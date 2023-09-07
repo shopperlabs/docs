@@ -47,7 +47,7 @@ And we're all good to go!
 Extend your current User Model \(usually `app/Models/User.php`\) using the `Shopper\Framework\Models\User\User as Authenticatable` alias:
 
 ```php
-``app/Models/User.php``
+// app/Models/User.php
 
 use Shopper\Framework\Models\User\User as Authenticatable; 
 
