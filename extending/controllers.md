@@ -2,8 +2,6 @@
 
 Controllers group related Laravel request handling logic into single classes stored in the `app/Http/Controllers/` directory. In this section we will create our own controllers to add functionality to our admin panel.
 
----
-
 To configure your controllers, you need to look at the `controllers` key in the `shopper/system.php` configuration file.
 
 ```php

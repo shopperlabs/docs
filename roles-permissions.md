@@ -1,8 +1,6 @@
 # Roles & Permissions
-
 Manage access and permissions of your users and members in your store.
 
----
 To connect to the dashboard you need to have the role `administrator` this role can be found in the configuration file `config/shopper/core.php`.
 
 ```php
@@ -23,8 +21,8 @@ To connect to the dashboard you need to have the role `administrator` this role 
 
 After [creating an super admin](/installing#create-an-admin-user) we get the following result
 
-```shell
-php artisan shopper:admin        
+```bash
+php artisan shopper:admin
 
 Create Admin User for Shopper administration panel
 
@@ -32,16 +30,16 @@ Create Admin User for Shopper administration panel
  > arthur@shopperlabs.io
 
  First Name [Shopper]:
- > 
+ >
 
  Last Name [Admin]:
- > 
+ >
 
  Password:
- > 
+ >
 
  Confirm Password:
- > 
+ >
 
 Creating admin account...
 User created successfully.
@@ -59,18 +57,16 @@ All this management of roles and permissions is done using the [Laravel Permissi
 At installation Laravel Shopper comes with 3 roles: **Administrator**, **Manager** and **User**, the user role cannot be modified from the administration interface because it is the role that will be assigned to any customer who will create his account on your shop.
 
 ## RBAC / ACL
-
 RBAC (Role Based Access Control) or ACL (Access Control Layer) is an approach to restricting system access for users using roles system, Laravel Shopper allow to define the level of access for each user. With roles a user can access menus, pages. It is important to know that one Administrator can have multiple roles assigned.
 
 To view the roles and permissions management page, you must go to the `Settings > Staff & Permissions`
 
 <div class="screenshot">
-  <img src="/img/settings-staff.png" alt="Setting Staff & permissions">
+  <img src="/img/screenshots/settings-staff.png" alt="Setting Staff & permissions">
   <div class="caption">Settings > Staff & permissions</div>
 </div>
 
 ### Fields
-
 The model used for the **Role** is `Shopper\Core\Models\Role` this model extend from the Spatie Role model.
 
 | Name        | Type      | Required |  Notes   |
@@ -103,8 +99,6 @@ use Spatie\Permission\Models\Permission as SpatiePermission;
 
 class Permission extends SpatiePermission
 {
-  ...
-    
   /**
    * Get a lists of permissions groups.
    */
@@ -125,7 +119,6 @@ class Permission extends SpatiePermission
 ```
 
 ### Components
-
 The components used to manage locations are found in the component configuration file `config/shopper/components.php`.
 
 ```php
@@ -133,35 +126,32 @@ use Shopper\Http\Livewire;
 use Shopper\Http\Livewire\Components;
 
 return [
-	...
-  
+
   	'livewire' => [
-  		...
+
       	'modals.delete-role' => Livewire\Modals\DeleteRole::class,
       	'modals.create-permission' => Livewire\Modals\CreatePermission::class,
       	'modals.create-role' => Livewire\Modals\CreateRole::class,
-      	
+
       	'settings.management.create-admin-user' => Components\Settings\Management\CreateAdminUser::class,
       	'settings.management.management' => Components\Settings\Management\Management::class,
       	'settings.management.permissions' => Components\Settings\Management\Permissions::class,
       	'settings.management.role' => Components\Settings\Management\Role::class,
       	'settings.management.users-role' => Components\Settings\Management\UsersRole::class,
-      	...
+
   	];
-  
-  	...
+
 ];
 
 ```
 
 ## Manage Roles
-
 A Role is a set of permissions to perform certain operations within the system, which is assigned to a chosen Administrator. As said previously Laravel Shopper at installation comes with 3 roles but 2 are accessible in the administration panel.
 
 The user role does not appear, modifying it could lead to bugs on your store so it is not listed here.
 
 <div class="screenshot">
-  <img src="/img/roles-admins.png" alt="roles and admins users">
+  <img src="/img/screenshots/roles-admins.png" alt="roles and admins users">
   <div class="caption">Roles & Admins</div>
 </div>
 
@@ -170,44 +160,41 @@ It's **strongly** advised to not change the name of roles when they are already 
 :::
 
 ### Add role
-
 To add a new role, you must click on `Add a new role` button. Required fields are marked with asterisks
 
 <div class="screenshot">
-  <img src="/img/add-role.png" alt="addd new role">
+  <img src="/img/screenshots/add-role.png" alt="addd new role">
   <div class="caption">Add new role</div>
 </div>
 
 The added roles can be used later in your code to assign functionality or access to resources.
 
 ### Update role
-
 To modify a role you must click on the role you want to modify to access the edit form.
 
 And as already mentioned, all Shopper features are livewire components. So you can change everything at any time to fit your store.
 
 <div class="screenshot">
-  <img src="/img/update-role.png" alt="update role">
+  <img src="/img/screenshots/update-role.png" alt="update role">
   <div class="caption">Update role</div>
 </div>
 
 ### Create admin
-
 In addition to creating an administrator from the command line you can also do it from the Shopper interface, you just need to click on **Add Administrator** button.
 
 <div class="screenshot">
-  <img src="/img/add-admin.png" alt="add new admin">
+  <img src="/img/screenshots/add-admin.png" alt="add new admin">
   <div class="caption">Add admin</div>
 </div>
 
 Then you fill in the information of your administrator with the role chosen for him
 
 <div class="screenshot">
-  <img src="/img/admin-user-form.png" alt="add new admin form">
+  <img src="/img/screenshots/admin-user-form.png" alt="add new admin form">
   <div class="caption">Add admin form</div>
 </div>
 
-The actual role registration function looks like the code below. And the whole implementation class is `Shopper\Http\Livewire\Components\Settings\Management\CreateAdminUser` 
+The actual role registration function looks like the code below. And the whole implementation class is `Shopper\Http\Livewire\Components\Settings\Management\CreateAdminUser`
 
 ```php
 public function store()
@@ -239,13 +226,12 @@ public function store()
 ```
 
 ### Create permission
-
 Let’s assume that you would like to add a new permission to ACL. You will need to choose the role because every single permissions are linked to a role.
 
 In the way that when a admin are granted of a specific role, he take all role's permissions.
 
 <div class="screenshot">
-  <img src="/img/permissions-browse.png" alt="Role's permissions example">
+  <img src="/img/screenshots/permissions-browse.png" alt="Role's permissions example">
   <div class="caption">Role's permissions example</div>
 </div>
 
@@ -254,7 +240,7 @@ As you may have noticed all permissions are grouped by type, and the available t
 To add a new permission you just need to click on the **Create permission** button.
 
 <div class="screenshot">
-  <img src="/img/add-permission.png" alt="Add permission">
+  <img src="/img/screenshots/add-permission.png" alt="Add permission">
   <div class="caption">Add permission</div>
 </div>
 
@@ -263,6 +249,6 @@ After adding your permission it will be automatically associated with the role a
 If the permission has no group it will be in a `Custom permissions` section.
 
 <div class="screenshot">
-  <img src="/img/custom-permissions.png" alt="new permission">
+  <img src="/img/screenshots/custom-permissions.png" alt="new permission">
   <div class="caption">New permission</div>
 </div>

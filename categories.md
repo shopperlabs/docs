@@ -29,7 +29,7 @@ Category
 ```
 
 <div class="screenshot">
-    <img src="/img/categories.png" alt="Categories">
+    <img src="/img/screenshots/categories.png" alt="Categories">
     <div class="caption">Categories</div>
 </div>
 
@@ -170,7 +170,7 @@ You can modify them in the component configuration file to use your own.
 Click on the "Create" button on the categories page, and a creation form appears.
 
 <div class="screenshot">
-  <img src="/img/create-category.png" alt="Create category form">
+  <img src="/img/screenshots/create-category.png" alt="Create category form">
   <div class="caption">Create category</div>
 </div>
 
@@ -179,7 +179,7 @@ Save your changes in order to be taken back to the categories list. Required fie
 The SEO section allows you to define how your category information should be displayed in search engines. To modify the content you click on the button "Edit SEO preview". It uses the same blade component as the brands.
 
 <div class="screenshot">
-  <img src="/img/seo-preview.gif" alt="Seo form">
+  <img src="/img/screenshots/seo-preview.gif" alt="Seo form">
   <div class="caption">Seo form preview</div>
 </div>
 
@@ -257,7 +257,7 @@ $child = Category::create([
 On Shopper, to specify the parent category you just have to choose via the select field 
 
 <div class="screenshot">
-  <img src="/img/category-parent.png" alt="category parent">
+  <img src="/img/screenshots/category-parent.png" alt="category parent">
   <div class="caption">Category parent</div>
 </div>
 
@@ -270,7 +270,7 @@ It is important to know that if you update the category name, the slug will auto
 :::
 
 <div class="screenshot">
-  <img src="/img/update-category.png" alt="update category">
+  <img src="/img/screenshots/update-category.png" alt="update category">
   <div class="caption">Update Category</div>
 </div>
 

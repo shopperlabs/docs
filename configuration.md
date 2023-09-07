@@ -2,8 +2,6 @@
 
 Shopper uses standard Laravel config files and environment variables for application-level settings
 
----
-
 ## Config Files
 
 With the installation of Shopper you will find new configurations files located in `config/shopper/`. They are PHP files named by area of responsibility.
@@ -156,13 +154,9 @@ return [
 		'account.devices' => Components\Account\Devices::class,
 		'account.dropdown' => Components\Account\Dropdown::class,
 		'account.password' => Components\Account\Password::class,
-		...
 	],
-
 ];
-
 ```
-
 
 ## Settings
 
@@ -172,7 +166,6 @@ In this file you can add parameters or delete those you don't need to simplify y
 
 ```php
 return [
-
     /*
     |--------------------------------------------------------------------------
     | Setting Menu
@@ -197,12 +190,10 @@ return [
             'icon' => 'heroicon-o-users',
             'route' => 'shopper.settings.users',
             'permission' => null,
-        ],      
-		...
+        ],
     ],
 ];
 ```
-
 
 ## Mapbox
 
@@ -210,7 +201,7 @@ Shopper uses Mapbox to enter the geographic coordinates (latitude and longitude)
 
 To activate mapbox you need to go to the [API](https://docs.mapbox.com/mapbox-gl-js/api/) documentation and create an API token. Once this is done you need to add the key `MAPBOX_PUBLIC_TOKEN` with the token value to your `.env` file
 
-```shell
+```bash
 MAPBOX_PUBLIC_TOKEN=your_token_here
 ```
 
@@ -220,7 +211,6 @@ In your `config/filesystems.php` config file add the following to the disks and 
 
 ``` php
 'disks' => [
-    ...
     // Shopper Uploads Disks. [tl! highlight:13]
     'avatars' => [ // [tl! collapse:start]
         'driver' => 'local',
@@ -250,12 +240,10 @@ In your `config/filesystems.php` config file add the following to the disks and 
 */
 
 'links' => [
-    ...
     // [tl! highlight:2]
     public_path('avatars') => storage_path('app/avatars'),
     public_path('uploads') => storage_path('app/uploads'),
 ],
-
 ```
 
 ### Create New Folders
@@ -263,13 +251,13 @@ In your `config/filesystems.php` config file add the following to the disks and 
 After adding the 2 entries in the filesystem config file, you must create them and add them to the .gitignore file.
 In your storage directory create 2 new folders called `avatars` and `uploads`.
 
-```shell
+```bash
 mkdir storage/app/avatars && mkdir storage/app/uploads
 ```
 
 In each new folder that you have created (avatars and uploads) you must create a .gitignore file which will contain the following line
 
-```shell
+```bash
 *
 !.gitignore
 ```

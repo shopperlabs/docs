@@ -2,7 +2,6 @@
 
 Collections, although not strictly the same, are akin to Categories. They serve to allow you to add products ,either explicitly or via certain criteria, for use on your store.
 
----
 In most e-commerce tools, collections are considered as categories. And especially on Shopify, collections are a great feature for grouping products.
 
 And for the constitution of the collections we got closer to what Shopify offers in terms of configuration, and the management of collections in Shopper is inspired by Shopify.
@@ -37,7 +36,7 @@ Where products can be added to any category, collections cannot. Depending on th
 As mentioned above, the collections in Shopper are inspired by [Shopify collections](https://help.shopify.com/en/manual/products/collections). So there are also 2 types of collections: "Manual" and "Automatic" and the configuration for each is different.
 
 <div class="screenshot">
-    <img src="/img/collections.png" alt="Collections">
+    <img src="/img/screenshots/collections.png" alt="Collections">
   	<div class="caption">Collections</div>
 </div>
 
@@ -152,7 +151,6 @@ return [
 	]
 ];
 ```
-:::
 
 ### Components
 
@@ -187,7 +185,7 @@ Form your Shopper admin on the sidebar go to **Collections**. The display page i
 By default you will see this page without data which is rendered by a blade component of Shopper called [empty state](/extending/empty-state).
 
 <div class="screenshot">
-    <img src="/img/collection-empty-state.png" alt="Collections empty data">
+    <img src="/img/screenshots/collection-empty-state.png" alt="Collections empty data">
   	<div class="caption">Collections empty data</div>
 </div>
 
@@ -196,7 +194,7 @@ By default you will see this page without data which is rendered by a blade comp
 Click on the "Create" button on the collections page, and a creation form appears.
 
 <div class="screenshot">
-  <img src="/img/create-collection.png" alt="Create collection form">
+  <img src="/img/screenshots/create-collection.png" alt="Create collection form">
   <div class="caption">Create collection</div>
 </div>
 
@@ -207,7 +205,7 @@ You can create two types of collections as we said: Automatic and manual collect
 Only automatic collections have rules for automating them. When you choose to create an automatic collection the rules section will be available in the creation form
 
 <div class="screenshot">
-  <img src="/img/collection-rules.png" alt="automatic collection rules">
+  <img src="/img/screenshots/collection-rules.png" alt="automatic collection rules">
   <div class="caption">Automatic collection rules</div>
 </div>
 
@@ -282,6 +280,6 @@ $collection = Collection::findBySlug('summers-clothes');
 To view the image of a collection you can consult the [media documentation](/media#retrieving-images). And you can display collections in your frontend.
 
 <div class="screenshot">
-  <img src="/img/collections-preview.png" alt="example collection rules">
+  <img src="/img/screenshots/collections-preview.png" alt="example collection rules">
   <div class="caption">Example display for collections</div>
 </div>

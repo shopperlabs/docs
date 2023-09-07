@@ -1,5 +1,4 @@
 # Two Factor Authenticator
-
 Two-step authentication (also known as two-factor authentication or multifactor authentication) provides a more secure login process. When you attempt to sign in, you need to complete two separate steps:
 
 1. Enter the account password.
@@ -12,7 +11,6 @@ Authentication in two secure steps rests on the combination of two factors, whic
 Two-step authentication can be configured for all accounts, but the store owner can not activate it for staff. The staff must put it in place for his own accounts. If you have multiple employees who manage your shop.
 
 ## Enabling Two-Factor Authentication
-
 To enable two-step authentication, you'll need first to download an authenticator app to your mobile device. The app will be able to scan QR codes and retrieve authentication data for you. Recommended authenticator apps:
 
 - [Google Authenticator](https://support.google.com/accounts/answer/1066447)
@@ -24,17 +22,17 @@ In addition, you should store the listed recovery codes in a secure password man
 
 When you install an authenticator app, make sure that you follow its instructions carefully. After your app is successfully downloaded and set up, you can activate the feature in Shopper.
 
-From your administrator interface, click on your name with account picture in the upper right corner. Next click on **Personal Account** 
+From your administrator interface, click on your name with account picture in the upper right corner. Next click on **Personal Account**
 
 <div class="screenshot">
-    <img src="/img/account-dropdown.png" alt="Account dropdown">
+    <img src="/img/screenshots/account-dropdown.png" alt="Account dropdown">
     <div class="caption">Account Dropdown</div>
 </div>
 
 Scroll to the two factor authenticate section on the screen, click **Enable authentication**. This action will trigger a modal to ask you to confirm your password
 
 <div class="screenshot">
-    <img src="/img/two-factor-section.png" alt="Two factor section Screenshot">
+    <img src="/img/screenshots/two-factor-section.png" alt="Two factor section Screenshot">
     <div class="caption">Two factor section</div>
 </div>
 
@@ -43,7 +41,7 @@ Enter your current password in the space provided and click **Enable**.
 If the user loses access to their mobile device, the login page will allow them to authenticate using one of their recovery codes instead of the temporary token provided by their mobile device's authenticator application.
 
 <div class="screenshot">
-    <img src="/img/two-factor-code.png" alt="Two factor code Screenshot">
+    <img src="/img/screenshots/two-factor-code.png" alt="Two factor code Screenshot">
     <div class="caption">Two factor QRcode & Recovery Code</div>
 </div>
 
@@ -52,11 +50,10 @@ This feature is inspired by [Laravel Fortify](https://laravel.com/docs/9.x/forti
 Now when you try to log in, two-factor authentication will require your mobile device.
 
 ## Logging in with Two-Factor Authentication
-
 You will go to the Shopper administration login page. You will enter your email address and password and click on the **Login** button. On the next page, you need to authenticate using the method you've used to set up two-factor authentication.
 
 <div class="screenshot">
-    <img src="/img/auth-two-factor-authentication.png" alt="Two factor login Screenshot">
+    <img src="/img/screenshots/auth-two-factor-authentication.png" alt="Two factor login Screenshot">
     <div class="caption">Two factor Login</div>
 </div>
 
@@ -65,12 +62,11 @@ If you used a two-factor authentication app, open it and retrieve the code you w
 If you have rather copied the recovery codes in an application like 1Password you will have to recover a code, enter it to connect to your store.
 
 ## Disable Two-Factor Authentication
-
 From your administrator interface, click on your name and your account photo in the upper right corner and click on Personnal Account menu.
 
 In the Two-factor authentication section, use the Disable button for the authentication method you want to deactivate. This will ask you for a password confirmation, you enter your password and click on confirm to completely deactivate the Two-factor authentication.
 
 <div class="screenshot">
-    <img src="/img/two-factor-disable.png" alt="Two factor disable Screenshot">
+    <img src="/img/screenshots/two-factor-disable.png" alt="Two factor disable Screenshot">
     <div class="caption">Two factor disable</div>
 </div>

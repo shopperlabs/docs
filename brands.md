@@ -11,7 +11,7 @@ If you sell your own products, you must at least create your company as a brand:
 The management of brands is exactly the same as the one done in most of the e-commerce website creation tools: only the name can change. It is mainly used to facilitate the navigation of customers in your catalog, as it is increasingly common to search for a specific brand.
 
 <div class="screenshot">
-    <img src="/img/brands.png" alt="Brands">
+    <img src="/img/screenshots/brands.png" alt="Brands">
     <div class="caption">Brands</div>
 </div>
 
@@ -20,7 +20,7 @@ New brands are automatically activated and available for your online store, even
 
 ### Fields
 
-The model used is `Shopper\Framework\Models\Shop\Product\Brand`. 
+The model used is `Shopper\Core\Models\Brand`.
 
 | Name        | Type      | Required   |  Notes   |
 |-------------|-----------|------------|------------|
@@ -42,33 +42,32 @@ To change the model you need to look at the configuration file `config/shopper/s
 ```php
 return [
 	'models' => [
+    /*
+      * Eloquent model should be used to retrieve your brands. Of course,
+      * it is often just the "Brand" model but you may use whatever you like.
+      *
+      * The model you want to use as a Brand model needs to extends the
+      * `\Shopper\Framework\Models\Shop\Product\Brand` model.
+      */
 
-        /*
-         * Eloquent model should be used to retrieve your brands. Of course,
-         * it is often just the "Brand" model but you may use whatever you like.
-         *
-         * The model you want to use as a Brand model needs to extends the
-         * `\Shopper\Framework\Models\Shop\Product\Brand` model.
-         */
-		
-        'brand' => \Shopper\Framework\Models\Shop\Product\Brand::class, // [tl! focus]
+    'brand' => \Shopper\Framework\Models\Shop\Product\Brand::class, // [tl! focus]
 
-        /*
-         * Eloquent model should be used to retrieve your categories. Of course,
-         * it is often just the "Category" model but you may use whatever you like.
-         *
-         * The model you want to use as a Category model needs to extends the
-         * `\Shopper\Framework\Models\Shop\Product\Category` model.
-         */
+    /*
+      * Eloquent model should be used to retrieve your categories. Of course,
+      * it is often just the "Category" model but you may use whatever you like.
+      *
+      * The model you want to use as a Category model needs to extends the
+      * `\Shopper\Framework\Models\Shop\Product\Category` model.
+      */
 
-        'category'  => \Shopper\Framework\Models\Shop\Product\Category::class,
+    'category'  => \Shopper\Framework\Models\Shop\Product\Category::class,
 	]
 ];
 ```
 
 1. Create your own model that you have to use
 
-```shell
+```bash
 php artisan make:model Brand
 ```
 Once the `app/Models/Brand.php` model is created in our app folder, we will make it extend from the `Shopper\Framework\Models\Shop\Product\Brand` model available in Shopper.

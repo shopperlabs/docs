@@ -1,18 +1,15 @@
 # Media
 The Shopper Framework supports assigning images to products, brands, collections and categories. It is an additional layer provided by the framework with the help of the [Spatie Media Library](https://spatie.be/docs/laravel-medialibrary)
 
----
 We recommend organizing your images in a folder offline and keeping a backup in case you need them in the future or mistakenly alter one and wish to revert to the original. You can look at the [documentation](/configuration#update-configurations) for this purpose
 
 ## Configuration
-
 For uploading images we are using [FilePond](https://pqina.nl/) and some custom upload component with Livewire.
 
 ### Filepond
-
 This component is used to update media at the product level and variants for products.
 <div class="screenshot">
-  <img src="/img/filepond.png" alt="filepond">
+  <img src="/img/screenshots/filepond.png" alt="filepond">
   <div class="caption">Filepond upload</div>
 </div>
 
@@ -36,10 +33,9 @@ Filepond is used in Shopper Framework only to update images, and for that it tak
 So you have to set up the file upload in your Livewire component yourself. An example of file upload with filepond is available on Livewire you can learn more on this [link](https://www.laravel-livewire.com/screencasts/s5-integrating-with-filepond).
 
 ### Single upload
-
 Single Upload is a reusable Livewire component created for single upload management with Livewire
 <div class="screenshot">
-  <img src="/img/single-upload.png" alt="single upload">
+  <img src="/img/screenshots/single-upload.png" alt="single upload">
   <div class="caption">Single upload component</div>
 </div>
 
@@ -59,20 +55,20 @@ use Livewire\Component;
 class MyComponent extends Component
 {
 	public ?string $fileUrl = null;
-  	
+
 	protected $listeners = [
       	'shopper:fileUpdated' => 'onFileUpdate'
     ];
-  
+
 	public function onFileUpdate($file)
     {
         $this->fileUrl = $file;
     }
-	
+
 	public function store()
 	{
 		$model = YourModel::create([...]);
-      
+
 		if ($this->fileUrl) {
 			$model->addMedia($this->fileUrl)
               ->toMediaCollection(config('shopper.core.storage.collection_name'));
@@ -86,7 +82,6 @@ To apply this action on your model you have to preapre your model with the Larav
 :::
 
 ### Multiple upload
-
 The component used is `Shopper\Http\Livewire\Components\Forms\Uploads\Multiple` To add it to your page you add this component to your view.
 
 ```blade
@@ -94,7 +89,7 @@ The component used is `Shopper\Http\Livewire\Components\Forms\Uploads\Multiple` 
 ```
 
 <div class="screenshot">
-  <img src="/img/multiple-upload.png" alt="multiple upload">
+  <img src="/img/screenshots/multiple-upload.png" alt="multiple upload">
   <div class="caption">Multiple upload component</div>
 </div>
 
@@ -106,20 +101,20 @@ use Livewire\Component;
 class MyComponent extends Component
 {
 	public $files = [];
-  	
+
 	protected $listeners = [
       'shopper:filesUpdated' => 'onFilesUpdated'
     ];
-  
+
 	public function onFilesUpdate($files)
     {
         $this->files = $files;
     }
-	
+
 	public function store()
 	{
 		$model = YourModel::create([...]);
-      
+
 		if (collect($this->files)->isNotEmpty()) {
 			collect($this->files)->each(
               fn ($file) => $model->addMedia($file)
@@ -131,7 +126,6 @@ class MyComponent extends Component
 ```
 
 ## Media Variants
-
 The Spatie Media library supports defining various image sizes, so-called [Conversions](https://spatie.be/docs/laravel-medialibrary/v10/converting-images/defining-conversions). The uploaded images will be then converted to the given sizes with the given parameters.
 
 For the moment in Shopper for all the Model that's used Media Library the only conversion available is
@@ -149,7 +143,7 @@ But you can extend the different models to add conversions according to your nee
 ## Retrieving Images
 
 ### Thumbnails
-The presence of thumbnails is a very common scenario, which is why Shopper use them. 
+The presence of thumbnails is a very common scenario, which is why Shopper use them.
 
 ```php
 $product->getUrl('thumb200x200')
@@ -158,8 +152,7 @@ $product->getUrl('thumb200x200')
 For more information on what's available, see [Defining conversions](https://spatie.be/docs/laravel-medialibrary/v10/converting-images/defining-conversions#content-using-multiple-conversions)
 
 ### Primary
-
-To get an image with full url on a product, a brand or a collection 
+To get an image with full url on a product, a brand or a collection
 
 ```php
 $product->getFirstMediaUrl(config('shopper.core.storage.disk_name'))

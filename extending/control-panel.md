@@ -2,8 +2,6 @@
 
 The control panel may be customized in a number of different ways. You may add new pages, menus, a stylesheet, or maybe you just want to add some arbitrary Javascript.
 
----
-
 When you need to add features to your Shopper administration, you can first set up some configurations
 
 ## Adding CSS and JS assets
