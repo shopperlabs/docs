@@ -1,6 +1,7 @@
----
-title: Collections
-intro: 'Collections, although not strictly the same, are akin to Categories. They serve to allow you to add products ,either explicitly or via certain criteria, for use on your store.'
+# Collections
+
+Collections, although not strictly the same, are akin to Categories. They serve to allow you to add products ,either explicitly or via certain criteria, for use on your store.
+
 ---
 In most e-commerce tools, collections are considered as categories. And especially on Shopify, collections are a great feature for grouping products.
 

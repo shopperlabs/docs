@@ -1,6 +1,7 @@
----
-title: 'Roles & Permissions'
-intro: 'Manage access and permissions of your users and members in your store.'
+# Roles & Permissions
+
+Manage access and permissions of your users and members in your store.
+
 ---
 To connect to the dashboard you need to have the role `administrator` this role can be found in the configuration file `config/shopper/core.php`.
 

@@ -1,6 +1,6 @@
----
-title: Customers
-intro: 'In e-commerce stores, customers are one if not the fundamental point for the functioning of your store.'
+# Customers
+In e-commerce stores, customers are one if not the fundamental point for the functioning of your store.
+
 ---
 The first page under the "Customers" menu gives you a list of all the registered users on your shop.
 

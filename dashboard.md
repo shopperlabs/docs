@@ -1,7 +1,7 @@
----
-title: Dashboard
-intro: "The dashboard is a user-customizable screen. One of Shopper's main goals is to enable stores to easily customize the modules."
----
+# Dashboard
+
+The dashboard is a user-customizable screen. One of Shopper's main goals is to enable stores to easily customize the modules.
+
 ## Overview
 
 When you log into the control panel, you will be taken to the dashboard — a customizable screen dispatch with a Livewire component!

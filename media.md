@@ -1,6 +1,6 @@
----
-title: Media
-intro: 'The Shopper Framework supports assigning images to products, brands, collections and categories. It is an additional layer provided by the framework with the help of the [Spatie Media Library](https://spatie.be/docs/laravel-medialibrary)'
+# Media
+The Shopper Framework supports assigning images to products, brands, collections and categories. It is an additional layer provided by the framework with the help of the [Spatie Media Library](https://spatie.be/docs/laravel-medialibrary)
+
 ---
 We recommend organizing your images in a folder offline and keeping a backup in case you need them in the future or mistakenly alter one and wish to revert to the original. You can look at the [documentation](/configuration#update-configurations) for this purpose
 

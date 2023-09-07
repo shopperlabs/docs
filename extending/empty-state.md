@@ -1,4 +1,5 @@
+# Empty State
+
 ---
-title: 'Empty State'
----
+
 Coming Soon...

@@ -1,7 +1,5 @@
----
-title: 'Two Factor Authenticator'
-intro: 'Secure your account with two-step authentication'
----
+# Two Factor Authenticator
+
 Two-step authentication (also known as two-factor authentication or multifactor authentication) provides a more secure login process. When you attempt to sign in, you need to complete two separate steps:
 
 1. Enter the account password.

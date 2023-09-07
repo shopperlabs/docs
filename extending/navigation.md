@@ -1,7 +1,9 @@
+# Navigation
+
+The Control Panel navigation is quite customizable. You can add your own sections, pages, and subpages, as well as remove and modify existing ones.
+
 ---
-title: Navigation
-intro: 'The Control Panel navigation is quite customizable. You can add your own sections, pages, and subpages, as well as remove and modify existing ones.'
----
+
 The navigation is controlled by the package [shopper/sidebar](https://github.com/shopperlabs/sidebar). You need to create a sidebar to add your menus within the main sidebar of Shopper. You may register your sidebar like event in the `register()` method of a service provider.
 
 ## Adding Navigation

@@ -1,6 +1,5 @@
----
-title: Categories
----
+# Categories
+
 Categories are the primary way to group products with similar features. You can also add subcategories if desired.
 
 For example, if you sell clothing, you might have “t-shirts”, “hoodies” and “pants” as categories.

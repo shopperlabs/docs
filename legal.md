@@ -1,6 +1,5 @@
----
-title: Legal
----
+# Legal
+
 As with any e-commerce site, it is important for users to know the terms and conditions and privacy policy that your site offers. This is for their own safety and yours as well.
 
 This section allows you to set up your pages for your privacy policy, return policy, terms of use and shipping policy to be presented to customers.

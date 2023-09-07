@@ -1,6 +1,5 @@
----
-title: 'Contribution Guide'
----
+# Contribution Guide
+
 Contributions are accepted via Pull Requests on [Github](https://github.com/shopperlabs/framework).
 
 ## Bug Reports

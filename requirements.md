@@ -1,15 +1,16 @@
+# Requirements
+Shopper is a modern PHP application, built as a [Laravel](https://laravel.com) package, and has the same server requirements as &mdash; you guessed it &mdash; Laravel itself. To manipulate images (resize, crop, etc), you will also need the GD Library or ImageMagick.
+
 ---
-title: Requirements
-intro: 'Shopper is a modern PHP application, built as a [Laravel](https://laravel.com) package, and has the same server requirements as &mdash; you guessed it &mdash; Laravel itself. To manipulate images (resize, crop, etc), you will also need the GD Library or ImageMagick.'
----
-## Server Requirements
 
 To run Laravel Shopper you'll need a server meeting the following requirements. These are all pretty standard in most modern hosting platforms.
 
-#### PHP Version
+## PHP Version
+
 - PHP 8.1+
 
-#### PHP Extension
+## PHP Extension
+
 - BCMath PHP Extension
 - Ctype PHP Extension
 - Exif PHP Extension
@@ -21,7 +22,8 @@ To run Laravel Shopper you'll need a server meeting the following requirements. 
 - XML PHP Extension
 - GD Library or ImageMagick
 
-#### Database Engine
+## Database Engine
+
 - MySQL 8.0+
 - MariaDB 10.2+
 - PostgreSQL 9.4+
@@ -45,7 +47,6 @@ You can even share your sites publicly using local tunnels. We use it ourselves 
 [Laragon][laragon] and [WAMP][wamp] are both good choice for those of the Windows persuasion. You may also want to checkout [Laravel Sail](https://laravel.com/docs/8.x/sail), which works well with Statamic.
 
 [do]: https://m.do.co/c/d6dca1691fb4
-[hosts]: https://github.com/statamic/hosts
 [homestead]: https://laravel.com/docs/homestead
 [valet]: https://laravel.com/docs/valet
 [valet_linux]: https://cpriego.github.io/valet-linux

@@ -1,6 +1,5 @@
----
-title: Brands
----
+# Brands
+
 Most e-commerce sites sell products from several manufacturers. And each supplier can be represented by a brand.
 
 Unless you make your own products, you should always register the brands of your products in Shopper.

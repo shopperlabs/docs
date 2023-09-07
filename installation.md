@@ -1,7 +1,7 @@
----
-title: 'Install Shopper'
-intro: 'Quick start guide for installing and configuring Laravel Shopper on your existing Laravel App.'
----
+# Installation
+
+Quick start guide for installing and configuring Laravel Shopper on your existing Laravel App.
+
 ## Supported Versions of Laravel
 
 **Laravel 9 and Laravel 10 are supported.** It feels like this section needs more than one sentence but it really doesn't. That first one said all that needs saying.
