@@ -1,7 +1,7 @@
 # Extending Shopper
 Although Shopper is primarily designed for e-commerce sites and has many associated features, you are free to add or modify existing ones.
 
-## Why extends Shopper ?
+## Why extends Shopper
 One might ask, knowing that the purpose of setting up an e-commerce site is simply to make the whole system work without always wanting to add to it.
 
 For example if you want a blog on your store, a section for a KYC, or maybe a forum, instead of creating another project to manage this you can directly extend Shopper to manage all this in the same administration area.
