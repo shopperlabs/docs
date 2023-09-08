@@ -73,7 +73,7 @@ Let's keep in mind the modification that was made in the previous section regard
 
 ```php
 return [
-	'models' => [
+  'models' => [
     /*
       * Eloquent model should be used to retrieve your categories. Of course,
       * it is often just the "Category" model but you may use whatever you like.
@@ -84,14 +84,14 @@ return [
     'category'  => \App\Models\Category::class,
 
     /*
-      * Eloquent model should be used to retrieve your collections. Of course,
-      * it is often just the "Collection" model but you may use whatever you like.
-      *
-      * The model you want to use as a Collection model needs to extends the
-      * `\Shopper\Framework\Models\Shop\Product\Collection` model.
-      */
-		'collection'  => \Shopper\Framework\Models\Shop\Product\Collection::class, // [tl! focus]
-	]
+    * Eloquent model should be used to retrieve your collections. Of course,
+    * it is often just the "Collection" model but you may use whatever you like.
+    *
+    * The model you want to use as a Collection model needs to extends the
+    * `\Shopper\Framework\Models\Shop\Product\Collection` model.
+    */
+    'collection'  => \Shopper\Framework\Models\Shop\Product\Collection::class, // [tl! focus]
+  ]
 ];
 ```
 
@@ -148,16 +148,16 @@ use Shopper\Framework\Http\Livewire;
 
 return [
 
-	'livewire' => [
+  'livewire' => [
 
-		'collections.browse' => Livewire\Collections\Browse::class,
-		'collections.create' => Livewire\Collections\Create::class,
-		'collections.edit' => Livewire\Collections\Edit::class,
-		'collections.products' => Livewire\Collections\Products::class,
+    'collections.browse' => Livewire\Collections\Browse::class,
+    'collections.create' => Livewire\Collections\Create::class,
+    'collections.edit' => Livewire\Collections\Edit::class,
+    'collections.products' => Livewire\Collections\Products::class,
 
-		'tables.collections-table' => Livewire\Tables\CollectionsTable::class,
+    'tables.collections-table' => Livewire\Tables\CollectionsTable::class,
 
-	];
+  ];
 
 ];
 ```

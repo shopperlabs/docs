@@ -12,14 +12,14 @@ You can load the links locally or using cdn. They will be automatically loaded i
 
 ``` php
 'resources' => [
-	'stylesheets' => [
-    	'/css/admin.css',
-		'https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css',
+  'stylesheets' => [
+      '/css/admin.css',
+      'https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/css/bootstrap.min.css',
     ],
-	'scripts' => [
-    	'https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js',
-		'/js/admin.js',
-    ],
+  'scripts' => [
+    'https://cdn.jsdelivr.net/npm/bootstrap@5.1.3/dist/js/bootstrap.min.js',
+    '/js/admin.js',
+  ],
 ],
 ```
 
@@ -59,16 +59,16 @@ module.exports = {
     './vendor/wire-elements/modal/resources/views/*.blade.php',
     './vendor/wireui/wireui/resources/**/*.blade.php',
     './vendor/wireui/wireui/ts/**/*.ts',
-	'./vendor/wireui/wireui/src/View/**/*.php' // [tl! focus:end]
+    './vendor/wireui/wireui/src/View/**/*.php' // [tl! focus:end]
   ],
   theme: {
-      extends: {
-        colors: { // [tl! focus:start]
-          primary: colors.blue,
-          secondary: colors.slate,
-          indigo: colors.blue,
-        } // [tl! focus:end]
-      }
+    extends: {
+      colors: { // [tl! focus:start]
+        primary: colors.blue,
+        secondary: colors.slate,
+        indigo: colors.blue,
+      } // [tl! focus:end]
+    }
   },
   plugins: [
     require('@tailwindcss/forms'), // [tl! focus]
@@ -81,9 +81,9 @@ New versions of Laravel come with vite by default so if you want to customize th
 
 ```js
 const mix = require('laravel-mix')
- 
+
 mix.postCss('resources/css/admin.css', 'public/css', [
-    require('tailwindcss'), // [tl! focus]
+  require('tailwindcss'), // [tl! focus]
 ])
 ```
 
@@ -105,10 +105,10 @@ And add Tailwind to the `postcss.config.js` file:
 
 ```js
 module.export = {
-    plugins: {
-        tailwindcss: {},
-        autoprefixer: {},
-    },
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
 }
 ```
 
@@ -122,16 +122,16 @@ You can choose between 2 options
 The first, and simplest, is to modify the value of the `brand` key in your `shopper/admin.php` configuration file, by entering the link to your logo.
 
 ```php
-	/*
-    |--------------------------------------------------------------------------
-    | Admin Brand Name
-    |--------------------------------------------------------------------------
-    |
-    | This will be displayed on the login page and in the sidebar's header.
-    |
-    */
+  /*
+  |--------------------------------------------------------------------------
+  | Admin Brand Name
+  |--------------------------------------------------------------------------
+  |
+  | This will be displayed on the login page and in the sidebar's header.
+  |
+  */
 
-    'brand' => 'img/logo.svg',
+  'brand' => 'img/logo.svg',
 ```
 
 This will load using the Laravel `asset()` helper function.

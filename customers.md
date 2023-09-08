@@ -43,18 +43,18 @@ use Shopper\Framework\Http\Livewire;
 
 return [
 
-  	'livewire' => [
-      	'modals.delete-customer' => Livewire\Modals\DeleteCustomer::class,
+  'livewire' => [
+      'modals.delete-customer' => Livewire\Modals\DeleteCustomer::class,
 
-      	'customers.addresses' => Livewire\Customers\Addresses::class,
-      	'customers.browse' => Livewire\Customers\Browse::class,
-      	'customers.create' => Livewire\Customers\Create::class,
-      	'customers.orders' => Livewire\Customers\Orders::class,
-      	'customers.profile' => Livewire\Customers\Profile::class,
-      	'customers.show' => Livewire\Customers\Show::class,
+      'customers.addresses' => Livewire\Customers\Addresses::class,
+      'customers.browse' => Livewire\Customers\Browse::class,
+      'customers.create' => Livewire\Customers\Create::class,
+      'customers.orders' => Livewire\Customers\Orders::class,
+      'customers.profile' => Livewire\Customers\Profile::class,
+      'customers.show' => Livewire\Customers\Show::class,
 
-      	'tables.customers-table' => Livewire\Tables\CustomersTable::class,
-  	];
+      'tables.customers-table' => Livewire\Tables\CustomersTable::class,
+  ];
 
 ];
 ```

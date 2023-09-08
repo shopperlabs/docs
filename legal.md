@@ -22,15 +22,14 @@ The components used to manage Legal page are found in the component configuratio
 use Shopper\Http\Livewire\Components;
 
 return [
+    'livewire' => [
 
-  	'livewire' => [
+        'settings.legal.privacy' => Components\Settings\Legal\Privacy::class,
+        'settings.legal.refund' => Components\Settings\Legal\Refund::class,
+        'settings.legal.shipping' => Components\Settings\Legal\Shipping::class,
+        'settings.legal.terms' => Components\Settings\Legal\Terms::class,
 
-      	'settings.legal.privacy' => Components\Settings\Legal\Privacy::class,
-      	'settings.legal.refund' => Components\Settings\Legal\Refund::class,
-      	'settings.legal.shipping' => Components\Settings\Legal\Shipping::class,
-      	'settings.legal.terms' => Components\Settings\Legal\Terms::class,
-
-  	];
+    ];
 
 ];
 ```

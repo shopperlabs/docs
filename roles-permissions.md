@@ -43,7 +43,6 @@ Create Admin User for Shopper administration panel
 
 Creating admin account...
 User created successfully.
-
 ```
 
 After logged as an admin, you can add members with permissions on your staff to log in to your store and complete tasks like **adding products** or managing **orders** and use roles to control what sections of your store they can access.
@@ -56,7 +55,7 @@ All this management of roles and permissions is done using the [Laravel Permissi
 
 At installation Laravel Shopper comes with 3 roles: **Administrator**, **Manager** and **User**, the user role cannot be modified from the administration interface because it is the role that will be assigned to any customer who will create his account on your shop.
 
-## RBAC / ACL
+## RBAC - ACL
 RBAC (Role Based Access Control) or ACL (Access Control Layer) is an approach to restricting system access for users using roles system, Laravel Shopper allow to define the level of access for each user. With roles a user can access menus, pages. It is important to know that one Administrator can have multiple roles assigned.
 
 To view the roles and permissions management page, you must go to the `Settings > Staff & Permissions`
@@ -99,7 +98,6 @@ use Spatie\Permission\Models\Permission as SpatiePermission;
 
 class Permission extends SpatiePermission
 {
-
   /**
    * Get a lists of permissions groups.
    */

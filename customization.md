@@ -19,19 +19,17 @@ use Illuminate\Database\Eloquent\Model;
 
 class Setting extends Model
 {
-    /**
-     * The attributes that are mass assignable.
-     *
-     * @var array
-     */
-    protected $fillable = [
-        'display_name',
-        'key',
-        'value',
-        'locked',
-    ];
-  
-  ...
+  /**
+   * The attributes that are mass assignable.
+   *
+   * @var array
+   */
+  protected $fillable = [
+    'display_name',
+    'key',
+    'value',
+    'locked',
+  ];
 }
 ```
 
@@ -128,10 +126,10 @@ By default when you set up your store Shopper creates a sales channel at the sam
 
 ```php
 (new ChannelRepository())->create([
-	'name' => $name = __('Web Store'),
-	'slug' => $name,
-	'url' => env('APP_URL'),
-	'is_default' => true,
+  'name' => $name = __('Web Store'),
+  'slug' => $name,
+  'url' => env('APP_URL'),
+  'is_default' => true,
 ]);
 ```
 

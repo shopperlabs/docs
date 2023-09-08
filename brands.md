@@ -37,27 +37,25 @@ To change the model you need to look at the configuration file `config/shopper/s
 
 ```php
 return [
-	  'models' => [
-        /*
-         * Eloquent model should be used to retrieve your brands. Of course,
-         * it is often just the "Brand" model but you may use whatever you like.
-         *
-         * The model you want to use as a Brand model needs to extends the
-         * `\Shopper\Framework\Models\Shop\Product\Brand` model.
-         */
+  'models' => [
+    /*
+    * Eloquent model should be used to retrieve your brands. Of course,
+    * it is often just the "Brand" model but you may use whatever you like.
+    *
+    * The model you want to use as a Brand model needs to extends the
+    * `\Shopper\Framework\Models\Shop\Product\Brand` model.
+    */
+    'brand' => \Shopper\Framework\Models\Shop\Product\Brand::class, // [tl! focus]
 
-        'brand' => \Shopper\Framework\Models\Shop\Product\Brand::class, // [tl! focus]
-
-        /*
-         * Eloquent model should be used to retrieve your categories. Of course,
-         * it is often just the "Category" model but you may use whatever you like.
-         *
-         * The model you want to use as a Category model needs to extends the
-         * `\Shopper\Framework\Models\Shop\Product\Category` model.
-         */
-
-        'category'  => \Shopper\Framework\Models\Shop\Product\Category::class,
-	]
+    /*
+    * Eloquent model should be used to retrieve your categories. Of course,
+    * it is often just the "Category" model but you may use whatever you like.
+    *
+    * The model you want to use as a Category model needs to extends the
+    * `\Shopper\Framework\Models\Shop\Product\Category` model.
+    */
+    'category'  => \Shopper\Framework\Models\Shop\Product\Category::class,
+  ]
 ];
 ```
 
@@ -69,40 +67,40 @@ php artisan make:model Brand
 Once the `app/Models/Brand.php` model is created in our app folder, we will make it extend from the `Shopper\Framework\Models\Shop\Product\Brand` model available in Shopper.
 
 2. Extend our Brand model from the Brand Shopper Model
-```php
-namespace App\Models;
+  ```php
+  namespace App\Models;
 
-use Shopper\Framework\Models\Shop\Product;
+  use Shopper\Framework\Models\Shop\Product;
 
-class Brand extends Product\Brand
-{
-}
-```
+  class Brand extends Product\Brand
+  {
+  }
+  ```
 
 3. Update `brand` key for the model on the `system.php` config file to use our new model
-```php
-return [
-	'models' => [
-        /*
-         * Eloquent model should be used to retrieve your brands. Of course,
-         * it is often just the "Brand" model but you may use whatever you like.
-         *
-         * The model you want to use as a Brand model needs to extends the
-         * `\Shopper\Framework\Models\Shop\Product\Brand` model.
-         */
-        'brand' => \App\Models\Brand::class, // [tl! focus]
+  ```php
+  return [
+    'models' => [
+      /*
+      * Eloquent model should be used to retrieve your brands. Of course,
+      * it is often just the "Brand" model but you may use whatever you like.
+      *
+      * The model you want to use as a Brand model needs to extends the
+      * `\Shopper\Framework\Models\Shop\Product\Brand` model.
+      */
+      'brand' => \App\Models\Brand::class, // [tl! focus]
 
-        /*
-         * Eloquent model should be used to retrieve your categories. Of course,
-         * it is often just the "Category" model but you may use whatever you like.
-         *
-         * The model you want to use as a Category model needs to extends the
-         * `\Shopper\Framework\Models\Shop\Product\Category` model.
-         */
-        'category'  => \Shopper\Framework\Models\Shop\Product\Category::class,
-	]
-];
-```
+      /*
+      * Eloquent model should be used to retrieve your categories. Of course,
+      * it is often just the "Category" model but you may use whatever you like.
+      *
+      * The model you want to use as a Category model needs to extends the
+      * `\Shopper\Framework\Models\Shop\Product\Category` model.
+      */
+      'category'  => \Shopper\Framework\Models\Shop\Product\Category::class,
+    ]
+  ];
+  ```
 :::
 
 ### Components
@@ -112,15 +110,13 @@ Livewire components for managing brands are available in the component configura
 use Shopper\Framework\Http\Livewire;
 
 return [
-  	'livewire' => [
-      	'brands.browse' => Livewire\Brands\Browse::class,
-      	'brands.create' => Livewire\Brands\Create::class,
-      	'brands.edit' => Livewire\Brands\Edit::class,
+  'livewire' => [
+    'brands.browse' => Livewire\Brands\Browse::class,
+    'brands.create' => Livewire\Brands\Create::class,
+    'brands.edit' => Livewire\Brands\Edit::class,
 
-      	'tables.brands-table' => Livewire\Tables\BrandsTable::class,
-
-  	];
-
+    'tables.brands-table' => Livewire\Tables\BrandsTable::class,
+  ];
 ];
 ```
 
@@ -170,25 +166,25 @@ use Carbon\Carbon;
 
 class HomeController extends Controller
 {
-    public function home()
-    {
-        $products = Product::with('categories', 'attributes')
-          ->publish()
-          ->take(8)
-          ->get()
-          ->map(function ($product) {
-            $product['is_new'] = $product->created_at
-              ->addDays(8)
-              ->greaterThanOrEqualTo(Carbon::now());
+  public function home()
+  {
+    $products = Product::with('categories', 'attributes')
+      ->publish()
+      ->take(8)
+      ->get()
+      ->map(function ($product) {
+        $product['is_new'] = $product->created_at
+          ->addDays(8)
+          ->greaterThanOrEqualTo(Carbon::now());
 
-            return $product;
-        });
+        return $product;
+    });
 
-        return view('home', [
-            'products' =>  $products,
-            'brands' => Brand::query()->get()->take(12), // [tl! focus]
-        ]);
-    }
+    return view('home', [
+      'products' =>  $products,
+      'brands' => Brand::query()->get()->take(12), // [tl! focus]
+    ]);
+  }
 }
 ```
 
@@ -205,10 +201,10 @@ use Illuminate\View\View;
 
 class BrandsComposer
 {
-    public function compose(View $view)
-    {
-        $view->with('brands', Brand::enabled()->get()->take(12));
-    }
+  public function compose(View $view)
+  {
+    $view->with('brands', Brand::enabled()->get()->take(12));
+  }
 }
 ```
 
@@ -223,10 +219,10 @@ use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
-    public function boot()
-    {
-        View::composer('partials.brands', BrandsComposer::class); // [tl! focus]
-    }
+  public function boot()
+  {
+    View::composer('partials.brands', BrandsComposer::class); // [tl! focus]
+  }
 }
 ```
 :::

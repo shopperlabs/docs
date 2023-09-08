@@ -55,16 +55,12 @@ Models used are defined in the models key, if you want to use your own models yo
 
 ``` php
 
-  ...
   'brand' => \Shopper\Core\Models\Brand::class,
 
-  ...
   'category' => \Shopper\Core\Models\Category::class,
 
-  ...
   'collection' => \Shopper\Core\Models\Collection::class,
 
-  ...
   'product' => \Shopper\Core\Models\Product::class,
 
 ```
@@ -87,6 +83,7 @@ During your work you may need to add your own style tables or javascript scenari
 The configuration of the routes allows you to specify a prefix to access your dashboard, the addition of middleware and the configuration file to add more routes to your administration.
 
 ### Prefix
+
 ```php
 // config/shopper/admin.php
 'prefix' => env('SHOPPER_PREFIX', 'cpanel'),
@@ -134,12 +131,11 @@ return [
     | for your app. By default all components from Shopper Kit are loaded in.
     |
     */
-  	'livewire' => [
-		'account.devices' => Components\Account\Devices::class,
-		'account.dropdown' => Components\Account\Dropdown::class,
-		'account.password' => Components\Account\Password::class,
-
-	],
+    'livewire' => [
+        'account.devices' => Components\Account\Devices::class,
+        'account.dropdown' => Components\Account\Dropdown::class,
+        'account.password' => Components\Account\Password::class,
+    ],
 ];
 ```
 

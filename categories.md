@@ -17,9 +17,9 @@ Category
  |
  |\__ Men
  |      \_ Accessories
- |		  |--> Bags
- |		  |--> Jeans
- |		  |--> Sunglasses
+ |      |--> Bags
+ |      |--> Jeans
+ |      |--> Sunglasses
  |      \_ Jeans
  |      \_ T-shirts
  |      \_ Shoes
@@ -55,26 +55,24 @@ Let's keep in mind the modification that was made in the previous section regard
 
 ```php
 return [
-	'models' => [
+  'models' => [
+    /*
+      * Eloquent model should be used to retrieve your brands. Of course,
+      * it is often just the "Brand" model but you may use whatever you like.
+      *
+      * The model you want to use as a Brand model needs to extends the
+      * `\Shopper\Framework\Models\Shop\Product\Brand` model.
+      */
+    'brand' => \App\Models\Brand::class,
 
-        /*
-         * Eloquent model should be used to retrieve your brands. Of course,
-         * it is often just the "Brand" model but you may use whatever you like.
-         *
-         * The model you want to use as a Brand model needs to extends the
-         * `\Shopper\Framework\Models\Shop\Product\Brand` model.
-         */
-        'brand' => \App\Models\Brand::class,
-
-        /*
-         * Eloquent model should be used to retrieve your categories. Of course,
-         * it is often just the "Category" model but you may use whatever you like.
-         *
-         * The model you want to use as a Category model needs to extends the
-         * `\Shopper\Framework\Models\Shop\Product\Category` model.
-         */
-
-        'category'  => \Shopper\Framework\Models\Shop\Product\Category::class, // [tl! focus]
+    /*
+    * Eloquent model should be used to retrieve your categories. Of course,
+    * it is often just the "Category" model but you may use whatever you like.
+    *
+    * The model you want to use as a Category model needs to extends the
+    * `\Shopper\Framework\Models\Shop\Product\Category` model.
+    */
+    'category'  => \Shopper\Framework\Models\Shop\Product\Category::class, // [tl! focus]
 	]
 ];
 ```
@@ -103,24 +101,23 @@ Once the `app/Models/Category.php` model is created in our app folder, we will m
   ```php
   return [
     'models' => [
+      /*
+      * Eloquent model should be used to retrieve your brands. Of course,
+      * it is often just the "Brand" model but you may use whatever you like.
+      *
+      * The model you want to use as a Brand model needs to extends the
+      * `\Shopper\Framework\Models\Shop\Product\Brand` model.
+      */
+      'brand' => \App\Models\Brand::class,
 
-          /*
-          * Eloquent model should be used to retrieve your brands. Of course,
-          * it is often just the "Brand" model but you may use whatever you like.
-          *
-          * The model you want to use as a Brand model needs to extends the
-          * `\Shopper\Framework\Models\Shop\Product\Brand` model.
-          */
-          'brand' => \App\Models\Brand::class,
-
-          /*
-          * Eloquent model should be used to retrieve your categories. Of course,
-          * it is often just the "Category" model but you may use whatever you like.
-          *
-          * The model you want to use as a Category model needs to extends the
-          * `\Shopper\Framework\Models\Shop\Product\Category` model.
-          */
-          'category'  => \App\Models\Category::class, // [tl! focus]
+      /*
+      * Eloquent model should be used to retrieve your categories. Of course,
+      * it is often just the "Category" model but you may use whatever you like.
+      *
+      * The model you want to use as a Category model needs to extends the
+      * `\Shopper\Framework\Models\Shop\Product\Category` model.
+      */
+      'category'  => \App\Models\Category::class, // [tl! focus]
     ]
   ];
   ```
@@ -133,15 +130,15 @@ Livewire components for managing categories are available in the component confi
 use Shopper\Framework\Http\Livewire;
 
 return [
-  	'livewire' => [
+  'livewire' => [
 
-      	'categories.browse' => Livewire\Categories\Browse::class,
-      	'categories.create' => Livewire\Categories\Create::class,
-      	'categories.edit' => Livewire\Categories\Edit::class,
+    'categories.browse' => Livewire\Categories\Browse::class,
+    'categories.create' => Livewire\Categories\Create::class,
+    'categories.edit' => Livewire\Categories\Edit::class,
 
-      	'tables.categories-table' => Livewire\Tables\CategoriesTable::class,
+    'tables.categories-table' => Livewire\Tables\CategoriesTable::class,
 
-  	];
+  ];
 
 ];
 ```
@@ -241,7 +238,7 @@ $child = Category::create([
 ]);
 ```
 
-On Shopper, to specify the parent category you just have to choose via the select field 
+On Shopper, to specify the parent category you just have to choose via the select field
 
 <div class="screenshot">
   <img src="/img/screenshots/{{version}}/category-parent.png" alt="category parent">
@@ -290,7 +287,7 @@ To find a category with his children or parent, etc. The following functions are
 $ancestors = Category::find($id)->ancestors;
 $categories = Category::with('descendants')->get();
 $categories = Category::whereHas('siblings', function ($query) {
-    $query->where('name', '=', 'Photo');
+  $query->where('name', '=', 'Photo');
 })->get();
 $total = Category::find($id)->descendants()->count();
 Category::find($id)->descendants()->update(['is_enabled' => false]);

@@ -54,23 +54,23 @@ use Livewire\Component;
 
 class MyComponent extends Component
 {
-	public ?string $fileUrl = null;
+    public ?string $fileUrl = null;
 
-	protected $listeners = [
-      	'shopper:fileUpdated' => 'onFileUpdate'
+    protected $listeners = [
+        'shopper:fileUpdated' => 'onFileUpdate'
     ];
 
-	public function onFileUpdate($file)
+    public function onFileUpdate($file)
     {
         $this->fileUrl = $file;
     }
 
-	public function store()
-	{
-		$model = YourModel::create([...]);
+    public function store()
+    {
+        $model = YourModel::create([...]);
 
-		if ($this->fileUrl) {
-			$model->addMedia($this->fileUrl)
+        if ($this->fileUrl) {
+            $model->addMedia($this->fileUrl)
               ->toMediaCollection(config('shopper.core.storage.collection_name'));
         }
     }
@@ -100,25 +100,24 @@ use Livewire\Component;
 
 class MyComponent extends Component
 {
-	public $files = [];
+    public $files = [];
 
-	protected $listeners = [
+    protected $listeners = [
       'shopper:filesUpdated' => 'onFilesUpdated'
     ];
 
-	public function onFilesUpdate($files)
+    public function onFilesUpdate($files)
     {
         $this->files = $files;
     }
 
-	public function store()
-	{
-		$model = YourModel::create([...]);
+    public function store()
+    {
+        $model = YourModel::create([...]);
 
-		if (collect($this->files)->isNotEmpty()) {
-			collect($this->files)->each(
-              fn ($file) => $model->addMedia($file)
-              	->toMediaCollection(config('shopper.core.storage.collection_name'))
+        if (collect($this->files)->isNotEmpty()) {
+            collect($this->files)->each(
+              fn ($file) => $model->addMedia($file)->toMediaCollection(config('shopper.core.storage.collection_name'))
             );
         }
     }
@@ -133,8 +132,8 @@ For the moment in Shopper for all the Model that's used Media Library the only c
 ```php
 public function registerMediaConversions(?Media $media = null): void
 {
-	$this->addMediaConversion('thumb200x200')
-      	->fit(Manipulations::FIT_CROP, 200, 200);
+    $this->addMediaConversion('thumb200x200')
+        ->fit(Manipulations::FIT_CROP, 200, 200);
 }
 ```
 
