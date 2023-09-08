@@ -30,7 +30,7 @@ The rest of the configuration will be done using the configuration files in the 
 
 We will deal with all this in more detail later.
 
-## How **not** to extend Shopper
+## How not to extend Shopper
 It should go without saying — but we'll say it anyway just in case...
 
 Don't ever, for any reason, ever, no matter what, no matter where, or who, or who you are with, or where you are going or... or where you've been... ever, for any reason, whatsoever, edit the files inside `/vendor/shopper`. Or any other Composer package. Anything you do will get blown away and you'll lose those changes forever and ever amen.
