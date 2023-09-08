@@ -74,8 +74,8 @@ Manual collections do not need to have rules.
 
 :::tip
 Models are customizable, and we recommend changing the **Collection** model when you configure your store.
-
 To change the model you need to look at the configuration file `config/shopper/system.php` at the key `models`.
+:::
 
 Let's keep in mind the modification that was made in the previous section regarding [Categories](/categories).
 
@@ -121,29 +121,29 @@ Once the `app/Models/Collection.php` model is created in our app folder, we will
   ```
 
 3. Update `Collection` key for the model on the `system.php` config file to use our new model
-```php
-return [
-  'models' => [
-    /*
-      * Eloquent model should be used to retrieve your categories. Of course,
-      * it is often just the "Category" model but you may use whatever you like.
-      *
-      * The model you want to use as a Category model needs to extends the
-      * `\Shopper\Core\Models\Category` model.
-      */
-    'category'  => \App\Models\Category::class,
+  ```php
+  return [
+    'models' => [
+      /*
+        * Eloquent model should be used to retrieve your categories. Of course,
+        * it is often just the "Category" model but you may use whatever you like.
+        *
+        * The model you want to use as a Category model needs to extends the
+        * `\Shopper\Core\Models\Category` model.
+        */
+      'category'  => \App\Models\Category::class,
 
-    /*
-    * Eloquent model should be used to retrieve your collections. Of course,
-    * it is often just the "Collection" model but you may use whatever you like.
-    *
-    * The model you want to use as a Collection model needs to extends the
-    * `\Shopper\Core\Models\Collection` model.
-    */
-    'collection'  => \App\Models\Collection::class, // [tl! focus]
-  ]
-];
-```
+      /*
+      * Eloquent model should be used to retrieve your collections. Of course,
+      * it is often just the "Collection" model but you may use whatever you like.
+      *
+      * The model you want to use as a Collection model needs to extends the
+      * `\Shopper\Core\Models\Collection` model.
+      */
+      'collection'  => \App\Models\Collection::class, // [tl! focus]
+    ]
+  ];
+  ```
 
 ### Components
 Livewire components for managing collections are available in the component configuration file `config/shopper/components.php`.
@@ -163,7 +163,6 @@ return [
 
   ];
 ];
-
 ```
 
 ## Manage Collections

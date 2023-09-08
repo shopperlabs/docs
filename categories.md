@@ -48,8 +48,8 @@ The model used is `Shopper\Core\Models\Category`.
 
 :::tip
 Models are customizable, and we recommend changing the **Category** model when you configure your store.
-
 To change the model you need to look at the configuration file `config/shopper/system.php` at the key `models`.
+:::
 
 Let's keep in mind the modification that was made in the previous section regarding [Brands](/brands).
 
@@ -83,7 +83,7 @@ return [
   ```
 Once the `app/Models/Category.php` model is created in our app folder, we will make it extend from the `Shopper\Core\Models\Category` model available in Shopper.
 
-1. Extend our Category model from the Category Shopper Model
+2. Extend our Category model from the Category Shopper Model
   ```php
   namespace App\Models;
 
@@ -118,7 +118,6 @@ Once the `app/Models/Category.php` model is created in our app folder, we will m
     ]
   ];
   ```
-:::
 
 ### Components
 

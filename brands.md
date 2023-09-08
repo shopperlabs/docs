@@ -32,8 +32,8 @@ The model used is `Shopper\Core\Models\Brand`.
 
 :::tip
 Models are customizable, and we recommend changing the **Brand** model when you configure your site.
-
 To change the model you need to look at the configuration file `config/shopper/system.php` at the key `models`.
+:::
 
 ```php
 return [
@@ -102,7 +102,6 @@ Once the `app/Models/Brand.php` model is created in our app folder, we will make
     ]
   ];
   ```
-:::
 
 ### Components
 Livewire components for managing brands are available in the component configuration file `config/shopper/components.php`.
@@ -192,6 +191,7 @@ class HomeController extends Controller
 
 :::tip
 Knowing that your brands can be displayed on several pages and places in your store, you can create a **View Composer** ([read more about View Composer](https://laravel.com/docs/9.x/views#view-composers)).
+:::
 
 - Create your brand composer undo a custom folder `app/View/Composers`
 
@@ -212,22 +212,21 @@ class BrandsComposer
 
 - Then you have to add it in your **AppServiceProvider**
 
-  ```php
-  namespace App\Providers;
+```php
+namespace App\Providers;
 
-  use App\View\Composers\BrandsComposer;
-  use Illuminate\Support\Facades\View;
-  use Illuminate\Support\ServiceProvider;
+use App\View\Composers\BrandsComposer;
+use Illuminate\Support\Facades\View;
+use Illuminate\Support\ServiceProvider;
 
-  class AppServiceProvider extends ServiceProvider
+class AppServiceProvider extends ServiceProvider
+{
+  public function boot()
   {
-    public function boot()
-    {
-      View::composer('partials.brands', BrandsComposer::class); // [tl! focus]
-    }
+    View::composer('partials.brands', BrandsComposer::class); // [tl! focus]
   }
-  ```
-:::
+}
+```
 
 And in your front-end you can browse your brands to have a display like this
 

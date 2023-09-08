@@ -16,19 +16,18 @@ app/
         BlogSidebar.php
 ```
 
-:::tip
+:::info
 We assume here that you have already seen how to add routes for our administration explained in this [section](/extending/control-panel#adding-control-panel-routes).
-
-Here we will assume that our `routes/shopper.php` file contains this
-
-    ```php
-    use Illuminate\Support\Facades\Route;
-
-    Route::prefix('blog')->group(function () {
-        Route::resource('posts', 'PostController')->only(['index', 'create', 'edit']);
-    });
-    ```
 :::
+
+Here we will assume that our `routes/shopper.php` file contains this :
+```php
+use Illuminate\Support\Facades\Route;
+
+Route::prefix('blog')->group(function () {
+    Route::resource('posts', 'PostController')->only(['index', 'create', 'edit']);
+});
+```
 
 :::warning
 You cannot use the notation `[PostController::class, 'index']` because this will not load and will generate an error. Everything is loaded directly from the RouteServiceProvider of Shopper
