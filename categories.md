@@ -48,8 +48,8 @@ The model used is `Shopper\Framework\Models\Shop\Product\Category`.
 
 :::tip
 Models are customizable, and we recommend changing the **Category** model when you configure your store.
-
 To change the model you need to look at the configuration file `config/shopper/system.php` at the key `models`.
+:::
 
 Let's keep in mind the modification that was made in the previous section regarding [Brands](/brands).
 
@@ -73,7 +73,7 @@ return [
     * `\Shopper\Framework\Models\Shop\Product\Category` model.
     */
     'category'  => \Shopper\Framework\Models\Shop\Product\Category::class, // [tl! focus]
-	]
+  ]
 ];
 ```
 
@@ -85,7 +85,6 @@ return [
 Once the `app/Models/Category.php` model is created in our app folder, we will make it extend from the `Shopper\Framework\Models\Shop\Product\Category` model available in Shopper.
 
 2. Extend our Category model from the Category Shopper Model
-
   ```php
   namespace App\Models;
 
@@ -97,7 +96,6 @@ Once the `app/Models/Category.php` model is created in our app folder, we will m
   ```
 
 3. Update `category` key for the model on the `system.php` config file to use our new model
-
   ```php
   return [
     'models' => [
@@ -121,7 +119,6 @@ Once the `app/Models/Category.php` model is created in our app folder, we will m
     ]
   ];
   ```
-:::
 
 ### Components
 Livewire components for managing categories are available in the component configuration file `config/shopper/components.php`.
