@@ -9,8 +9,8 @@ If you sell your own products, you must at least create your company as a brand:
 The management of brands is exactly the same as the one done in most of the e-commerce website creation tools: only the name can change. It is mainly used to facilitate the navigation of customers in your catalog, as it is increasingly common to search for a specific brand.
 
 <div class="screenshot">
-    <img src="/img/screenshots/{{version}}/brands.png" alt="Brands">
-    <div class="caption">Brands</div>
+  <img src="/img/screenshots/{{version}}/brands.png" alt="Brands">
+  <div class="caption">Brands</div>
 </div>
 
 New brands are automatically activated and available for your online store, even if they do not contain any products yet. You must deactivate them so that they do not appear online.
@@ -60,11 +60,11 @@ return [
 ```
 
 1. Create your own model that you have to use
-```bash
-php artisan make:model Brand
-```
+  ```bash
+  php artisan make:model Brand
+  ```
 
-Once the `app/Models/Brand.php` model is created in our app folder, we will make it extend from the `Shopper\Framework\Models\Shop\Product\Brand` model available in Shopper.
+  Once the `app/Models/Brand.php` model is created in our app folder, we will make it extend from the `Shopper\Framework\Models\Shop\Product\Brand` model available in Shopper.
 
 2. Extend our Brand model from the Brand Shopper Model
   ```php

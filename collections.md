@@ -66,8 +66,8 @@ Manual collections do not need to have rules.
 
 :::tip
 Models are customizable, and we recommend changing the **Collection** model when you configure your store.
-
 To change the model you need to look at the configuration file `config/shopper/system.php` at the key `models`.
+:::
 
 Let's keep in mind the modification that was made in the previous section regarding [Categories](/categories).
 
@@ -99,10 +99,9 @@ return [
   ```bash
   php artisan make:model Collection
   ```
-Once the `app/Models/Collection.php` model is created in our app folder, we will make it extend from the `Shopper\Framework\Models\Shop\Product\Collection` model available in Shopper.
+  Once the `app/Models/Collection.php` model is created in our app folder, we will make it extend from the `Shopper\Framework\Models\Shop\Product\Collection` model available in Shopper.
 
 2. Extend our Collection model from the Collection Shopper Model
-
   ```php
     namespace App\Models;
 
@@ -114,7 +113,6 @@ Once the `app/Models/Collection.php` model is created in our app folder, we will
   ```
 
 3. Update `Collection` key for the model on the `system.php` config file to use our new model
-
   ```php
   return [
     'models' => [
@@ -138,7 +136,6 @@ Once the `app/Models/Collection.php` model is created in our app folder, we will
     ]
   ];
   ```
-:::
 
 ### Components
 Livewire components for managing collections are available in the component configuration file `config/shopper/components.php`.
