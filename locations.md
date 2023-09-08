@@ -65,7 +65,7 @@ In your administration area you must click on the "cog" icon to display the sett
 - From your admin panel, on the blue sidebar click on the cog icon, go to `Settings > Locations`.
 
 <div class="screenshot">
-  <img src="/img/screenshots/{{version}}/settings-location.png" alt="Setting location">
+  <img src="/img/screenshots/{{version}}/settings.png" alt="Setting location">
   <div class="caption">Settings > locations</div>
 </div>
 

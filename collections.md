@@ -23,25 +23,20 @@ The question is essential, it is difficult to find this type of configuration on
 The advantage of having collections in addition to categories in Shopper is to differentiate or optimize the search for products by customers in your store.
 
 ### Depth
-
 A collection can't have a child or a parent like a category. So all the collections are at the same hierachical level.
 
 ### Condition
-
 Where products can be added to any category, collections cannot. Depending on the type of collection you want to create (Manual or Automatic) you will find yourself creating conditions or rules for the products that should be in that collection.
 
-
 ## Overview
-
 As mentioned above, the collections in Shopper are inspired by [Shopify collections](https://help.shopify.com/en/manual/products/collections). So there are also 2 types of collections: "Manual" and "Automatic" and the configuration for each is different.
 
 <div class="screenshot">
-    <img src="/img/screenshots/{{version}}/collections.png" alt="Collections">
-  	<div class="caption">Collections</div>
+  <img src="/img/screenshots/{{version}}/collections.png" alt="Collections">
+  <div class="caption">Collections</div>
 </div>
 
 ### Fields
-
 As the collections can be automatic, they are managed by 2 Models, the Collection model and the model for rules associated with automatic collections.
 
 Manual collections do not need to have rules.
@@ -49,7 +44,7 @@ Manual collections do not need to have rules.
 - Collection model is `Shopper\Core\Models\Collection`.
 - Rule model is `Shopper\Core\Models\CollectionRule`
 
-*Collection Model*
+**Collection Model**
 
 | Name        | Type      | Required   |  Notes   |
 |-------------|-----------|------------|------------|
@@ -62,7 +57,7 @@ Manual collections do not need to have rules.
 | `match_conditions` | enum  | no | Nullable, `['all', 'any']` |
 | `published_at` | dateTimeTz  | no | Default `now()` |
 
-*CollectionRule Model*
+**CollectionRule Model**
 
 | Name        | Type      | Required   |  Notes   |
 |-------------|-----------|------------|------------|

@@ -62,7 +62,7 @@ php artisan shopper:admin
 And you will be prompted for the user email, firstname, lastname and password. You can now login to start create products
 
 <div class="screenshot">
-  <img src="/img/screenshots/{{version}}/product-screenshot.png" alt="Product creation screenshot">
+  <img src="/img/screenshots/{{version}}/login.png" alt="Product creation screenshot">
 </div>
 
 ## New Shopper Directory

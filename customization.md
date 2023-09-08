@@ -154,11 +154,6 @@ To edit your shop information, you must:
 
 - From your administration, on the blue sidebar click on the settings icon at the bottom of the page **Settings > General**
 
-<div class="screenshot">
-  <img src="/img/screenshots/{{version}}/setting.jpg" alt="Admin Panel setting">
-  <div class="caption">Admin setting</div>
-</div>
-
 The component used to update store setting of the store is found in the component configuration file `config/shopper/components.php`, It's the `Shopper\Framework\Http\Livewire\Settings\General` component.
 
 ```php

@@ -62,7 +62,7 @@ RBAC (Role Based Access Control) or ACL (Access Control Layer) is an approach to
 To view the roles and permissions management page, you must go to the `Settings > Staff & Permissions`
 
 <div class="screenshot">
-  <img src="/img/screenshots/{{version}}/settings-staff.png" alt="Setting Staff & permissions">
+  <img src="/img/screenshots/{{version}}/settings.png" alt="Setting Staff & permissions">
   <div class="caption">Settings > Staff & permissions</div>
 </div>
 
@@ -176,17 +176,11 @@ And as already mentioned, all Shopper features are livewire components. So you c
 
 ### Create admin
 In addition to creating an administrator from the command line you can also do it from the Shopper interface, you just need to click on **Add Administrator** button.
+Then you fill in the information of your administrator with the role chosen for him
 
 <div class="screenshot">
   <img src="/img/screenshots/{{version}}/add-admin.png" alt="add new admin">
   <div class="caption">Add admin</div>
-</div>
-
-Then you fill in the information of your administrator with the role chosen for him
-
-<div class="screenshot">
-  <img src="/img/screenshots/{{version}}/admin-user-form.png" alt="add new admin form">
-  <div class="caption">Add admin form</div>
 </div>
 
 The actual role registration function looks like the code below. And the whole implementation class is `Shopper\Http\Livewire\Components\Settings\Management\CreateAdminUser`
@@ -226,8 +220,8 @@ Let’s assume that you would like to add a new permission to ACL. You will need
 In the way that when a admin are granted of a specific role, he take all role's permissions.
 
 <div class="screenshot">
-  <img src="/img/screenshots/{{version}}/permissions-browse.png" alt="Role's permissions example">
-  <div class="caption">Role's permissions example</div>
+  <img src="/img/screenshots/{{version}}/permissions-browse.png" alt="Role's permissions">
+  <div class="caption">Role's permissions</div>
 </div>
 
 As you may have noticed all permissions are grouped by type, and the available types are mentioned above in this [section](/roles-permissions#fields).
