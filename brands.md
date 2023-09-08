@@ -1,6 +1,4 @@
----
-title: Brands
----
+# Brands
 Most e-commerce sites sell products from several manufacturers. And each supplier can be represented by a brand.
 
 Unless you make your own products, you should always register the brands of your products in Shopper.
@@ -8,24 +6,21 @@ Unless you make your own products, you should always register the brands of your
 If you sell your own products, you must at least create your company as a brand: this helps your customer find what they are looking for, and this can bring some valuable search engine points.
 
 ## Overview
-
 The management of brands is exactly the same as the one done in most of the e-commerce website creation tools: only the name can change. It is mainly used to facilitate the navigation of customers in your catalog, as it is increasingly common to search for a specific brand.
 
 <div class="screenshot">
-    <img src="/img/brands.png" alt="Brands">
+    <img src="/img/screenshots/{{version}}/brands.png" alt="Brands">
     <div class="caption">Brands</div>
 </div>
 
 New brands are automatically activated and available for your online store, even if they do not contain any products yet. You must deactivate them so that they do not appear online.
 
-
 ### Fields
-
-The model used is `Shopper\Framework\Models\Shop\Product\Brand`. 
+The model used is `Shopper\Framework\Models\Shop\Product\Brand`.
 
 | Name        | Type      | Required   |  Notes   |
 |-------------|-----------|------------|------------|
-| `id` 		  | autoinc |         |  auto  |
+| `id`  | autoinc |         |  auto  |
 | `name`    | string  | yes |   |
 | `slug`    | string  | yes | Unique, default value is auto generated using brand name |
 | `website` | string  | no | Nullable |
@@ -42,8 +37,7 @@ To change the model you need to look at the configuration file `config/shopper/s
 
 ```php
 return [
-	'models' => [
-
+	  'models' => [
         /*
          * Eloquent model should be used to retrieve your brands. Of course,
          * it is often just the "Brand" model but you may use whatever you like.
@@ -51,7 +45,7 @@ return [
          * The model you want to use as a Brand model needs to extends the
          * `\Shopper\Framework\Models\Shop\Product\Brand` model.
          */
-		
+
         'brand' => \Shopper\Framework\Models\Shop\Product\Brand::class, // [tl! focus]
 
         /*
@@ -68,14 +62,13 @@ return [
 ```
 
 1. Create your own model that you have to use
-
-```shell
+```bash
 php artisan make:model Brand
 ```
+
 Once the `app/Models/Brand.php` model is created in our app folder, we will make it extend from the `Shopper\Framework\Models\Shop\Product\Brand` model available in Shopper.
 
 2. Extend our Brand model from the Brand Shopper Model
-
 ```php
 namespace App\Models;
 
@@ -87,11 +80,9 @@ class Brand extends Product\Brand
 ```
 
 3. Update `brand` key for the model on the `system.php` config file to use our new model
-
 ```php
 return [
 	'models' => [
-
         /*
          * Eloquent model should be used to retrieve your brands. Of course,
          * it is often just the "Brand" model but you may use whatever you like.
@@ -99,7 +90,6 @@ return [
          * The model you want to use as a Brand model needs to extends the
          * `\Shopper\Framework\Models\Shop\Product\Brand` model.
          */
-		
         'brand' => \App\Models\Brand::class, // [tl! focus]
 
         /*
@@ -109,7 +99,6 @@ return [
          * The model you want to use as a Category model needs to extends the
          * `\Shopper\Framework\Models\Shop\Product\Category` model.
          */
-
         'category'  => \Shopper\Framework\Models\Shop\Product\Category::class,
 	]
 ];
@@ -117,43 +106,36 @@ return [
 :::
 
 ### Components
-
 Livewire components for managing brands are available in the component configuration file `config/shopper/components.php`.
 
 ```php
 use Shopper\Framework\Http\Livewire;
 
 return [
-	...
-  
   	'livewire' => [
-  		...
       	'brands.browse' => Livewire\Brands\Browse::class,
       	'brands.create' => Livewire\Brands\Create::class,
       	'brands.edit' => Livewire\Brands\Edit::class,
-      
-      	'tables.brands-table' => Livewire\Tables\BrandsTable::class,
-      	...
-  	];
-  
-  	...
-];
 
+      	'tables.brands-table' => Livewire\Tables\BrandsTable::class,
+
+  	];
+
+];
 ```
+
 For handling tables in Shopper, we use [Laravel Livewire Tables](https://github.com/rappasoft/laravel-livewire-tables) package by Anthony Rappa.
 
 ## Manage Brands
-
 The brands are accessible via the Brands Menu on the left sidebar. The display page is rendered by the Livewire component `Shopper\Framework\Http\Livewire\Brands\Browse` and for the display of the brands table is the component `Shopper\Framework\Http\Livewire\Tables\BrandsTable`.
 
-You can modify them in the component configuration file to use your own. 
+You can modify them in the component configuration file to use your own.
 
 ### Create brand
-
 Click on the "Create" button on the brands page, and a creation form appears.
 
 <div class="screenshot">
-  <img src="/img/create-brand.png" alt="Create brand">
+  <img src="/img/screenshots/{{version}}/create-brand.png" alt="Create brand">
   <div class="caption">Create brand</div>
 </div>
 
@@ -162,23 +144,21 @@ Save your changes in order to be taken back to the brand's list. Required fields
 The SEO section allows you to define how your brand information should be displayed in search engines. To modify the content you click on the button "Edit SEO preview"
 
 <div class="screenshot">
-  <img src="/img/brand-seo.png" alt="brand seo form">
+  <img src="/img/screenshots/{{version}}/brand-seo.png" alt="brand seo form">
   <div class="caption">Brand SEO</div>
 </div>
 
 By fill the data you will have a direct preview of the content.
 
 ### Delete brand
-
 To delete, deactivate or activate brands, you need to select the brand you want to delete and then click on the "Bulk Actions" button to choose the action you want to perform.
 
 <div class="screenshot">
-  <img src="/img/delete-brand.png" alt="delete brand">
+  <img src="/img/screenshots/{{version}}/delete-brand.png" alt="delete brand">
   <div class="caption">Delete brand</div>
 </div>
 
 ## Retrieve Data
-
 Once you have your brands and you want to display them in your store, you can retrieve them this way in your controller
 
 ```php
@@ -210,7 +190,6 @@ class HomeController extends Controller
         ]);
     }
 }
-
 ```
 
 :::tip
@@ -255,6 +234,6 @@ class AppServiceProvider extends ServiceProvider
 And in your front-end you can browse your brands to have a display like this
 
 <div class="screenshot">
-  <img src="/img/brand-lists.png" alt="Brands preview list">
+  <img src="/img/screenshots/{{version}}/brand-lists.png" alt="Brands preview list">
   <div class="caption">Brands example list</div>
 </div>
