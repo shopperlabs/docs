@@ -77,14 +77,14 @@ return [
 ];
 ```
 
-1. Create your own model that you have to use
+- Create your own model that you have to use
   ```bash
   php artisan make:model Category
   ```
 
   Once the `app/Models/Category.php` model is created in our app folder, we will make it extend from the `Shopper\Core\Models\Category` model available in Shopper.
 
-1. Extend our Category model from the Category Shopper Model
+- Extend our Category model from the Category Shopper Model
   ```php
   namespace App\Models;
 
@@ -95,7 +95,7 @@ return [
   }
   ```
 
-3. Update `category` key for the model on the `system.php` config file to use our new model
+- Update `category` key for the model on the `system.php` config file to use our new model
   ```php
   return [
     'models' => [
