@@ -95,13 +95,13 @@ return [
 ];
 ```
 
-1. Create your own model that you have to use
+- Create your own model that you have to use
   ```bash
   php artisan make:model Collection
   ```
   Once the `app/Models/Collection.php` model is created in our app folder, we will make it extend from the `Shopper\Framework\Models\Shop\Product\Collection` model available in Shopper.
 
-2. Extend our Collection model from the Collection Shopper Model
+- Extend our Collection model from the Collection Shopper Model
   ```php
     namespace App\Models;
 
@@ -112,7 +112,7 @@ return [
     }
   ```
 
-3. Update `Collection` key for the model on the `system.php` config file to use our new model
+- Update `Collection` key for the model on the `system.php` config file to use our new model
   ```php
   return [
     'models' => [

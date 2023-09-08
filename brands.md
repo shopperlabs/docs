@@ -59,14 +59,14 @@ return [
 ];
 ```
 
-1. Create your own model that you have to use
+- Create your own model that you have to use
   ```bash
   php artisan make:model Brand
   ```
 
   Once the `app/Models/Brand.php` model is created in our app folder, we will make it extend from the `Shopper\Framework\Models\Shop\Product\Brand` model available in Shopper.
 
-2. Extend our Brand model from the Brand Shopper Model
+- Extend our Brand model from the Brand Shopper Model
   ```php
   namespace App\Models;
 
@@ -77,7 +77,7 @@ return [
   }
   ```
 
-3. Update `brand` key for the model on the `system.php` config file to use our new model
+- Update `brand` key for the model on the `system.php` config file to use our new model
   ```php
   return [
     'models' => [
