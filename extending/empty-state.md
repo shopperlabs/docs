@@ -1,3 +1,0 @@
-# Empty State
-
-Coming Soon...
