@@ -1,4 +1,4 @@
 - ##### Admin Panel
-  - [Overview](/docs/{{version}}/extending/control-panel)
-  - [Controllers](/docs/{{version}}/extending/controllers)
-  - [Navigation](/docs/{{version}}/extending/navigation)
+  - [Overview](/docs/{{version}}/control-panel)
+  - [Controllers](/docs/{{version}}/controllers)
+  - [Navigation](/docs/{{version}}/navigation)
