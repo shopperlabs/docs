@@ -2,3 +2,7 @@
   - [Overview](/docs/{{version}}/control-panel)
   - [Controllers](/docs/{{version}}/controllers)
   - [Navigation](/docs/{{version}}/navigation)
+- ##### Components
+  - [Forms](/docs/{{version}}/forms)
+  - [Modals](/docs/{{version}}/modals)
+  - [Events](/docs/{{version}}/events)
