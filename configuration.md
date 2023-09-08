@@ -122,7 +122,7 @@ Here is an example of some components
 use Shopper\Http\Livewire\Components;
 
 return [
-	/*
+    /*
     |--------------------------------------------------------------------------
     | Livewire Components
     |--------------------------------------------------------------------------
@@ -191,7 +191,6 @@ In your `config/filesystems.php` config file add the following to the disks and 
 
 ``` php
 'disks' => [
-    ...
     // Shopper Uploads Disks. [tl! highlight:13]
     'avatars' => [ // [tl! collapse:start]
         'driver' => 'local',
@@ -221,7 +220,6 @@ In your `config/filesystems.php` config file add the following to the disks and 
 */
 
 'links' => [
-    ...
     // [tl! highlight:2]
     public_path('avatars') => storage_path('app/avatars'),
     public_path('uploads') => storage_path('app/uploads'),
