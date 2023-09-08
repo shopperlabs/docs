@@ -24,7 +24,7 @@ But you can change this namespace, you can change it for example to load them in
 
 You can create a controller using the following laravel command, which will generate a class in the `App\Http\Controllers\Shopper` namespace.
 
-```shell
+```bash
 php artisan make:controller Shopper\\PostController
 ```
 
@@ -38,7 +38,6 @@ use Illuminate\Http\Request;
 
 class PostController extends Controller
 {
-    //
+  //
 }
-
 ```

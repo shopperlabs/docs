@@ -1,13 +1,10 @@
 # Installation
-
 Quick start guide for installing and configuring Laravel Shopper on your existing Laravel App.
 
 ## Supported Versions of Laravel
-
 **Laravel 9 and Laravel 10 are supported.** It feels like this section needs more than one sentence but it really doesn't. That first one said all that needs saying.
 
 ## Install Shopper
-
 Shopper is really easy to install. After creating your new app or in an existing Laravel app \(8+\). There are 2 steps to follow to install Shopper.
 
 1. Run `php artisan config:clear` to make sure your config isn't cached.
@@ -19,9 +16,7 @@ Shopper is really easy to install. After creating your new app or in an existing
     ```
 
 ## Write Env Variables
-
 Next make sure to create a new database and add your database credentials to your .env file, you will also want to add your application URL in the `APP_URL` variable
-
    ```bash
     APP_URL=http://laravelshopper.test
     DB_HOST=localhost
@@ -31,7 +26,6 @@ Next make sure to create a new database and add your database credentials to you
   ```
 
 ## Automatic Installation
-
 After installing Shopper in your project via compose and configuring the database, now we will automatically install in the project.
 
   ```bash
@@ -43,13 +37,12 @@ This will install shopper, publish vendor files, create shopper and storage syml
 And we're all good to go!
 
 ## Update Existing Files
-
-Extend your current User Model \(usually `app/Models/User.php`\) using the `Shopper\Framework\Models\User\User as Authenticatable` alias:
+Extend your current User Model \(usually `app/Models/User.php`\) using the `Shopper\Core\Models\User as Authenticatable` alias:
 
 ```php
 // app/Models/User.php
 
-use Shopper\Framework\Models\User\User as Authenticatable; 
+use Shopper\Core\Models\User as Authenticatable; 
 
 class User extends Authenticatable
 {
@@ -58,32 +51,28 @@ class User extends Authenticatable
 ```
 
 ## Create an Admin user
-
 Now we can create a new superuser and sign into the Dashboard and start creating some content to display on the frontend.
 
 Run the following command to create a user with supreme \(at the moment of creation\) rights:
 
-```shell
+```bash
 php artisan shopper:admin
 ```
 
 And you will be prompted for the user email, firstname, lastname and password. You can now login to start create products
 
 <div class="screenshot">
-    <img src="/img/product-screenshot.png" alt="Product creation screenshot">
+  <img src="/img/screenshots/{{version}}/product-screenshot.png" alt="Product creation screenshot">
 </div>
 
-    
 ## New Shopper Directory
-
 After Shopper is installed, you'll have 1 new directory in your project:
 - `config/shopper/`
 
 ## Publish Vendor Files
-
 If you want to publish again Shopper's vendor files run these commands:
 
-```shell
+```bash
 php artisan shopper:publish
 ```
 
@@ -93,6 +82,6 @@ After that, run `composer dump-autoload` to finish your installation!
 
 If your are using Laravel Valet you can easily access with your project name with `.test` at the end when you navigate on you project.
 
-```shell
+```bash
 http://laravelshopper.test/shopper/login
 ```

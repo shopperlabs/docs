@@ -6,8 +6,8 @@ If you have already used [Shopify](https://shopify.com) it is a bit the same mod
 You can set up multiple locations in your store so that you can track inventory and have excel documents of the products ordered in each of your locations. Your locations can be retail stores, warehouses, popups, or any other place where you manage or store inventory. With multiple locations, you have better visibility into your inventory in your business.
 
 <div class="screenshot">
-    <img src="/img/screenshots/location-admin.png" alt="Locations">
-    <div class="caption">Locations</div>
+  <img src="/img/screenshots/{{version}}/location-admin.png" alt="Locations">
+  <div class="caption">Locations</div>
 </div>
 
 A location is a physical place or space where you perform any or all of the following activities: Selling products, shipping or fulfillment orders, and inventory inventory (this may even be your apartment).
@@ -16,24 +16,24 @@ A location is a physical place or space where you perform any or all of the foll
 From the administration area of your store you can't manage more than 4 inventories. This system being still experimental we are working on it to make it simpler to facilitate the management of your store.
 
 ### Fields
-The model used is `Shopper\Core\Models\Inventory`. 
+The model used is `Shopper\Core\Models\Inventory`.
 
 | Name        | Type      | Required   |  Notes   |
 |--------------|-----------|------------|------------|
-| `id` 		   | autoinc   |            |   auto     |
-| `code` 	   | string  | yes | Unique, the code is a unique element that allows to index an inventory in a unique way, a bit like a slug |
+| `id`  | autoinc   |            |   auto     |
+| `code` | string  | yes | Unique, the code is a unique element that allows to index an inventory in a unique way, a bit like a slug |
 | `description`| text | no | nullable |
 | `email`  | string | yes | Unique, the location email address |
 | `street_address` | string | yes | The address details (street, nr, building, etc) |
 | `street_address_plus` | string | no | The second address details (optional) |
-| `zipcode`	 | string | yes | National identification code. (optional) |
-| `city` 	 | string | yes | The city/settlement |
+| `zipcode`	| string | yes | National identification code. (optional) |
+| `city` | string | yes | The city/settlement |
 | `phone_number` | string | no | Nullable |
-| `priority` 	| integer  | default (`0`) | no |
-| `latitude` 	| decimal | no | Nullable, GPS latitude coordinates |
-| `longitude` 	| decimal | no | Nullable, GPS longitude coordinates |
-| `is_default` 	| boolean | no | Default `false`, define location as defaut for stock|
-| `country_id` 	| string   | yes | foreign key for country, each location must be linked to a country |
+| `priority` | integer  | default (`0`) | no |
+| `latitude` | decimal | no | Nullable, GPS latitude coordinates |
+| `longitude` | decimal | no | Nullable, GPS longitude coordinates |
+| `is_default` | boolean | no | Default `false`, define location as defaut for stock|
+| `country_id` | string   | yes | foreign key for country, each location must be linked to a country |
 
 ### Components
 The components used to manage locations are found in the component configuration file `config/shopper/components.php`.
@@ -43,19 +43,16 @@ use Shopper\Core\Http\Livewire;
 use Shopper\Core\Http\Livewire\Components;
 
 return [
+  'livewire' => [
 
-  	'livewire' => [
+    'modals.delete-inventory' => Livewire\Modals\DeleteInventory::class, // [tl! focus]
 
-      	'modals.delete-inventory' => Livewire\Modals\DeleteInventory::class, // [tl! focus]
+    'settings.inventories.browse' => Components\Settings\Inventories\Browse::class, // [tl! focus]
+    'settings.inventories.create' => Components\Settings\Inventories\Create::class,// [tl! focus]
+    'settings.inventories.edit' => Components\Settings\Inventories\Edit::class,// [tl! focus]
 
-      	'settings.inventories.browse' => Components\Settings\Inventories\Browse::class, // [tl! focus]
-      	'settings.inventories.create' => Components\Settings\Inventories\Create::class,// [tl! focus]
-      	'settings.inventories.edit' => Components\Settings\Inventories\Edit::class,// [tl! focus]
-
-  	];
-
+  ];
 ];
-
 ```
 
 You can expand each of its components to customize this section or replace the entire section if your system requires it.
@@ -68,7 +65,7 @@ In your administration area you must click on the "cog" icon to display the sett
 - From your admin panel, on the blue sidebar click on the cog icon, go to `Settings > Locations`.
 
 <div class="screenshot">
-  <img src="/img/screenshots/settings-location.png" alt="Setting location">
+  <img src="/img/screenshots/{{version}}/settings-location.png" alt="Setting location">
   <div class="caption">Settings > locations</div>
 </div>
 
@@ -79,7 +76,7 @@ In your administration area you must click on the "cog" icon to display the sett
 2. Enter a unique name and an address for the location.
 
 <div class="screenshot">
-  <img src="/img/screenshots/add-location.png" alt="Add location">
+  <img src="/img/screenshots/{{version}}/add-location.png" alt="Add location">
   <div class="caption">Add location</div>
 </div>
 
@@ -87,7 +84,7 @@ In your administration area you must click on the "cog" icon to display the sett
 To update a location you click on an available location among those you have saved and you will have the update page.
 
 <div class="screenshot">
-  <img src="/img/screenshots/update-location.png" alt="update location">
+  <img src="/img/screenshots/{{version}}/update-location.png" alt="update location">
   <div class="caption">Update location</div>
 </div>
 
@@ -97,7 +94,7 @@ The default location is the one in which all products will be collected with eac
 You select a location and during the modification you click on the checkbox **Set as default inventory**
 
 <div class="screenshot">
-  <img src="/img/screenshots/default-location.png" alt="Set default location">
+  <img src="/img/screenshots/{{version}}/default-location.png" alt="Set default location">
   <div class="caption">Set default location</div>
 </div>
 
@@ -105,7 +102,7 @@ You select a location and during the modification you click on the checkbox **Se
 To delete a location you must click on a location to display it and at the bottom of the page you click on the delete button.
 
 <div class="screenshot">
-  <img src="/img/screenshots/delete-location.png" alt="Delete location">
+  <img src="/img/screenshots/{{version}}/delete-location.png" alt="Delete location">
   <div class="caption">Delete location confirmation</div>
 </div>
 

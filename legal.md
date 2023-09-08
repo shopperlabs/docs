@@ -4,15 +4,15 @@ As with any e-commerce site, it is important for users to know the terms and con
 This section allows you to set up your pages for your privacy policy, return policy, terms of use and shipping policy to be presented to customers.
 
 ## Fields
-The model used is `Shopper\Core\Models\Legal`. 
+The model used is `Shopper\Core\Models\Legal`.
 
 | Name        | Type      | Required   |  Notes   |
 |--------------|-----------|------------|------------|
-| `id` 		   | autoinc   |            |   auto     |
-| `title` 	  | string  | yes | Unique, title of the legal page |
-| `slug` 	  | string  | yes | Unique, this is dynamically generated based on the title |
+| `id` | autoinc   |            |   auto     |
+| `title` | string  | yes | Unique, title of the legal page |
+| `slug` | string  | yes | Unique, this is dynamically generated based on the title |
 | `content`| longText | no | nullable, the text of the legal page |
-| `is_enabled` 	| boolean | no | Default `false`, define if this legal page is ready to use|
+| `is_enabled`  boolean | no | Default `false`, define if this legal page is ready to use|
 
 ## Components
 The components used to manage Legal page are found in the component configuration file `config/shopper/components.php`. Each component corresponds to the page that is defined
@@ -21,16 +21,13 @@ The components used to manage Legal page are found in the component configuratio
 use Shopper\Http\Livewire\Components;
 
 return [
-
-  	'livewire' => [
-      	'settings.legal.privacy' => Components\Settings\Legal\Privacy::class,
-      	'settings.legal.refund' => Components\Settings\Legal\Refund::class,
-      	'settings.legal.shipping' => Components\Settings\Legal\Shipping::class,
-      	'settings.legal.terms' => Components\Settings\Legal\Terms::class,
-  	];
-
+    'livewire' => [
+        'settings.legal.privacy' => Components\Settings\Legal\Privacy::class,
+        'settings.legal.refund' => Components\Settings\Legal\Refund::class,
+        'settings.legal.shipping' => Components\Settings\Legal\Shipping::class,
+        'settings.legal.terms' => Components\Settings\Legal\Terms::class,
+    ];
 ];
-
 ```
 
 ## Add Legal content
@@ -39,14 +36,14 @@ In your administration area you must click on the "cog" icon to display the sett
 - From your admin panel, on the blue sidebar click on the cog icon, go to `Settings > Legal`.
 
 <div class="screenshot">
-    <img src="/img/screenshots/settings-legal.png" alt="legal setting">
+    <img src="/img/screenshots/{{version}}/settings-legal.png" alt="legal setting">
     <div class="caption">Settings > Legal</div>
 </div>
 
 Once in this page, all the legal pages are displayed as a tab. You can just fill in the content of each page and click on the Enable switch to retrieve the content of your page and display it in your front-end.
 
 <div class="screenshot">
-    <img src="/img/screenshots/legal-screenshot.png" alt="legal pages">
+    <img src="/img/screenshots/{{version}}/legal-screenshot.png" alt="legal pages">
     <div class="caption">Legal pages</div>
 </div>
 
@@ -59,7 +56,7 @@ Once the information is filled in, we can display it to our users in the views w
 
 To do this we will start by creating a controller that will take care of collecting our information and send it to a view
 
-```shell
+```bash
 php artisan make:controller LegalController
 ```
 

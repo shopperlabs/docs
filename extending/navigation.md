@@ -1,13 +1,9 @@
 # Navigation
-
 The Control Panel navigation is quite customizable. You can add your own sections, pages, and subpages, as well as remove and modify existing ones.
-
----
 
 The navigation is controlled by the package [shopper/sidebar](https://github.com/shopperlabs/sidebar). You need to create a sidebar to add your menus within the main sidebar of Shopper. You may register your sidebar like event in the `register()` method of a service provider.
 
 ## Adding Navigation
-
 Let’s assume we’re creating a Sidebar folder under app folder, and want to add a Blog navigation item to the Content section of the navigation. To add this item, we’ll create first a `BlogSidebar` class.
 
 There is no command to create this class so you have to create it manually and it must extend from `Shopper\Sidebar\AbstractAdminSidebar`
@@ -25,14 +21,13 @@ We assume here that you have already seen how to add routes for our administrati
 
 Here we will assume that our `routes/shopper.php` file contains this
 
-```php
-use Illuminate\Support\Facades\Route;
+    ```php
+    use Illuminate\Support\Facades\Route;
 
-Route::prefix('blog')->group(function () {
-    Route::resource('posts', 'PostController')->only(['index', 'create', 'edit']);
-});
-
-```
+    Route::prefix('blog')->group(function () {
+        Route::resource('posts', 'PostController')->only(['index', 'create', 'edit']);
+    });
+    ```
 :::
 
 :::warning
@@ -42,8 +37,6 @@ You cannot use the notation `[PostController::class, 'index']` because this will
 Our BlogSidebar will look like this
 
 ```php
-<?php
-  
 namespace App\Sidebar;
 
 use Maatwebsite\Sidebar\Group;
@@ -85,8 +78,6 @@ class BlogSidebar extends AbstractAdminSidebar
 Now we will register our sidebar in our **AppServiceProvider** with the `register()` method
 
 ```php
-<?php
-
 namespace App\Providers;
 
 use App\Sidebar\BlogSidebar; // [tl! focus]
@@ -144,16 +135,14 @@ class AppServiceProvider extends ServiceProvider
 We will have this in our sidebar
 
 <div class="screenshot">
-    <img src="/img/sidebar-screen.png" alt="Blog sidebar">
+    <img src="/img/screenshots/{{version}}/sidebar-screen.png" alt="Blog sidebar">
     <div class="caption">Blog sidebar</div>
 </div>
 
 ## The Menu & Item Class
-
 Each item you see in the navigation is an instance of the `Maatwebsite\Sidebar\Item` class. Each top-level `Menu` in a section can contain its own group of `Item` children.
 
 ### Basic API
-
 The code examples above demonstrate how to add Navigation. Once you have a `Item` object, the following chainable methods are available to you:
 
 | Method | Parameters | Description |

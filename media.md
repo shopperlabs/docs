@@ -9,7 +9,7 @@ For uploading images we are using [FilePond](https://pqina.nl/) and some custom 
 ### Filepond
 This component is used to update media at the product level and variants for products.
 <div class="screenshot">
-  <img src="/img/screenshots/filepond.png" alt="filepond">
+  <img src="/img/screenshots/{{version}}/filepond.png" alt="filepond">
   <div class="caption">Filepond upload</div>
 </div>
 
@@ -35,7 +35,7 @@ So you have to set up the file upload in your Livewire component yourself. An ex
 ### Single upload
 Single Upload is a reusable Livewire component created for single upload management with Livewire
 <div class="screenshot">
-  <img src="/img/screenshots/single-upload.png" alt="single upload">
+  <img src="/img/screenshots/{{version}}/single-upload.png" alt="single upload">
   <div class="caption">Single upload component</div>
 </div>
 
@@ -54,23 +54,23 @@ use Livewire\Component;
 
 class MyComponent extends Component
 {
-	public ?string $fileUrl = null;
+    public ?string $fileUrl = null;
 
-	protected $listeners = [
-      	'shopper:fileUpdated' => 'onFileUpdate'
+    protected $listeners = [
+        'shopper:fileUpdated' => 'onFileUpdate'
     ];
 
-	public function onFileUpdate($file)
+    public function onFileUpdate($file)
     {
         $this->fileUrl = $file;
     }
 
-	public function store()
-	{
-		$model = YourModel::create([...]);
+    public function store()
+    {
+        $model = YourModel::create([...]);
 
-		if ($this->fileUrl) {
-			$model->addMedia($this->fileUrl)
+        if ($this->fileUrl) {
+            model->addMedia($this->fileUrl)
               ->toMediaCollection(config('shopper.core.storage.collection_name'));
         }
     }
@@ -89,7 +89,7 @@ The component used is `Shopper\Http\Livewire\Components\Forms\Uploads\Multiple` 
 ```
 
 <div class="screenshot">
-  <img src="/img/screenshots/multiple-upload.png" alt="multiple upload">
+  <img src="/img/screenshots/{{version}}/multiple-upload.png" alt="multiple upload">
   <div class="caption">Multiple upload component</div>
 </div>
 
@@ -100,25 +100,24 @@ use Livewire\Component;
 
 class MyComponent extends Component
 {
-	public $files = [];
+    public $files = [];
 
-	protected $listeners = [
+    protected $listeners = [
       'shopper:filesUpdated' => 'onFilesUpdated'
     ];
 
-	public function onFilesUpdate($files)
+    public function onFilesUpdate($files)
     {
         $this->files = $files;
     }
 
-	public function store()
-	{
-		$model = YourModel::create([...]);
+    public function store()
+    {
+        $model = YourModel::create([...]);
 
-		if (collect($this->files)->isNotEmpty()) {
-			collect($this->files)->each(
-              fn ($file) => $model->addMedia($file)
-              	->toMediaCollection(config('shopper.core.storage.collection_name'))
+        if (collect($this->files)->isNotEmpty()) {
+            collect($this->files)->each(
+              fn ($file) => $model->addMedia($file)->toMediaCollection(config('shopper.core.storage.collection_name'))
             );
         }
     }
@@ -133,15 +132,13 @@ For the moment in Shopper for all the Model that's used Media Library the only c
 ```php
 public function registerMediaConversions(?Media $media = null): void
 {
-	$this->addMediaConversion('thumb200x200')
-      	->fit(Manipulations::FIT_CROP, 200, 200);
+    $this->addMediaConversion('thumb200x200')->fit(Manipulations::FIT_CROP, 200, 200);
 }
 ```
 
 But you can extend the different models to add conversions according to your needs.
 
 ## Retrieving Images
-
 ### Thumbnails
 The presence of thumbnails is a very common scenario, which is why Shopper use them.
 

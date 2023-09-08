@@ -1,5 +1,4 @@
 # Empty State
 
----
 
 Coming Soon...

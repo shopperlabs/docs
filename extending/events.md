@@ -1,7 +1,5 @@
-# Notifications
+# Events
 
-Notifications are used to alert an administrator when an action has been performed.
-
----
+Shopper dispatch events when an action has been performed on some models.
 
 Coming Soon...
