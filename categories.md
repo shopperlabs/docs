@@ -81,9 +81,10 @@ return [
   ```bash
   php artisan make:model Category
   ```
-Once the `app/Models/Category.php` model is created in our app folder, we will make it extend from the `Shopper\Core\Models\Category` model available in Shopper.
 
-2. Extend our Category model from the Category Shopper Model
+  Once the `app/Models/Category.php` model is created in our app folder, we will make it extend from the `Shopper\Core\Models\Category` model available in Shopper.
+
+1. Extend our Category model from the Category Shopper Model
   ```php
   namespace App\Models;
 

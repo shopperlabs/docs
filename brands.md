@@ -64,7 +64,7 @@ return [
   php artisan make:model Brand
   ```
 
-Once the `app/Models/Brand.php` model is created in our app folder, we will make it extend from the `Shopper\Core\Models\Brand` model available in Shopper.
+  Once the `app/Models/Brand.php` model is created in our app folder, we will make it extend from the `Shopper\Core\Models\Brand` model available in Shopper.
 
 2. Extend our Brand model from the Brand Shopper Model
   ```php
@@ -78,7 +78,6 @@ Once the `app/Models/Brand.php` model is created in our app folder, we will make
   ```
 
 3. Update `brand` key for the model on the `system.php` config file to use our new model
-
   ```php
   return [
     'models' => [
@@ -121,6 +120,7 @@ return [
   ];
 ];
 ```
+
 For handling tables in Shopper, we use [Laravel Livewire Tables](https://github.com/rappasoft/laravel-livewire-tables) package by Anthony Rappa.
 
 ## Manage Brands

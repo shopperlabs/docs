@@ -107,7 +107,8 @@ return [
   ```bash
   php artisan make:model Collection
   ```
-Once the `app/Models/Collection.php` model is created in our app folder, we will make it extend from the `Shopper\Core\Models\Collection` model available in Shopper.
+
+  Once the `app/Models/Collection.php` model is created in our app folder, we will make it extend from the `Shopper\Core\Models\Collection` model available in Shopper.
 
 2. Extend our Collection model from the Collection Shopper Model
   ```php
