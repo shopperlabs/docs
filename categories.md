@@ -34,6 +34,8 @@ Category
 ### Fields
 The model used is `Shopper\Framework\Models\Shop\Product\Category`.
 
+<div class="overflow-auto">
+
 | Name        | Type      | Required   |  Notes   |
 |-------------|-----------|------------|------------|
 | `id` | autoinc |         |  auto  |
@@ -45,6 +47,8 @@ The model used is `Shopper\Framework\Models\Shop\Product\Category`.
 | `seo_title` | string  | no | Nullable, for seo title max length is 60  |
 | `seo_description` | string  | no | Nullable, for seo description max length is 160 |
 | `parent_id` | bigint  | no |  |
+
+</div>
 
 :::tip
 Models are customizable, and we recommend changing the **Category** model when you configure your store.
