@@ -41,7 +41,7 @@ Manual collections do not need to have rules.
 - Collection model is `Shopper\Framework\Models\Shop\Product\Collection`.
 - Rule model is `Shopper\Framework\Models\Shop\Product\CollectionRule`
 
-*Collection Model*
+**Collection Model**
 
 | Name        | Type      | Required   |  Notes   |
 |-------------|-----------|------------|------------|
@@ -54,7 +54,7 @@ Manual collections do not need to have rules.
 | `match_conditions` | enum  | no | Nullable, `['all', 'any']` |
 | `published_at` | dateTimeTz  | no | Default `now()` |
 
-*CollectionRule Model*
+**CollectionRule Model**
 
 | Name        | Type      | Required   |  Notes   |
 |-------------|-----------|------------|------------|
@@ -95,14 +95,14 @@ return [
 ];
 ```
 
-- Create your own model that you have to use
-  ```bash
-  php artisan make:model Collection
-  ```
-  Once the `app/Models/Collection.php` model is created in our app folder, we will make it extend from the `Shopper\Framework\Models\Shop\Product\Collection` model available in Shopper.
+1. Create your own model that you have to use
+    ```bash
+    php artisan make:model Collection
+    ```
+    Once the `app/Models/Collection.php` model is created in our app folder, we will make it extend from the `Shopper\Framework\Models\Shop\Product\Collection` model available in Shopper.
 
-- Extend our Collection model from the Collection Shopper Model
-  ```php
+2. Extend our Collection model from the Collection Shopper Model
+    ```php
     namespace App\Models;
 
     use Shopper\Framework\Models\Shop\Product;
@@ -110,32 +110,32 @@ return [
     class Collection extends Product\Collection
     {
     }
-  ```
+    ```
 
-- Update `Collection` key for the model on the `system.php` config file to use our new model
-  ```php
-  return [
-    'models' => [
-      /*
-        * Eloquent model should be used to retrieve your categories. Of course,
-        * it is often just the "Category" model but you may use whatever you like.
-        *
-        * The model you want to use as a Category model needs to extends the
-        * `\Shopper\Framework\Models\Shop\Product\Category` model.
-        */
-      'category'  => \App\Models\Category::class,
+3. Update `Collection` key for the model on the `system.php` config file to use our new model
+    ```php
+    return [
+      'models' => [
+        /*
+          * Eloquent model should be used to retrieve your categories. Of course,
+          * it is often just the "Category" model but you may use whatever you like.
+          *
+          * The model you want to use as a Category model needs to extends the
+          * `\Shopper\Framework\Models\Shop\Product\Category` model.
+          */
+        'category'  => \App\Models\Category::class,
 
-      /*
-        * Eloquent model should be used to retrieve your collections. Of course,
-        * it is often just the "Collection" model but you may use whatever you like.
-        *
-        * The model you want to use as a Collection model needs to extends the
-        * `\Shopper\Framework\Models\Shop\Product\Collection` model.
-        */
-      'collection'  => \App\Models\Collection::class, // [tl! focus]
-    ]
-  ];
-  ```
+        /*
+          * Eloquent model should be used to retrieve your collections. Of course,
+          * it is often just the "Collection" model but you may use whatever you like.
+          *
+          * The model you want to use as a Collection model needs to extends the
+          * `\Shopper\Framework\Models\Shop\Product\Collection` model.
+          */
+        'collection'  => \App\Models\Collection::class, // [tl! focus]
+      ]
+    ];
+    ```
 
 ### Components
 Livewire components for managing collections are available in the component configuration file `config/shopper/components.php`.
@@ -197,8 +197,7 @@ namespace Shopper\Framework\Http\Livewire\Collections;
 
 use Shopper\Framework\Models\Shop\Product\CollectionRule;
 use Shopper\Framework\Repositories\Ecommerce\CollectionRepository;
-...
-  
+
 class Create extends Component
 {
   public function store()

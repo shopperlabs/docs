@@ -77,29 +77,29 @@ return [
     ```
 
 3. Update `brand` key for the model on the `system.php` config file to use our new model
-  ```php
-  return [
-    'models' => [
-      /*
-      * Eloquent model should be used to retrieve your brands. Of course,
-      * it is often just the "Brand" model but you may use whatever you like.
-      *
-      * The model you want to use as a Brand model needs to extends the
-      * `\Shopper\Framework\Models\Shop\Product\Brand` model.
-      */
-      'brand' => \App\Models\Brand::class, // [tl! focus]
+    ```php
+    return [
+      'models' => [
+        /*
+        * Eloquent model should be used to retrieve your brands. Of course,
+        * it is often just the "Brand" model but you may use whatever you like.
+        *
+        * The model you want to use as a Brand model needs to extends the
+        * `\Shopper\Framework\Models\Shop\Product\Brand` model.
+        */
+        'brand' => \App\Models\Brand::class, // [tl! focus]
 
-      /*
-      * Eloquent model should be used to retrieve your categories. Of course,
-      * it is often just the "Category" model but you may use whatever you like.
-      *
-      * The model you want to use as a Category model needs to extends the
-      * `\Shopper\Framework\Models\Shop\Product\Category` model.
-      */
-      'category'  => \Shopper\Framework\Models\Shop\Product\Category::class,
-    ]
-  ];
-  ```
+        /*
+        * Eloquent model should be used to retrieve your categories. Of course,
+        * it is often just the "Category" model but you may use whatever you like.
+        *
+        * The model you want to use as a Category model needs to extends the
+        * `\Shopper\Framework\Models\Shop\Product\Category` model.
+        */
+        'category'  => \Shopper\Framework\Models\Shop\Product\Category::class,
+      ]
+    ];
+    ```
 
 ### Components
 Livewire components for managing brands are available in the component configuration file `config/shopper/components.php`.

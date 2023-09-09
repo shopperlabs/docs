@@ -77,48 +77,47 @@ return [
 ];
 ```
 
-- Create your own model that you have to use
-  ```bash
-  php artisan make:model Category
-  ```
-
+1. Create your own model that you have to use
+    ```bash
+    php artisan make:model Category
+    ```
   Once the `app/Models/Category.php` model is created in our app folder, we will make it extend from the `Shopper\Framework\Models\Shop\Product\Category` model available in Shopper.
 
-- Extend our Category model from the Category Shopper Model
-  ```php
-  namespace App\Models;
+2. Extend our Category model from the Category Shopper Model
+    ```php
+    namespace App\Models;
 
-  use Shopper\Framework\Models\Shop\Product;
+    use Shopper\Framework\Models\Shop\Product;
 
-  class Category extends Product\Category
-  {
-  }
-  ```
+    class Category extends Product\Category
+    {
+    }
+    ```
 
-- Update `category` key for the model on the `system.php` config file to use our new model
-  ```php
-  return [
-    'models' => [
-      /*
-      * Eloquent model should be used to retrieve your brands. Of course,
-      * it is often just the "Brand" model but you may use whatever you like.
-      *
-      * The model you want to use as a Brand model needs to extends the
-      * `\Shopper\Framework\Models\Shop\Product\Brand` model.
-      */
-      'brand' => \App\Models\Brand::class,
+3. Update `category` key for the model on the `system.php` config file to use our new model
+    ```php
+    return [
+      'models' => [
+        /*
+        * Eloquent model should be used to retrieve your brands. Of course,
+        * it is often just the "Brand" model but you may use whatever you like.
+        *
+        * The model you want to use as a Brand model needs to extends the
+        * `\Shopper\Framework\Models\Shop\Product\Brand` model.
+        */
+        'brand' => \App\Models\Brand::class,
 
-      /*
-      * Eloquent model should be used to retrieve your categories. Of course,
-      * it is often just the "Category" model but you may use whatever you like.
-      *
-      * The model you want to use as a Category model needs to extends the
-      * `\Shopper\Framework\Models\Shop\Product\Category` model.
-      */
-      'category'  => \App\Models\Category::class, // [tl! focus]
-    ]
-  ];
-  ```
+        /*
+        * Eloquent model should be used to retrieve your categories. Of course,
+        * it is often just the "Category" model but you may use whatever you like.
+        *
+        * The model you want to use as a Category model needs to extends the
+        * `\Shopper\Framework\Models\Shop\Product\Category` model.
+        */
+        'category'  => \App\Models\Category::class, // [tl! focus]
+      ]
+    ];
+    ```
 
 ### Components
 Livewire components for managing categories are available in the component configuration file `config/shopper/components.php`.
