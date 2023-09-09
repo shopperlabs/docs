@@ -8,29 +8,26 @@ Quick start guide for installing and configuring Laravel Shopper on your existin
 Shopper is really easy to install. After creating your new app or in an existing Laravel app \(8+\). There are 2 steps to follow to install Shopper.
 
 1. Run `php artisan config:clear` to make sure your config isn't cached.
-
 2. Install `shopper/framework` with Composer.
-
-    ``` bash
-    composer require shopper/framework --with-dependencies
-    ```
+  ``` bash
+  composer require shopper/framework --with-dependencies
+  ```
 
 ## Write Env Variables
 Next make sure to create a new database and add your database credentials to your .env file, you will also want to add your application URL in the `APP_URL` variable
-
-   ```bash
-    APP_URL=http://laravelshopper.test
-    DB_HOST=localhost
-    DB_DATABASE=homestead
-    DB_USERNAME=homestead
-    DB_PASSWORD=secret
-  ```
+```bash
+APP_URL=http://laravelshopper.test
+DB_HOST=localhost
+DB_DATABASE=homestead
+DB_USERNAME=homestead
+DB_PASSWORD=secret
+```
 
 ## Automatic Installation
 After installing Shopper in your project via compose and configuring the database, now we will automatically install in the project.
-  ```bash
-   php artisan shopper:install
-  ```
+```bash
+  php artisan shopper:install
+```
 
 This will install shopper, publish vendor files, create shopper and storage symlinks if they don't exist in the public folder, run migrations and seeders classes.
 

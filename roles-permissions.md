@@ -92,7 +92,7 @@ And the **Permission** model is `Shopper\Core\Models\Permission`
 The **Permission** model has some groups as shown here
 
 ```php
-namespace Shopper\Core\Models;
+namespace Shopper\Framework\Models\User;
 
 use Spatie\Permission\Models\Permission as SpatiePermission;
 
@@ -121,8 +121,8 @@ class Permission extends SpatiePermission
 The components used to manage locations are found in the component configuration file `config/shopper/components.php`.
 
 ```php
-use Shopper\Http\Livewire;
-use Shopper\Http\Livewire\Components;
+use Shopper\Framework\Http\Livewire;
+use Shopper\Framework\Http\Livewire\Components;
 
 return [
 

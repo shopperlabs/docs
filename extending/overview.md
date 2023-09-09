@@ -1,7 +1,7 @@
 # Extending Shopper
 Although Shopper is primarily designed for e-commerce sites and has many associated features, you are free to add or modify existing ones.
 
-## Why extends Shopper ?
+## Why extends Shopper
 One might ask, knowing that the purpose of setting up an e-commerce site is simply to make the whole system work without always wanting to add to it.
 
 For example if you want a blog on your store, a section for a KYC, or maybe a forum, instead of creating another project to manage this you can directly extend Shopper to manage all this in the same administration area.
@@ -30,7 +30,7 @@ The rest of the configuration will be done using the configuration files in the 
 
 We will deal with all this in more detail later.
 
-## How **not** to extend Shopper
+## How not to extend Shopper
 It should go without saying — but we'll say it anyway just in case...
 
 Don't ever, for any reason, ever, no matter what, no matter where, or who, or who you are with, or where you are going or... or where you've been... ever, for any reason, whatsoever, edit the files inside `/vendor/shopper`. Or any other Composer package. Anything you do will get blown away and you'll lose those changes forever and ever amen.
