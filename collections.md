@@ -145,7 +145,7 @@ return [
 Livewire components for managing collections are available in the component configuration file `config/shopper/components.php`.
 
 ```php
-use Shopper\Framework\Http\Livewire;
+use Shopper\Http\Livewire;
 
 return [
   'livewire' => [
