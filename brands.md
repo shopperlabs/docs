@@ -18,8 +18,6 @@ New brands are automatically activated and available for your online store, even
 ### Fields
 The model used is `Shopper\Framework\Models\Shop\Product\Brand`.
 
-<div class="overflow-auto">
-
 | Name        | Type      | Required   |  Notes   |
 |-------------|-----------|------------|------------|
 | `id`  | autoinc |         |  auto  |
@@ -31,8 +29,6 @@ The model used is `Shopper\Framework\Models\Shop\Product\Brand`.
 | `is_enabled` | boolean  | no | Default `false` |
 | `seo_title` | string  | no | Nullable, for seo title max length is 60  |
 | `seo_description` | string  | no | Nullable, for seo description max length is 160 |
-
-</div>
 
 :::tip
 Models are customizable, and we recommend changing the **Brand** model when you configure your site.

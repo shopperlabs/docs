@@ -42,7 +42,6 @@ Manual collections do not need to have rules.
 - Rule model is `Shopper\Framework\Models\Shop\Product\CollectionRule`
 
 **Collection Model**
-<div class="overflow-auto">
 
 | Name        | Type      | Required   |  Notes   |
 |-------------|-----------|------------|------------|
@@ -55,11 +54,7 @@ Manual collections do not need to have rules.
 | `match_conditions` | enum  | no | Nullable, `['all', 'any']` |
 | `published_at` | dateTimeTz  | no | Default `now()` |
 
-</div>
-
 **CollectionRule Model**
-
-<div class="overflow-auto">
 
 | Name        | Type      | Required   |  Notes   |
 |-------------|-----------|------------|------------|
@@ -68,8 +63,6 @@ Manual collections do not need to have rules.
 | `operator`    | string  | yes | current values `equals_to`, `not_equals_to`, `less_than`, `greater_than`, `starts_with`, `ends_with`, `contains`, `not_contains` |
 | `value` | string  | yes |  |
 | `collection_id` | bigint  | no | Collection ID |
-
-</div>
 
 :::tip
 Models are customizable, and we recommend changing the **Collection** model when you configure your store.
