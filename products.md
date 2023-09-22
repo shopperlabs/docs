@@ -269,6 +269,7 @@ In case you're using the standalone product creation, then there's no product im
 
 ```php
 use App\Models\Product;
+
 $product = Product::create();
 
 if (collect($request->file('files'))->isNotEmpty()) {
@@ -330,7 +331,7 @@ It is important to note that this is not a discount coupon. Discount coupons are
 ### Product Associations
 When you add a new product, the relationships you can directly set are brand, collections and categories.
 <div class="screenshot">
-  <img src="/img/screenshots/{{version}}product-relations.png" alt="">
+  <img src="/img/screenshots/{{version}}/product-relations.png" alt="">
   <div class="caption">Product relations</div>
 </div>
 

@@ -33,9 +33,7 @@ Models are customizable, and we recommend changing the **Channel** model when yo
 ```php
 return [
   'models' => [
-
-    'brand' => \Shopper\Core\Models\Channel::class,
-
+    'channel' => \Shopper\Core\Models\Channel::class,
   ]
 ];
 ```
@@ -62,9 +60,7 @@ return [
   ```php
   return [
     'models' => [
-
       'channel'  => \App\Models\Channel::class,
-
     ]
   ];
   ```
@@ -76,6 +72,7 @@ Channels are not yet a highly developed feature on Shopper. But if you want to a
 
 ```php
 use App\Models\Channel;
+
 $channel = Channel::create([
   'name' => $name = 'Telegram',
   'slug' => $name,
