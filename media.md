@@ -1,9 +1,12 @@
 # Media
 The Shopper Framework supports assigning images to products, brands, collections and categories. It is an additional layer provided by the framework with the help of the [Spatie Media Library](https://spatie.be/docs/laravel-medialibrary)
 
-We recommend organizing your images in a folder offline and keeping a backup in case you need them in the future or mistakenly alter one and wish to revert to the original. You can look at the [documentation](/configuration#update-configurations) for this purpose
+We recommend organizing your images in a folder offline and keeping a backup in case you need them in the future or mistakenly alter one and wish to revert to the original. You can look at the [documentation](/docs/{{version}}/configuration#update-configurations) for this purpose
 
 ## Configuration
+To manage media, there's the `shopper/media.php` configuration file. This defines the type of images and files we want to support for our products, categories, collections etc. And also the different conversion sizes for images.
+
+## Use
 For uploading images we are using [FilePond](https://pqina.nl/) and some custom upload component with Livewire.
 
 ### Filepond
@@ -17,14 +20,14 @@ Filepond is used in Shopper Framework only to update images, and for that it tak
 
 ```blade
 <x-shopper-forms.filepond
-    wire:model="files"
-    multiple
-    allowImagePreview
-    imagePreviewMaxHeight="200"
-    allowFileTypeValidation
-    allowFileSizeValidation
-    maxFileSize="5mb"
-    :images="$images"
+  wire:model="files"
+  multiple
+  allowImagePreview
+  imagePreviewMaxHeight="200"
+  allowFileTypeValidation
+  allowFileSizeValidation
+  maxFileSize="5mb"
+  :images="$images"
 />
 ```
 
@@ -54,31 +57,31 @@ use Livewire\Component;
 
 class MyComponent extends Component
 {
-    public ?string $fileUrl = null;
+  public ?string $fileUrl = null;
 
-    protected $listeners = [
-        'shopper:fileUpdated' => 'onFileUpdate'
-    ];
+  protected $listeners = [
+    'shopper:fileUpdated' => 'onFileUpdate'
+  ];
 
-    public function onFileUpdate($file)
-    {
-        $this->fileUrl = $file;
+  public function onFileUpdate($file)
+  {
+    $this->fileUrl = $file;
+  }
+
+  public function store()
+  {
+    $model = YourModel::create([...]);
+
+    if ($this->fileUrl) {
+      $model->addMedia($this->fileUrl)
+        ->toMediaCollection(config('shopper.core.storage.collection_name'));
     }
-
-    public function store()
-    {
-        $model = YourModel::create([...]);
-
-        if ($this->fileUrl) {
-            model->addMedia($this->fileUrl)
-              ->toMediaCollection(config('shopper.core.storage.collection_name'));
-        }
-    }
+  }
 }
 ```
 
 :::warning
-To apply this action on your model you have to preapre your model with the Laravel Media Library [configuration](https://spatie.be/docs/laravel-medialibrary/v10/basic-usage/preparing-your-model)
+To apply this action on your model you have to prepare your model with the Laravel Media Library [configuration](https://spatie.be/docs/laravel-medialibrary/v10/basic-usage/preparing-your-model)
 :::
 
 ### Multiple upload
@@ -100,27 +103,27 @@ use Livewire\Component;
 
 class MyComponent extends Component
 {
-    public $files = [];
+  public $files = [];
 
-    protected $listeners = [
-      'shopper:filesUpdated' => 'onFilesUpdated'
-    ];
+  protected $listeners = [
+    'shopper:filesUpdated' => 'onFilesUpdated'
+  ];
 
-    public function onFilesUpdate($files)
-    {
-        $this->files = $files;
+  public function onFilesUpdate($files)
+  {
+    $this->files = $files;
+  }
+
+  public function store()
+  {
+    $model = YourModel::create([...]);
+
+    if (collect($this->files)->isNotEmpty()) {
+      collect($this->files)->each(
+        fn ($file) => $model->addMedia($file)->toMediaCollection(config('shopper.core.storage.collection_name'))
+      );
     }
-
-    public function store()
-    {
-        $model = YourModel::create([...]);
-
-        if (collect($this->files)->isNotEmpty()) {
-            collect($this->files)->each(
-              fn ($file) => $model->addMedia($file)->toMediaCollection(config('shopper.core.storage.collection_name'))
-            );
-        }
-    }
+  }
 }
 ```
 
@@ -132,7 +135,7 @@ For the moment in Shopper for all the Model that's used Media Library the only c
 ```php
 public function registerMediaConversions(?Media $media = null): void
 {
-    $this->addMediaConversion('thumb200x200')->fit(Manipulations::FIT_CROP, 200, 200);
+  $this->addMediaConversion('thumb200x200')->fit(Manipulations::FIT_CROP, 200, 200);
 }
 ```
 
@@ -152,5 +155,23 @@ For more information on what's available, see [Defining conversions](https://spa
 To get an image with full url on a product, a brand or a collection
 
 ```php
-$product->getFirstMediaUrl(config('shopper.core.storage.disk_name'))
+$product->getFirstMediaUrl(config('shopper.core.storage.collection_name'))
+```
+
+### Fallback image
+When you create a new product, collection brand or category, and don't yet have an image to associate with it, to avoid it being empty, Shopper will display a placeholder image. If you want to put your own image, you can specify the fallback url of your image here.
+
+```php
+# shopper/media.php
+
+/*
+  |--------------------------------------------------------------------------
+  | Fallback image URL
+  |--------------------------------------------------------------------------
+  |
+  | If your media collection does not contain any items, this image should be displayed
+  |
+  */
+
+  'fallback' => '/images/my-image-placeholder.png',
 ```

@@ -1,14 +1,14 @@
 # Customers
 In e-commerce stores, customers are one if not the fundamental point for the functioning of your store.
 
-The first page under the "Customers" menu gives you a list of all the registered users on your shop.
+The first page under the **"Customers"** menu gives you a list of all the registered users on your shop.
 
 <div class="screenshot">
   <img src="/img/screenshots/{{version}}/customers.png" alt="Customers">
   <div class="caption">Customers</div>
 </div>
 
-During the [installation](/installing#update-existing-files) of Shopper, one of the first things required is to inherit to our model User the features of the model User that is in Shopper.
+During the [installation](/docs/{{version}}/installation#update-existing-files) of Shopper, one of the first things required is to inherit to our model User the features of the model User that is in Shopper.
 
 ## Fields
 The model used is `App\Models\User` which extends the `\Shopper\Core\Models\User` model.
@@ -40,17 +40,19 @@ The components used to manage customers are found in the component configuration
 
 ```php
 use Shopper\Http\Livewire;
+use Shopper\Http\Livewire\Components;
 
 return [
   'livewire' => [
-    'modals.delete-customer' => Livewire\Modals\DeleteCustomer::class,
 
-    'customers.addresses' => Livewire\Customers\Addresses::class,
-    'customers.browse' => Livewire\Customers\Browse::class,
-    'customers.create' => Livewire\Customers\Create::class,
-    'customers.orders' => Livewire\Customers\Orders::class,
-    'customers.profile' => Livewire\Customers\Profile::class,
-    'customers.show' => Livewire\Customers\Show::class,
+    'customers.addresses' => Components\Customers\Addresses::class,
+    'customers.browse' => Components\Customers\Browse::class,
+    'customers.create' => Components\Customers\Create::class,
+    'customers.orders' => Components\Customers\Orders::class,
+    'customers.profile' => Components\Customers\Profile::class,
+    'customers.show' => Components\Customers\Show::class,
+
+    'modals.delete-customer' => Livewire\Modals\DeleteCustomer::class,
 
     'tables.customers-table' => Livewire\Tables\CustomersTable::class,
   ];
@@ -86,17 +88,17 @@ And you can also check the **Send customer credentials** checkbox to sent an ema
   <div class="caption">Customer notifications</div>
 </div>
 
-The Livewire component used to create a client is `Shopper\Framework\Http\Livewire\Customers\Create`
+The Livewire component used to create a client is `Shopper\Http\Livewire\Components\Customers\Create`
 
 ```php
 $customer = (new UserRepository())->create([
-    'last_name' => $this->last_name,
-    'first_name' => $this->first_name,
-    'email' => $this->email,
-    'password' => Hash::make($this->password),
-    'phone_number' => $this->phone_number,
-    'email_verified_at' => now()->toDateTimeString(),
-    'opt_in' => $this->opt_in,
+  'last_name' => $this->last_name,
+  'first_name' => $this->first_name,
+  'email' => $this->email,
+  'password' => Hash::make($this->password),
+  'phone_number' => $this->phone_number,
+  'email_verified_at' => now()->toDateTimeString(),
+  'opt_in' => $this->opt_in,
 ]);
 
 $customer->assignRole(config('shopper.system.users.default_role'));
@@ -107,7 +109,6 @@ The clients that are displayed in the listing page are those that have the `user
 :::
 
 ### Customer's Information
-
 In the case where you would like to have more information on a given customer, you can click on the customer name row in the customer's list. A new page appears.
 
 <div class="screenshot">

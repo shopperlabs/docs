@@ -224,7 +224,7 @@ In the way that when a admin are granted of a specific role, he take all role's 
   <div class="caption">Role's permissions</div>
 </div>
 
-As you may have noticed all permissions are grouped by type, and the available types are mentioned above in this [section](/roles-permissions#fields).
+As you may have noticed all permissions are grouped by type, and the available types are mentioned above in this [section](/docs/{{version}}/roles-permissions#fields).
 
 To add a new permission you just need to click on the **Create permission** button.
 

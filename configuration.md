@@ -18,8 +18,8 @@ config/shopper/
 
 And the `admin.php` is the main file, you can find various options to change the configuration of your Shopper installation.
 
-## System
-All the basic configurations for using shopper can be found in this file. The management of the locale, the models to use and additional resources (scripts and styles) to the administration.
+## Admin and Core
+All the basic configurations for using shopper can be found in this `admin.php` and `core.php` files. The admin prefix for route and the domain, the models to use and additional resources (scripts and styles) to the administration, user default role and permissions, etc.
 
 ### Brand logo
 By default, the Shopper logo will be used as the brand logo in the administration panel.
@@ -27,9 +27,11 @@ By default, the Shopper logo will be used as the brand logo in the administratio
 To update it you just have to fill in the logo link in your public folder
 
 ```php
+# config/shopper/admin.php
+
 /*
   |--------------------------------------------------------------------------
-  | Brand Name
+  | Admin Brand Name
   |--------------------------------------------------------------------------
   |
   | This will be displayed on the login page and in the sidebar's header.
@@ -45,6 +47,8 @@ By default Shopper loads controllers that are defined in this namespace. You can
 In your config file you have the controllers key that define the controller's namespace for your extended Controllers:
 
 ``` php
+# config/shopper/admin.php
+
 'controllers' => [
     'namespace' => 'App\\Http\\Controllers\\Shopper',
 ],
@@ -67,6 +71,8 @@ Models used are defined in the models key, if you want to use your own models yo
 During your work you may need to add your own style tables or javascript scenarios globally for all the pages, so you need to add them to relevant arrays.
 
 ```php
+# config/shopper/admin.php
+
 'resources' => [
     'stylesheets' => [
         //'css/custom.css',
@@ -82,7 +88,7 @@ The configuration of the routes allows you to specify a prefix to access your da
 
 ### Prefix
 ```php
-// config/shopper/admin.php
+# config/shopper/admin.php
 'prefix' => env('SHOPPER_PREFIX', 'cpanel'),
 ```
 
@@ -93,7 +99,7 @@ There are other reasons but we won't speak of them in this section. The point is
 ### Middleware
 
 ```php
-// config/shopper/routes.php
+# config/shopper/routes.php
 'middleware' => [],
 ```
 
@@ -102,6 +108,7 @@ Shopper gives you the ability to add middleware to all of your routes. These mid
 ### Additional dashboard routes
 
 ```php
+# config/shopper/routes.php
 // Eg.: base_path('routes/shopper.php')
 'custom_file' => null,
 ```
@@ -109,7 +116,7 @@ Shopper gives you the ability to add middleware to all of your routes. These mid
 By default none of your routes in the `web.php` file will be accessible and loaded in the shopper administration. So that your routes added in the sidebar can have the middleware applied to the dashboard, you must fill in an additional routing file and this will be automatically loaded by Shopper's internal RouteServiceProvider.
 
 ## Components
-The main features of Laravel Shopper is to handle Livewire components to add new functionnalities to your admin panel. 
+The main features of Laravel Shopper is to handle Livewire components to add new functionnalities to your admin panel.
 
 For this purpose you have a component file that lists all Livewire components used within Laravel Shopper. You can for each feature modify the associated or extends component to add functionality or even change the view to fit your own logic.
 
@@ -119,6 +126,7 @@ Here is an example of some components
 use Shopper\Http\Livewire\Components;
 
 return [
+
     /*
     |--------------------------------------------------------------------------
     | Livewire Components
@@ -128,6 +136,7 @@ return [
     | for your app. By default all components from Shopper Kit are loaded in.
     |
     */
+
     'livewire' => [
         'account.devices' => Components\Account\Devices::class,
         'account.dropdown' => Components\Account\Dropdown::class,
@@ -139,7 +148,7 @@ return [
 ## Settings
 Settings are a very important part of an e-commerce site administration. Shopper has understood this very well and has set up a settings file, to allow you to add or modify the default settings of Shopper.
 
-In this file you can add parameters or delete those you don't need to simplify your store or to make it larger
+In this `settings.php` file under the shopper config folder, you can add parameters or delete those you don't need to simplify your store or to make it larger.
 
 ```php
 return [
@@ -149,7 +158,7 @@ return [
     |--------------------------------------------------------------------------
     |
     | The menu for the generation of the page settings and layout.
-    | BladeUIKit Heroicon is the icon used. See https://blade-ui-kit.com/blade-icons?set=1
+    | BladeUIKit UntitledUI is the icon used. See https://blade-ui-kit.com/blade-icons?set=74
     |
     */
 
@@ -175,31 +184,28 @@ return [
 ## Mapbox
 Shopper uses Mapbox to enter the geographic coordinates (latitude and longitude) of your store so that you can easily tell your customers your location.
 
+:::info
+This configuration is absolutely not required to launch shopper, so don't worry.
+:::
+
 To activate mapbox you need to go to the [API](https://docs.mapbox.com/mapbox-gl-js/api/) documentation and create an API token. Once this is done you need to add the key `MAPBOX_PUBLIC_TOKEN` with the token value to your `.env` file
 
 ```bash
 MAPBOX_PUBLIC_TOKEN=your_token_here
 ```
 
-## Update Configurations
-In your `config/filesystems.php` config file add the following to the disks and links section:
+## Upload Configuration
+By default, shopper uses the public disk to upload images. But if you want to use another disk, for example an uploads disk, in your `config/filesystems.php` config file add the following to the disks and links section:
 
 ``` php
 'disks' => [
-    // Shopper Uploads Disks. [tl! highlight:13]
-    'avatars' => [ // [tl! collapse:start]
-        'driver' => 'local',
-        'root' => storage_path('app/avatars'),
-        'url' => env('APP_URL').'/avatars',
-        'visibility' => 'public',
-    ], // [tl! collapse:end]
-
-    'uploads' => [ // [tl! collapse:start]
+    // Shopper Uploads Disks. [tl! highlight:6]
+    'uploads' => [
         'driver' => 'local',
         'root' => storage_path('app/uploads'),
         'url' => env('APP_URL').'/uploads',
         'visibility' => 'public',
-    ], // [tl! collapse:end]
+    ],
 ],
 
 /*
@@ -214,21 +220,38 @@ In your `config/filesystems.php` config file add the following to the disks and 
 */
 
 'links' => [
-    // [tl! highlight:2]
-    public_path('avatars') => storage_path('app/avatars'),
-    public_path('uploads') => storage_path('app/uploads'),
+    public_path('uploads') => storage_path('app/uploads'),  // [tl! highlight]
 ],
 ```
 
-### Create New Folders
-After adding the 2 entries in the filesystem config file, you must create them and add them to the .gitignore file.
-In your storage directory create 2 new folders called `avatars` and `uploads`.
+Once you have done this, you need to change the name of the disk to be used in the `shopper/core.php` config file to apply the changes.
 
-```bash
-mkdir storage/app/avatars && mkdir storage/app/uploads
+```php
+/*
+    |--------------------------------------------------------------------------
+    | Storage Disk
+    |--------------------------------------------------------------------------
+    |
+    | Specifies the configuration for resources storage, this will be to store
+    | all media of your products, brands, categories, etc.
+    |
+    */
+
+    'storage' => [
+        'collection_name' => 'uploads',
+        'disk_name' => 'public', // [tl! --]
+        'disk_name' => 'uploads', // [tl! ++]
+    ],
 ```
 
-In each new folder that you have created (avatars and uploads) you must create a .gitignore file which will contain the following line
+### Create New Folder
+After adding the entry in the filesystem config file, you must create and add this to the .gitignore file. In your storage directory, create a new folder called `uploads`.
+
+```bash
+mkdir storage/app/uploads
+```
+
+In the new folder that you have created **(uploads)** you must create a .gitignore file which will contain the following line
 
 ```bash
 *

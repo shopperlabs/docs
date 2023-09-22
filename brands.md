@@ -31,29 +31,36 @@ The model used is `Shopper\Core\Models\Brand`.
 | `seo_description` | string  | no | Nullable, for seo description max length is 160 |
 
 :::tip
-Models are customizable, and we recommend changing the **Brand** model when you configure your site.
-To change the model you need to look at the configuration file `config/shopper/system.php` at the key `models`.
+Models are customizable, and we recommend changing the **Brand** model when you configure your site. To change the model you need to look at the configuration file `config/shopper/models.php`.
 :::
 
 ```php
 return [
   'models' => [
     /*
-    * Eloquent model should be used to retrieve your brands. Of course,
-    * it is often just the "Brand" model but you may use whatever you like.
-    *
-    * The model you want to use as a Brand model needs to extends the
-    * `\Shopper\Core\Models\Brand` model.
+    |--------------------------------------------------------------------------
+    | Brand Model
+    |--------------------------------------------------------------------------
+    |
+    | Eloquent model should be used to retrieve your brands. Of course,
+    | If you want to change this to use a custom model, your model needs to extends the
+    | \Shopper\Core\Models\Brand model.
+    |
     */
+
     'brand' => \Shopper\Core\Models\Brand::class, // [tl! focus]
 
     /*
-    * Eloquent model should be used to retrieve your categories. Of course,
-    * it is often just the "Category" model but you may use whatever you like.
-    *
-    * The model you want to use as a Category model needs to extends the
-    * `\Shopper\Core\Models\Category` model.
+    |--------------------------------------------------------------------------
+    | Category Model
+    |--------------------------------------------------------------------------
+    |
+    | Eloquent model should be used to retrieve your categories. Of course,
+    | If you want to change this to use a custom model, your model needs to extends the
+    | \Shopper\Core\Models\Category model.
+    |
     */
+
     'category'  => \Shopper\Core\Models\Category::class,
   ]
 ];
@@ -77,26 +84,34 @@ return [
   }
   ```
 
-- Update `brand` key for the model on the `system.php` config file to use our new model
+- Update `brand` key for the model on the `models.php` config file to use our new model
   ```php
   return [
     'models' => [
       /*
-      * Eloquent model should be used to retrieve your brands. Of course,
-      * it is often just the "Brand" model but you may use whatever you like.
-      *
-      * The model you want to use as a Brand model needs to extends the
-      * `\Shopper\Core\Models\Brand` model.
+      |--------------------------------------------------------------------------
+      | Brand Model
+      |--------------------------------------------------------------------------
+      |
+      | Eloquent model should be used to retrieve your brands. Of course,
+      | If you want to change this to use a custom model, your model needs to extends the
+      | \Shopper\Core\Models\Brand model.
+      |
       */
+
       'brand' => \App\Models\Brand::class, // [tl! focus]
 
       /*
-      * Eloquent model should be used to retrieve your categories. Of course,
-      * it is often just the "Category" model but you may use whatever you like.
-      *
-      * The model you want to use as a Category model needs to extends the
-      * `\Shopper\Core\Models\Category` model.
+      |--------------------------------------------------------------------------
+      | Category Model
+      |--------------------------------------------------------------------------
+      |
+      | Eloquent model should be used to retrieve your categories. Of course,
+      | If you want to change this to use a custom model, your model needs to extends the
+      | \Shopper\Core\Models\Category model.
+      |
       */
+
       'category'  => \Shopper\Core\Models\Category::class,
     ]
   ];
@@ -107,13 +122,14 @@ Livewire components for managing brands are available in the component configura
 
 ```php
 use Shopper\Http\Livewire;
+use Shopper\Http\Livewire\Components;
 
 return [
   'livewire' => [
 
-    'brands.browse' => Livewire\Brands\Browse::class,
-    'brands.create' => Livewire\Brands\Create::class,
-    'brands.edit' => Livewire\Brands\Edit::class,
+    'brands.browse' => Components\Brands\Browse::class,
+    'brands.create' => Components\Brands\Create::class,
+    'brands.edit' => Components\Brands\Edit::class,
 
     'tables.brands-table' => Livewire\Tables\BrandsTable::class,
 
@@ -124,12 +140,12 @@ return [
 For handling tables in Shopper, we use [Laravel Livewire Tables](https://github.com/rappasoft/laravel-livewire-tables) package by Anthony Rappa.
 
 ## Manage Brands
-The brands are accessible via the Brands Menu on the left sidebar. The display page is rendered by the Livewire component `Shopper\Http\Livewire\Brands\Browse` and for the display of the brands table is the component `Shopper\Http\Livewire\Tables\BrandsTable`.
+The brands are accessible via the **Brands** Menu on the left sidebar. The display page is rendered by the Livewire component `Shopper\Http\Livewire\Components\Brands\Browse` and for the display of the brands table is the component `Shopper\Http\Livewire\Tables\BrandsTable`.
 
 You can modify them in the component configuration file to use your own.
 
 ### Create brand
-Click on the "Create" button on the brands page, and a creation form appears.
+Click on the **"Add new brand"** button on the brands page, and a creation form appears.
 
 <div class="screenshot">
   <img src="/img/screenshots/{{version}}/create-brand.png" alt="Create brand">
@@ -141,7 +157,7 @@ Save your changes in order to be taken back to the brand's list. Required fields
 The SEO section allows you to define how your brand information should be displayed in search engines. To modify the content you click on the button "Edit SEO preview"
 
 <div class="screenshot">
-  <img src="/img/screenshots/{{version}}/brand-seo.png" alt="brand seo form">
+  <img src="/img/screenshots/{{version}}/brand-seo.png" alt="Brand seo">
   <div class="caption">Brand SEO</div>
 </div>
 
@@ -161,7 +177,7 @@ Once you have your brands and you want to display them in your store, you can re
 ```php
 namespace App\Http\Controllers;
 
-use App\Models\Brand;
+use App\Models\Brand; // [tl! focus]
 use App\Models\Product;
 use Carbon\Carbon;
 
@@ -183,14 +199,14 @@ class HomeController extends Controller
 
     return view('home', [
       'products' =>  $products,
-      'brands' => Brand::query()->get()->take(12), // [tl! focus]
+      'brands' => Brand::enabled()->limit(12)->get(), // [tl! focus]
     ]);
   }
 }
 ```
 
 :::tip
-Knowing that your brands can be displayed on several pages and places in your store, you can create a **View Composer** ([read more about View Composer](https://laravel.com/docs/9.x/views#view-composers)).
+Knowing that your brands can be displayed on several pages and places in your store, you can create a **View Composer** ([read more about View Composer](https://laravel.com/docs/views#view-composers)).
 :::
 
 - Create your brand composer undo a custom folder `app/View/Composers`
@@ -205,7 +221,7 @@ class BrandsComposer
 {
   public function compose(View $view)
   {
-    $view->with('brands', Brand::enabled()->get()->take(12));
+    $view->with('brands', Brand::enabled()->limit(12)->get());
   }
 }
 ```
@@ -215,7 +231,7 @@ class BrandsComposer
 ```php
 namespace App\Providers;
 
-use App\View\Composers\BrandsComposer;
+use App\View\Composers\BrandsComposer; // [tl! focus]
 use Illuminate\Support\Facades\View;
 use Illuminate\Support\ServiceProvider;
 

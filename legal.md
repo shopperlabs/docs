@@ -12,7 +12,7 @@ The model used is `Shopper\Core\Models\Legal`.
 | `title` | string  | yes | Unique, title of the legal page |
 | `slug` | string  | yes | Unique, this is dynamically generated based on the title |
 | `content`| longText | no | nullable, the text of the legal page |
-| `is_enabled`  boolean | no | Default `false`, define if this legal page is ready to use|
+| `is_enabled` | boolean | no | Default `false`, define if this legal page is ready to use|
 
 ## Components
 The components used to manage Legal page are found in the component configuration file `config/shopper/components.php`. Each component corresponds to the page that is defined

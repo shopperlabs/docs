@@ -1,7 +1,7 @@
 # Categories
 Categories are the primary way to group products with similar features. You can also add subcategories if desired.
 
-For example, if you sell clothing, you might have “t-shirts”, “hoodies” and “pants” as categories.
+For example, if you sell clothes, you might have “t-shirts”, “hoodies” and “pants” as categories.
 
 ## Overview
 Shopper gives you a possibility to categorize your products in a very flexible way, which is one of the most vital functionalities of the modern e-commerce systems. The categories system in Shopper use the [Laravel Adjacency List](https://github.com/staudenmeir/laravel-adjacency-list) package to create categories trees like this
@@ -37,41 +37,48 @@ The model used is `Shopper\Core\Models\Category`.
 | Name        | Type      | Required   |  Notes   |
 |-------------|-----------|------------|------------|
 | `id` | autoinc |         |  auto  |
-| `name`    | string  | yes |   |
-| `slug`    | string  | yes | Unique, default value is generated using category name |
+| `name` | string  | yes |   |
+| `slug` | string  | yes | Unique, default value is generated using category name |
 | `description` | longText  | no | Nullable |
 | `position` | string  | no | Default `0` |
 | `is_enabled` | boolean  | no | Default `false` |
 | `seo_title` | string  | no | Nullable, for seo title max length is 60  |
 | `seo_description` | string  | no | Nullable, for seo description max length is 160 |
-| `parent_id` | bigint  | no |  |
+| `parent_id` | bigint  | no | Nullable, representation for the parent category  |
 
 :::tip
-Models are customizable, and we recommend changing the **Category** model when you configure your store.
-To change the model you need to look at the configuration file `config/shopper/system.php` at the key `models`.
+Models are customizable, and we recommend changing the **Category** model when you configure your store. To change the model you need to look at the configuration file `config/shopper/models.php`.
 :::
 
-Let's keep in mind the modification that was made in the previous section regarding [Brands](/brands).
+Let's keep in mind the modification that was made in the previous section regarding [Brands](/docs/{{version}}/brands).
 
 ```php
 return [
   'models' => [
     /*
-      * Eloquent model should be used to retrieve your brands. Of course,
-      * it is often just the "Brand" model but you may use whatever you like.
-      *
-      * The model you want to use as a Brand model needs to extends the
-      * `\Shopper\Core\Models\Brand` model.
-      */
+    |--------------------------------------------------------------------------
+    | Brand Model
+    |--------------------------------------------------------------------------
+    |
+    | Eloquent model should be used to retrieve your brands. Of course,
+    | If you want to change this to use a custom model, your model needs to extends the
+    | \Shopper\Core\Models\Brand model.
+    |
+    */
+
     'brand' => \App\Models\Brand::class,
 
     /*
-      * Eloquent model should be used to retrieve your categories. Of course,
-      * it is often just the "Category" model but you may use whatever you like.
-      *
-      * The model you want to use as a Category model needs to extends the
-      * `\Shopper\Core\Models\Category` model.
-      */
+    |--------------------------------------------------------------------------
+    | Category Model
+    |--------------------------------------------------------------------------
+    |
+    | Eloquent model should be used to retrieve your categories. Of course,
+    | If you want to change this to use a custom model, your model needs to extends the
+    | \Shopper\Core\Models\Category model.
+    |
+    */
+
     'category'  => \Shopper\Core\Models\Category::class, // [tl! focus]
   ]
 ];
@@ -95,44 +102,52 @@ return [
   }
   ```
 
-- Update `category` key for the model on the `system.php` config file to use our new model
+- Update `category` key for the model on the `models.php` config file to use our new model
   ```php
   return [
     'models' => [
       /*
-      * Eloquent model should be used to retrieve your brands. Of course,
-      * it is often just the "Brand" model but you may use whatever you like.
-      *
-      * The model you want to use as a Brand model needs to extends the
-      * `\Shopper\Core\Models\Brand` model.
+      |--------------------------------------------------------------------------
+      | Brand Model
+      |--------------------------------------------------------------------------
+      |
+      | Eloquent model should be used to retrieve your brands. Of course,
+      | If you want to change this to use a custom model, your model needs to extends the
+      | \Shopper\Core\Models\Brand model.
+      |
       */
+
       'brand' => \App\Models\Brand::class,
 
       /*
-      * Eloquent model should be used to retrieve your categories. Of course,
-      * it is often just the "Category" model but you may use whatever you like.
-      *
-      * The model you want to use as a Category model needs to extends the
-      * `\Shopper\Core\Models\Category` model.
+      |--------------------------------------------------------------------------
+      | Category Model
+      |--------------------------------------------------------------------------
+      |
+      | Eloquent model should be used to retrieve your categories. Of course,
+      | If you want to change this to use a custom model, your model needs to extends the
+      | \Shopper\Core\Models\Category model.
+      |
       */
+
       'category'  => \App\Models\Category::class, // [tl! focus]
     ]
   ];
   ```
 
 ### Components
-
 Livewire components for managing categories are available in the component configuration file `config/shopper/components.php`.
 
 ```php
 use Shopper\Http\Livewire;
+use Shopper\Http\Livewire\Components;
 
 return [
   'livewire' => [
 
-    'categories.browse' => Livewire\Categories\Browse::class,
-    'categories.create' => Livewire\Categories\Create::class,
-    'categories.edit' => Livewire\Categories\Edit::class,
+    'categories.browse' => Components\Categories\Browse::class,
+    'categories.create' => Components\Categories\Create::class,
+    'categories.edit' => Components\Categories\Edit::class,
 
     'tables.categories-table' => Livewire\Tables\CategoriesTable::class,
 
@@ -143,12 +158,12 @@ return [
 ## Manage Categories
 Categories are determinant of how people will navigate on your site and search for your products. You should focus on your category tree and how categories are organized even before you start creating product sheets.
 
-The categories are accessible via the **Categories** Menu on the left sidebar. The display page is rendered by the Livewire component `Shopper\Http\Livewire\Categories\Browse` and for the display of the categories table is the component `Shopper\Http\Livewire\Tables\CategoriesTable`.
+The categories are accessible via the **Categories** Menu on the left sidebar. The display page is rendered by the Livewire component `Shopper\Http\Livewire\Components\Categories\Browse` and for the display of the categories table is the component `Shopper\Http\Livewire\Tables\CategoriesTable`.
 
 You can modify them in the component configuration file to use your own.
 
 ### Create category
-Click on the "Create" button on the categories page, and a creation form appears.
+Click on the **"Add new category"** button on the categories page, and a creation form appears.
 
 <div class="screenshot">
   <img src="/img/screenshots/{{version}}/create-category.png" alt="Create category form">
@@ -197,7 +212,7 @@ echo $category2->slug;
 
 And if the category has a parent, the child's slug will be generated with the parent's directly
 
-This generation is done when adding a category in Shopper. But you can change this behavior by extending the category create [Shopper\Framework\Http\Livewire\Categories\Create](https://github.com/shopperlabs/framework/blob/main/src/Http/Livewire/Categories/Create.php) Livewire component or by creating a new one.
+This generation is done when adding a category in Shopper. But you can change this behavior by extending the category create `Shopper\Http\Livewire\Categories\Create` Livewire component or by creating a new one.
 
 ```php
 use App\Models\Category;
@@ -221,11 +236,11 @@ echo $categoryChild->slug;
 ```php
 use App\Models\Category;
 
-$parent = Category::create([
+$parent = Category::create([ // [tl! focus:start]
   'name' => $name = 'Clothes',
   'slug' => $name,
   'is_enabled' => true,
-]);
+]); // [tl! focus:end]
 
 $child = Category::create([
   'name' => 'Jeans',

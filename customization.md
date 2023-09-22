@@ -1,5 +1,5 @@
 # Customization
-Once you have installed Shopper, you need to set up a store to serve as your first location.  After creating a new user, you need to login via the url `/shopper/login`. After logging in you need to fill in the required information to access the Shopper dashboard
+Once you have installed Shopper, you need to set up a store to serve as your first location.  After creating a new user, you need to login via the url `/cpanel/login`. After logging in you need to fill in the required information to access the Shopper dashboard
 
 <div class="screenshot">
   <img src="/img/screenshots/{{version}}/customization.png" alt="Shopper Config Example">
@@ -39,14 +39,7 @@ class Setting extends Model
 | `key` | string    | Unique, the configuration key that will be used to retrieve this information. |
 | `display_name` | string    | Nullable, represents the display name for the key that has been set for better reading|
 | `value` | json      | Nullable, represents the value of the key that will be displayed when the parameter is requested |
-| `locked` | boolean   | default is false (0), allows to define if this parameter can be updated |
-
-### Component
-Shopper is made of several Livewire components, to make the configuration easier and more adaptable to any kind of system.
-
-The component used to manage the configuration and customization of the store is found in the component configuration file `config/shopper/components.php`.
-
-So you can replace it and configure your store the way you want. Yes it's magic 🎩
+| `locked` | boolean   | default is `false` (0), allows to define if this parameter can be updated |
 
 ### Retrieving setting
 By default to retrieve the value of a key you can use the helper function `shopper_setting()` passing the desired key as parameter
@@ -176,6 +169,6 @@ return [
   <div class="caption">Admin update setting</div>
 </div>
 
-In this interface you will update your store. Don't forget that the model used is the model `Shopper\Models\Setting`. 
+In this interface you will update your store. Don't forget that the model used is the model `Shopper\Core\Models\Setting`.
 
 With the Shopper configuration you can completely change the architecture of this view and the data stored in the database.
