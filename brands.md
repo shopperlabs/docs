@@ -142,7 +142,7 @@ For handling tables in Shopper, we use [Laravel Livewire Tables](https://github.
 ## Manage Brands
 The brands are accessible via the **Brands** Menu on the left sidebar. The display page is rendered by the Livewire component `Shopper\Http\Livewire\Components\Brands\Browse` and for the display of the brands table is the component `Shopper\Http\Livewire\Tables\BrandsTable`.
 
-You can modify them in the component configuration file to use your own.
+You can modify them in the components configuration file to use your own.
 
 ### Create brand
 Click on the **"Add new brand"** button on the brands page, and a creation form appears.

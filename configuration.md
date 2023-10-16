@@ -228,20 +228,20 @@ Once you have done this, you need to change the name of the disk to be used in t
 
 ```php
 /*
-    |--------------------------------------------------------------------------
-    | Storage Disk
-    |--------------------------------------------------------------------------
-    |
-    | Specifies the configuration for resources storage, this will be to store
-    | all media of your products, brands, categories, etc.
-    |
-    */
+|--------------------------------------------------------------------------
+| Storage Disk
+|--------------------------------------------------------------------------
+|
+| Specifies the configuration for resources storage, this will be to store
+| all media of your products, brands, categories, etc.
+|
+*/
 
-    'storage' => [
-        'collection_name' => 'uploads',
-        'disk_name' => 'public', // [tl! --]
-        'disk_name' => 'uploads', // [tl! ++]
-    ],
+'storage' => [
+    'collection_name' => 'uploads',
+    'disk_name' => 'public', // [tl! --]
+    'disk_name' => 'uploads', // [tl! ++]
+],
 ```
 
 ### Create New Folder
