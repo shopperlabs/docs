@@ -80,3 +80,17 @@ $channel = Channel::create([
   'is_default' => false,
 ]);
 ```
+
+### Associate to product
+A channel can contain several products. To add a product to a channel
+
+```php
+$channel = App\Models\Channel::default()->first();
+
+$product = App\Models\Product::create([
+  'name' => $name = 'Nike LeBron Soldier 10 FlyEase',
+  'slug'  => $name,
+]);
+
+$product->channels()->attach($channel->id);
+```
