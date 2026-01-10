@@ -1,13 +1,13 @@
 ---
-title: 'Control Panel'
-description: 'Customize the Shopper control panel with your own assets, routes, and branding'
+title: Control Panel
+description: Learn how to customize the Shopper control panel by adding CSS, JS assets, customizing the theme, branding logo, and adding custom routes.
 ---
 
 The control panel may be customized in a number of different ways. You may add new pages, menus, a stylesheet, or maybe you just want to add some arbitrary Javascript.
+
 When you need to add features to your Shopper administration, you can first set up some configurations
 
 ## Adding CSS and JS assets
-
 Shopper can load extra stylesheets and Javascript files located in the `public/` directory.
 
 You may register assets to be loaded in the Control Panel using the `scripts` and `stylesheets` keys of the resources in the `config/shopper/admin.php` config file. This will accept a array of links.
@@ -34,10 +34,9 @@ Depending on how you will use your css and js files, the order is important
 These commands will make Shopper expect files at `public/css/admin.css` and `public/js/admin.js` respectively for local links.
 
 ## Customize Shopper theme
-
 Shopper is built using Tallstack presets, but you are not limited to that because the base css file is already built for production.
 
-But if you want to customize your dashboard using Tailwind css you must first install Tailwind in your project. You can read the [documentation](https://tailwindcss.com/v2/guides/laravel)
+But if you want to customize your dashboard using Tailwind css you must first install Tailwind in your project. You can read the [documentation](https://tailwindcss.com/docs/guides/laravel)
 
 Shopper using Tailwind CSS, there are some Tailwind plugins you need to install first: Plugin Forms and Typography, Autoprefixer. You can install them via NPM or Yarn:
 
@@ -48,30 +47,37 @@ yarn add -D tailwindcss @tailwindcss/forms @tailwindcss/typography autoprefixer
 After installing Tailwind, you need to create a `tailwind.config.js` file at the root of your project and add this content
 
 ```js
-import forms from '@tailwindcss/forms'
-import typography from '@tailwindcss/typography'
-import colors from 'tailwindcss/colors'
-import filamentPreset from './vendor/filament/support/tailwind.config.preset'
-import preset from './vendor/shopper/framework/tailwind.config.preset'
+const colors = require('tailwindcss/colors')
 
 /** @type {import('tailwindcss').Config} */
 module.exports = {
   darkMode: 'class',
-  presets: [filamentPreset, preset],
+  presets: [
+    require('./vendor/shopper/framework/tailwind.config'),
+  ],
   content: [
     './resources/**/*.blade.php',
     './vendor/shopper/framework/**/*.blade.php',
-    './vendor/shopper/framework/src/**/*.php',
     './vendor/filament/**/*.blade.php',
+    './vendor/rappasoft/laravel-livewire-tables/resources/views/**/*.blade.php',
+    './vendor/wire-elements/modal/resources/views/*.blade.php',
+    './vendor/wireui/wireui/resources/**/*.blade.php',
+    './vendor/wireui/wireui/ts/**/*.ts',
+    './vendor/wireui/wireui/src/View/**/*.php'
   ],
   theme: {
     extends: {
       colors: {
         primary: colors.blue,
+        secondary: colors.slate,
+        indigo: colors.blue,
       }
     }
   },
-  plugins: [forms, typography],
+  plugins: [
+    require('@tailwindcss/forms'),
+    require('@tailwindcss/typography'),
+  ],
 }
 ```
 
@@ -91,11 +97,15 @@ Just load the default Tailwind CSS directives inside your `./resources/css/admin
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-@import '../../vendor/shopper/framework/resources/css/shopper.css';
 ```
 
-Add Tailwind to the `postcss.config.js` file:
+Then run `yarn run dev`
+
+<Tip>
+Keep in mind the `admin.css` file must be load on the `resources` key of your `shopper/admin.php` config file
+</Tip>
+
+And add Tailwind to the `postcss.config.js` file:
 
 ```js
 module.export = {
@@ -106,41 +116,7 @@ module.export = {
 }
 ```
 
-Then run `yarn run dev`
-
-<Tip>
-For Laravel mix, keep in mind the `admin.css` file must be load on the `resources.stylesheets` key of your `shopper/admin.php` config file
-</Tip>
-
-And if you use Tailwind v4 your admin style should look like this
-
-```css
-@import 'tailwindcss';
-
-@import '../../vendor/shopper/framework/resources/css/theme.css';
-
-@config '../../tailwind.config.js';
-```
-
-<Warning>
-Shopper is based on filament and for this reason tailwind v4 support is based on filament support.
-</Warning>
-
-### Load theme
-
-In your `AppServiceProvider` or any other provide you want, you should add this on your boot method
-
-```php
-public function boot()
-{
-    Shopper::serving(function (): void {
-        Shopper::registerViteTheme('resources/css/admin.css');
-    });
-}
-```
-
 ### Branding Logo
-
 After update (or not) the colors of your administration theme to reflect your brand. You'll probably want to change the logo to display
 
 By default, Laravel Shopper logo is used next to your application name in the administration panel.
@@ -175,7 +151,6 @@ It can be a simple svg or an image tag.
 ```
 
 ## Adding control panel routes
-
 If you need to have custom routes for the control panel:
 
 1. Create a routes file. Name it whatever you want, for example: `routes/shopper.php`

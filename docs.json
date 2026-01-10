@@ -11,6 +11,59 @@
     "navigation": {
         "versions": [
             {
+                "version": "1.x",
+                "groups": [
+                    {
+                        "group": "Prologue",
+                        "pages": ["v1/contributing"]
+                    },
+                    {
+                        "group": "Getting Started",
+                        "pages": [
+                            "v1/requirements",
+                            "v1/installation",
+                            "v1/configuration"
+                        ]
+                    },
+                    {
+                        "group": "Concepts",
+                        "pages": [
+                            "v1/customization",
+                            "v1/locations",
+                            "v1/roles-permissions",
+                            "v1/two-factor",
+                            "v1/legal",
+                            "v1/media"
+                        ]
+                    },
+                    {
+                        "group": "Control Panel",
+                        "pages": [
+                            "v1/dashboard",
+                            "v1/brands",
+                            "v1/categories",
+                            "v1/collections",
+                            "v1/customers",
+                            "v1/products",
+                            "v1/attributes",
+                            "v1/reviews",
+                            "v1/discounts",
+                            "v1/orders"
+                        ]
+                    },
+                    {
+                        "group": "Extending",
+                        "pages": [
+                            "v1/extending/control-panel",
+                            "v1/extending/controllers",
+                            "v1/extending/navigation",
+                            "v1/extending/forms",
+                            "v1/extending/modals"
+                        ]
+                    }
+                ]
+            },
+            {
                 "version": "2.x",
                 "groups": [
                     {

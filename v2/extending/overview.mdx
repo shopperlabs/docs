@@ -22,10 +22,10 @@ use Shopper\Sidebar\SidebarBuilder;
 
 class AppServiceProvider extends ServiceProvider
 {
-  public function registerCustomShopperSidebar() // [tl! focus:start]
+  public function registerCustomShopperSidebar()
   {
     $this->app['events']->listen(SidebarBuilder::class, RegisterCustomMenu::class);
-  } // [tl! focus:end]
+  }
 }
 ```
 
