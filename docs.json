@@ -1,122 +1,110 @@
 {
-  "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
-  "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
-  },
-  "favicon": "/favicon.svg",
-  "navigation": {
-    "tabs": [
-      {
-        "tab": "Guides",
-        "groups": [
-          {
-            "group": "Getting started",
-            "pages": [
-              "index",
-              "quickstart",
-              "development"
-            ]
-          },
-          {
-            "group": "Customization",
-            "pages": [
-              "essentials/settings",
-              "essentials/navigation"
-            ]
-          },
-          {
-            "group": "Writing content",
-            "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
-            ]
-          },
-          {
-            "group": "AI tools",
-            "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
-            ]
-          }
+    "$schema": "https://mintlify.com/docs.json",
+    "theme": "mint",
+    "name": "TALL Stack E-commerce Framework",
+    "colors": {
+        "primary": "#2563eb",
+        "light": "#1C4ED8",
+        "dark": "#3b82f6"
+    },
+    "favicon": "/favicon.svg",
+    "navigation": {
+        "versions": [
+            {
+                "version": "2.x",
+                "groups": [
+                    {
+                        "group": "Prologue",
+                        "pages": [
+                            "v2/introduction",
+                            "v2/upgrade",
+                            "v2/contributing"
+                        ]
+                    },
+                    {
+                        "group": "Getting Started",
+                        "pages": [
+                            "v2/requirements",
+                            "v2/installation",
+                            "v2/configuration"
+                        ]
+                    },
+                    {
+                        "group": "Concepts",
+                        "pages": [
+                            "v2/setup-store",
+                            "v2/locations",
+                            "v2/acl",
+                            "v2/currencies",
+                            "v2/zones",
+                            "v2/legal",
+                            "v2/media",
+                            "v2/two-factor"
+                        ]
+                    },
+                    {
+                        "group": "Control Panel",
+                        "pages": [
+                            "v2/dashboard",
+                            "v2/brands",
+                            "v2/categories",
+                            "v2/collections",
+                            "v2/customers",
+                            "v2/attributes",
+                            "v2/products",
+                            "v2/product-variants",
+                            "v2/discounts",
+                            "v2/orders",
+                            "v2/reviews",
+                            "v2/pricing"
+                        ]
+                    },
+                    {
+                        "group": "Storefronts",
+                        "pages": [
+                            "v2/starter-kits",
+                            "v2/livewire-starter-kit",
+                            "v2/blade-starter-kit",
+                            "v2/inertia-starter-kit"
+                        ]
+                    },
+                    {
+                        "group": "Extending",
+                        "pages": [
+                            "v2/extending/overview",
+                            "v2/extending/control-panel",
+                            "v2/extending/navigation",
+                            "v2/extending/controllers",
+                            "v2/extending/events"
+                        ]
+                    }
+                ]
+            }
+        ],
+        "global": {}
+    },
+    "logo": {
+        "light": "/logo/logo.svg",
+        "dark": "/logo/logo.svg"
+    },
+    "navbar": {},
+    "contextual": {
+        "options": [
+            "copy",
+            "view",
+            "chatgpt",
+            "claude",
+            "perplexity",
+            "mcp",
+            "cursor",
+            "vscode"
         ]
-      },
-      {
-        "tab": "API reference",
-        "groups": [
-          {
-            "group": "API documentation",
-            "pages": [
-              "api-reference/introduction"
-            ]
-          },
-          {
-            "group": "Endpoint examples",
-            "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
-            ]
-          }
-        ]
-      }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
+    },
+    "footer": {
+        "socials": {
+            "x": "https://x.com/laravelshopper",
+            "github": "https://github.com/shopperlabs",
+            "linkedin": "https://linkedin.com/company/shopperlabs"
         }
-      ]
     }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
-  }
 }
