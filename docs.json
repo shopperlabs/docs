@@ -160,9 +160,85 @@
         }
     },
     "redirects": [
-    {
-        "source": "/",
-        "destination": "/v2/getting-started"
-    }
-  ]
+        {
+            "source": "/",
+            "destination": "/v2/getting-started"
+        },
+        {
+            "source": "/getting-started",
+            "destination": "/v2/getting-started"
+        },
+        {
+            "source": "/acl",
+            "destination": "/v2/acl"
+        },
+        {
+            "source": "/blade-starter-kit",
+            "destination": "/v2/blade-starter-kit"
+        },
+        {
+            "source": "/currencies",
+            "destination": "/v2/currencies"
+        },
+        {
+            "source": "/extending/empty-state",
+            "destination": "/v2/extending/empty-state"
+        },
+        {
+            "source": "/extending/events",
+            "destination": "/v2/extending/events"
+        },
+        {
+            "source": "/extending/forms",
+            "destination": "/v2/extending/forms"
+        },
+        {
+            "source": "/extending/modals",
+            "destination": "/v2/extending/modals"
+        },
+        {
+            "source": "/extending/overview",
+            "destination": "/v2/extending/overview"
+        },
+        {
+            "source": "/extending/slideover",
+            "destination": "/v2/extending/slideover"
+        },
+        {
+            "source": "/getting-started",
+            "destination": "/v2/getting-started"
+        },
+        {
+            "source": "/inertia-starter-kit",
+            "destination": "/v2/inertia-starter-kit"
+        },
+        {
+            "source": "/livewire-starter-kit",
+            "destination": "/v2/livewire-starter-kit"
+        },
+        {
+            "source": "/pricing",
+            "destination": "/v2/pricing"
+        },
+        {
+            "source": "/product-variants",
+            "destination": "/v2/product-variants"
+        },
+        {
+            "source": "/setup-store",
+            "destination": "/v2/setup-store"
+        },
+        {
+            "source": "/starter-kits",
+            "destination": "/v2/starter-kits"
+        },
+        {
+            "source": "/upgrade",
+            "destination": "/v2/upgrade"
+        },
+        {
+            "source": "/zones",
+            "destination": "/v2/zones"
+        }
+    ]
 }
