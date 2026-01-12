@@ -1,20 +1,25 @@
 ---
-title: Control Panel
-description: Learn how to customize the Shopper control panel by adding CSS, JS assets, customizing the theme, branding logo, and adding custom routes.
+title: "Control Panel"
+description: "Learn how to customize the Shopper control panel by adding CSS, JS assets, customizing the theme, branding logo, and adding custom routes."
 ---
+
+<Warning>
+  This is documentation for Shopper v1, which is no longer maintained. Please refer to the [v2 docs](/v2) for the latest information.
+</Warning>
 
 The control panel may be customized in a number of different ways. You may add new pages, menus, a stylesheet, or maybe you just want to add some arbitrary Javascript.
 
 When you need to add features to your Shopper administration, you can first set up some configurations
 
 ## Adding CSS and JS assets
+
 Shopper can load extra stylesheets and Javascript files located in the `public/` directory.
 
 You may register assets to be loaded in the Control Panel using the `scripts` and `stylesheets` keys of the resources in the `config/shopper/admin.php` config file. This will accept a array of links.
 
 You can load the links locally or using cdn. They will be automatically loaded in the control panel
 
-``` php
+```php
 'resources' => [
   'stylesheets' => [
       '/css/admin.css',
@@ -28,12 +33,13 @@ You can load the links locally or using cdn. They will be automatically loaded i
 ```
 
 <Info>
-Depending on how you will use your css and js files, the order is important
+  Depending on how you will use your css and js files, the order is important
 </Info>
 
 These commands will make Shopper expect files at `public/css/admin.css` and `public/js/admin.js` respectively for local links.
 
 ## Customize Shopper theme
+
 Shopper is built using Tallstack presets, but you are not limited to that because the base css file is already built for production.
 
 But if you want to customize your dashboard using Tailwind css you must first install Tailwind in your project. You can read the [documentation](https://tailwindcss.com/docs/guides/laravel)
@@ -102,7 +108,7 @@ Just load the default Tailwind CSS directives inside your `./resources/css/admin
 Then run `yarn run dev`
 
 <Tip>
-Keep in mind the `admin.css` file must be load on the `resources` key of your `shopper/admin.php` config file
+  Keep in mind the `admin.css` file must be load on the `resources` key of your `shopper/admin.php` config file
 </Tip>
 
 And add Tailwind to the `postcss.config.js` file:
@@ -117,6 +123,7 @@ module.export = {
 ```
 
 ### Branding Logo
+
 After update (or not) the colors of your administration theme to reflect your brand. You'll probably want to change the logo to display
 
 By default, Laravel Shopper logo is used next to your application name in the administration panel.
@@ -143,7 +150,7 @@ This will load using the Laravel `asset()` helper function.
 The 2nd option is to create a resources/views/vendor/shopper/components/brand.blade.php file to provide a customized logo:
 
 <Info>
-It can be a simple svg or an image tag.
+  It can be a simple svg or an image tag.
 </Info>
 
 ```html
@@ -151,18 +158,20 @@ It can be a simple svg or an image tag.
 ```
 
 ## Adding control panel routes
+
 If you need to have custom routes for the control panel:
 
 1. Create a routes file. Name it whatever you want, for example: `routes/shopper.php`
 2. Then add this to your `shopper/routes.php` file so that all routes are dynamically loaded:
-    ```php
-     'custom_file' => base_path('routes/shopper.php'),
-    ```
+
+   ```php
+    'custom_file' => base_path('routes/shopper.php'),
+   ```
 3. If you want to add middleware to further control access to the routes available in this file you can add in the key `middleware` of the `shopper/routes.php` file
 
-	```php
-    'middleware' => [
-      'my-custom-middleware',
-      'permission:can-access',
-    ],
-	```
+   ```php
+   'middleware' => [
+     'my-custom-middleware',
+     'permission:can-access',
+   ],
+   ```
