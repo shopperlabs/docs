@@ -148,7 +148,12 @@
         "light": "/logo/logo.svg",
         "dark": "/logo/logo.svg"
     },
-    "navbar": {},
+    "navbar": {
+      "primary": {
+        "type": "github",
+        "href": "https://github.com/shopperlabs/shopper"
+      }
+    },
     "contextual": {
         "options": [
             "copy",
