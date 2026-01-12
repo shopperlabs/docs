@@ -165,10 +165,6 @@
             "destination": "/v2/getting-started"
         },
         {
-            "source": "/getting-started",
-            "destination": "/v2/getting-started"
-        },
-        {
             "source": "/acl",
             "destination": "/v2/acl"
         },
