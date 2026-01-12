@@ -134,7 +134,15 @@
                 ]
             }
         ],
-        "global": {}
+        "global": {
+          "anchors": [
+            {
+              "anchor": "Community",
+              "href": "https://discord.gg/CC444Gy7",  
+              "icon": "fa-brands fa-discord"
+            }
+          ]
+        }
     },
     "logo": {
         "light": "/logo/logo.svg",
@@ -236,5 +244,15 @@
             "source": "/zones",
             "destination": "/v2/zones"
         }
-    ]
+    ],
+    "seo": {
+        "metatags": {
+            "og:image": "/images/socialcard.png"
+        }
+    },
+    "integrations": {
+        "ga4": {
+            "measurementId": "G-NNZ07903B6"
+        }
+    }
 }
