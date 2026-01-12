@@ -137,9 +137,9 @@
         "global": {
           "anchors": [
             {
-              "anchor": "Community",
-              "href": "https://discord.gg/CC444Gy7",  
-              "icon": "fa-brands fa-discord"
+                "anchor": "Community",
+                "href": "https://discord.gg/CC444Gy7",  
+                "icon": "discord"
             }
           ]
         }
