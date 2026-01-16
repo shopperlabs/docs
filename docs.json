@@ -1,6 +1,6 @@
 {
     "$schema": "https://mintlify.com/docs.json",
-    "theme": "mint",
+    "theme": "aspen",
     "name": "TALL Stack E-commerce Framework",
     "colors": {
         "primary": "#2563eb",
@@ -259,5 +259,6 @@
         "ga4": {
             "measurementId": "G-NNZ07903B6"
         }
-    }
+    },
+    "description": "Headless e-commerce administration built with Laravel to create and manage online store. "
 }
