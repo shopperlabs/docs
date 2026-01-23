@@ -1,103 +1,454 @@
 ---
 title: Products
-description: Learn how to manage Products in your Shopper administration.
+description: Complete reference for the Product model, relationships, and usage in Shopper.
 ---
 
-### Model
+Products are the core of your e-commerce catalog. This documentation covers the Product model structure, relationships, types, and how to interact with products programmatically.
 
-The model used is `Shopper\Core\Models\Product`.
-
-| Name              | Type     | Required | Notes                                                                        |
-|-------------------|----------|----------|------------------------------------------------------------------------------|
-| `id`              | autoinc  |          | auto                                                                         |
-| `name`            | string   | yes      | The name of the product.                                                     |
-| `slug`            | string   | yes      | Unique, default value is auto generated using product name                   |
-| `sku`             | string   | no       | The Stock Keeping Unit (SKU) code of the product                             |
-| `barcode`         | string   | no       | The barcode of the product.                                                  |
-| `type`            | string   | yes      | The type of product `Shopper\Core\Enum\ProductType`                          |
-| `description`     | longtext | no       | Defines the description of the product                                       |
-| `is_visible`      | boolean  | no       | Defines the visibility of the product for customers                          |
-| `featured`        | boolean  | no       | Default `false`                                                              |
-| `weight_unit`     | string   | no       | The weight unit of the product `Shopper\Core\Enum\Dimension\Weight`          |
-| `weight_value`    | float    | no       | The weight value of the product                                              |
-| `height_unit`     | string   | no       | The height unit of the product `Shopper\Core\Enum\Dimension\Length`          |
-| `height_value`    | float    | no       | The height value of the product                                              |
-| `width_unit`      | string   | no       | The width unit of the product `Shopper\Core\Enum\Dimension\Length`           |
-| `width_value`     | float    | no       | The width value of the product                                               |
-| `depth_unit`      | string   | no       | The depth unit of the product `Shopper\Core\Enum\Dimension\Length`           |
-| `depth_value`     | float    | no       | The depth value of the product                                               |
-| `volume_unit`     | string   | no       | The volume unit of the product `Shopper\Core\Enum\Dimension\Volume`          |
-| `volume_value`    | float    | no       | The volume value of the product                                              |
-| `brand_id`        | int      | no       | int (`Brand` object via the `brand` relation)                                |
-| `summary`         | text     | no       | Nullable                                                                     |
-| `security_stock`  | int      | no       | Define the security stock of the product.                                    |
-| `seo_title`       | string   | no       | Nullable                                                                     |
-| `seo_description` | string   | no       | Nullable                                                                     |
-| `external_id`     | string   | no       | Nullable                                                                     |
-| `published_at`    | datetime | yes      | Defines a publication date so that your product are scheduled on your store. |
-| `metadata`        | json     | no       | Nullable                                                                     |
-
-<Tip>
-Models are customizable, and we recommend changing the **Product** model when you configure your site.
-To change the model you need to look at the configuration file `config/shopper/models.php`.
-</Tip>
+## Model
 
 ```php
-use Shopper\Core\Models;
+Shopper\Core\Models\Product
+```
 
+The Product model implements several interfaces and uses multiple traits to provide a complete feature set:
+
+```php
+use Shopper\Core\Models\Product;
+
+// The model implements
+- Shopper\Core\Contracts\HasReviews
+- Shopper\Core\Contracts\Priceable
+- Shopper\Core\Models\Contracts\Product
+- Spatie\MediaLibrary\HasMedia
+```
+
+### Extending the Model
+
+To customize the Product model, create your own model that extends the base class:
+
+```php
+namespace App\Models;
+
+use Shopper\Core\Models\Product as BaseProduct;
+
+class Product extends BaseProduct
+{
+    // Add your customizations here
+}
+```
+
+Then update the configuration in `config/shopper/models.php`:
+
+```php
 return [
-    // ...
-    'product' => Models\Product::class,
+    'product' => \App\Models\Product::class,
 ];
 ```
 
-1. Create your own Model
-    ```bash
-    php artisan make:model Product
-    ```
-   Once the `app/Models/Product.php` model is created in your app folder, you need to extend from the `Shopper\Core\Models\Product` Model.
+## Database Schema
 
-2. Extend your Product model from the Product Shopper Model
-    ```php
-    namespace App\Models;
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `name` | string | no | - | Product name |
+| `slug` | string | yes | auto | URL-friendly identifier (unique) |
+| `sku` | string | yes | null | Stock Keeping Unit (unique) |
+| `barcode` | string | yes | null | Product barcode (unique) |
+| `description` | longtext | yes | null | Full product description |
+| `type` | string | yes | null | Product type enum value |
+| `is_visible` | boolean | no | false | Visibility on storefront |
+| `featured` | boolean | no | false | Featured product flag |
+| `security_stock` | integer | yes | 0 | Minimum stock alert threshold |
+| `old_price_amount` | integer | yes | null | Compare at price (in cents) |
+| `price_amount` | integer | yes | null | Current price (in cents) |
+| `cost_amount` | integer | yes | null | Cost per item (in cents) |
+| `backorder` | boolean | no | false | Allow backorders |
+| `published_at` | datetime | no | now() | Publication date |
+| `seo_title` | string(60) | yes | null | SEO meta title |
+| `seo_description` | string(160) | yes | null | SEO meta description |
+| `weight_unit` | string | yes | null | Weight unit enum |
+| `weight_value` | decimal(10,2) | yes | null | Weight value |
+| `height_unit` | string | yes | null | Height unit enum |
+| `height_value` | decimal(10,2) | yes | null | Height value |
+| `width_unit` | string | yes | null | Width unit enum |
+| `width_value` | decimal(10,2) | yes | null | Width value |
+| `depth_unit` | string | yes | null | Depth unit enum |
+| `depth_value` | decimal(10,2) | yes | null | Depth value |
+| `volume_unit` | string | yes | null | Volume unit enum |
+| `volume_value` | decimal(10,2) | yes | null | Volume value |
+| `external_id` | string | yes | null | External system reference |
+| `metadata` | json | yes | null | Additional custom data |
+| `brand_id` | bigint | yes | null | Foreign key to brands |
+| `parent_id` | bigint | yes | null | Foreign key for parent product |
 
-    use Shopper\Core\Models\Product as Model;
+## Product Types
 
-    class Product extends Model
-    {
-    }
-    ```
+Products are categorized using the `ProductType` enum:
 
-3. Update `product` key for the model on the `models.php` config file to use our new model
-    ```php
-    'product' => Models\Product::class, // [tl! --]
-    'product' => \App\Models\Product::class, // [tl! ++]
-    ```
+```php
+use Shopper\Core\Enum\ProductType;
 
-### Components
+ProductType::Standard  // Simple product without variants
+ProductType::Variant   // Product with variants (size, color, etc.)
+ProductType::Virtual   // Digital/downloadable product
+ProductType::External  // Product hosted externally (affiliate)
+```
 
-By default, product Livewire components are not published. To customize components, you must publish them.
+### Type Checking Methods
+
+```php
+$product->isStandard();
+$product->isVariant();
+$product->isVirtual();
+$product->isExternal();
+```
+
+### Type Capabilities
+
+```php
+// Check if product can use shipping
+$product->canUseShipping(); // true for Standard and Variant types
+
+// Check if product can have attributes
+$product->canUseAttributes(); // true for Standard and Variant types
+
+// Check if product can have variants
+$product->canUseVariants(); // true only for Variant type
+```
+
+## Relationships
+
+### Brand
+
+```php
+// Get the product's brand
+$product->brand; // Returns Brand model or null
+
+// Query products by brand
+Product::query()
+    ->whereHas('brand', fn ($q) => $q->where('slug', 'nike'))
+    ->get();
+```
+
+### Categories
+
+Products have a many-to-many polymorphic relationship with categories:
+
+```php
+// Get all categories
+$product->categories;
+
+// Attach categories
+$product->categories()->attach([$categoryId1, $categoryId2]);
+
+// Sync categories (replaces existing)
+$product->categories()->sync([$categoryId1, $categoryId2]);
+
+// Detach all categories
+$product->categories()->detach();
+```
+
+### Collections
+
+```php
+// Get all collections containing this product
+$product->collections;
+
+// Add product to collection
+$product->collections()->attach($collectionId);
+```
+
+### Channels
+
+Products can be assigned to multiple sales channels:
+
+```php
+// Get product channels
+$product->channels;
+
+// Assign to channel
+$product->channels()->attach($channelId);
+```
+
+### Variants
+
+For products with `type = ProductType::Variant`:
+
+```php
+// Get all variants
+$product->variants;
+
+// Get total stock across all variants
+$product->variants_stock;
+
+// Create a variant
+$product->variants()->create([
+    'name' => 'Blue / Large',
+    'sku' => 'TSHIRT-BLU-L',
+    'price_amount' => 2999,
+]);
+```
+
+### Attributes (Options)
+
+Product attributes are accessed via the `options()` relationship to avoid collision with Eloquent's `$attributes` property:
+
+```php
+// Get product attributes
+$product->options; // Collection of Attribute models
+
+// Access pivot data
+foreach ($product->options as $attribute) {
+    $valueId = $attribute->pivot->attribute_value_id;
+    $customValue = $attribute->pivot->attribute_custom_value;
+}
+
+// Attach attributes with values
+$product->options()->attach($attributeId, [
+    'attribute_value_id' => $valueId,
+    'attribute_custom_value' => 'Custom text',
+]);
+```
+
+### Related Products
+
+```php
+// Get related products
+$product->relatedProducts;
+
+// Attach related products
+$product->relatedProducts()->attach([$productId1, $productId2]);
+```
+
+## Query Scopes
+
+### Published Products
+
+```php
+use Shopper\Core\Models\Product;
+
+// Get only published and visible products
+Product::query()->publish()->get();
+
+// The scope filters by:
+// - published_at <= now()
+// - is_visible = true
+```
+
+### Filter by Channel
+
+```php
+// Products available on a specific channel
+Product::query()->forChannel($channelId)->get();
+
+// Multiple channels
+Product::query()->forChannel([$channel1, $channel2])->get();
+```
+
+## Publication Status
+
+```php
+// Check if product is currently published
+$product->isPublished();
+
+// This checks:
+// - is_visible is true
+// - published_at is set
+// - published_at is in the past or present
+```
+
+## Media Management
+
+Products use Spatie Media Library for image management:
+
+```php
+// Add an image
+$product->addMedia($file)->toMediaCollection('products');
+
+// Add thumbnail (single file collection)
+$product->addMedia($file)->toMediaCollection('thumbnail');
+
+// Add downloadable files
+$product->addMedia($file)->toMediaCollection('files');
+
+// Get all product images
+$product->getMedia('products');
+
+// Get thumbnail
+$product->getFirstMedia('thumbnail');
+$product->getFirstMediaUrl('thumbnail');
+```
+
+### Media Collections Configuration
+
+The product registers three media collections:
+
+| Collection | Disk | Single File | Description |
+|------------|------|-------------|-------------|
+| `products` | configured | no | Product gallery images |
+| `thumbnail` | configured | yes | Main product image |
+| `files` | configured | no | Downloadable files |
+
+## Events
+
+Product lifecycle events are dispatched automatically:
+
+```php
+use Shopper\Core\Events\Products\ProductCreated;
+use Shopper\Core\Events\Products\ProductUpdated;
+use Shopper\Core\Events\Products\ProductDeleted;
+use Shopper\Core\Events\Products\ProductPurchased;
+```
+
+### Listening to Events
+
+```php
+// In your EventServiceProvider
+protected $listen = [
+    ProductCreated::class => [
+        SendProductCreatedNotification::class,
+        SyncProductToExternalService::class,
+    ],
+    ProductPurchased::class => [
+        DecreaseProductInventory::class, // Built-in listener
+    ],
+];
+```
+
+### Event Payload
+
+```php
+// All product events contain the product instance
+class ProductCreated
+{
+    public function __construct(
+        public Product $product
+    ) {}
+}
+```
+
+## Stock Management
+
+Products use the `HasStock` trait for inventory management:
+
+```php
+// Get current stock
+$product->stock;
+
+// For variant products, get combined stock
+$product->variants_stock;
+
+// Check stock status
+if ($product->stock <= $product->security_stock) {
+    // Low stock alert
+}
+```
+
+## Pricing
+
+Products use the `HasPrices` trait:
+
+```php
+// Get product price (returns Price model)
+$product->price;
+
+// Access amount (in cents)
+$product->price_amount;
+
+// Compare at price
+$product->old_price_amount;
+
+// Cost
+$product->cost_amount;
+
+// Format price for display
+shopper_money_format($product->price_amount); // "$29.99"
+```
+
+## Creating Products
+
+```php
+use Shopper\Core\Models\Product;
+use Shopper\Core\Enum\ProductType;
+
+$product = Product::query()->create([
+    'name' => 'Classic T-Shirt',
+    'sku' => 'TSHIRT-001',
+    'type' => ProductType::Standard,
+    'price_amount' => 2999, // $29.99 in cents
+    'is_visible' => true,
+    'published_at' => now(),
+    'brand_id' => $brandId,
+]);
+
+// Attach to categories
+$product->categories()->attach([$categoryId]);
+
+// Add media
+$product->addMediaFromUrl('https://example.com/image.jpg')
+    ->toMediaCollection('thumbnail');
+```
+
+## Retrieving Products
+
+```php
+// Get all published products
+$products = Product::query()
+    ->publish()
+    ->with(['brand', 'categories', 'media'])
+    ->get();
+
+// Get featured products
+$featured = Product::query()
+    ->publish()
+    ->where('featured', true)
+    ->take(8)
+    ->get();
+
+// Get products by category
+$products = Product::query()
+    ->publish()
+    ->whereHas('categories', fn ($q) => $q->where('slug', 'clothing'))
+    ->get();
+
+// Get products with low stock
+$lowStock = Product::query()
+    ->whereColumn('stock', '<=', 'security_stock')
+    ->get();
+```
+
+## Components
+
+Publish Livewire components to customize the admin interface:
 
 ```bash
 php artisan shopper:component:publish product
 ```
 
-This command will publish all Livewire components used for product management (from pages to form components).
-Once you've published the component, you can find it in the `product.php` locate in the `config/shopper/components` folder.
+This publishes to `config/shopper/components/product.php`:
 
 ```php
 use Shopper\Livewire;
+use Shopper\Livewire\Components;
 
 return [
-  'pages' => [
+    'pages' => [
         'product-index' => Livewire\Pages\Product\Index::class,
-        // ...
+        'product-edit' => Livewire\Pages\Product\Edit::class,
+        'variant-edit' => Livewire\Pages\Product\Variant::class,
+        'attribute-index' => Livewire\Pages\Attribute\Browse::class,
     ],
-    
-  'components' => [
+    'components' => [
+        'products.form.attributes' => Components\Products\Form\Attributes::class,
+        'products.form.edit' => Components\Products\Form\Edit::class,
+        'products.form.media' => Components\Products\Form\Media::class,
+        'products.form.inventory' => Components\Products\Form\Inventory::class,
+        'products.form.variants' => Components\Products\Form\Variants::class,
         // ...
         'slide-overs.add-product' => Livewire\SlideOvers\AddProduct::class,
+        'slide-overs.add-variant' => Livewire\SlideOvers\AddVariant::class,
         // ...
-  ],
+    ],
 ];
 ```

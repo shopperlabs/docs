@@ -1,0 +1,232 @@
+---
+title: 'Alert'
+description: 'Display contextual feedback messages with different severity levels'
+---
+
+import { ComponentPreview, PreviewAlert } from '/snippets/component-preview.jsx'
+
+The Alert component displays colored feedback messages to users. It supports different colors for various contexts like warnings, errors, success messages, and general information.
+
+## Preview
+
+<ComponentPreview centered={false}>
+  <PreviewAlert
+    color="warning"
+    title="Attention Required"
+    message="Please review your settings before proceeding with this action."
+  />
+</ComponentPreview>
+
+## Usage
+
+```blade
+<x-shopper::alert
+    color="warning"
+    title="Attention Required"
+    message="Please review your settings before proceeding."
+    icon="heroicon-o-exclamation-triangle"
+/>
+```
+
+## Props
+
+<ParamField path="message" type="string" required>
+  The main alert message content.
+</ParamField>
+
+<ParamField path="color" type="string" default="warning">
+  The alert color theme. Options: `info`, `danger`, `success`, `warning`.
+</ParamField>
+
+<ParamField path="title" type="string" default="null">
+  Optional title displayed above the message.
+</ParamField>
+
+<ParamField path="icon" type="string" default="null">
+  Optional Filament icon name to display.
+</ParamField>
+
+<ParamField path="iconSize" type="IconSize" default="Medium">
+  Size of the icon. Options: `Small`, `Medium`, `Large`.
+</ParamField>
+
+## Color Variants
+
+### Info
+
+<ComponentPreview centered={false}>
+  <PreviewAlert
+    color="info"
+    title="Information"
+    message="This is an informational message to help guide the user."
+  />
+</ComponentPreview>
+
+```blade
+<x-shopper::alert
+    color="info"
+    title="Information"
+    message="This is an informational message to help guide the user."
+    icon="heroicon-o-information-circle"
+/>
+```
+
+### Success
+
+<ComponentPreview centered={false}>
+  <PreviewAlert
+    color="success"
+    title="Success"
+    message="Your changes have been saved successfully."
+  />
+</ComponentPreview>
+
+```blade
+<x-shopper::alert
+    color="success"
+    title="Success"
+    message="Your changes have been saved successfully."
+    icon="heroicon-o-check-circle"
+/>
+```
+
+### Warning
+
+<ComponentPreview centered={false}>
+  <PreviewAlert
+    color="warning"
+    title="Warning"
+    message="This action may have unintended consequences. Please proceed with caution."
+  />
+</ComponentPreview>
+
+```blade
+<x-shopper::alert
+    color="warning"
+    title="Warning"
+    message="This action may have unintended consequences."
+    icon="heroicon-o-exclamation-triangle"
+/>
+```
+
+### Danger
+
+<ComponentPreview centered={false}>
+  <PreviewAlert
+    color="danger"
+    title="Error"
+    message="Something went wrong. Please try again or contact support."
+  />
+</ComponentPreview>
+
+```blade
+<x-shopper::alert
+    color="danger"
+    title="Error"
+    message="Something went wrong. Please try again or contact support."
+    icon="heroicon-o-x-circle"
+/>
+```
+
+## Examples
+
+### Alert Without Title
+
+<ComponentPreview centered={false}>
+  <PreviewAlert
+    color="info"
+    message="You can create alerts without a title for simpler messages."
+  />
+</ComponentPreview>
+
+```blade
+<x-shopper::alert
+    color="info"
+    message="You can create alerts without a title for simpler messages."
+/>
+```
+
+### Alert Without Icon
+
+```blade
+<x-shopper::alert
+    color="warning"
+    title="Note"
+    message="This alert has no icon."
+    :icon="false"
+/>
+```
+
+### Using in Forms
+
+Alerts are commonly used to display validation summaries or important notices in forms:
+
+```blade
+<x-shopper::card title="Product Settings">
+    <x-shopper::alert
+        color="warning"
+        message="Changing the SKU will affect inventory tracking."
+        icon="heroicon-o-exclamation-triangle"
+        class="mb-4"
+    />
+
+    <form>
+        <!-- Form fields -->
+    </form>
+</x-shopper::card>
+```
+
+## Blade Component Source
+
+The Alert component is located at `packages/admin/resources/views/components/alert.blade.php`:
+
+```blade
+@php
+    use Filament\Support\Enums\IconSize;
+@endphp
+
+@props([
+    'message',
+    'color' => 'warning',
+    'title' => null,
+    'icon' => null,
+    'iconSize' => IconSize::Medium,
+])
+
+@php
+    if (! $iconSize instanceof IconSize) {
+        $iconSize = filled($iconSize) ? IconSize::tryFrom($iconSize) ?? $iconSize : null;
+    }
+
+    $containerClass = \Illuminate\Support\Arr::toCssClasses([
+        'rounded-lg p-4 ring-1',
+        match ($color) {
+            'info' => 'bg-info-50 ring-info-200 dark:ring-info-400/20 dark:bg-info-800/30',
+            'danger' => 'bg-danger-50 ring-danger-200 dark:ring-danger-400/20 dark:bg-danger-800/30',
+            'success' => 'bg-success-50 ring-success-200 dark:ring-success-400/20 dark:bg-success-800/30',
+            'warning' => 'bg-warning-50 ring-warning-200 dark:ring-warning-400/20 dark:bg-warning-800/30',
+            default => 'bg-custom-50 ring-custom-200 dark:ring-custom-400/20 dark:bg-custom-800/30',
+        },
+    ]);
+@endphp
+
+<div {{ $attributes->twMerge(['class' => $containerClass]) }}>
+    <div class="flex gap-3">
+        @if ($icon)
+            <div class="shrink-0">
+                <x-filament::icon :icon="$icon" :class="$iconClasses" />
+            </div>
+        @endif
+
+        <div>
+            @if ($title)
+                <h3 @class([$titleClasses])>{{ $title }}</h3>
+            @endif
+
+            <p @class([$messageClasses])>
+                {{ $message }}
+            </p>
+        </div>
+    </div>
+</div>
+```

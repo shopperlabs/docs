@@ -1,0 +1,98 @@
+---
+title: 'User Avatar'
+description: 'Display user profile picture with optional name'
+---
+
+import { ComponentPreview, PreviewUserAvatar } from '/snippets/component-preview.jsx'
+
+The User Avatar component displays a user's profile picture with an optional name. Commonly used in Filament tables and user-related interfaces.
+
+## Preview
+
+<ComponentPreview>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+    <PreviewUserAvatar name="John Doe" />
+    <PreviewUserAvatar name="Jane Smith" showName={false} />
+  </div>
+</ComponentPreview>
+
+## Usage
+
+```blade
+<x-shopper::user-avatar :user="$customer" />
+```
+
+## Props
+
+<ParamField path="user" type="Model" required>
+  The user model instance. Must have `picture` and `full_name` attributes.
+</ParamField>
+
+<ParamField path="showName" type="bool" default="true">
+  Whether to display the user's name next to the avatar.
+</ParamField>
+
+## Examples
+
+### With Name
+
+<ComponentPreview>
+  <PreviewUserAvatar name="John Doe" />
+</ComponentPreview>
+
+```blade
+<x-shopper::user-avatar :user="$user" />
+```
+
+### Avatar Only
+
+<ComponentPreview>
+  <PreviewUserAvatar name="Jane Smith" showName={false} />
+</ComponentPreview>
+
+```blade
+<x-shopper::user-avatar :user="$user" :showName="false" />
+```
+
+### In a Filament Table
+
+```php
+Tables\Columns\ViewColumn::make('customer')
+    ->view('shopper::components.user-avatar')
+    ->label(__('Customer')),
+```
+
+## User Model Requirements
+
+The user model must implement:
+
+```php
+// Profile picture URL
+public function getPictureAttribute(): string;
+
+// Full name display
+public function getFullNameAttribute(): string;
+```
+
+## Blade Component Source
+
+```blade
+@props([
+    'user',
+    'showName' => true,
+])
+
+<div class="flex items-center gap-2">
+    <img
+        class="size-8 rounded-full"
+        src="{{ $user->picture }}"
+        alt="{{ $user->full_name }}"
+    />
+
+    @if ($showName)
+        <span class="text-sm font-medium text-gray-700 dark:text-gray-300">
+            {{ $user->full_name }}
+        </span>
+    @endif
+</div>
+```

@@ -1,0 +1,386 @@
+---
+title: 'Standalone Installation'
+description: 'How to use the sidebar package in any Laravel application'
+---
+
+This guide covers how to install and use the sidebar package in a standalone Laravel application (without Shopper).
+
+## Installation
+
+Install the package via Composer:
+
+```bash
+composer require shopper/sidebar
+```
+
+Publish the configuration file:
+
+```bash
+php artisan vendor:publish --provider="Shopper\Sidebar\SidebarServiceProvider" --tag="sidebar-config"
+```
+
+Optionally, publish the views for customization:
+
+```bash
+php artisan vendor:publish --provider="Shopper\Sidebar\SidebarServiceProvider" --tag="sidebar-views"
+```
+
+## Setting Up the Middleware
+
+Add the sidebar resolver middleware to your route group or in `bootstrap/app.php`:
+
+```php
+// In a route group
+Route::middleware(['web', \Shopper\Sidebar\Middleware\ResolveSidebars::class])
+    ->group(function () {
+        // Your routes
+    });
+```
+
+Or in Laravel 11+ with `bootstrap/app.php`:
+
+```php
+->withMiddleware(function (Middleware $middleware) {
+    $middleware->appendToGroup('web', [
+        \Shopper\Sidebar\Middleware\ResolveSidebars::class,
+    ]);
+})
+```
+
+## Creating a Sidebar
+
+### 1. Create a Sidebar Class
+
+Create a class that implements the `Sidebar` contract:
+
+```php
+<?php
+
+namespace App\Sidebar;
+
+use Shopper\Sidebar\Contracts\Builder\Menu;
+use Shopper\Sidebar\Contracts\Builder\Group;
+use Shopper\Sidebar\Contracts\Builder\Item;
+use Shopper\Sidebar\Contracts\Sidebar;
+
+class AdminSidebar implements Sidebar
+{
+    public function __construct(private Menu $menu) {}
+
+    public function build(): void
+    {
+        $this->menu->group('Main', function (Group $group): void {
+            $group->weight(1);
+            $group->setAuthorized();
+            $group->setGroupItemsClass('space-y-1');
+
+            $group->item('Dashboard', function (Item $item): void {
+                $item->weight(1);
+                $item->setAuthorized();
+                $item->route('dashboard');
+                $item->setIcon('heroicon-o-home');
+            });
+
+            $group->item('Users', function (Item $item): void {
+                $item->weight(2);
+                $item->setAuthorized();
+                $item->route('users.index');
+                $item->setIcon('heroicon-o-users');
+
+                // Add sub-items
+                $item->item('All Users', function (Item $subItem): void {
+                    $subItem->route('users.index');
+                });
+
+                $item->item('Create User', function (Item $subItem): void {
+                    $subItem->route('users.create');
+                });
+            });
+        });
+
+        $this->menu->group('Settings', function (Group $group): void {
+            $group->weight(10);
+            $group->setAuthorized();
+
+            $group->item('General', function (Item $item): void {
+                $item->weight(1);
+                $item->route('settings.general');
+                $item->setIcon('heroicon-o-cog');
+            });
+        });
+    }
+
+    public function getMenu(): Menu
+    {
+        return $this->menu;
+    }
+}
+```
+
+### 2. Register the Sidebar
+
+Register your sidebar in a service provider using the `SidebarManager`:
+
+```php
+<?php
+
+namespace App\Providers;
+
+use App\Sidebar\AdminSidebar;
+use Illuminate\Support\ServiceProvider;
+use Shopper\Sidebar\SidebarManager;
+
+class SidebarServiceProvider extends ServiceProvider
+{
+    public function boot(SidebarManager $manager): void
+    {
+        $manager->register(AdminSidebar::class);
+    }
+}
+```
+
+Don't forget to register the service provider in `config/app.php` or `bootstrap/providers.php`.
+
+## Using the Sidebar
+
+### Option 1: Livewire Component
+
+The easiest way to use the sidebar is with the built-in Livewire component:
+
+```blade
+@livewire('sidebar', [
+    'sidebarClass' => \App\Sidebar\AdminSidebar::class,
+    'class' => 'h-full',
+    'collapsible' => true,
+])
+```
+
+### Option 2: Custom Blade Implementation
+
+For full control, use the `SidebarRenderer` directly:
+
+```blade
+@php
+    $sidebar = app(\App\Sidebar\AdminSidebar::class);
+    $sidebar->build();
+    $renderer = app(\Shopper\Sidebar\Presentation\SidebarRenderer::class);
+    $renderedSidebar = $renderer->render($sidebar);
+@endphp
+
+<aside class="sidebar" x-data x-bind:class="{ 'collapsed': $store.sidebar.isCollapsed }">
+    <div class="sidebar-header">
+        <img src="/logo.png" alt="Logo" />
+        <span x-show="!$store.sidebar.isCollapsed">My App</span>
+    </div>
+
+    <nav class="sidebar-nav">
+        {!! $renderedSidebar !!}
+    </nav>
+
+    <div class="sidebar-footer">
+        <button @click="$store.sidebar.toggle()">
+            Toggle Sidebar
+        </button>
+    </div>
+</aside>
+```
+
+## Alpine.js Store Setup
+
+The sidebar uses an Alpine.js store for state management. Add the store to your JavaScript:
+
+```javascript
+import Alpine from 'alpinejs'
+import sidebarStore from './vendor/sidebar/stores/sidebar'
+
+// Register the store
+Alpine.store('sidebar', sidebarStore())
+
+// Start Alpine
+Alpine.start()
+
+// Initialize the sidebar store after Alpine starts
+document.addEventListener('alpine:init', () => {
+    Alpine.store('sidebar').init()
+})
+```
+
+To get the source JavaScript files, publish them:
+
+```bash
+php artisan vendor:publish --provider="Shopper\Sidebar\SidebarServiceProvider" --tag="sidebar-js"
+```
+
+This will publish the files to `resources/js/vendor/sidebar/`.
+
+### Store API
+
+The sidebar store provides these properties and methods:
+
+```javascript
+// State properties
+$store.sidebar.isOpen        // Mobile: sidebar visibility
+$store.sidebar.isCollapsed   // Desktop: collapsed state
+$store.sidebar.collapsible   // Whether collapse is enabled
+$store.sidebar.currentPath   // Current URL path
+
+// Sidebar visibility (mobile)
+$store.sidebar.open()        // Open sidebar
+$store.sidebar.close()       // Close sidebar
+
+// Sidebar collapse (desktop)
+$store.sidebar.toggle()      // Smart toggle based on screen size
+$store.sidebar.collapse()    // Collapse sidebar
+$store.sidebar.expand()      // Expand sidebar
+$store.sidebar.toggleCollapse()
+
+// Group management
+$store.sidebar.toggleGroup(label)
+$store.sidebar.isGroupCollapsed(label)
+$store.sidebar.collapseGroup(label)
+$store.sidebar.expandGroup(label)
+
+// Navigation tracking (for SPA)
+$store.sidebar.isActive(url) // Check if URL is active
+```
+
+## CSS Variables
+
+Add CSS variables to your layout for sidebar dimensions:
+
+```blade
+<style>
+    :root {
+        --sidebar-width: {{ \Shopper\Sidebar\sidebar_width() }};
+        --sidebar-collapsed-width: {{ \Shopper\Sidebar\sidebar_collapsed_width() }};
+    }
+</style>
+
+<body
+    data-sidebar-breakpoint="{{ \Shopper\Sidebar\sidebar_breakpoint() }}"
+    data-sidebar-collapsible="{{ \Shopper\Sidebar\sidebar_is_collapsible() ? 'true' : 'false' }}"
+>
+```
+
+## Menu Item API
+
+### Basic Item Options
+
+```php
+$group->item('Label', function (Item $item): void {
+    // URL or Route
+    $item->setUrl('/path');          // Direct URL
+    $item->route('route.name');       // Route name
+    $item->route('route.name', ['id' => 1]); // Route with parameters
+
+    // Icon
+    $item->setIcon(
+        icon: 'heroicon-o-home',
+        type: 'blade',               // 'blade' or 'svg'
+        iconClass: 'size-5',
+        attributes: ['stroke-width' => '1.5'],
+    );
+
+    // Ordering
+    $item->weight(1);                // Sort order (lower = higher)
+
+    // Authorization
+    $item->setAuthorized();          // Always authorized
+    $item->setAuthorized(fn() => auth()->user()->isAdmin()); // Conditional
+
+    // Behavior
+    $item->useSpa();                 // Use wire:navigate for Livewire
+    $item->isNewTab();               // Open in new tab
+
+    // CSS Classes
+    $item->setItemClass('my-item-class');
+    $item->setActiveClass('active');
+});
+```
+
+### Adding Badges
+
+```php
+$item->badge('New');                  // Simple text badge
+$item->badge(5);                      // Number badge
+$item->badge('3', 'bg-red-500 text-white'); // Styled badge
+
+// Or using callback
+$item->badge(function (Badge $badge): void {
+    $badge->setValue($this->getNotificationCount());
+    $badge->setClass('bg-primary-500 text-white');
+    $badge->color('danger');
+});
+```
+
+### Adding Append Elements
+
+Append elements are additional action buttons displayed next to the item:
+
+```php
+$item->append('/users/create', 'heroicon-o-plus', 'Add User');
+
+// Or using callback
+$item->append(function (Append $append): void {
+    $append->route('users.create');
+    $append->setIcon('heroicon-o-plus', 'blade', 'size-4');
+    $append->setName('Add User');
+    $append->setClass('hover:bg-gray-100');
+});
+```
+
+### Sub-Items
+
+```php
+$item->item('Sub Item 1', function (Item $subItem): void {
+    $subItem->route('sub.route.1');
+});
+
+$item->item('Sub Item 2', function (Item $subItem): void {
+    $subItem->route('sub.route.2');
+});
+```
+
+## Group API
+
+```php
+$menu->group('Group Name', function (Group $group): void {
+    $group->weight(1);                    // Sort order
+    $group->setAuthorized();              // Authorization
+    $group->hideHeading();                // Hide the group heading
+    $group->collapsible(true);            // Allow collapsing
+
+    // CSS Classes
+    $group->setClass('my-group-class');
+    $group->setHeadingClass('my-heading-class');
+    $group->setGroupItemsClass('space-y-1');
+
+    // Add items
+    $group->item('Item', function (Item $item): void {
+        // ...
+    });
+});
+```
+
+## Helper Functions
+
+The package provides namespaced helper functions:
+
+```php
+use function Shopper\Sidebar\sidebar_config;
+use function Shopper\Sidebar\sidebar_width;
+use function Shopper\Sidebar\sidebar_collapsed_width;
+use function Shopper\Sidebar\sidebar_breakpoint;
+use function Shopper\Sidebar\sidebar_is_collapsible;
+
+// Get any config value
+$value = sidebar_config('cache.method', 'default');
+
+// Get dimensions
+$width = sidebar_width();               // e.g., '17.5rem'
+$collapsed = sidebar_collapsed_width(); // e.g., '4.5rem'
+
+// Get responsive settings
+$breakpoint = sidebar_breakpoint();     // e.g., 1024
+$collapsible = sidebar_is_collapsible(); // true/false
+```

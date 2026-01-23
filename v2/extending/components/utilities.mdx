@@ -1,0 +1,172 @@
+---
+title: 'Utility Components'
+description: 'Structural and utility components for layouts'
+---
+
+These components provide structural and utility functionality. They don't require visual previews as they are primarily wrappers or functional elements.
+
+## Container
+
+Page content wrapper with responsive horizontal padding.
+
+```blade
+<x-shopper::container>
+    <!-- Page content -->
+</x-shopper::container>
+```
+
+**Source:**
+```blade
+<div {{ $attributes->twMerge(['class' => 'px-4 lg:px-6']) }}>
+    {{ $slot }}
+</div>
+```
+
+---
+
+## Link
+
+Internal navigation link with Livewire `wire:navigate.hover` for SPA-like navigation.
+
+```blade
+<x-shopper::link href="{{ route('shopper.products.index') }}">
+    Products
+</x-shopper::link>
+```
+
+**Source:**
+```blade
+<a {{ $attributes }} wire:navigate.hover>
+    {{ $slot }}
+</a>
+```
+
+---
+
+## Separator
+
+Visual divider between content sections.
+
+```blade
+<x-shopper::separator />
+```
+
+**Source:**
+```blade
+<div class="sh-separator py-8 lg:py-10">
+    <div class="border-t border-gray-200 dark:border-white/20"></div>
+</div>
+```
+
+---
+
+## Breadcrumb
+
+Navigation breadcrumb with mobile back link support.
+
+```blade
+<x-shopper::breadcrumb :back="route('shopper.products.index')" current="iPhone 15">
+    <x-shopper::breadcrumb.link
+        :href="route('shopper.products.index')"
+        :title="__('Products')"
+    />
+</x-shopper::breadcrumb>
+```
+
+### Props
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `back` | string | URL for mobile back link |
+| `current` | string | Current page title (optional) |
+
+### Breadcrumb Link
+
+```blade
+<x-shopper::breadcrumb.link
+    :href="route('shopper.categories.index')"
+    :title="__('Categories')"
+/>
+```
+
+---
+
+## Validation Errors
+
+Displays Laravel validation errors in a styled error box.
+
+```blade
+<x-shopper::validation-errors />
+```
+
+Automatically displays all validation errors from `$errors->all()`.
+
+**Source:**
+```blade
+@if ($errors->count() > 0)
+    <div class="bg-danger-50 my-2 rounded-lg p-4">
+        <div class="flex">
+            <div class="shrink-0">
+                <!-- Error icon -->
+            </div>
+            <div class="ml-3">
+                <h3 class="text-danger-800 text-sm leading-5 font-medium">
+                    {{ __('shopper::forms.error') }}
+                </h3>
+                <div class="text-danger-700 mt-2 text-sm leading-5">
+                    <ul class="list-disc space-y-1 pl-5">
+                        @foreach ($errors->all() as $message)
+                            <li>{{ $message }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+@endif
+```
+
+---
+
+## Dropdown Link
+
+Menu item for dropdown menus.
+
+```blade
+<x-shopper::dropdown-link :href="route('shopper.profile')">
+    Profile
+</x-shopper::dropdown-link>
+```
+
+---
+
+## Form Slide-over
+
+Wrapper for forms displayed in slide-over panels.
+
+```blade
+<x-shopper::form-slider-over action="save" close-panel="form-panel">
+    <x-slot:title>Edit Product</x-slot:title>
+
+    <!-- Form content -->
+
+    <x-slot:buttons>
+        <x-filament::button type="submit">Save</x-filament::button>
+    </x-slot:buttons>
+</x-shopper::form-slider-over>
+```
+
+### Props
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `action` | string | Livewire method to call on submit |
+| `close-panel` | string | Panel name to close after submit |
+
+### Slots
+
+| Slot | Description |
+|------|-------------|
+| `title` | Slide-over header title |
+| `default` | Form content |
+| `buttons` | Footer action buttons |

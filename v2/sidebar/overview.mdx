@@ -1,0 +1,60 @@
+---
+title: 'Sidebar Package'
+description: 'A headless sidebar package for Laravel with Alpine.js integration'
+---
+
+The `shopper/sidebar` package is a headless sidebar builder for Laravel that allows you to create and manage sidebars with full customization support. Originally forked from [SpartnerNL/Laravel-Sidebar](https://github.com/SpartnerNL/Laravel-Sidebar), it has been completely rewritten to support modern Laravel applications with Livewire and Alpine.js.
+
+## Features
+
+- **Headless Architecture**: Full control over your sidebar's HTML and styling
+- **Livewire Integration**: Built-in Livewire component for easy setup
+- **Alpine.js State Management**: Reactive sidebar state with collapse, expand, and responsive features
+- **LocalStorage Persistence**: User preferences are saved automatically
+- **Event-Based Extension**: Extend existing sidebars using Laravel events
+- **Caching Support**: Optional sidebar caching for performance
+- **Authorization**: Built-in authorization support for items and groups
+
+## Architecture
+
+The sidebar package is built around several key concepts:
+
+### Menu
+The root container that holds all sidebar groups. Each sidebar has one menu that contains multiple groups.
+
+### Group
+A collection of related menu items with an optional heading. Groups can be collapsible and styled independently.
+
+### Item
+A single navigation entry that can have:
+- An icon
+- A badge (for notifications, counts, etc.)
+- An append element (additional action button)
+- Nested sub-items
+
+### Contracts
+The package uses contracts (interfaces) for all major components, allowing you to customize or replace default implementations:
+
+- `Shopper\Sidebar\Contracts\Sidebar` - Main sidebar interface
+- `Shopper\Sidebar\Contracts\Builder\Menu` - Menu builder
+- `Shopper\Sidebar\Contracts\Builder\Group` - Group builder
+- `Shopper\Sidebar\Contracts\Builder\Item` - Item builder
+- `Shopper\Sidebar\Contracts\Builder\Badge` - Badge builder
+- `Shopper\Sidebar\Contracts\Builder\Append` - Append builder
+
+## Use Cases
+
+### Standalone Laravel Applications
+
+You can use this package in any Laravel application to create custom sidebars. See the [Standalone Installation](/v2/sidebar/standalone) guide.
+
+### Extending Shopper
+
+If you're using Laravel Shopper, you can extend the admin panel sidebar using the event-based system. See [Extending Shopper Navigation](/v2/sidebar/shopper-extension) for details.
+
+## Requirements
+
+- PHP 8.3+
+- Laravel 11.x or 12.x
+- Livewire 3.x
+- Alpine.js 3.x

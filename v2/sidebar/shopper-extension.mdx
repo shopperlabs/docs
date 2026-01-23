@@ -1,0 +1,321 @@
+---
+title: 'Extending Shopper'
+description: 'How to extend the Shopper admin panel sidebar'
+---
+
+This guide covers how to add custom navigation items to the Shopper admin panel using the sidebar extension system.
+
+## Overview
+
+Shopper uses an event-based system to build the sidebar. When the sidebar is rendered, it dispatches a `SidebarBuilder` event that you can listen to and add your own menu groups and items.
+
+## Creating a Sidebar Extension
+
+### 1. Create an Extension Class
+
+Create a class that extends `AbstractAdminSidebar`:
+
+```php
+<?php
+
+namespace App\Sidebar;
+
+use Shopper\Sidebar\AbstractAdminSidebar;
+use Shopper\Sidebar\Contracts\Builder\Group;
+use Shopper\Sidebar\Contracts\Builder\Item;
+use Shopper\Sidebar\Contracts\Builder\Menu;
+
+class BlogSidebar extends AbstractAdminSidebar
+{
+    public function extendWith(Menu $menu): Menu
+    {
+        $menu->group(__('Blog'), function (Group $group): void {
+            $group->weight(5);
+            $group->setAuthorized();
+
+            $group->item(__('Posts'), function (Item $item): void {
+                $item->weight(1);
+                $item->setAuthorized();
+                $item->useSpa();
+                $item->route('shopper.blog.posts.index');
+                $item->setIcon('untitledui-file-02');
+            });
+
+            $group->item(__('Categories'), function (Item $item): void {
+                $item->weight(2);
+                $item->setAuthorized();
+                $item->useSpa();
+                $item->route('shopper.blog.categories.index');
+                $item->setIcon('untitledui-folder');
+            });
+        });
+
+        return $menu;
+    }
+}
+```
+
+<Info>
+The `$this->user` property is available in your extension class to access the authenticated user for authorization checks.
+</Info>
+
+### 2. Register the Extension
+
+Register your sidebar extension in a service provider:
+
+```php
+<?php
+
+namespace App\Providers;
+
+use App\Sidebar\BlogSidebar;
+use Illuminate\Support\ServiceProvider;
+use Shopper\Sidebar\SidebarBuilder;
+
+class AppServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        $this->app['events']->listen(SidebarBuilder::class, BlogSidebar::class);
+    }
+}
+```
+
+<Warning>
+Make sure to register the listener in the `register()` method, not `boot()`, to ensure it's registered before the sidebar is built.
+</Warning>
+
+## Weight System
+
+The `weight` value determines the order of items and groups. Lower values appear first:
+
+| Section | Weight |
+|---------|--------|
+| Dashboard | 1 |
+| Catalog | 2 |
+| Sales | 3 |
+| Customers | 4 |
+| Your Extension | 5-9 |
+| Settings (footer) | 10+ |
+
+Choose a weight value that positions your menu in the desired location.
+
+## Adding Sub-Items
+
+Items can have nested sub-items for dropdown menus:
+
+```php
+$group->item(__('Blog'), function (Item $item): void {
+    $item->weight(1);
+    $item->setAuthorized();
+    $item->route('shopper.blog.posts.index');
+    $item->setIcon('untitledui-file-02');
+
+    // Sub-items
+    $item->item(__('All Posts'), function (Item $subItem): void {
+        $subItem->weight(1);
+        $subItem->setAuthorized();
+        $subItem->useSpa();
+        $subItem->route('shopper.blog.posts.index');
+    });
+
+    $item->item(__('Create Post'), function (Item $subItem): void {
+        $subItem->weight(2);
+        $subItem->setAuthorized();
+        $subItem->useSpa();
+        $subItem->route('shopper.blog.posts.create');
+    });
+});
+```
+
+<Info>
+Add `sh-items-has-child` to the parent item class to enable the proper dropdown styling.
+</Info>
+
+## Authorization
+
+### Permission-Based Authorization
+
+Use Laravel's authorization system to control visibility:
+
+```php
+$group->item(__('Posts'), function (Item $item): void {
+    // Only show if user can manage posts
+    $item->setAuthorized(fn() => $this->user?->can('manage_posts'));
+
+    // ... rest of configuration
+});
+```
+
+### Role-Based Authorization
+
+```php
+$group->item(__('Admin Settings'), function (Item $item): void {
+    $item->setAuthorized(fn() => $this->user?->hasRole('admin'));
+
+    // ... rest of configuration
+});
+```
+
+## Adding Badges
+
+Show notification counts or labels on menu items:
+
+```php
+$group->item(__('Orders'), function (Item $item): void {
+    // ... item configuration
+
+    // Add a badge with pending order count
+    $item->badge(function (Badge $badge): void {
+        $count = Order::pending()->count();
+        if ($count > 0) {
+            $badge->setValue($count);
+            $badge->setClass('bg-danger-500 text-white');
+        }
+    });
+});
+```
+
+## Adding Quick Actions (Append)
+
+Add action buttons next to menu items:
+
+```php
+$group->item(__('Products'), function (Item $item): void {
+    // ... item configuration
+
+    // Add a "+" button to quickly create a product
+    $item->append(function (Append $append): void {
+        $append->route('shopper.products.create');
+        $append->setIcon('untitledui-plus');
+        $append->setName(__('Add Product'));
+        $append->setClass('sh-sidebar-item-nav');
+        $append->setAuthorized(fn() => $this->user?->can('create_products'));
+    });
+});
+```
+
+## Complete Example
+
+Here's a complete example of a blog sidebar extension:
+
+```php
+<?php
+
+namespace App\Sidebar;
+
+use App\Models\Post;
+use Shopper\Sidebar\AbstractAdminSidebar;
+use Shopper\Sidebar\Contracts\Builder\Append;
+use Shopper\Sidebar\Contracts\Builder\Badge;
+use Shopper\Sidebar\Contracts\Builder\Group;
+use Shopper\Sidebar\Contracts\Builder\Item;
+use Shopper\Sidebar\Contracts\Builder\Menu;
+
+class BlogSidebar extends AbstractAdminSidebar
+{
+    public function extendWith(Menu $menu): Menu
+    {
+        $menu->group(__('Content'), function (Group $group): void {
+            $group->weight(5);
+            $group->setAuthorized();
+
+            $group->item(__('Blog'), function (Item $item): void {
+                $item->weight(1);
+                $item->setAuthorized(fn() => $this->user?->can('manage_blog'));
+                $item->route('shopper.blog.posts.index');
+                $item->setIcon('untitledui-edit-04');
+
+                // Badge for draft posts
+                $item->badge(function (Badge $badge): void {
+                    $drafts = Post::draft()->count();
+                    if ($drafts > 0) {
+                        $badge->setValue($drafts);
+                        $badge->setClass('text-xs bg-warning-100 text-warning-700');
+                    }
+                });
+
+                // Quick create button
+                $item->append(function (Append $append): void {
+                    $append->route('shopper.blog.posts.create');
+                    $append->setIcon('untitledui-plus');
+                    $append->setName(__('New Post'));
+                });
+
+                // Sub-items
+                $item->item(__('All Posts'), function (Item $subItem): void {
+                    $subItem->weight(1);
+                    $subItem->setAuthorized();
+                    $subItem->useSpa();
+                    $subItem->route('shopper.blog.posts.index');
+                });
+
+                $item->item(__('Categories'), function (Item $subItem): void {
+                    $subItem->weight(2);
+                    $subItem->setAuthorized();
+                    $subItem->useSpa();
+                    $subItem->route('shopper.blog.categories.index');
+                });
+
+                $item->item(__('Tags'), function (Item $subItem): void {
+                    $subItem->weight(3);
+                    $subItem->setAuthorized();
+                    $subItem->useSpa();
+                    $subItem->route('shopper.blog.tags.index');
+                });
+            });
+
+            $group->item(__('Pages'), function (Item $item): void {
+                $item->weight(2);
+                $item->setAuthorized(fn() => $this->user?->can('manage_pages'));
+                $item->useSpa();
+                $item->route('shopper.pages.index');
+                $item->setIcon('untitledui-file-06');
+            });
+        });
+
+        return $menu;
+    }
+}
+```
+
+## Using Closures for Dynamic Sidebars
+
+For simpler cases, you can use a closure instead of a class:
+
+```php
+use Illuminate\Support\Facades\Event;
+use Shopper\Sidebar\SidebarBuilder;
+
+Event::listen(SidebarBuilder::class, function (SidebarBuilder $sidebar) {
+    $menu = $sidebar->getMenu();
+
+    $menu->group('Quick Links', function ($group) {
+        $group->weight(100);
+        $group->item('Documentation')
+            ->setUrl('https://docs.example.com')
+            ->isNewTab()
+            ->setIcon('untitledui-book-open');
+    });
+
+    $sidebar->add($menu);
+});
+```
+
+## Routes Configuration
+
+Add your routes in the `routes/shopper.php` file (configured in `config/shopper/routes.php`):
+
+```php
+use Illuminate\Support\Facades\Route;
+
+Route::prefix('blog')->name('blog.')->group(function (): void {
+    Route::get('posts', [PostController::class, 'index'])->name('posts.index');
+    Route::get('posts/create', [PostController::class, 'create'])->name('posts.create');
+    Route::get('categories', [CategoryController::class, 'index'])->name('categories.index');
+});
+```
+
+<Warning>
+All routes in `routes/shopper.php` are automatically prefixed with the Shopper route prefix and have the `shopper.` route name prefix. So `posts.index` becomes `shopper.blog.posts.index`.
+</Warning>

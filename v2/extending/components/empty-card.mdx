@@ -1,0 +1,126 @@
+---
+title: 'Empty Card'
+description: 'Centered empty state for card content areas'
+---
+
+import { ComponentPreview, PreviewEmptyCard, PreviewButton } from '/snippets/component-preview.jsx'
+
+The Empty Card component displays a centered empty state within card or panel areas. It's more compact than the full Empty State component.
+
+## Preview
+
+<ComponentPreview centered={false}>
+  <PreviewEmptyCard
+    heading="No zones available"
+    description="Create shipping zones to define where you deliver products."
+  />
+</ComponentPreview>
+
+## Usage
+
+```blade
+<x-shopper::empty-card
+    heading="No zones available"
+    description="Create shipping zones to define where you deliver products."
+    icon="untitledui-globe-02"
+/>
+```
+
+## Props
+
+<ParamField path="heading" type="string" required>
+  The main heading text.
+</ParamField>
+
+<ParamField path="description" type="string" default="null">
+  Optional description text below the heading.
+</ParamField>
+
+<ParamField path="icon" type="string" default="null">
+  Icon name to display above the heading (uses Blade Icons).
+</ParamField>
+
+<ParamField path="action" type="Slot" default="null">
+  Optional slot for action buttons.
+</ParamField>
+
+## Examples
+
+### With Action Button
+
+<ComponentPreview centered={false}>
+  <PreviewEmptyCard
+    heading="No products"
+    description="Start by adding your first product to the catalog."
+    action={<button className="sh-btn sh-btn-primary">Add Product</button>}
+  />
+</ComponentPreview>
+
+```blade
+<x-shopper::empty-card
+    heading="No products"
+    description="Start by adding your first product to the catalog."
+    icon="untitledui-package"
+>
+    <x-slot:action>
+        <x-filament::button wire:click="create">
+            Add Product
+        </x-filament::button>
+    </x-slot:action>
+</x-shopper::empty-card>
+```
+
+### Without Icon
+
+<ComponentPreview centered={false}>
+  <PreviewEmptyCard
+    heading="No addresses saved"
+    description="Customer addresses will appear here."
+    icon={false}
+  />
+</ComponentPreview>
+
+```blade
+<x-shopper::empty-card
+    heading="No addresses saved"
+    description="Customer addresses will appear here."
+/>
+```
+
+## Blade Component Source
+
+```blade
+@props([
+    'heading',
+    'description' => null,
+    'icon' => null,
+    'action' => null,
+])
+
+<div
+    {{ $attributes->twMerge(['class' => 'flex flex-col items-center justify-center px-8 py-10 text-center']) }}
+>
+    @if ($icon)
+        <div
+            class="flex size-12 items-center justify-center rounded-full bg-gray-100 text-gray-700 dark:bg-gray-900 dark:text-white"
+        >
+            @svg($icon, 'size-5', ['aria-hidden' => 'true'])
+        </div>
+    @endif
+
+    <h3 @class(['font-medium text-gray-900 dark:text-white', 'mt-2' => $icon])>
+        {{ $heading }}
+    </h3>
+    @if ($description)
+        <p class="mx-auto mt-1 max-w-lg text-sm text-gray-500 dark:text-gray-400">
+            {{ $description }}
+        </p>
+    @endif
+
+    @if ($action)
+        <div class="mt-6">
+            {{ $action }}
+        </div>
+    @endif
+</div>
+```

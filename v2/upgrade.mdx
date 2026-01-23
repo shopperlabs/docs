@@ -1,4 +1,436 @@
 ---
-title: "Upgrade Guide"
-description: "Guide for upgrading Laravel Shopper to newer versions"
+title: Upgrade Guide
+description: How to upgrade your Shopper installation to the latest version.
 ---
+
+This guide covers upgrading Shopper from v2.1 to v2.2. If you're upgrading from v1.x, please follow the [v1 to v2 migration guide](/v1/migration) first.
+
+## Upgrading to 2.2 from 2.1
+
+<Info>
+**Estimated Upgrade Time:** 15-30 minutes for most applications.
+</Info>
+
+### Requirements
+
+Shopper 2.2 requires:
+
+| Dependency | Version |
+|------------|---------|
+| PHP | ^8.3 |
+| Laravel | ^11.0 \| ^12.0 |
+| Filament | ^4.5 |
+| Livewire | ^3.6 |
+| Tailwind CSS | ^4.1 |
+
+<Warning>
+**Laravel 10 is no longer supported.** You must upgrade to Laravel 11 or 12 before upgrading to Shopper 2.2.
+</Warning>
+
+### Updating Dependencies
+
+Update your `composer.json` file to require Shopper 2.2:
+
+```json
+"require": {
+    "php": "^8.3",
+    "laravel/framework": "^11.0|^12.0",
+    "shopper/framework": "^2.2"
+}
+```
+
+Then run:
+
+```bash
+composer update
+```
+
+After updating Composer dependencies, run the migrations:
+
+```bash
+php artisan migrate
+```
+
+---
+
+## High Impact Changes
+
+### Repository Pattern Removed
+
+**Likelihood of Impact: High**
+
+The Repository pattern has been completely removed in favor of a configurable Model Contract system. This is a **breaking change** if you were using repositories directly.
+
+#### Before (v2.1)
+
+```php
+use Shopper\Core\Repositories\ProductRepository;
+use Shopper\Core\Repositories\UserRepository;
+
+// Using repositories
+$products = (new ProductRepository)->all();
+$user = (new UserRepository)->create([...]);
+
+// Dependency injection
+public function __construct(
+    private ProductRepository $productRepository
+) {}
+```
+
+#### After (v2.2)
+
+```php
+use Shopper\Core\Models\Product;
+use Shopper\Core\Models\Contracts\Product as ProductContract;
+
+// Using models directly with Model
+$products = Product::query()->get();
+
+// Or via the contract for configured model
+$products = resolve(ProductContract::class)::query()->get();
+
+// Type-hint the contract
+public function __construct(
+    public ProductContract $product
+) {}
+```
+
+<Tip>
+The `query()` method automatically uses the configured model class from `config/shopper/models.php`.
+</Tip>
+
+### Configuration: `users` Key Renamed to `roles`
+
+**Likelihood of Impact: High**
+
+The `users` configuration key in `config/shopper/core.php` has been renamed to `roles` with updated sub-keys.
+
+#### Before (v2.1)
+
+```php
+// config/shopper/core.php
+'users' => [
+    'admin_role' => 'administrator',
+    'manager_role' => 'manager',
+    'default_role' => 'user',
+],
+```
+
+#### After (v2.2)
+
+```php
+// config/shopper/core.php
+'roles' => [
+    'admin' => 'administrator',
+    'manager' => 'manager',
+    'user' => 'user',
+],
+```
+
+**Update your code references:**
+
+```php
+// Before
+config('shopper.core.users.admin_role')
+config('shopper.core.users.default_role')
+
+// After
+config('shopper.core.roles.admin')
+config('shopper.core.roles.user')
+```
+
+### ShopperUser Interface & Trait
+
+**Likelihood of Impact: High**
+
+The `Shopper\Core\Models\User` model has been removed. Your User model must now implement the `ShopperUser` interface and use the `ShopperUser` trait.
+
+#### Before (v2.1)
+
+```php
+namespace App\Models;
+
+use Shopper\Core\Models\User as ShopperUser;
+
+class User extends ShopperUser
+{
+    // ...
+}
+```
+
+#### After (v2.2)
+
+```php
+namespace App\Models;
+
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Shopper\Core\Models\Contracts\ShopperUser as ShopperUserContract;
+use Shopper\Core\Traits\ShopperUser;
+
+class User extends Authenticatable implements ShopperUserContract
+{
+    use ShopperUser;
+
+    protected $fillable = [
+        'first_name',
+        'last_name',
+        'email',
+        'password',
+        'phone_number',
+        'birth_date',
+        'gender',
+        'avatar_type',
+        'avatar_location',
+        'timezone',
+        'opt_in',
+    ];
+
+    protected $hidden = [
+        'password',
+        'remember_token',
+        'two_factor_recovery_codes',
+        'two_factor_secret',
+    ];
+}
+```
+
+<Note>
+The `ShopperUser` trait provides all the necessary methods: `isAdmin()`, `isManager()`, `isVerified()`, `addresses()`, `orders()`, and the `customers`/`administrators` scopes.
+</Note>
+
+### Filament v4 Upgrade
+
+**Likelihood of Impact: High**
+
+**Shopper v2.2** requires **Filament v4.5**. If you have customized any Filament components or forms, review the [Filament v4 upgrade guide](https://filamentphp.com/docs/4.x/upgrade-guide).
+
+Key changes affecting Shopper users:
+
+- Form schema syntax has been updated
+- Modal components have been replaced with Filament Actions
+- Table syntax has been updated
+
+---
+
+## Medium Impact Changes
+
+### New Models in Configuration
+
+**Likelihood of Impact: Medium**
+
+Three new models have been added to `config/shopper/models.php`: `address`, `inventory`, and `order`.
+
+If you have a published `config/shopper/models.php`, add these entries:
+
+```php
+return [
+    'address' => \Shopper\Core\Models\Address::class,
+    // ... existing models ...
+    'inventory' => \Shopper\Core\Models\Inventory::class,
+    'order' => \Shopper\Core\Models\Order::class,
+];
+```
+
+### Order Number Generator Configuration
+
+**Likelihood of Impact: Medium**
+
+The order number generator configuration in `config/shopper/orders.php` has been updated with new options for more flexible number formatting.
+
+#### Before (v2.1)
+
+```php
+'generator' => [
+    'start_sequence_from' => 1,
+    'prefix' => 'SH_',
+    'pad_length' => 1,
+    'pad_string' => '0',
+],
+```
+
+#### After (v2.2)
+
+```php
+'generator' => [
+    'prefix' => null,
+    'separator' => '-',
+    'date_format' => 'Ymd',
+    'start_sequence_from' => 1,
+    'pad_length' => 6,
+    'pad_string' => '0',
+],
+```
+
+New options:
+- `separator`: character between each part of the number
+- `date_format`: PHP date format included in the number (set to `null` to disable)
+- `prefix` can now be set to `null` to disable
+
+Examples of generated numbers depending on configuration:
+- Default (`prefix => null`) → `20250123-000001`
+- With prefix (`prefix => 'ORD'`) → `ORD-20250123-000001`
+- Without date (`date_format => null`) → `000001`
+
+### Custom Modal Components Removed
+
+**Likelihood of Impact: Medium**
+
+Several custom modal components have been removed and replaced with Filament Actions or slide-overs:
+
+| Removed Component | Replacement |
+|-------------------|-------------|
+| `Modals\CreatePermission` | Integrated into parent component |
+| `Modals\CreateRole` | Integrated into parent component |
+| `Modals\ConfirmPassword` | Filament Action |
+| `Modals\LogoutOthersBrowser` | Filament Action |
+| `Modals\PaymentMethodForm` | Slide-over |
+| `Modals\CollectionProductsList` | `SlideOvers\CollectionProductsList` |
+| `Modals\RelatedProductsList` | `SlideOvers\RelatedProductsList` |
+
+If you have overridden these components, update your `config/shopper/components/setting.php`:
+
+```php
+// The modals section has been removed
+// Modal functionality is now built into parent components
+'components' => [
+    'settings.locations.form' => Components\Settings\Locations\InventoryForm::class,
+    'settings.legal.privacy' => Components\Settings\Legal\Privacy::class,
+    // ... other components
+
+    'slide-overs.create-team-member' => Livewire\SlideOvers\CreateTeamMember::class,
+    // ... slide-overs
+],
+```
+
+### Custom Button Components Removed
+
+**Likelihood of Impact: Medium**
+
+Custom button Blade components have been removed in favor of Filament's button components:
+
+| Removed Component | Replacement |
+|-------------------|-------------|
+| `<x-shopper::buttons.primary>` | `<x-filament::button>` |
+| `<x-shopper::buttons.default>` | `<x-filament::button color="gray">` |
+| `<x-shopper::buttons.danger>` | `<x-filament::button color="danger">` |
+
+#### Before (v2.1)
+
+```blade
+<x-shopper::buttons.primary wire:click="save">
+    Save Changes
+</x-shopper::buttons.primary>
+```
+
+#### After (v2.2)
+
+```blade
+<x-filament::button wire:click="save">
+    Save Changes
+</x-filament::button>
+```
+
+### Card with Gray Heading Removed
+
+**Likelihood of Impact: Medium**
+
+The `<x-shopper::card-with-gray-heading>` component has been removed. Use the standard `<x-shopper::card>` component or Filament's Section component instead.
+
+---
+
+## Low Impact Changes
+
+### Tailwind CSS v4
+
+**Likelihood of Impact: Low**
+
+Shopper 2.2 uses Tailwind CSS v4. If you have custom CSS that extends Shopper's styles, review the [Tailwind v4 upgrade guide](https://tailwindcss.com/docs/v4-beta).
+
+The CSS architecture has been updated - if you've customized styles, you may need to update your imports.
+
+### PostgreSQL Support
+
+**Likelihood of Impact: Low**
+
+Shopper 2.2 adds official PostgreSQL support. No action required for MySQL/MariaDB users.
+
+### Sidebar Redesign
+
+**Likelihood of Impact: Low**
+
+The admin sidebar has been redesigned with Alpine.js state management:
+
+- Collapsible sidebar with persistent state via localStorage
+- New submenu support with arrow indicators
+- Improved mobile responsiveness
+
+If you have customized sidebar views, update them to use the new structure in `resources/views/components/layouts/app/sidebar/`.
+
+### SKU Uniqueness for Variants
+
+**Likelihood of Impact: Low**
+
+Product variant SKUs now have a composite unique constraint scoped to `product_id`. This means:
+
+- SKUs must be unique within a product (not globally)
+- Auto-generated SKUs now use format: `{PRODUCT_SKU}-{VARIANT_SLUG}`
+
+If you have custom variant creation logic, ensure SKUs are unique per product.
+
+### HasPrices Trait: New `getPrice()` Method
+
+**Likelihood of Impact: Low**
+
+A new `getPrice()` method has been added to the `HasPrices` trait:
+
+```php
+// Get price for default currency
+$variant->getPrice(); // ?Price
+
+// Get price for specific currency
+$variant->getPrice('USD'); // ?Price
+```
+
+This method is now part of the `Priceable` contract.
+
+---
+
+## Deprecations
+
+The following features are deprecated and will be removed in v3.0:
+
+| Deprecated | Replacement |
+|------------|-------------|
+| Repository classes | Model contracts with `resolvedQuery()` |
+| `config('shopper.core.users.*')` | `config('shopper.core.roles.*')` |
+
+---
+
+## Migration Checklist
+
+Use this checklist to ensure a complete upgrade:
+
+- [ ] Update PHP to ^8.3
+- [ ] Update Laravel to ^11.0 or ^12.0
+- [ ] Update `composer.json` dependencies
+- [ ] Run `composer update`
+- [ ] Update `config/shopper/core.php`: rename `users` to `roles`
+- [ ] Update `config/shopper/models.php`: add `address`, `inventory`, `order`
+- [ ] Update `config/shopper/orders.php`: update generator configuration
+- [ ] Update User model to implement `ShopperUser` interface and trait
+- [ ] Replace repository usage with model contracts
+- [ ] Update custom button components to Filament buttons
+- [ ] Update custom modal components if overridden
+- [ ] Run `php artisan migrate`
+- [ ] Clear caches: `php artisan optimize:clear`
+- [ ] Test your application thoroughly
+
+---
+
+## Getting Help
+
+If you encounter issues during the upgrade:
+
+- Check the [GitHub Issues](https://github.com/shopperlabs/shopper/issues)
+- Join our [Discord community](https://discord.gg/CC444Gy7)
+- Review the [changelog](https://github.com/shopperlabs/shopper/releases)

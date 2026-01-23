@@ -1,0 +1,58 @@
+---
+title: 'Overview'
+description: 'Discover the UI components available in Shopper admin panel'
+---
+
+Shopper provides a set of Blade components that you can use when extending the admin panel. These components are designed to maintain visual consistency across your custom features.
+
+## Available Components
+
+The component library includes:
+
+<CardGroup cols={2}>
+  <Card title="Card" icon="square" href="/v2/extending/components/card">
+    Container component with optional title and description for content grouping.
+  </Card>
+  <Card title="Alert" icon="bell" href="/v2/extending/components/alert">
+    Colored alert boxes for displaying messages with different severity levels.
+  </Card>
+  <Card title="Heading" icon="heading" href="/v2/extending/components/heading">
+    Page-level heading with optional action slot for buttons.
+  </Card>
+  <Card title="Section Heading" icon="align-left" href="/v2/extending/components/section-heading">
+    Section titles with optional descriptions for content organization.
+  </Card>
+  <Card title="Empty State" icon="inbox" href="/v2/extending/components/empty-state">
+    Placeholder component for empty data states with call-to-action.
+  </Card>
+</CardGroup>
+
+## Usage
+
+All Shopper components are prefixed with `x-shopper::` and can be used in any Blade view within the admin panel context:
+
+```blade
+<x-shopper::card title="My Card Title">
+    <p>Card content goes here</p>
+</x-shopper::card>
+```
+
+## Styling
+
+Components use Tailwind CSS and support both light and dark modes out of the box. They follow the Shopper design system with consistent spacing, colors, and typography.
+
+## Customization
+
+You can customize components by:
+
+1. **Passing attributes**: Most components accept standard HTML attributes via `$attributes`
+2. **Using slots**: Many components support named slots for flexible content placement
+3. **Publishing views**: Override component views by publishing them to your application
+
+```bash
+php artisan vendor:publish --tag=shopper-views
+```
+
+<Note>
+  When overriding components, be careful to maintain the expected structure to avoid breaking the admin panel UI.
+</Note>

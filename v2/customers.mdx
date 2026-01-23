@@ -1,142 +1,461 @@
 ---
 title: Customers
-description: Learn how to manage Customers in your Shopper administration.
+description: Complete reference for the User model, addresses, and customer management in Shopper.
 ---
 
-In e-commerce stores, customers are one if not the fundamental point for the functioning of your store.
+Customers are users who have the customer role and can place orders in your store. Shopper extends your Laravel User model with e-commerce specific fields and relationships.
 
-The first page under the "Customers" menu gives you a list of all the registered users on your shop.
+## User Model Integration
 
-<Frame caption="Customers">
-  <img src="/images/v2/customers.png" alt="Customers" />
-</Frame>
+Shopper doesn't create a separate Customer model. Instead, it extends your existing `App\Models\User` model with the `ShopperUser` trait and contract.
 
-During the [installation](/v2/installing#update-existing-files) of Shopper, one of the first things required is to inherit to our model User the features of the model User that is in Shopper.
+```php
+namespace App\Models;
 
-## Model
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Shopper\Core\Models\Contracts\ShopperUser;
+use Shopper\Core\Traits\ShopperUser as ShopperUserTrait;
 
-The model used is `App\Models\User` which extends the `\Shopper\Core\Models\User` model. 
+class User extends Authenticatable implements ShopperUser
+{
+    use ShopperUserTrait;
 
-<Warning>
-During the installation of Shopper, the `name` column of the users table is removed and replaced by 2 new fields which are `first_name` and `last_name`.
-</Warning>
+    // Your customizations
+}
+```
 
-| Name                | Type      | Required | Notes                                                            |
-|---------------------|-----------|----------|------------------------------------------------------------------|
-| `id`                | autoinc   |          | auto                                                             |
-| `first_name`        | string    | no       | Nullable                                                         |
-| `last_name`         | string    | yes      |                                                                  |
-| `email`             | string    | yes      | Unique                                                           |
-| `password`          | string    | no       | Nullable                                                         |
-| `email_verified_at` | timestamp | no       | Nullable                                                         |
-| `gender`            | enum      | yes      | values `['male', 'female']`                                      |
-| `phone_number`      | string    | no       | Nullable                                                         |
-| `birth_date`        | date      | no       | Nullable                                                         |
-| `avatar_type`       | string    | no       | default [ui-avatars](https://ui-avatars.com/)                    |
-| `avatar_location`   | string    | no       | Nullable, picture filename                                       |
-| `timezone`          | string    | no       | Nullable                                                         |
-| `opt_in`            | boolean   | no       | default `false`, this field can be used for mailing subscription |
-| `last_login_at`     | timestamp | no       | Nullable                                                         |
-| `last_login_ip`     | string    | no       | Nullable                                                         |
+The `ShopperUser` trait provides:
+- `HasRoles` (Spatie Permission)
+- `HasDiscounts`
+- `HasProfilePhoto`
+- `TwoFactorAuthenticatable`
+
+## Database Schema
+
+### User Table Modifications
+
+Shopper modifies the standard Laravel `users` table:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `first_name` | string | yes | null | First name |
+| `last_name` | string | no | - | Last name |
+| `email` | string | no | - | Email address (unique) |
+| `password` | string | yes | null | Password (nullable for social auth) |
+| `email_verified_at` | timestamp | yes | null | Email verification date |
+| `gender` | string | no | - | Gender enum value |
+| `phone_number` | string | yes | null | Phone number |
+| `birth_date` | date | yes | null | Birth date |
+| `avatar_type` | string | no | avatar_ui | Avatar source type |
+| `avatar_location` | string | yes | null | Avatar file path |
+| `timezone` | string | yes | null | User timezone |
+| `opt_in` | boolean | no | false | Marketing email consent |
+| `last_login_at` | timestamp | yes | null | Last login timestamp |
+| `last_login_ip` | string | yes | null | Last login IP address |
+
+### Address Table
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `first_name` | string | no | - | First name |
+| `last_name` | string | no | - | Last name |
+| `company_name` | string | yes | null | Company name |
+| `street_address` | string | no | - | Street address |
+| `street_address_plus` | string | yes | null | Additional address line |
+| `postal_code` | string | no | - | Postal/ZIP code |
+| `city` | string | no | - | City |
+| `state` | string | yes | null | State/province/region |
+| `phone_number` | string | yes | null | Phone number |
+| `shipping_default` | boolean | no | false | Default shipping address |
+| `billing_default` | boolean | no | false | Default billing address |
+| `type` | string | yes | null | Address type enum |
+| `country_id` | bigint | yes | null | FK to countries |
+| `user_id` | bigint | no | - | FK to users |
+
+## Gender Type
+
+The `GenderType` enum defines available gender options:
+
+```php
+use Shopper\Core\Enum\GenderType;
+
+GenderType::Male    // male
+GenderType::Female  // female
+```
+
+## Address Type
+
+The `AddressType` enum defines address categories:
+
+```php
+use Shopper\Core\Enum\AddressType;
+
+AddressType::Billing   // billing
+AddressType::Shipping  // shipping
+```
+
+## Relationships
+
+### Orders
+
+```php
+// Get all customer orders
+$customer->orders; // Collection of Order models
+
+// Get recent orders
+$customer->orders()
+    ->latest()
+    ->take(5)
+    ->get();
+```
+
+### Addresses
+
+```php
+// Get all customer addresses
+$customer->addresses; // Collection of Address models
+
+// Get default shipping address
+$customer->addresses()
+    ->where('shipping_default', true)
+    ->first();
+
+// Get default billing address
+$customer->addresses()
+    ->where('billing_default', true)
+    ->first();
+```
+
+## Query Scopes
+
+```php
+use App\Models\User;
+
+// Get only customers (users with 'user' role)
+User::query()->customers()->get();
+
+// Get administrators (admin or manager roles)
+User::query()->administrators()->get();
+```
+
+## Role Checking
+
+```php
+// Check if user is an admin
+$user->isAdmin();
+
+// Check if user is a manager
+$user->isManager();
+
+// Check if email is verified
+$user->isVerified();
+```
+
+## Computed Attributes
+
+```php
+// Get full name
+$customer->full_name; // "John Doe"
+
+// Get formatted birth date
+$customer->birth_date_formatted; // "15, January 1990"
+
+// Get roles as comma-separated string
+$customer->roles_label; // "User, VIP"
+
+// Get profile picture URL
+$customer->picture; // Avatar URL (ui-avatars or uploaded)
+```
+
+## Address Model
+
+```php
+use Shopper\Core\Models\Address;
+
+// The model implements
+- Shopper\Core\Models\Contracts\Address
+```
+
+### Extending the Address Model
+
+```php
+namespace App\Models;
+
+use Shopper\Core\Models\Address as BaseAddress;
+
+class Address extends BaseAddress
+{
+    // Add your customizations here
+}
+```
+
+Update `config/shopper/models.php`:
+
+```php
+return [
+    'address' => \App\Models\Address::class,
+];
+```
+
+### Address Methods
+
+```php
+// Check if default shipping address
+$address->isShippingDefault();
+
+// Check if default billing address
+$address->isBillingDefault();
+
+// Get full name
+$address->full_name; // "John Doe"
+
+// Get country
+$address->country;
+```
+
+## Creating Customers
+
+### Basic Customer
+
+```php
+use App\Models\User;
+use Shopper\Core\Enum\GenderType;
+use Illuminate\Support\Facades\Hash;
+
+$customer = User::query()->create([
+    'first_name' => 'John',
+    'last_name' => 'Doe',
+    'email' => 'john@example.com',
+    'password' => Hash::make('password'),
+    'gender' => GenderType::Male,
+    'email_verified_at' => now(),
+]);
+
+// Assign customer role
+$customer->assignRole(config('shopper.core.roles.user'));
+```
+
+### Customer with Address
+
+```php
+use Shopper\Core\Models\Address;
+use Shopper\Core\Enum\AddressType;
+
+$customer = User::query()->create([
+    'first_name' => 'Jane',
+    'last_name' => 'Doe',
+    'email' => 'jane@example.com',
+    'gender' => GenderType::Female,
+    'phone_number' => '+1234567890',
+    'opt_in' => true,
+]);
+
+$customer->assignRole(config('shopper.core.roles.user'));
+
+// Add shipping address
+$customer->addresses()->create([
+    'first_name' => 'Jane',
+    'last_name' => 'Doe',
+    'street_address' => '123 Main Street',
+    'city' => 'New York',
+    'postal_code' => '10001',
+    'country_id' => $countryId,
+    'type' => AddressType::Shipping,
+    'shipping_default' => true,
+]);
+```
+
+## Retrieving Customers
+
+```php
+use App\Models\User;
+
+// Get all customers
+$customers = User::query()
+    ->customers()
+    ->latest()
+    ->get();
+
+// Search customers
+$customers = User::query()
+    ->customers()
+    ->where(function ($query) use ($search) {
+        $query->where('first_name', 'like', "%{$search}%")
+            ->orWhere('last_name', 'like', "%{$search}%")
+            ->orWhere('email', 'like', "%{$search}%");
+    })
+    ->get();
+
+// Get customer with addresses and orders
+$customer = User::query()
+    ->with(['addresses', 'orders'])
+    ->findOrFail($id);
+
+// Get customers who opted in for marketing
+$marketingList = User::query()
+    ->customers()
+    ->where('opt_in', true)
+    ->get();
+
+// Get verified customers only
+$verified = User::query()
+    ->customers()
+    ->whereNotNull('email_verified_at')
+    ->get();
+```
+
+## Managing Addresses
+
+```php
+use Shopper\Core\Models\Address;
+
+// Create address for customer
+$address = Address::query()->create([
+    'user_id' => $customer->id,
+    'first_name' => 'John',
+    'last_name' => 'Doe',
+    'street_address' => '456 Oak Avenue',
+    'city' => 'Los Angeles',
+    'postal_code' => '90001',
+    'country_id' => $countryId,
+    'type' => AddressType::Billing,
+    'billing_default' => true,
+]);
+
+// Update default address
+Address::query()
+    ->where('user_id', $customer->id)
+    ->where('type', AddressType::Shipping)
+    ->update(['shipping_default' => false]);
+
+$newDefault = Address::query()->find($addressId);
+$newDefault->update(['shipping_default' => true]);
+```
+
+## Observer Behavior
+
+When a user is deleted, the `ShopperUser` trait automatically:
+- Detaches all roles
+- Deletes all addresses
+
+```php
+// When deleting a user:
+$customer->delete();
+// Roles are detached and addresses are deleted automatically
+```
+
+## Role Configuration
+
+Roles are defined in `config/shopper/core.php`:
+
+```php
+return [
+    'roles' => [
+        'admin' => 'administrator',
+        'manager' => 'manager',
+        'user' => 'user',
+    ],
+];
+```
 
 ## Components
-
-By default, brands Livewire components are not published. To customize components, you must publish them.
 
 ```bash
 php artisan shopper:component:publish customer
 ```
 
-This command will publish all Livewire components used for brand management (from pages to form components).
-Once you've published the component, you can find it in the `customer.php` locate in the `config/shopper/components` folder.
-
+Creates `config/shopper/components/customer.php`:
 
 ```php
 use Shopper\Livewire;
 use Shopper\Livewire\Components;
 
 return [
-
-  'pages' => [
-      'customer-index' => Livewire\Pages\Customers\Index::class,
-      'customer-create' => Livewire\Pages\Customers\Create::class,
-      'customer-show' => Livewire\Pages\Customers\Show::class,
-  ],
-
-  'components' => [
-      'customers.addresses' => Components\Customers\Addresses::class,
-      'customers.orders' => Components\Customers\Orders::class,
-      'customers.profile' => Components\Customers\Profile::class,
-  ],
-
+    'pages' => [
+        'customer-index' => Livewire\Pages\Customers\Index::class,
+        'customer-create' => Livewire\Pages\Customers\Create::class,
+        'customer-show' => Livewire\Pages\Customers\Show::class,
+    ],
+    'components' => [
+        'customers.addresses' => Components\Customers\Addresses::class,
+        'customers.orders' => Components\Customers\Orders::class,
+        'customers.profile' => Components\Customers\Profile::class,
+    ],
 ];
 ```
 
-## Manage Customers
-
-When a new customer places an order with your store, their name and information are automatically added to your customer list. 
-A customer profile is created when a customer interacts with your store.
-
-Alternatively, you can add a customer to your store manually.
-
-### Create customer
-
-From your Shopper admin panel, go to Customers and click on "**New customer**" button.
-
-<Frame caption="Create customer">
-  <img src="/images/v2/create-customer.png" alt="Create customer" />
-</Frame>
-
-When creating a customer manually, you should also fill in an address that will be used when he places an order in your store.
-
-<Frame caption="Customer address form">
-  <img src="/images/v2/customer-address.png" alt="customer address form" />
-</Frame>
-
-_Optional_: If the customer has agreed to receive marketing emails, and you have entered an email address, then 
-in the Customer overview section, check Customer agreed to receive marketing emails.
-
-And you can also check the **Send customer credentials** checkbox to send an email to the customer with their login information.
-
-<Frame caption="Customer notifications">
-  <img src="/images/v2/customer-notification.png" alt="customer notification" />
-</Frame>
-
-The Livewire component used to create a customer is `Shopper\Livewire\Livewire\Pages\Customers\Create`
+## Storefront Example
 
 ```php
-$customer = (new UserRepository())->create([
-  'last_name' => $this->last_name,
-  'first_name' => $this->first_name,
-  'email' => $this->email,
-  'password' => Hash::make($this->password),
-  'phone_number' => $this->phone_number,
-  'email_verified_at' => now()->toDateTimeString(),
-  'opt_in' => $this->opt_in,
-]);
+namespace App\Http\Controllers;
 
-$customer->assignRole(config('shopper.system.users.default_role'));
+use App\Models\User;
+use Shopper\Core\Models\Address;
+use Shopper\Core\Enum\GenderType;
+use Shopper\Core\Enum\AddressType;
+use Illuminate\Support\Facades\Hash;
+
+class AccountController extends Controller
+{
+    public function show()
+    {
+        $customer = auth()->user();
+
+        return view('account.show', [
+            'customer' => $customer,
+            'orders' => $customer->orders()->latest()->paginate(10),
+            'addresses' => $customer->addresses,
+        ]);
+    }
+
+    public function updateProfile(Request $request)
+    {
+        $validated = $request->validate([
+            'first_name' => 'required|string|max:255',
+            'last_name' => 'required|string|max:255',
+            'phone_number' => 'nullable|string|max:20',
+            'birth_date' => 'nullable|date',
+            'opt_in' => 'boolean',
+        ]);
+
+        auth()->user()->update($validated);
+
+        return back()->with('success', 'Profile updated successfully');
+    }
+
+    public function storeAddress(Request $request)
+    {
+        $validated = $request->validate([
+            'first_name' => 'required|string',
+            'last_name' => 'required|string',
+            'street_address' => 'required|string',
+            'city' => 'required|string',
+            'postal_code' => 'required|string',
+            'country_id' => 'required|exists:countries,id',
+            'type' => 'required|in:billing,shipping',
+        ]);
+
+        auth()->user()->addresses()->create([
+            ...$validated,
+            'type' => AddressType::from($validated['type']),
+        ]);
+
+        return back()->with('success', 'Address added successfully');
+    }
+}
 ```
 
-<Info>
-The clients that are displayed in the listing page are those that have the `user` profile which is the default role associated with all clients.
-</Info>
+## Use Cases
 
-### Customer's Information
+| Scope | Description |
+|-------|-------------|
+| `customers()` | Users with 'user' role |
+| `administrators()` | Users with 'admin' or 'manager' role |
 
-In the case where you would like to have more information on a given customer, you can click on the customer name row in the customer's list. A new page appears.
-
-<Frame caption="Customer informations">
-  <img src="/images/v2/customer-informations.png" alt="customer informations" />
-</Frame>
-
-And in this page you can modify the information of a customer by clicking on the "update" button on the right of each information.
-
-The various sections provide you with some key data on the user:
-- **Customer information**, first and last name, e-mail address, picture, birthdate, gender.
-- Registered **Addresses**
-- **Orders** Summary of purchases already made by the customer. Amount spent, payment type, order status. For more information on each order, click on the order number.
-
-<Tip>
-Each of its pages are accessible via Livewire components, and are fully customizable to your needs. So don't hesitate to modify them.
-</Tip>
+| Method | Description |
+|--------|-------------|
+| `isAdmin()` | Check if user has admin role |
+| `isManager()` | Check if user has manager role |
+| `isVerified()` | Check if email is verified |

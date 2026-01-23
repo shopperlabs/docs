@@ -1,56 +1,499 @@
 ---
 title: Discounts
-description: Learn how to manage Discounts in your Shopper administration.
+description: Complete reference for the Discount model, types, conditions, and usage in Shopper.
 ---
 
-...
+Discounts allow you to create promotional offers for your customers. Shopper supports percentage and fixed amount discounts with flexible application rules, eligibility conditions, and usage limits.
 
-### Fields
+## Models
 
-The model used is `Shopper\Core\Models\Discount`.
+Shopper uses two models to manage discounts:
 
-| Name                   | Type     | Required | Notes                                                                                           |
-|------------------------|----------|----------|-------------------------------------------------------------------------------------------------|
-| `id`                   | autoinc  |          | auto                                                                                            |
-| `code`                 | string   | yes      | The given code for the discount                                                                 |
-| `type`                 | string   | yes      | The type of discount `Shopper\Core\Enum\DiscountType`                                           |
-| `value`                | int      | yes      | Depends on the type of discount you want to apply. It can be a percentage or a fixed amount     |
-| `is_active`            | boolean  | no       | Defines the visibility of the discount for customers.                                           |
-| `apply_to`             | string   | yes      | Defines what the discount can be applied to `Shopper\Core\Enum\DiscountApplyTo`                 |
-| `min_required`         | string   | yes      | Defines the conditions required to apply the discount `Shopper\Core\Enum\DiscountRequirement`   |
-| `min_required_value`   | string   | no       | The minimum value required after defining the required condition, default `NULL`                |
-| `eligibility`          | string   | yes      | Defines discount eligibility conditions `Shopper\Core\Enum\DiscountEligibility`                 |
-| `usage_limit`          | int      | no       | How many uses the discount has had                                                              |
-| `usage_limit_per_user` | boolean  | no       | Defines whether the coupon can be used more than once by customers                              |
-| `total_use`            | int      | no       | The number of times the discount has been used, default `0`                                     |
-| `start_at`             | datetime | yes      | The datetime the discount starts                                                                |
-| `end_at`               | datetime | no       | The datetime the discount expires, if `NULL` it won't expire                                    |
-| `metadata`             | array    | no       | `NULL`, json column to save any data key:value                                                  |
-| `zone_id`              | int      | no       | The area in which the discount can be applied. If `NULL`, the discount can be applied anywhere. |
+```php
+Shopper\Core\Models\Discount       // The discount definition
+Shopper\Core\Models\DiscountDetail // Links discounts to products/customers
+```
 
-### Components
+```php
+use Shopper\Core\Models\Discount;
 
-By default, discounts Livewire components are not published. To customize components, you must publish them.
+// The model implements
+- Shopper\Core\Models\Contracts\Discount
+```
+
+## Database Schema
+
+### Discount Table
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `code` | string | no | - | Unique discount code |
+| `type` | string | no | - | Discount type enum |
+| `value` | integer | no | - | Discount value (percentage or cents) |
+| `is_active` | boolean | no | false | Discount visibility |
+| `apply_to` | string | no | - | Application scope enum |
+| `min_required` | string | no | - | Requirement type enum |
+| `min_required_value` | string | yes | null | Minimum value required |
+| `eligibility` | string | no | - | Eligibility type enum |
+| `usage_limit` | integer | yes | null | Maximum total uses |
+| `usage_limit_per_user` | boolean | no | false | Limit one use per customer |
+| `total_use` | integer | no | 0 | Current total usage count |
+| `start_at` | datetime | no | - | Discount start date |
+| `end_at` | datetime | yes | null | Discount end date (null = no expiry) |
+| `zone_id` | bigint | yes | null | FK to zone (null = all zones) |
+| `metadata` | json | yes | null | Additional custom data |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+### Discountable Table (Pivot)
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | no | Primary key |
+| `condition` | string | yes | Condition type (apply_to, eligibility) |
+| `total_use` | integer | no | Usage count for this relation |
+| `discountable_id` | bigint | no | Polymorphic relation ID |
+| `discountable_type` | string | no | Polymorphic relation type |
+| `discount_id` | bigint | no | FK to discount |
+
+## Discount Type
+
+The `DiscountType` enum defines value types:
+
+```php
+use Shopper\Core\Enum\DiscountType;
+
+DiscountType::Percentage   // percentage - e.g., 10% off
+DiscountType::FixedAmount  // fixed_amount - e.g., $10 off
+```
+
+| Type | Database Value | Value Handling |
+|------|---------------|----------------|
+| Percentage | `percentage` | Stored as-is (10 = 10%) |
+| Fixed Amount | `fixed_amount` | Stored in cents (1000 = $10.00) |
+
+## Discount Application
+
+The `DiscountApplyTo` enum defines where the discount applies:
+
+```php
+use Shopper\Core\Enum\DiscountApplyTo;
+
+DiscountApplyTo::Order     // order - Applies to entire order
+DiscountApplyTo::Products  // products - Applies to specific products
+```
+
+| Scope | Database Value | Description |
+|-------|---------------|-------------|
+| Order | `order` | Discount applies to total order amount |
+| Products | `products` | Discount applies only to linked products |
+
+## Discount Eligibility
+
+The `DiscountEligibility` enum defines who can use the discount:
+
+```php
+use Shopper\Core\Enum\DiscountEligibility;
+
+DiscountEligibility::Everyone   // everyone - All customers
+DiscountEligibility::Customers  // customers - Specific customers only
+```
+
+| Eligibility | Database Value | Description |
+|-------------|---------------|-------------|
+| Everyone | `everyone` | Any customer can use |
+| Customers | `customers` | Only linked customers can use |
+
+## Discount Requirements
+
+The `DiscountRequirement` enum defines minimum conditions:
+
+```php
+use Shopper\Core\Enum\DiscountRequirement;
+
+DiscountRequirement::None     // none - No minimum
+DiscountRequirement::Price    // price - Minimum order amount
+DiscountRequirement::Quantity // quantity - Minimum items count
+```
+
+| Requirement | Database Value | min_required_value |
+|-------------|---------------|-------------------|
+| None | `none` | Not used |
+| Price | `price` | Minimum amount in cents |
+| Quantity | `quantity` | Minimum item count |
+
+## Relationships
+
+### Items (DiscountDetail)
+
+```php
+use Shopper\Core\Enum\DiscountCondition;
+
+// Get all discount items (products or customers)
+$discount->items; // Collection of DiscountDetail models
+
+// Add a product to discount
+$discount->items()->create([
+    'condition' => DiscountCondition::ApplyTo,
+    'discountable_type' => Product::class,
+    'discountable_id' => $productId,
+]);
+
+// Add eligible customer
+$discount->items()->create([
+    'condition' => DiscountCondition::Eligibility,
+    'discountable_type' => User::class,
+    'discountable_id' => $userId,
+]);
+```
+
+### Zone
+
+```php
+// Get discount zone (market)
+$discount->zone; // Zone model or null
+
+// Restrict discount to a zone
+$discount->update(['zone_id' => $zoneId]);
+```
+
+## HasDiscounts Trait
+
+Models can use the `HasDiscounts` trait to access their discounts:
+
+```php
+use Shopper\Core\Models\Traits\HasDiscounts;
+
+class User extends Authenticatable
+{
+    use HasDiscounts;
+}
+
+// Get user's available discounts
+$user->discounts; // Collection of Discount models
+```
+
+## Value Handling
+
+Fixed amount values are automatically converted:
+
+```php
+// Create a $10 off discount
+$discount = Discount::query()->create([
+    'code' => 'SAVE10',
+    'type' => DiscountType::FixedAmount,
+    'value' => 10, // Stored as 1000 (cents)
+    // ...
+]);
+
+// Reading the value
+$discount->value; // Returns 10 (dollars)
+
+// Create a 15% discount
+$discount = Discount::query()->create([
+    'code' => 'SAVE15',
+    'type' => DiscountType::Percentage,
+    'value' => 15, // Stored as 15
+    // ...
+]);
+```
+
+## Usage Limit Checking
+
+```php
+// Check if discount has reached its usage limit
+$discount->hasReachedLimit(); // true if total_use === usage_limit
+
+// Check remaining uses
+if ($discount->usage_limit !== null) {
+    $remaining = $discount->usage_limit - $discount->total_use;
+}
+```
+
+## Creating Discounts
+
+### Percentage Discount for All Orders
+
+```php
+use Shopper\Core\Models\Discount;
+use Shopper\Core\Enum\DiscountType;
+use Shopper\Core\Enum\DiscountApplyTo;
+use Shopper\Core\Enum\DiscountEligibility;
+use Shopper\Core\Enum\DiscountRequirement;
+
+$discount = Discount::query()->create([
+    'code' => 'SUMMER20',
+    'type' => DiscountType::Percentage,
+    'value' => 20, // 20% off
+    'is_active' => true,
+    'apply_to' => DiscountApplyTo::Order,
+    'eligibility' => DiscountEligibility::Everyone,
+    'min_required' => DiscountRequirement::None,
+    'start_at' => now(),
+    'end_at' => now()->addMonth(),
+]);
+```
+
+### Fixed Amount Discount with Minimum Order
+
+```php
+$discount = Discount::query()->create([
+    'code' => 'SAVE10',
+    'type' => DiscountType::FixedAmount,
+    'value' => 10, // $10 off
+    'is_active' => true,
+    'apply_to' => DiscountApplyTo::Order,
+    'eligibility' => DiscountEligibility::Everyone,
+    'min_required' => DiscountRequirement::Price,
+    'min_required_value' => '5000', // Minimum $50 order
+    'start_at' => now(),
+    'usage_limit' => 100, // Max 100 uses
+]);
+```
+
+### Product-Specific Discount
+
+```php
+$discount = Discount::query()->create([
+    'code' => 'PRODUCT15',
+    'type' => DiscountType::Percentage,
+    'value' => 15,
+    'is_active' => true,
+    'apply_to' => DiscountApplyTo::Products,
+    'eligibility' => DiscountEligibility::Everyone,
+    'min_required' => DiscountRequirement::None,
+    'start_at' => now(),
+]);
+
+// Link specific products
+$discount->items()->createMany([
+    [
+        'condition' => 'apply_to',
+        'discountable_type' => Product::class,
+        'discountable_id' => $product1->id,
+    ],
+    [
+        'condition' => 'apply_to',
+        'discountable_type' => Product::class,
+        'discountable_id' => $product2->id,
+    ],
+]);
+```
+
+### VIP Customer Discount
+
+```php
+$discount = Discount::query()->create([
+    'code' => 'VIP30',
+    'type' => DiscountType::Percentage,
+    'value' => 30,
+    'is_active' => true,
+    'apply_to' => DiscountApplyTo::Order,
+    'eligibility' => DiscountEligibility::Customers,
+    'min_required' => DiscountRequirement::None,
+    'start_at' => now(),
+    'usage_limit_per_user' => true, // One use per customer
+]);
+
+// Link eligible customers
+foreach ($vipCustomers as $customer) {
+    $discount->items()->create([
+        'condition' => 'eligibility',
+        'discountable_type' => User::class,
+        'discountable_id' => $customer->id,
+    ]);
+}
+```
+
+## Retrieving Discounts
+
+```php
+use Shopper\Core\Models\Discount;
+
+// Get all active discounts
+$discounts = Discount::query()
+    ->where('is_active', true)
+    ->where('start_at', '<=', now())
+    ->where(function ($q) {
+        $q->whereNull('end_at')
+            ->orWhere('end_at', '>', now());
+    })
+    ->get();
+
+// Get discount by code
+$discount = Discount::query()
+    ->where('code', 'SUMMER20')
+    ->where('is_active', true)
+    ->first();
+
+// Get discounts for a zone
+$discounts = Discount::query()
+    ->where('is_active', true)
+    ->where(function ($q) use ($zoneId) {
+        $q->whereNull('zone_id')
+            ->orWhere('zone_id', $zoneId);
+    })
+    ->get();
+
+// Get discounts with available uses
+$discounts = Discount::query()
+    ->where('is_active', true)
+    ->where(function ($q) {
+        $q->whereNull('usage_limit')
+            ->orWhereColumn('total_use', '<', 'usage_limit');
+    })
+    ->get();
+```
+
+## Validating Discounts
+
+```php
+class DiscountService
+{
+    public function validate(string $code, $user, $cart): ?Discount
+    {
+        $discount = Discount::query()
+            ->where('code', $code)
+            ->where('is_active', true)
+            ->first();
+
+        if (! $discount) {
+            return null;
+        }
+
+        // Check dates
+        if ($discount->start_at > now()) {
+            return null; // Not started yet
+        }
+
+        if ($discount->end_at && $discount->end_at < now()) {
+            return null; // Expired
+        }
+
+        // Check usage limit
+        if ($discount->hasReachedLimit()) {
+            return null;
+        }
+
+        // Check minimum requirements
+        if ($discount->min_required === DiscountRequirement::Price) {
+            if ($cart->total() < (int) $discount->min_required_value) {
+                return null;
+            }
+        }
+
+        if ($discount->min_required === DiscountRequirement::Quantity) {
+            if ($cart->itemCount() < (int) $discount->min_required_value) {
+                return null;
+            }
+        }
+
+        // Check eligibility
+        if ($discount->eligibility === DiscountEligibility::Customers) {
+            $isEligible = $discount->items()
+                ->where('condition', 'eligibility')
+                ->where('discountable_type', get_class($user))
+                ->where('discountable_id', $user->id)
+                ->exists();
+
+            if (! $isEligible) {
+                return null;
+            }
+        }
+
+        return $discount;
+    }
+
+    public function calculate(Discount $discount, int $amount): int
+    {
+        if ($discount->type === DiscountType::Percentage) {
+            return (int) ($amount * ($discount->value / 100));
+        }
+
+        // Fixed amount (already in cents in DB, accessor returns dollars)
+        return $discount->value * 100;
+    }
+}
+```
+
+## Components
 
 ```bash
 php artisan shopper:component:publish discount
 ```
 
-This command will publish all Livewire components used for discount management (from pages to form components).
-Once you've published the component, you can find it in the `discount.php` locate in the `config/shopper/components` folder.
+Creates `config/shopper/components/discount.php`:
 
 ```php
 use Shopper\Livewire;
 
 return [
-  'pages' => [
+    'pages' => [
         'discount-index' => Livewire\Pages\Discount\Index::class,
     ],
-    
     'components' => [
         'slide-overs.discount-form' => Livewire\SlideOvers\DiscountForm::class,
     ],
 ];
 ```
 
-## Manage Discount
+## Storefront Example
+
+```php
+namespace App\Http\Controllers;
+
+use App\Services\DiscountService;
+use Shopper\Core\Models\Discount;
+
+class CartController extends Controller
+{
+    public function __construct(
+        private DiscountService $discountService
+    ) {}
+
+    public function applyDiscount(Request $request)
+    {
+        $validated = $request->validate([
+            'code' => 'required|string',
+        ]);
+
+        $cart = Cart::current();
+        $user = auth()->user();
+
+        $discount = $this->discountService->validate(
+            $validated['code'],
+            $user,
+            $cart
+        );
+
+        if (! $discount) {
+            return back()->with('error', 'Invalid or expired discount code');
+        }
+
+        // Apply discount to cart
+        $discountAmount = $this->discountService->calculate(
+            $discount,
+            $cart->subtotal()
+        );
+
+        $cart->applyDiscount($discount->id, $discountAmount);
+
+        // Increment usage counter
+        $discount->increment('total_use');
+
+        return back()->with('success', 'Discount applied!');
+    }
+}
+```
+
+## Use Cases
+
+| Scenario | Type | Apply To | Eligibility | Requirement |
+|----------|------|----------|-------------|-------------|
+| Site-wide sale | Percentage | Order | Everyone | None |
+| Free shipping over $50 | Fixed | Order | Everyone | Price |
+| Buy 3+ get 10% off | Percentage | Order | Everyone | Quantity |
+| VIP member exclusive | Percentage | Order | Customers | None |
+| Product clearance | Percentage | Products | Everyone | None |
+| First order discount | Fixed | Order | Customers | None |

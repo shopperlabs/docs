@@ -39,6 +39,8 @@ Shopper is built using Tallstack presets, but you are not limited to that becaus
 
 But if you want to customize your dashboard using Tailwind css you must first install Tailwind in your project. You can read the [documentation](https://tailwindcss.com/v2/guides/laravel)
 
+### Setting up Tailwind CSS for your project
+
 Shopper using Tailwind CSS, there are some Tailwind plugins you need to install first: Plugin Forms and Typography, Autoprefixer. You can install them via NPM or Yarn:
 
 ```bash
@@ -47,79 +49,24 @@ yarn add -D tailwindcss @tailwindcss/forms @tailwindcss/typography autoprefixer
 
 After installing Tailwind, you need to create a `tailwind.config.js` file at the root of your project and add this content
 
-```js
-import forms from '@tailwindcss/forms'
-import typography from '@tailwindcss/typography'
-import colors from 'tailwindcss/colors'
-import filamentPreset from './vendor/filament/support/tailwind.config.preset'
-import preset from './vendor/shopper/framework/tailwind.config.preset'
-
-/** @type {import('tailwindcss').Config} */
-module.exports = {
-  darkMode: 'class',
-  presets: [filamentPreset, preset],
-  content: [
-    './resources/**/*.blade.php',
-    './vendor/shopper/framework/**/*.blade.php',
-    './vendor/shopper/framework/src/**/*.php',
-    './vendor/filament/**/*.blade.php',
-  ],
-  theme: {
-    extends: {
-      colors: {
-        primary: colors.blue,
-      }
-    }
-  },
-  plugins: [forms, typography],
-}
-```
-
-New versions of Laravel come with vite by default so if you want to customize the Shopper admin, you need to switch to `Laravel Mix` and in your `webpack.mix.js` file, register Tailwind CSS as a PostCSS plugin:
-
-```js
-const mix = require('laravel-mix')
-
-mix.postCss('resources/css/admin.css', 'public/css', [
-  require('tailwindcss'),
-])
-```
-
-Just load the default Tailwind CSS directives inside your `./resources/css/admin.css`
+Just load the default shopper CSS inside your `./resources/css/shopper.css`
 
 ```css
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-
 @import '../../vendor/shopper/framework/resources/css/shopper.css';
+
+@source '../../../../app/Filament';
+@source '../../../../resources/views/filament';
+@source '../../../../vendor/filament/**/*.blade.php';
+@source '../../../../vendor/shopper/**/*.blade.php';
 ```
 
-Add Tailwind to the `postcss.config.js` file:
+Add the theme’s CSS file to the Laravel plugin’s input array in vite.config.js:
 
 ```js
-module.export = {
-  plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
-  },
-}
-```
-
-Then run `yarn run dev`
-
-<Tip>
-For Laravel mix, keep in mind the `admin.css` file must be load on the `resources.stylesheets` key of your `shopper/admin.php` config file
-</Tip>
-
-And if you use Tailwind v4 your admin style should look like this
-
-```css
-@import 'tailwindcss';
-
-@import '../../vendor/shopper/framework/resources/css/theme.css';
-
-@config '../../tailwind.config.js';
+input: [
+    // ...
+    'resources/css/shopper.css',
+]
 ```
 
 <Warning>
@@ -134,7 +81,7 @@ In your `AppServiceProvider` or any other provide you want, you should add this 
 public function boot()
 {
     Shopper::serving(function (): void {
-        Shopper::registerViteTheme('resources/css/admin.css');
+        Shopper::registerViteTheme('resources/css/shopper.css');
     });
 }
 ```

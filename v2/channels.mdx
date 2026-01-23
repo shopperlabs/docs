@@ -1,0 +1,310 @@
+---
+title: Channels
+description: Complete reference for the Channel model, sales channels, and multi-channel management in Shopper.
+---
+
+Channels represent different sales platforms where your products can be sold. Examples include your main website, mobile app, marketplace integrations, or physical stores.
+
+## Model
+
+```php
+Shopper\Core\Models\Channel
+```
+
+```php
+use Shopper\Core\Models\Channel;
+
+// The model implements
+- Shopper\Core\Models\Contracts\Channel
+
+// Uses traits
+- HasSlug
+```
+
+### Extending the Model
+
+```php
+namespace App\Models;
+
+use Shopper\Core\Models\Channel as BaseChannel;
+
+class Channel extends BaseChannel
+{
+    // Add your customizations here
+}
+```
+
+Update `config/shopper/models.php`:
+
+```php
+return [
+    'channel' => \App\Models\Channel::class,
+];
+```
+
+## Database Schema
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `name` | string | no | - | Channel name |
+| `slug` | string | yes | auto | URL-friendly identifier (unique) |
+| `description` | text | yes | null | Channel description |
+| `timezone` | string | yes | null | Channel timezone |
+| `url` | string | yes | null | Channel URL |
+| `is_default` | boolean | no | false | Default channel flag |
+| `is_enabled` | boolean | no | false | Channel visibility |
+| `metadata` | json | yes | null | Additional custom data |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+## Relationships
+
+### Products
+
+Channels have a many-to-many polymorphic relationship with products:
+
+```php
+// Get all products for a channel
+$channel->products; // Collection of Product models
+
+// Add products to channel
+$channel->products()->attach([$productId1, $productId2]);
+
+// Remove products from channel
+$channel->products()->detach($productId);
+
+// Sync products
+$channel->products()->sync($productIds);
+```
+
+## Query Scopes
+
+```php
+use Shopper\Core\Models\Channel;
+
+// Get only the default channel
+Channel::query()->default()->first();
+
+// Get only enabled channels
+Channel::query()->enabled()->get();
+
+// Combine scopes
+Channel::query()
+    ->enabled()
+    ->where('timezone', 'UTC')
+    ->get();
+```
+
+## Observer Behavior
+
+The `ChannelObserver` ensures only one channel can be default:
+
+```php
+// When creating/updating a channel with is_default = true:
+// 1. Any existing default channel is set to is_default = false
+// 2. The new/updated channel becomes the default
+
+$channel = Channel::query()->create([
+    'name' => 'Mobile App',
+    'is_default' => true, // Previous default is automatically unset
+]);
+```
+
+## Default Channel
+
+You can retrieve the default channel using the `default` scope:
+
+```php
+use Shopper\Core\Models\Channel;
+
+// Get the default channel
+$channel = Channel::query()->default()->first();
+
+// Use in controllers
+public function index()
+{
+    $channel = Channel::query()->default()->first();
+
+    $products = Product::query()
+        ->forChannel($channel->id)
+        ->publish()
+        ->get();
+}
+```
+
+## Creating Channels
+
+### Default Website Channel
+
+```php
+use Shopper\Core\Models\Channel;
+
+$channel = Channel::query()->create([
+    'name' => 'Website',
+    'slug' => 'website',
+    'description' => 'Main e-commerce website',
+    'url' => 'https://example.com',
+    'timezone' => 'UTC',
+    'is_default' => true,
+    'is_enabled' => true,
+]);
+```
+
+### Additional Channels
+
+```php
+// Mobile app channel
+$mobileChannel = Channel::query()->create([
+    'name' => 'Mobile App',
+    'slug' => 'mobile-app',
+    'description' => 'iOS and Android mobile application',
+    'timezone' => 'UTC',
+    'is_enabled' => true,
+]);
+
+// Marketplace channel
+$marketplaceChannel = Channel::query()->create([
+    'name' => 'Amazon',
+    'slug' => 'amazon',
+    'description' => 'Amazon marketplace integration',
+    'url' => 'https://amazon.com/store/your-store',
+    'is_enabled' => true,
+    'metadata' => [
+        'marketplace_id' => 'ATVPDKIKX0DER',
+        'seller_id' => 'A1234567890',
+    ],
+]);
+```
+
+## Retrieving Channels
+
+```php
+use Shopper\Core\Models\Channel;
+
+// Get all enabled channels
+$channels = Channel::query()->enabled()->get();
+
+// Get default channel
+$default = Channel::query()->default()->first();
+
+// Get channel by slug
+$channel = Channel::query()
+    ->where('slug', 'website')
+    ->first();
+
+// Get channel with products
+$channel = Channel::query()
+    ->with('products')
+    ->where('slug', 'mobile-app')
+    ->first();
+
+// Get channels with product counts
+$channels = Channel::query()
+    ->enabled()
+    ->withCount('products')
+    ->get();
+```
+
+## Assigning Products to Channels
+
+```php
+use Shopper\Core\Models\Product;
+
+$product = Product::query()->find($id);
+
+// Assign to channels (via product)
+$product->channels()->attach([$channelId1, $channelId2]);
+
+// Get products for a specific channel
+$products = Product::query()
+    ->forChannel($channelId)
+    ->publish()
+    ->get();
+
+// Get products available on multiple channels
+$products = Product::query()
+    ->forChannel([$channelId1, $channelId2])
+    ->publish()
+    ->get();
+```
+
+## Storefront Example
+
+```php
+namespace App\Http\Controllers;
+
+use Shopper\Core\Models\Channel;
+use Shopper\Core\Models\Product;
+
+class ProductController extends Controller
+{
+    public function index()
+    {
+        // Get products for default channel
+        $channel = Channel::query()->default()->first();
+
+        $products = Product::query()
+            ->forChannel($channel->id)
+            ->publish()
+            ->with(['brand', 'categories'])
+            ->paginate(12);
+
+        return view('products.index', compact('products'));
+    }
+}
+```
+
+### Multi-Channel API
+
+```php
+namespace App\Http\Controllers\Api;
+
+use Shopper\Core\Models\Channel;
+use Shopper\Core\Models\Product;
+
+class ProductController extends Controller
+{
+    public function index(Request $request)
+    {
+        $channelSlug = $request->header('X-Channel', 'website');
+
+        $channel = Channel::query()
+            ->where('slug', $channelSlug)
+            ->enabled()
+            ->firstOrFail();
+
+        $products = Product::query()
+            ->forChannel($channel->id)
+            ->publish()
+            ->paginate(20);
+
+        return response()->json($products);
+    }
+}
+```
+
+## Use Cases
+
+| Channel | Example Use |
+|---------|------------|
+| Website | Main e-commerce storefront |
+| Mobile App | iOS/Android application |
+| Marketplace | Amazon, eBay, Etsy integration |
+| POS | Physical store point of sale |
+| Wholesale | B2B customer portal |
+| Social | Facebook/Instagram shop |
+
+## Best Practices
+
+1. **Default Channel**: Always have one default channel for fallback
+2. **Product Assignment**: Assign products to relevant channels during creation
+3. **Timezone**: Set appropriate timezone for each channel
+4. **Metadata**: Use metadata for channel-specific configuration (API keys, etc.)
+
+```php
+// Example: Channel-specific pricing
+$channel = Channel::query()->find($id);
+$apiKey = $channel->metadata['api_key'] ?? null;
+$merchantId = $channel->metadata['merchant_id'] ?? null;
+```

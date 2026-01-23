@@ -1,33 +1,267 @@
 ---
 title: Reviews
-description: Learn how to manage Reviews in your Shopper administration.
+description: Complete reference for the Review model, ratings, and product review management in Shopper.
 ---
 
-### Model
+Reviews allow customers to rate and review products. Shopper provides a flexible review system with approval workflows, rating calculations, and polymorphic relationships.
 
-The model used is `Shopper\Core\Models\Review`.
+## Model
 
-| Name             | Type     | Required       | Notes                                                                   |
-|------------------|----------|----------------|-------------------------------------------------------------------------|
-| `id`             | autoinc  |                | auto                                                                    |
-| `approved`       | boolean  | no             | Default `false`                                                         |
-| `is_recommended` | boolean  | no             | Default `false`                                                         |
-| `title`          | string   | no             | The title of the review.                                                |
-| `content`        | longText | author_type no | The content of the review.                                              |
-| `rating`         | string   | yes            | The rating of the review                                                |
-| `reviewrateable` | morphs   | yes            | relation generate `reviewrateable_id` and `reviewrateable_type` columns |
-| `author`         | morphs   | yes            | relation generate `author_id` and `author_type` columns                 |
+```php
+Shopper\Core\Models\Review
+```
 
-### Components
+```php
+use Shopper\Core\Models\Review;
 
-By default, review Livewire components are not published. To customize components, you must publish them.
+// The model implements
+- Shopper\Core\Models\Contracts\Review
+```
+
+## Database Schema
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `rating` | integer | no | - | Rating value (typically 1-5) |
+| `title` | text | yes | null | Review title |
+| `content` | text | yes | null | Review content |
+| `is_recommended` | boolean | no | false | Customer recommends product |
+| `approved` | boolean | no | false | Review approval status |
+| `reviewrateable_id` | bigint | no | - | Polymorphic relation ID (product) |
+| `reviewrateable_type` | string | no | - | Polymorphic relation type |
+| `author_id` | bigint | no | - | Polymorphic relation ID (user) |
+| `author_type` | string | no | - | Polymorphic relation type |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+## Relationships
+
+### Reviewrateable (Product)
+
+```php
+// Get the reviewed entity (usually a product)
+$review->reviewrateable; // Product model
+```
+
+### Author (User)
+
+```php
+// Get the review author
+$review->author; // User model
+```
+
+## HasReviews Contract
+
+Products implement the `HasReviews` contract via the `InteractsWithReviews` trait:
+
+```php
+use Shopper\Core\Contracts\HasReviews;
+use Shopper\Core\Models\Traits\InteractsWithReviews;
+
+class Product extends Model implements HasReviews
+{
+    use InteractsWithReviews;
+}
+```
+
+## Rating Methods
+
+### Getting Ratings
+
+```php
+// Get all ratings for a product
+$product->ratings; // Collection of Review models
+
+// Get all ratings with sorting
+$product->getAllRatings($product->id, 'desc');
+
+// Get only approved ratings
+$product->getApprovedRatings($product->id);
+
+// Get pending (not approved) ratings
+$product->getNotApprovedRatings($product->id);
+
+// Get recent ratings
+$product->getRecentRatings($product->id, 5);
+
+// Get recent ratings by user
+$product->getRecentUserRatings($userId, 5, approved: true);
+```
+
+### Rating Counts
+
+```php
+// Count all ratings
+$product->countRating(); // Returns integer
+
+// Get rating sum
+$product->sumRating(); // Collection with sum
+```
+
+### Average Ratings
+
+```php
+// Get average rating
+$product->averageRating(); // Collection with average
+
+// Get average rating rounded to 1 decimal
+$product->averageRating(round: 1); // e.g., 4.5
+
+// Get average rating of approved reviews only
+$product->averageRating(round: 1, onlyApproved: true);
+```
+
+### Rating Percentage
+
+```php
+// Get percentage of 5-star ratings
+$product->ratingPercent(5); // e.g., 85.5
+
+// Useful for displaying rating distribution
+$distribution = [
+    5 => $product->ratingPercent(5),
+    4 => $product->ratingPercent(4),
+    3 => $product->ratingPercent(3),
+    2 => $product->ratingPercent(2),
+    1 => $product->ratingPercent(1),
+];
+```
+
+## Creating Reviews
+
+### Via Product Model
+
+```php
+use Shopper\Core\Models\Product;
+
+$product = Product::query()->find($id);
+
+// Create a review
+$review = $product->rating([
+    'rating' => 5,
+    'title' => 'Excellent product!',
+    'content' => 'This product exceeded my expectations.',
+    'is_recommended' => true,
+    'approved' => false, // Pending approval
+], $user);
+```
+
+### Via Review Model
+
+```php
+use Shopper\Core\Models\Review;
+
+$review = new Review;
+$review = $review->createRating($product, [
+    'rating' => 4,
+    'title' => 'Good quality',
+    'content' => 'Happy with my purchase.',
+    'is_recommended' => true,
+], $user);
+```
+
+### Direct Creation
+
+```php
+$review = Review::query()->create([
+    'rating' => 5,
+    'title' => 'Love it!',
+    'content' => 'Best purchase I made.',
+    'is_recommended' => true,
+    'approved' => false,
+    'reviewrateable_id' => $product->id,
+    'reviewrateable_type' => get_class($product),
+    'author_id' => $user->id,
+    'author_type' => get_class($user),
+]);
+```
+
+## Updating Reviews
+
+```php
+// Via product model
+$product->updateRating($reviewId, [
+    'rating' => 4,
+    'content' => 'Updated review content.',
+]);
+
+// Via review model
+$review = new Review;
+$review->updateRating($reviewId, [
+    'title' => 'Updated title',
+    'content' => 'Updated content',
+]);
+```
+
+## Approval Management
+
+```php
+// Approve a review
+$review->updatedApproved(true);
+
+// Unapprove a review
+$review->updatedApproved(false);
+
+// Direct update
+$review->update(['approved' => true]);
+```
+
+## Deleting Reviews
+
+```php
+// Via product model
+$product->deleteRating($reviewId);
+
+// Via review model
+$review = new Review;
+$review->deleteRating($reviewId);
+
+// Direct delete
+Review::query()->find($reviewId)->delete();
+```
+
+## Retrieving Reviews
+
+```php
+use Shopper\Core\Models\Review;
+
+// Get all reviews
+$reviews = Review::query()
+    ->with(['author', 'reviewrateable'])
+    ->latest()
+    ->get();
+
+// Get pending reviews
+$pending = Review::query()
+    ->where('approved', false)
+    ->with('author')
+    ->get();
+
+// Get approved reviews for a product
+$productReviews = Review::query()
+    ->where('reviewrateable_id', $productId)
+    ->where('reviewrateable_type', Product::class)
+    ->where('approved', true)
+    ->with('author')
+    ->latest()
+    ->paginate(10);
+
+// Get reviews by user
+$userReviews = Review::query()
+    ->where('author_id', $userId)
+    ->where('author_type', User::class)
+    ->with('reviewrateable')
+    ->get();
+```
+
+## Components
 
 ```bash
 php artisan shopper:component:publish review
 ```
 
-This command will publish all Livewire components used for review management (from pages to form components).
-Once you've published the component, you can find it in the `review.php` locate in the `config/shopper/components` folder.
+Creates `config/shopper/components/review.php`:
 
 ```php
 use Shopper\Livewire;
@@ -36,9 +270,195 @@ return [
     'pages' => [
         'review-index' => Livewire\Pages\Reviews\Index::class,
     ],
-    
     'components' => [
         'slide-overs.review-detail' => Livewire\SlideOvers\ReviewDetail::class,
     ],
 ];
 ```
+
+## Storefront Example
+
+### Review Display
+
+```php
+namespace App\Http\Controllers;
+
+use Shopper\Core\Models\Product;
+
+class ProductController extends Controller
+{
+    public function show(string $slug)
+    {
+        $product = Product::query()
+            ->where('slug', $slug)
+            ->publish()
+            ->firstOrFail();
+
+        // Get approved reviews
+        $reviews = $product->ratings()
+            ->where('approved', true)
+            ->with('author')
+            ->latest()
+            ->paginate(10);
+
+        // Get rating stats
+        $averageRating = $product->averageRating(1, onlyApproved: true)->first();
+        $reviewCount = $product->ratings()->where('approved', true)->count();
+
+        // Rating distribution
+        $distribution = [];
+        for ($i = 5; $i >= 1; $i--) {
+            $count = $product->ratings()
+                ->where('approved', true)
+                ->where('rating', $i)
+                ->count();
+            $distribution[$i] = [
+                'count' => $count,
+                'percentage' => $reviewCount > 0 ? ($count / $reviewCount) * 100 : 0,
+            ];
+        }
+
+        return view('products.show', compact(
+            'product',
+            'reviews',
+            'averageRating',
+            'reviewCount',
+            'distribution'
+        ));
+    }
+}
+```
+
+### Review Submission
+
+```php
+namespace App\Http\Controllers;
+
+use Shopper\Core\Models\Product;
+
+class ReviewController extends Controller
+{
+    public function store(Request $request, Product $product)
+    {
+        $validated = $request->validate([
+            'rating' => 'required|integer|min:1|max:5',
+            'title' => 'nullable|string|max:255',
+            'content' => 'nullable|string|max:2000',
+            'is_recommended' => 'boolean',
+        ]);
+
+        // Check if user already reviewed this product
+        $existingReview = $product->ratings()
+            ->where('author_id', auth()->id())
+            ->where('author_type', get_class(auth()->user()))
+            ->exists();
+
+        if ($existingReview) {
+            return back()->with('error', 'You have already reviewed this product.');
+        }
+
+        // Create review (pending approval)
+        $product->rating([
+            ...$validated,
+            'approved' => false,
+        ], auth()->user());
+
+        return back()->with('success', 'Thank you! Your review is pending approval.');
+    }
+}
+```
+
+### Review Management (Admin)
+
+```php
+namespace App\Http\Controllers\Admin;
+
+use Shopper\Core\Models\Review;
+
+class ReviewController extends Controller
+{
+    public function index()
+    {
+        $reviews = Review::query()
+            ->with(['author', 'reviewrateable'])
+            ->latest()
+            ->paginate(20);
+
+        return view('admin.reviews.index', compact('reviews'));
+    }
+
+    public function approve(Review $review)
+    {
+        $review->updatedApproved(true);
+
+        return back()->with('success', 'Review approved.');
+    }
+
+    public function reject(Review $review)
+    {
+        $review->delete();
+
+        return back()->with('success', 'Review deleted.');
+    }
+}
+```
+
+## Blade Template Example
+
+```blade
+{{-- Product rating summary --}}
+<div class="rating-summary">
+    <div class="average">
+        <span class="score">{{ $averageRating ?? 0 }}</span>
+        <span class="max">/5</span>
+    </div>
+    <div class="stars">
+        @for ($i = 1; $i <= 5; $i++)
+            <svg class="{{ $i <= round($averageRating) ? 'text-yellow-400' : 'text-gray-300' }}">
+                <!-- Star icon -->
+            </svg>
+        @endfor
+    </div>
+    <p>Based on {{ $reviewCount }} reviews</p>
+</div>
+
+{{-- Rating distribution --}}
+<div class="distribution">
+    @foreach ($distribution as $rating => $data)
+        <div class="row">
+            <span>{{ $rating }} stars</span>
+            <div class="bar" style="width: {{ $data['percentage'] }}%"></div>
+            <span>{{ $data['count'] }}</span>
+        </div>
+    @endforeach
+</div>
+
+{{-- Reviews list --}}
+@foreach ($reviews as $review)
+    <div class="review">
+        <div class="header">
+            <span class="author">{{ $review->author->full_name }}</span>
+            <span class="rating">{{ $review->rating }}/5</span>
+            <span class="date">{{ $review->created_at->diffForHumans() }}</span>
+        </div>
+        @if ($review->title)
+            <h4>{{ $review->title }}</h4>
+        @endif
+        <p>{{ $review->content }}</p>
+        @if ($review->is_recommended)
+            <span class="recommended">✓ Recommends this product</span>
+        @endif
+    </div>
+@endforeach
+```
+
+## Use Cases
+
+| Method | Use Case |
+|--------|----------|
+| `averageRating()` | Display product rating stars |
+| `countRating()` | Show total review count |
+| `ratingPercent()` | Build rating distribution chart |
+| `getApprovedRatings()` | Display reviews on product page |
+| `getNotApprovedRatings()` | Admin review moderation queue |
+| `getRecentUserRatings()` | Customer review history |

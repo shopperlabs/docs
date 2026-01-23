@@ -1,0 +1,149 @@
+---
+title: 'Heading'
+description: 'Page-level heading component with optional action slot'
+---
+
+import { ComponentPreview, PreviewHeading, PreviewButton } from '/snippets/component-preview.jsx'
+
+The Heading component is used for main page titles. It displays a large, bold heading with an optional action slot for buttons or other controls.
+
+## Preview
+
+<ComponentPreview centered={false}>
+  <PreviewHeading title="Products">
+    <PreviewButton variant="primary">Add Product</PreviewButton>
+  </PreviewHeading>
+</ComponentPreview>
+
+## Usage
+
+```blade
+<x-shopper::heading>
+    <x-slot:title>Products</x-slot:title>
+
+    <x-slot:action>
+        <x-filament::button tag="a" href="{{ route('shopper.products.create') }}">
+            Add Product
+        </x-filament::button>
+    </x-slot:action>
+</x-shopper::heading>
+```
+
+## Slots
+
+<ParamField path="title" type="Slot" required>
+  The heading title. Can be plain text or a custom slot with additional elements.
+</ParamField>
+
+<ParamField path="action" type="Slot">
+  Optional slot for action buttons or controls aligned to the right.
+</ParamField>
+
+## Examples
+
+### Simple Heading
+
+<ComponentPreview centered={false}>
+  <PreviewHeading title="Dashboard" />
+</ComponentPreview>
+
+```blade
+<x-shopper::heading>
+    <x-slot:title>Dashboard</x-slot:title>
+</x-shopper::heading>
+```
+
+### Heading with Action Button
+
+<ComponentPreview centered={false}>
+  <PreviewHeading title="Categories">
+    <PreviewButton variant="primary">New Category</PreviewButton>
+  </PreviewHeading>
+</ComponentPreview>
+
+```blade
+<x-shopper::heading>
+    <x-slot:title>Categories</x-slot:title>
+
+    <x-slot:action>
+        <x-filament::button wire:click="create">
+            New Category
+        </x-filament::button>
+    </x-slot:action>
+</x-shopper::heading>
+```
+
+### Heading with Multiple Actions
+
+<ComponentPreview centered={false}>
+  <PreviewHeading title="Orders">
+    <div className="flex items-center gap-2">
+      <PreviewButton variant="secondary">Export</PreviewButton>
+      <PreviewButton variant="primary">Create Order</PreviewButton>
+    </div>
+  </PreviewHeading>
+</ComponentPreview>
+
+```blade
+<x-shopper::heading>
+    <x-slot:title>Orders</x-slot:title>
+
+    <x-slot:action>
+        <div class="flex items-center gap-2">
+            <x-filament::button color="gray" wire:click="export">
+                Export
+            </x-filament::button>
+            <x-filament::button wire:click="create">
+                Create Order
+            </x-filament::button>
+        </div>
+    </x-slot:action>
+</x-shopper::heading>
+```
+
+### Custom Title Slot
+
+For more complex titles, you can use the title as a slot:
+
+```blade
+<x-shopper::heading>
+    <x-slot:title>
+        <div class="flex items-center gap-3">
+            <span>Product: iPhone 15</span>
+            <span class="inline-flex items-center rounded-full bg-green-50 px-2 py-1 text-xs font-medium text-green-700">
+                Published
+            </span>
+        </div>
+    </x-slot:title>
+
+    <x-slot:action>
+        <x-filament::button color="danger">
+            Unpublish
+        </x-filament::button>
+    </x-slot:action>
+</x-shopper::heading>
+```
+
+## Blade Component Source
+
+The Heading component is located at `packages/admin/resources/views/components/heading.blade.php`:
+
+```blade
+<div
+    {{ $attributes->twMerge(['class' => 'space-y-3 sm:flex sm:items-center sm:justify-between sm:space-x-4 sm:space-y-0']) }}
+>
+    @if ($title instanceof \Illuminate\View\ComponentSlot)
+        {{ $title }}
+    @else
+        <h2
+            class="font-heading text-2xl font-bold text-gray-900 sm:truncate sm:text-3xl dark:text-white"
+        >
+            {{ $title }}
+        </h2>
+    @endif
+
+    @isset($action)
+        {{ $action }}
+    @endisset
+</div>
+```

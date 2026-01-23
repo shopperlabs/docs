@@ -1,0 +1,271 @@
+---
+title: 'Configuration'
+description: 'Configure the sidebar package settings'
+---
+
+The sidebar package can be configured through the `config/sidebar.php` file. Publish it if you haven't already:
+
+```bash
+php artisan vendor:publish --provider="Shopper\Sidebar\SidebarServiceProvider" --tag="sidebar-config"
+```
+
+## Configuration Options
+
+### Caching
+
+```php
+'cache' => [
+    'method' => null,
+    'duration' => 1440,
+],
+```
+
+| Option | Values | Description |
+|--------|--------|-------------|
+| `method` | `null`, `static`, `user-based` | The caching strategy to use |
+| `duration` | integer | Cache duration in minutes |
+
+**Caching Methods:**
+
+- `null` - No caching, sidebar is rebuilt on every request
+- `static` - Cache the sidebar once for all users
+- `user-based` - Cache per user (useful when authorization differs per user)
+
+<Info>
+For production environments with static sidebars, use `static` caching to improve performance.
+</Info>
+
+### Dimensions
+
+```php
+'width' => '17.5rem',
+'collapsed_width' => '4.5rem',
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `width` | `17.5rem` | The sidebar width when expanded |
+| `collapsed_width` | `4.5rem` | The sidebar width when collapsed |
+
+These values are available as CSS variables `--sidebar-width` and `--sidebar-collapsed-width`.
+
+### Responsive Breakpoint
+
+```php
+'breakpoint' => 1024,
+```
+
+The pixel width below which the sidebar switches to mobile mode. In mobile mode:
+- The sidebar is hidden by default
+- Opening the sidebar shows it as an overlay
+- The sidebar cannot be collapsed (only opened/closed)
+
+### Collapsible
+
+```php
+'collapsible' => true,
+```
+
+Whether the sidebar can be collapsed on desktop screens. When set to `false`, the collapse functionality is disabled and the sidebar remains at full width.
+
+## Full Configuration Example
+
+```php
+<?php
+
+return [
+
+    /*
+    |--------------------------------------------------------------------------
+    | Caching
+    |--------------------------------------------------------------------------
+    |
+    | Define the way the Sidebar should be cached.
+    | The cache store is defined by the Laravel cache configuration.
+    |
+    | Available: null|static|user-based
+    |
+    */
+
+    'cache' => [
+        'method' => env('SIDEBAR_CACHE', null),
+        'duration' => 1440,
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
+    | Sidebar Dimensions
+    |--------------------------------------------------------------------------
+    |
+    | Configure the sidebar width for expanded and collapsed states.
+    | These values will be injected as CSS variables.
+    |
+    */
+
+    'width' => '17.5rem',
+
+    'collapsed_width' => '4.5rem',
+
+    /*
+    |--------------------------------------------------------------------------
+    | Responsive Breakpoint
+    |--------------------------------------------------------------------------
+    |
+    | The breakpoint (in pixels) below which the sidebar switches to mobile
+    | mode (hidden by default, shown via toggle).
+    |
+    */
+
+    'breakpoint' => 1024,
+
+    /*
+    |--------------------------------------------------------------------------
+    | Collapsible
+    |--------------------------------------------------------------------------
+    |
+    | Whether the sidebar can be collapsed on desktop.
+    |
+    */
+
+    'collapsible' => true,
+
+];
+```
+
+## Environment Variables
+
+You can use environment variables for deployment flexibility:
+
+```env
+SIDEBAR_CACHE=static
+```
+
+```php
+'cache' => [
+    'method' => env('SIDEBAR_CACHE', null),
+    'duration' => env('SIDEBAR_CACHE_DURATION', 1440),
+],
+```
+
+## Accessing Configuration
+
+Use the helper functions to access configuration values:
+
+```php
+use function Shopper\Sidebar\sidebar_config;
+use function Shopper\Sidebar\sidebar_width;
+use function Shopper\Sidebar\sidebar_collapsed_width;
+use function Shopper\Sidebar\sidebar_breakpoint;
+use function Shopper\Sidebar\sidebar_is_collapsible;
+
+// Get any config value
+$cacheMethod = sidebar_config('cache.method');
+
+// Get dimensions
+$width = sidebar_width();               // '17.5rem'
+$collapsed = sidebar_collapsed_width(); // '4.5rem'
+
+// Get responsive settings
+$breakpoint = sidebar_breakpoint();     // 1024
+$collapsible = sidebar_is_collapsible(); // true
+```
+
+## Injecting CSS Variables
+
+Use the helper functions to inject CSS variables in your layout:
+
+```blade
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        :root {
+            --sidebar-width: {{ \Shopper\Sidebar\sidebar_width() }};
+            --sidebar-collapsed-width: {{ \Shopper\Sidebar\sidebar_collapsed_width() }};
+        }
+    </style>
+</head>
+<body
+    data-sidebar-breakpoint="{{ \Shopper\Sidebar\sidebar_breakpoint() }}"
+    data-sidebar-collapsible="{{ \Shopper\Sidebar\sidebar_is_collapsible() ? 'true' : 'false' }}"
+>
+    <!-- Your content -->
+</body>
+</html>
+```
+
+The `data-*` attributes are automatically read by the Alpine.js sidebar store to configure its behavior.
+
+## Customizing Views
+
+Publish the views to customize the sidebar rendering:
+
+```bash
+php artisan vendor:publish --provider="Shopper\Sidebar\SidebarServiceProvider" --tag="sidebar-views"
+```
+
+This publishes the following views to `resources/views/vendor/sidebar/`:
+
+| View | Description |
+|------|-------------|
+| `menu.blade.php` | The root menu container |
+| `group.blade.php` | A sidebar group with optional heading |
+| `item.blade.php` | A single menu item |
+| `badge.blade.php` | Item badge component |
+| `append.blade.php` | Item append action component |
+
+### Example: Customizing the Item View
+
+```blade
+{{-- resources/views/vendor/sidebar/item.blade.php --}}
+<li class="{{ $item->getItemClass() }} {{ $item->isActive() ? $item->getActiveClass() : '' }}">
+    <a
+        href="{{ $item->getUrl() }}"
+        @if($item->withSpa()) wire:navigate @endif
+        @if($item->getNewTab()) target="_blank" @endif
+        class="flex items-center gap-3 p-2 rounded-lg"
+    >
+        @if($item->getIcon())
+            <x-dynamic-component
+                :component="$item->getIcon()"
+                :class="$item->getIconClass()"
+                :attributes="$item->getIconAttributes()"
+            />
+        @endif
+
+        <span class="flex-1">{{ $item->getName() }}</span>
+
+        @foreach($item->getBadges() as $badge)
+            @include('sidebar::badge', ['badge' => $badge])
+        @endforeach
+    </a>
+
+    @if($item->getItems()->count())
+        <ul class="ml-4 space-y-1">
+            @foreach($item->getItems() as $subItem)
+                @include('sidebar::item', ['item' => $subItem])
+            @endforeach
+        </ul>
+    @endif
+</li>
+```
+
+## Clearing the Cache
+
+To clear the sidebar cache, use Laravel's cache commands:
+
+```bash
+# Clear all cache
+php artisan cache:clear
+
+# Or clear specific tag (if using tagged cache)
+php artisan cache:forget sidebar
+```
+
+The package also provides a `SidebarFlusher` service that you can use programmatically:
+
+```php
+use Shopper\Sidebar\Infrastructure\SidebarFlusher;
+
+app(SidebarFlusher::class)->flush();
+```

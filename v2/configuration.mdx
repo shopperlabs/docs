@@ -72,6 +72,8 @@ Models used are defined in the models config `shopper/models.php` file, if you w
 use Shopper\Core\Models;
 
 return [
+    'address' => Models\Address::class,
+
     'brand' => Models\Brand::class,
 
     'category' => Models\Category::class,
@@ -80,7 +82,13 @@ return [
 
     'product' => Models\Product::class,
 
+    'variant' => Models\ProductVariant::class,
+
     'channel' => Models\Channel::class,
+
+    'inventory' => Models\Inventory::class,
+
+    'order' => Models\Order::class,
 ];
 ```
 
@@ -136,34 +144,91 @@ php artisan shopper:component:publish brand
 ### Settings
 
 Settings are a very important part of an e-commerce site administration.
-Shopper has understood this very well and has set up a settings file, to allow you to add or modify the default settings of Shopper.
+Shopper uses a class-based approach for settings, allowing you to easily add, remove or disable settings pages.
 
-In this file you can add parameters or delete those you don't need to simplify your store or to make it larger
+Each setting is a class that implements the `Shopper\Contracts\SettingItem` interface. The configuration file `settings.php` registers which settings are enabled or disabled.
 
-```php
+```php config/shopper/settings.php
+use Shopper\Settings\Items;
+
 return [
     'items' => [
-        // ...
-        [
-            'name' => 'General',
-            'description' => 'View and update your store information.',
-            'icon' => 'heroicon-o-cog',
-            'route' => 'shopper.settings.shop',
-            'permission' => null,
-        ],
-        [
-            'name' => 'Staff & permissions',
-            'description' => 'View and manage what staff can see or do in your store.',
-            'icon' => 'heroicon-o-users',
-            'route' => 'shopper.settings.users',
-            'permission' => null,
-        ],
-        // ...
+        Items\GeneralSetting::class => true,
+        Items\StaffSetting::class => true,
+        Items\LocationSetting::class => true,
+        Items\PaymentSetting::class => true,
+        Items\CarrierSetting::class => true,
+        Items\LegalSetting::class => true,
+        Items\ZoneSetting::class => true,
     ],
 ];
 ```
 
+To disable a setting page, simply set its value to `false`.
+
+#### Creating a custom setting
+
+To create your own setting page, extend the `Shopper\Settings\Setting` base class:
+
+```php
+namespace App\Settings;
+
+use Shopper\Settings\Setting;
+
+final class MyCustomSetting extends Setting
+{
+    public function name(): string
+    {
+        return 'My Custom Setting';
+    }
+
+    public function description(): string
+    {
+        return 'Manage your custom configuration.';
+    }
+
+    public function icon(): string
+    {
+        return 'heroicon-o-cog';
+    }
+
+    public function url(): string
+    {
+        return route('shopper.settings.custom');
+    }
+
+    public function order(): int
+    {
+        return 10;
+    }
+
+    public function permission(): ?string
+    {
+        return 'manage_custom_settings';
+    }
+}
+```
+
+Then register it in the `settings.php` config file:
+
+```php
+'items' => [
+    // ... existing settings
+    App\Settings\MyCustomSetting::class => true,
+],
+```
+
+#### Programmatic registration
+
+You can also register settings programmatically via the `SettingManager`:
+
+```php
+use Shopper\Settings\SettingManager;
+
+app(SettingManager::class)->add(App\Settings\MyCustomSetting::class);
+```
+
 <Warning>
-Be careful: if you delete items from the configuration, you will no longer have access to certain interfaces,
+Be careful: if you disable items from the configuration, you will no longer have access to certain interfaces,
 and this can make the user experience more complex.
 </Warning>

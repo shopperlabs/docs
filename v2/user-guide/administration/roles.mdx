@@ -1,0 +1,165 @@
+---
+title: Roles & Permissions
+description: Configure access control with roles and permissions.
+---
+
+Roles and permissions allow you to control what each staff member can do in your store's administration panel. This ensures security and prevents unauthorized access to sensitive areas.
+
+## Overview
+
+The access control system consists of:
+
+- **Roles** - Groups of permissions assigned to users
+- **Permissions** - Individual actions a user can perform
+
+## Accessing Roles & Permissions
+
+1. Click on **Settings** in the sidebar
+2. Navigate to the access control section
+
+## Understanding Permissions
+
+Permissions control access to specific actions:
+
+<Frame>
+  <img src="/images/v2/permissions.png" alt="Permissions" />
+</Frame>
+
+### Permission Categories
+
+| Category | Examples |
+|----------|----------|
+| **Products** | View, create, edit, delete products |
+| **Orders** | View orders, process refunds |
+| **Customers** | View customer data, edit accounts |
+| **Settings** | Access configuration options |
+| **Staff** | Manage other administrators |
+
+### Browsing Permissions
+
+View all available permissions in the system:
+
+<Frame>
+  <img src="/images/v2/permissions.png" alt="Browse Permissions" />
+</Frame>
+
+## Managing Roles
+
+### Creating a Role
+
+To create a new role:
+
+1. Navigate to Roles
+2. Click **Create role**
+3. Enter a name and description
+4. Select permissions
+5. Click **Save**
+
+<Frame>
+  <img src="/images/v2/add-role.png" alt="Add Role" />
+</Frame>
+
+### Role Fields
+
+| Field | Description |
+|-------|-------------|
+| **Name** | Role name (e.g., "Store Manager") |
+| **Description** | What this role is for |
+| **Permissions** | List of allowed actions |
+
+### Updating a Role
+
+Modify an existing role:
+
+<Frame caption="Update Role">
+  <img src="/images/v2/update-role.png" alt="Update Role" />
+</Frame>
+
+Changes apply immediately to all users with that role.
+
+## Creating Permissions
+
+Add custom permissions for your specific needs:
+
+<Frame caption="Add Permission Form">
+  <img src="/images/v2/add-permission.png" alt="Add Permission" />
+</Frame>
+
+## Custom Permissions
+
+Create permissions tailored to your business:
+
+<Frame>
+  <img src="/images/v2/custom-permissions.png" alt="Custom Permissions" />
+</Frame>
+
+## Common Role Examples
+
+### Store Manager
+
+Full operational access:
+- All product permissions
+- All order permissions
+- All customer permissions
+- Limited settings access
+
+### Content Editor
+
+Focus on catalog management:
+- View/edit products
+- View/edit categories
+- View/edit collections
+- No order or customer access
+
+### Support Agent
+
+Customer service focus:
+- View orders
+- View customers
+- Limited edit capabilities
+- No product management
+
+### Marketing
+
+Promotional access:
+- View products
+- Manage discounts
+- Manage collections
+- No customer data access
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Start Restrictive" icon="lock">
+    Begin with minimal permissions and add as needed.
+  </Card>
+  <Card title="Group Logically" icon="layer-group">
+    Create roles that match actual job functions.
+  </Card>
+  <Card title="Review Regularly" icon="rotate">
+    Audit roles periodically to ensure they're still appropriate.
+  </Card>
+  <Card title="Document Roles" icon="file-lines">
+    Keep clear descriptions of what each role can do.
+  </Card>
+</CardGroup>
+
+## Permission Hierarchy
+
+<Tip>
+Some permissions may depend on others. For example, to edit a product, a user typically also needs permission to view products.
+</Tip>
+
+When assigning permissions, consider:
+
+1. **View** - Can see the information
+2. **Create** - Can add new items
+3. **Edit** - Can modify existing items
+4. **Delete** - Can remove items (most sensitive)
+
+## Security Considerations
+
+- **Audit trails** - Track who changed what
+- **Separation of duties** - Don't give one person all permissions
+- **Regular reviews** - Remove unnecessary access
+- **Test roles** - Verify permissions work as expected

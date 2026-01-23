@@ -1,0 +1,118 @@
+---
+title: Shipping Zones
+description: Configure shipping zones to define where and how you ship products.
+---
+
+Shipping zones allow you to define geographical areas where you ship products and set specific shipping rules for each zone. This helps you manage shipping costs and delivery options effectively.
+
+## What are Shipping Zones?
+
+A shipping zone is a geographical area (country, region, or group of countries) where you offer delivery. Each zone can have:
+
+- Specific shipping methods
+- Different shipping rates
+- Custom delivery times
+
+## Accessing Zones
+
+Zones can be managed through the Settings panel or when configuring your storefront.
+
+<Frame caption="Shipping Zones Settings">
+  <img src="/images/v2/starterkit-zones.png" alt="Shipping Zones" />
+</Frame>
+
+## Enabling Zones for Your Store
+
+Before customers can complete checkout, you need to enable at least one shipping zone.
+
+<Frame>
+  <img src="/images/v2/starterkit-enable-zone.png" alt="Enable Zone" />
+</Frame>
+
+## Creating a Shipping Zone
+
+To create a new shipping zone:
+
+1. Click on **Settings** in the sidebar
+2. Select **Zones** from the settings menu
+3. Click on the **plus icon**
+4. Define the zone details:
+
+<Frame>
+  <img src="/images/v2/add-zone.png" alt="Enable Zone" />
+</Frame>
+
+| Field | Description |
+|-------|-------------|
+| **Name** | A descriptive name (e.g., "Europe", "North America") |
+| **Code** | A short code (e.g., "EU", "NA") |
+| **Countries** | Select countries included in this zone |
+| **Currency** | Zone's currency. A zone can only have one currency. |
+| **Payment methods** | Zone's payment methods. |
+| **Delivery methods** | Zone's delivery methods. |
+
+## Zone-Based Shipping
+
+Once zones are configured, you can:
+
+- Set flat-rate shipping per zone
+- Configure weight-based shipping rates
+- Offer free shipping for specific zones
+- Set minimum order amounts for free shipping
+
+## Delivery Methods
+
+Each zone can have its own delivery methods (shipping options) that define how products are shipped to customers in that zone.
+
+### Viewing Delivery Methods
+
+When you open a zone, the delivery methods section displays all configured shipping options with their carrier, name, status, and price.
+
+<Frame>
+  <img src="/images/v2/zone-delivery-methods.png" alt="Zone delivery methods" />
+</Frame>
+
+### Adding a Delivery Method
+
+Click the **Add** button in the delivery methods section to open the shipping option form. Fill in the required fields (name, carrier, price, etc.) and save.
+
+<Frame caption="Add a delivery method">
+  <img src="/images/v2/zone-delivery-method-form.png" alt="Delivery method form" />
+</Frame>
+
+### Deleting a Delivery Method
+
+To remove a delivery method, click the delete action on the corresponding option. A confirmation modal will appear before the deletion is processed.
+
+<Frame>
+  <img src="/images/v2/zone-delivery-method-delete.png" alt="Delete delivery method confirmation" />
+</Frame>
+
+## Orders with Zones
+
+When viewing orders, you can see which shipping zone applies to each order.
+
+<Frame>
+  <img src="/images/v2/orders-with-zone.png" alt="Orders with Zone" />
+</Frame>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Start Simple" icon="rocket">
+    Begin with broad zones (e.g., "Domestic" and "International") and refine as your business grows.
+  </Card>
+  <Card title="Consider Costs" icon="calculator">
+    Group countries with similar shipping costs into the same zone to simplify pricing.
+  </Card>
+  <Card title="Test Thoroughly" icon="vial">
+    Place test orders from different locations to ensure zones work correctly.
+  </Card>
+  <Card title="Update Regularly" icon="rotate">
+    Review your zones periodically as shipping costs and delivery options change.
+  </Card>
+</CardGroup>
+
+<Tip>
+If you're just starting out, create a simple domestic zone first to enable checkout, then add international zones as needed.
+</Tip>
