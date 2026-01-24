@@ -1,0 +1,94 @@
+---
+title: 'Label'
+description: 'Form field label with optional required indicator'
+---
+
+import { ComponentPreview, PreviewLabel } from '/snippets/component-preview.jsx'
+
+The Label component provides a styled label for form fields with an optional required indicator.
+
+## Preview
+
+<ComponentPreview>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <PreviewLabel value="Email address" />
+    <PreviewLabel value="Password" isRequired={true} />
+  </div>
+</ComponentPreview>
+
+## Usage
+
+```blade
+<x-shopper::label for="email" value="Email address" />
+```
+
+## Props
+
+<ParamField path="value" type="string">
+  The label text. Can also use the slot instead.
+</ParamField>
+
+<ParamField path="isRequired" type="bool" default="false">
+  Shows a red asterisk (*) after the label text.
+</ParamField>
+
+## Examples
+
+### Basic Label
+
+<ComponentPreview>
+  <PreviewLabel value="Username" />
+</ComponentPreview>
+
+```blade
+<x-shopper::label for="username" value="Username" />
+```
+
+### Required Field
+
+<ComponentPreview>
+  <PreviewLabel value="Email" isRequired={true} />
+</ComponentPreview>
+
+```blade
+<x-shopper::label for="email" value="Email" :isRequired="true" />
+```
+
+### Using Slot
+
+```blade
+<x-shopper::label for="name">
+    Full Name
+</x-shopper::label>
+```
+
+### With Form Input
+
+```blade
+<div>
+    <x-shopper::label for="email" value="Email" :isRequired="true" />
+    <x-shopper::forms.input
+        type="email"
+        name="email"
+        id="email"
+        class="mt-1"
+    />
+</div>
+```
+
+## Blade Component Source
+
+```blade
+@props([
+    'value',
+    'isRequired' => false,
+])
+
+<label {{ $attributes->twMerge(['class' => 'block font-medium text-sm text-gray-700 dark:text-gray-300']) }}>
+    {{ $value ?? $slot }}
+
+    @if ($isRequired)
+        <span class="text-red-500">*</span>
+    @endif
+</label>
+```

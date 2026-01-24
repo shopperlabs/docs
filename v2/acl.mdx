@@ -20,12 +20,12 @@ To access dashboard, you need to have the role `administrator` this role can be 
 */
 
 'users' => [
-  'admin_role' => 'administrator', // [tl! highlight]
+  'admin_role' => 'administrator',
   'default_role' => 'user',
 ],
 ```
 
-After [creating a super admin](/installation#create-an-admin-user) we get the following result
+After creating a super admin we get the following result
 
 ```bash
 php artisan shopper:user
@@ -70,7 +70,7 @@ the level of access for each user. With roles a user can access menus, pages. It
 
 To view the roles and permissions management page, you must go to the **Settings > Staff & Permissions**
 
-<Frame caption="Settings > Staff & permissions">
+<Frame>
   <img src="/images/v2/settings-staff.png" alt="Setting Staff & permissions" />
 </Frame>
 
@@ -146,20 +146,25 @@ use Shopper\Livewire\Pages;
 return [
 
     'pages' => [
+        'setting-index' => Pages\Settings\Index::class,
+        'general' => Pages\Settings\General::class,
+        'location-index' => Pages\Settings\Locations\Index::class,
+        'location-create' => Pages\Settings\Locations\Create::class,
+        'location-edit' => Pages\Settings\Locations\Edit::class,
         'legal' => Pages\Settings\LegalPage::class,
-        'payment' => Pages\Settings\Payment::class,
+        'payment-methods' => Pages\Settings\PaymentMethod::class,
         'team-index' => Pages\Settings\Team\Index::class,
         'team-roles' => Pages\Settings\Team\RolePermission::class,
         'zones' => Pages\Settings\Zones::class,
     ],
 
     'components' => [
-        'modals.create-permission' => Livewire\Modals\CreatePermission::class,
-        'modals.create-role' => Livewire\Modals\CreateRole::class,
-        'modals.confirm-password' => Livewire\Modals\ConfirmPassword::class,
-        'modals.logout-others-browser' => Livewire\Modals\LogoutOthersBrowser::class,
-        'modals.payment-method-form' => Livewire\Modals\PaymentMethodForm::class,
-
+        'settings.locations.form' => Components\Settings\Locations\InventoryForm::class,
+        'settings.legal.privacy' => Components\Settings\Legal\Privacy::class,
+        'settings.legal.refund' => Components\Settings\Legal\Refund::class,
+        'settings.legal.shipping' => Components\Settings\Legal\Shipping::class,
+        'settings.legal.terms' => Components\Settings\Legal\Terms::class,
+        'settings.legal.form' => Components\Settings\Legal\PolicyForm::class,
         'settings.team.permissions' => Components\Settings\Team\Permissions::class,
         'settings.team.users' => Components\Settings\Team\UsersRole::class,
         'settings.zones.detail' => Components\Settings\Zones\Detail::class,
@@ -179,7 +184,6 @@ A Role is a set of permissions to perform certain operations within the system, 
 at installation comes with 3 roles but 2 are accessible in the administration panel.
 The user role does not appear, modifying it could lead to bugs on your store so it is not listed here.
 
-
 <Warning>
 It's **strongly** advised to not change the name of roles when they are already assigned to users. If the role verification is done manually you will be forced to change this name in all **middleware**, **helpers**, **blade directives** etc.
 </Warning>
@@ -188,7 +192,7 @@ It's **strongly** advised to not change the name of roles when they are already 
 
 To add a new role, you must click on `Add a new role` button. Required fields are marked with asterisks
 
-<Frame caption="Add new role">
+<Frame>
   <img src="/images/v2/add-role.png" alt="addd new role" />
 </Frame>
 
@@ -200,7 +204,7 @@ To modify a role you must click on the role you want to modify to access the edi
 
 And as already mentioned, all Shopper features are livewire components. So you can change everything at any time to fit your store.
 
-<Frame caption="Update role">
+<Frame>
   <img src="/images/v2/update-role.png" alt="update role" />
 </Frame>
 
@@ -209,7 +213,7 @@ And as already mentioned, all Shopper features are livewire components. So you c
 In addition to creating an administrator from the command line you can also do it from the Shopper interface, you just need to click on **Add Administrator** button.
 Then you fill in the information of your administrator with the role chosen for him
 
-<Frame caption="Add admin">
+<Frame>
   <img src="/images/v2/add-admin.png" alt="add new admin" />
 </Frame>
 
@@ -221,7 +225,7 @@ Let's assume that you would like to add a new permission to ACL. You will need t
 
 In the way that when an admin are granted of a specific role, he will granted all role's permissions.
 
-<Frame caption="Role's permissions">
+<Frame>
   <img src="/images/v2/permissions.png" alt="Role's permissions example" />
 </Frame>
 
@@ -229,7 +233,7 @@ As you may have noticed all permissions are grouped by type, and the available t
 
 To add a new permission you just need to click on the **Create permission** button.
 
-<Frame caption="Add permission">
+<Frame>
   <img src="/images/v2/add-permission.png" alt="Add permission" />
 </Frame>
 
@@ -237,6 +241,6 @@ After adding your permission it will be automatically associated with the role a
 
 If the permission has no group it will be in a `Custom permissions` section.
 
-<Frame caption="New permission">
+<Frame>
   <img src="/images/v2/custom-permissions.png" alt="new permission" />
 </Frame>

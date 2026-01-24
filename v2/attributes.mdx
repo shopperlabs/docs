@@ -1,94 +1,400 @@
 ---
 title: Attributes
-description: Learn how to manage Attributes in your Shopper administration.
+description: Complete reference for the Attribute model, field types, values, and usage in Shopper.
 ---
 
-Attributes are crucial for creating variable products. Attributes can also be used to enhance the product filtering and selection process, 
-allowing customers to find and select products that meet their specific preferences or needs.
-
-An Attribute is a specification or characteristic of a product, for example, Color, Size, and Pattern are attributes of a T-Shirt.
-You can also create many attributes for a single product.
-
-In Shopper, attributes go beyond basic product descriptions—they highlight the unique value and features of each item, 
-helping customers understand what makes a product special. By leveraging attributes, you can create variable products, 
-enhance search and filtering options, and provide a more personalized shopping experience.
-
-<Frame caption="Attributes">
-  <img src="/images/v2/attributes.png" alt="Attributes" />
-</Frame>
+Attributes define product characteristics like Color, Size, or Material. They enable variable products, enhance filtering, and provide detailed product specifications.
 
 ## Models
 
-- [Attribute](#attribute)(`Shopper\Core\Models\Attribute`) represents characteristics of a product, such as **Size**, **Color**, **Material**, or any other feature that helps differentiate products
-- [AttributeValue](#attributevalue)(`Shopper\Core\Models\AttributeValue`) Model stores the specific values associated with an attribute. For example, if the attribute is "Color," the values might include "Red," "Blue," and "Green."
-- [AttributeProduct](#attributeproduct)(`Shopper\Core\Models\AttributeProduct`) Model acts as a pivot table that connects attributes and their values to specific products. This model is essential for creating variable products and managing product variations.
+Shopper uses three models to manage attributes:
 
-### Attribute
+```php
+Shopper\Core\Models\Attribute       // The attribute definition
+Shopper\Core\Models\AttributeValue  // Possible values for an attribute
+Shopper\Core\Models\AttributeProduct // Pivot linking attributes to products
+```
 
-| Name            | Type    | Required | Notes                                                     |
-|-----------------|---------|----------|-----------------------------------------------------------|
-| `id`            | autoinc |          | auto                                                      |
-| `name`          | string  | yes      |                                                           |
-| `slug`          | string  | no       | `Unique`, default value is generated using attribute name |
-| `icon`          | string  | no       |                                                           |
-| `description`   | string  | no       |                                                           |
-| `type`          | string  | yes      | `[FieldType](#attribute-types)`                           |
-| `is_enabled`    | bool    | no       | Default `false`                                           |
-| `is_searchable` | bool    | no       | Default `false`                                           |
-| `is_filterable` | bool    | no       | Default `false`                                           |
+```php
+use Shopper\Core\Models\Attribute;
 
-### AttributeValue
+// The model implements
+- Shopper\Core\Models\Contracts\Attribute
+```
 
-| Name           | Type    | Required | Notes                                                 |
-|----------------|---------|----------|-------------------------------------------------------|
-| `id`           | autoinc |          | auto                                                  |
-| `value`        | string  | yes      |                                                       |
-| `key`          | string  | yes      | `Unique`                                              |
-| `position`     | int     | no       | Default `1`                                           |
-| `attribute_id` | int     | yes      | int (`Attribute` object via the `attribute` relation) |
+## Database Schema
 
-### AttributeProduct
+### Attribute Table
 
-| Name                      | Type    | Required | Notes                                                  |
-|---------------------------|---------|----------|--------------------------------------------------------|
-| `id`                      | autoinc |          | auto                                                   |
-| `attribute_id`            | int     | yes      | int (`Attribute` object via the `attribute` relation)  |
-| `product_id`              | int     | yes      | int (`Product` object via the `product` relation)      |
-| `attribute_value_id`      | int     | no       | int (`AttributeValue` object via the `value` relation) |
-| `attribute_custome_value` | string  | no       | Custom value for attribute with no value id            |
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `name` | string | no | - | Attribute name |
+| `slug` | string | yes | auto | URL-friendly identifier (unique) |
+| `description` | string | yes | null | Attribute description |
+| `type` | string | no | - | Field type enum value |
+| `icon` | string | yes | null | Icon identifier |
+| `is_enabled` | boolean | no | false | Attribute visibility |
+| `is_searchable` | boolean | no | false | Include in search |
+| `is_filterable` | boolean | no | false | Show in filters |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
 
-## Attribute Types
+### AttributeValue Table
 
-Attributes can be of several types. And this allows you to define how they will be displayed when assigned to a product.
-The types are available via the `Shopper\Core\Enum\FieldType` Enum className and the available values are:
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `value` | string(50) | no | - | Display value |
+| `key` | string | no | - | Unique identifier key |
+| `position` | smallint | yes | 1 | Display order |
+| `attribute_id` | bigint | no | - | Foreign key to attribute |
 
-- `FieldType::Checkbox()` It represents multiple values that can be assigned to a product.
-- `FieldType::ColorPicker()` Multiple values as checkbox but for the color.
-- `FieldType::DatePicker()` Displays a date value in the preferred format.
-- `FieldType::RichText()` Rich Text Editor.
-- `FieldType::Select()` Displays an option to select a value.
-- `FieldType::Text()` A single-line input field for text.
-- `FieldType::Number()` Integer or Decimal value.
+### AttributeProduct Table (Pivot)
 
-## Create Attribute
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | no | Primary key |
+| `attribute_id` | bigint | no | Foreign key to attribute |
+| `product_id` | bigint | no | Foreign key to product |
+| `attribute_value_id` | bigint | yes | Foreign key to attribute value |
+| `attribute_custom_value` | longtext | yes | Custom value for text-based attributes |
 
-On the sidebar, navigate to **Products > Attributes** and Click on the "Create" button on the attributes page to display the form.
+## Field Types
 
-<Frame caption="Create Attribute">
-  <img src="/images/v2/attribute-form.png" alt="create attribute" />
-</Frame>
+Attributes use the `FieldType` enum to determine input behavior:
 
-Fill in your information and save the form to return to the list of attributes. Required fields are marked with an asterisk (*).
-If you use another interface (e.g. API) to save your Attribute, you can save directly using the Attribute Model
+```php
+use Shopper\Core\Enum\FieldType;
+
+FieldType::Checkbox     // Multiple selectable values
+FieldType::ColorPicker  // Color selection
+FieldType::DatePicker   // Date input
+FieldType::RichText     // Rich text editor
+FieldType::Select       // Single selection dropdown
+FieldType::Text         // Single-line text input
+FieldType::Number       // Numeric input
+```
+
+| Type | Database Value | Has Predefined Values | Description |
+|------|---------------|----------------------|-------------|
+| Checkbox | `checkbox` | Yes | Multiple values can be selected |
+| ColorPicker | `colorpicker` | Yes | Color values with picker |
+| DatePicker | `datepicker` | No | Date input field |
+| RichText | `richtext` | No | HTML content editor |
+| Select | `select` | Yes | Single value selection |
+| Text | `text` | No | Free text input |
+| Number | `number` | No | Integer or decimal input |
+
+### Type Checking Methods
+
+```php
+// Check if attribute accepts multiple values
+$attribute->hasMultipleValues(); // true for Checkbox, ColorPicker
+
+// Check if attribute uses single selection
+$attribute->hasSingleValue(); // true for Select
+
+// Check if attribute uses custom text input
+$attribute->hasTextValue(); // true for Text, Number, RichText, DatePicker
+
+// Get types that require predefined values
+Attribute::fieldsWithValues(); // [Checkbox, ColorPicker, Select]
+```
+
+## Relationships
+
+### Values
+
+```php
+// Get all values for an attribute
+$attribute->values; // Collection of AttributeValue models
+
+// Add a new value
+$attribute->values()->create([
+    'value' => 'Red',
+    'key' => 'color-red',
+    'position' => 1,
+]);
+
+// Create multiple values
+$attribute->values()->createMany([
+    ['value' => 'Small', 'key' => 'size-s', 'position' => 1],
+    ['value' => 'Medium', 'key' => 'size-m', 'position' => 2],
+    ['value' => 'Large', 'key' => 'size-l', 'position' => 3],
+]);
+```
+
+### Products
+
+```php
+// Get all products with this attribute
+$attribute->products;
+
+// Attach attribute to product with a predefined value
+$attribute->products()->attach($productId, [
+    'attribute_value_id' => $valueId,
+]);
+
+// Attach attribute to product with a custom value
+$attribute->products()->attach($productId, [
+    'attribute_custom_value' => 'Custom specification',
+]);
+```
+
+### Variants (AttributeValue)
+
+AttributeValue can be linked to product variants:
+
+```php
+// Get variants with this value
+$attributeValue->variants;
+
+// Link value to variant
+$attributeValue->variants()->attach($variantId);
+```
+
+## Query Scopes
+
+```php
+use Shopper\Core\Models\Attribute;
+
+// Get only enabled attributes
+Attribute::query()->enabled()->get();
+
+// Get filterable attributes (for storefront filters)
+Attribute::query()->isFilterable()->get();
+
+// Get searchable attributes
+Attribute::query()->isSearchable()->get();
+
+// Combine scopes
+Attribute::query()
+    ->enabled()
+    ->isFilterable()
+    ->with('values')
+    ->get();
+```
+
+## Status Management
+
+```php
+// Enable an attribute
+$attribute->updateStatus(true);
+
+// Disable an attribute
+$attribute->updateStatus(false);
+```
+
+## Display Helpers
+
+```php
+// Get formatted type label for display
+$attribute->type_formatted; // Returns translated label like "Checkbox"
+
+// Get all available types with labels
+Attribute::typesFields();
+// Returns: ['checkbox' => 'Checkbox', 'colorpicker' => 'Color Picker', ...]
+```
+
+## Working with AttributeProduct
+
+The `AttributeProduct` model provides a computed `real_value` accessor:
+
+```php
+use Shopper\Core\Models\AttributeProduct;
+
+$attributeProduct = AttributeProduct::query()->find($id);
+
+// Get the actual value (custom or from value relationship)
+$attributeProduct->real_value;
+// Returns attribute_custom_value if set, otherwise value->value
+```
+
+## Creating Attributes
+
+### Attribute with Predefined Values
 
 ```php
 use Shopper\Core\Models\Attribute;
 use Shopper\Core\Enum\FieldType;
 
-$attribute = Attribute::create([
+// Create a color attribute
+$color = Attribute::query()->create([
     'name' => 'Color',
     'slug' => 'color',
-    'type' => FieldType::Checkbox(),
-    'is_enabled'=> true,
+    'type' => FieldType::ColorPicker,
+    'is_enabled' => true,
+    'is_filterable' => true,
+]);
+
+// Add color values
+$color->values()->createMany([
+    ['value' => 'Red', 'key' => 'red', 'position' => 1],
+    ['value' => 'Blue', 'key' => 'blue', 'position' => 2],
+    ['value' => 'Green', 'key' => 'green', 'position' => 3],
 ]);
 ```
+
+### Attribute with Free Text
+
+```php
+// Create a text attribute (no predefined values needed)
+$material = Attribute::query()->create([
+    'name' => 'Material',
+    'slug' => 'material',
+    'type' => FieldType::Text,
+    'is_enabled' => true,
+    'is_searchable' => true,
+]);
+```
+
+## Assigning Attributes to Products
+
+```php
+use Shopper\Core\Models\Product;
+
+$product = Product::query()->find($id);
+
+// Assign attribute with predefined value (via options relationship)
+$product->options()->attach($attributeId, [
+    'attribute_value_id' => $valueId,
+]);
+
+// Assign attribute with custom value
+$product->options()->attach($attributeId, [
+    'attribute_custom_value' => '100% Cotton',
+]);
+
+// Get product attributes with values
+foreach ($product->options as $attribute) {
+    $valueId = $attribute->pivot->attribute_value_id;
+    $customValue = $attribute->pivot->attribute_custom_value;
+}
+```
+
+## Retrieving Attributes
+
+```php
+use Shopper\Core\Models\Attribute;
+
+// Get all enabled attributes with values
+$attributes = Attribute::query()
+    ->enabled()
+    ->with('values')
+    ->get();
+
+// Get filterable attributes for storefront
+$filters = Attribute::query()
+    ->enabled()
+    ->isFilterable()
+    ->with(['values' => fn ($q) => $q->orderBy('position')])
+    ->get();
+
+// Get attribute by slug
+$size = Attribute::query()
+    ->where('slug', 'size')
+    ->with('values')
+    ->firstOrFail();
+```
+
+## Observer Behavior
+
+The `AttributeObserver` handles cleanup when deleting:
+
+```php
+// When an attribute is deleted:
+// 1. All product associations are detached
+// 2. All attribute values are deleted
+
+$attribute->delete(); // Triggers observer cleanup
+```
+
+## Disabling Attribute Feature
+
+```php
+// config/shopper/features.php
+use Shopper\Enum\FeatureState;
+
+return [
+    'attribute' => FeatureState::Disabled,
+];
+```
+
+## Components
+
+Attribute components are part of the product configuration. To customize them:
+
+```bash
+php artisan shopper:component:publish product
+```
+
+Attribute-related components in `config/shopper/components/product.php`:
+
+```php
+use Shopper\Livewire;
+
+return [
+    'pages' => [
+        // ...
+        'attribute-index' => Livewire\Pages\Attribute\Browse::class,
+    ],
+    'components' => [
+        // ...
+        'slide-overs.attribute-form' => Livewire\SlideOvers\AttributeForm::class,
+        'slide-overs.choose-product-attributes' => Livewire\SlideOvers\ChooseProductAttributes::class,
+        'slide-overs.attribute-values' => Livewire\SlideOvers\AttributeValues::class,
+    ],
+];
+```
+
+## Storefront Example
+
+```php
+namespace App\Http\Controllers;
+
+use Shopper\Core\Models\Attribute;
+use Shopper\Core\Models\Product;
+
+class ProductFilterController extends Controller
+{
+    public function index()
+    {
+        // Get filterable attributes for sidebar
+        $filters = Attribute::query()
+            ->enabled()
+            ->isFilterable()
+            ->with(['values' => fn ($q) => $q->orderBy('position')])
+            ->get();
+
+        return view('products.index', compact('filters'));
+    }
+
+    public function filter(Request $request)
+    {
+        $query = Product::query()->publish();
+
+        // Apply attribute filters
+        foreach ($request->input('attributes', []) as $slug => $values) {
+            $query->whereHas('options', function ($q) use ($slug, $values) {
+                $q->whereHas('attribute', fn ($a) => $a->where('slug', $slug))
+                    ->whereIn('attribute_value_id', $values);
+            });
+        }
+
+        return $query->paginate(12);
+    }
+}
+```
+
+## Use Cases
+
+| Attribute Type | Example | Use Case |
+|----------------|---------|----------|
+| Checkbox | Size | Multiple sizes available for clothing |
+| ColorPicker | Color | Product color options |
+| Select | Material | Single material selection |
+| Text | SKU Suffix | Custom text per product |
+| Number | Weight | Numeric specifications |
+| DatePicker | Release Date | Product launch date |
+| RichText | Care Instructions | Detailed HTML content |

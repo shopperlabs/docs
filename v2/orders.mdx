@@ -1,197 +1,562 @@
 ---
 title: Orders
-description: Learn how to manage Orders in your Shopper administration.
+description: Complete reference for the Order model, items, addresses, shipping, refunds, and order management in Shopper.
 ---
 
-Orders are the heartbeat of your e-commerce store. They represent the culmination of your customers' journeys, from browsing products to completing purchases.
-Effectively managing orders is essential to ensuring a seamless experience for both your customers and your team.
-Order processing is one of the critical aspects of e-commerce business. Such activities as creating orders/create
-invoices/create shipments, and refunds (if necessary), should always be organized logically.
-
-This documentation serves as your comprehensive user guide to managing orders in Shopper.
-Whether you're an administrator or a store manager, you'll find everything you need to navigate the order management process with ease.
-
-The following pages will walk you through:
-
-- Viewing and filtering orders.
-- Create order.
-- Updating order statuses.
-- Managing customer information and order details.
-
-## Overview
-
-In Shopper, orders are typically created when a customer completes the checkout process on your store.
-When a customer places an order from your store, on the admin panel, the order status is generated from where the admin can further process the order.
-
-However, you also have the ability to update the Order Component to create and manage orders manually through the admin panel.
-Orders are accessible to users with the appropriate permissions, ensuring that your store's operations remain secure and organized.
-
-<Frame caption="Orders">
-  <img src="/images/v2/orders.png" alt="Shopper Orders" />
-</Frame>
+Orders represent customer purchases and are central to your e-commerce operations. Shopper provides a comprehensive order management system with support for items, addresses, shipping, refunds, and status tracking.
 
 ## Models
 
-Order management and processing in Shopper are powered by a set of Models that work together seamlessly. These Models represent the core entities 
-involved in handling orders, from creation to fulfillment.
+Shopper uses five models to manage orders:
 
-- [Order](#order) (`Shopper\Core\Models\Order`) represents a customer's purchase, including details like order status, payment method, and total amount.
-- [OrderItem](#orderitem) (`Shopper\Core\Models\OrderItem`) tracks individual products included in an order, along with quantities and prices.
-- [OrderAddress](#orderaddress) (`Shopper\Core\Models\OrderAddress`) responsible for managing the shipping and billing addresses associated with an order
-- [OrderRefund](#orderrefund) (`Shopper\Core\Models\OrderRefund`) manages refund requests and processes, including amounts and reasons for refunds.
-- [OrderShipping](#ordershipping) (`Shopper\Core\Models\OrderShipping`)
-
-### Order
-
-As mentioned above, initially on Shopper it is not possible to create orders from the administration area. Orders can only be placed from your customer site, and will be available and processed in your administration area.
-However, you have the option of publishing order-related [components](#components) to customize them to your needs.
-
-#### Fields
-
-| Name                  | Type      | Required | Notes                                                                        |
-|-----------------------|-----------|----------|------------------------------------------------------------------------------|
-| `id`                  | autoinc   |          | auto                                                                         |
-| `number`              | string    | yes      | Order number, can be generate using the `generate_number()` helper           |
-| `price_amount`        | int       | no       | The order price, if not set the price can be determine using the items price |
-| `status`              | string    | yes      | `[OrderStatus](#enums-types)` Enum value                                     |
-| `currency_code`       | string    | yes      |                                                                              |
-| `notes`               | text      | no       |                                                                              |
-| `parent_order_id`     | int       | no       | int (`Order` object via the `parent` relation)                               |
-| `payment_method_id`   | int       | no       | int (`PaymentMethod` object via the `paymentMethod` relation)                |
-| `channel_id`          | int       | no       | int (`Channel` object via the `channel` relation)                            |
-| `customer_id`         | int       | no       | int (`User` object via the `customer` relation)                              |
-| `zone_id`             | int       | no       | int (`Zone` object via the `zone` relation)                                  |
-| `billing_address_id`  | int       | no       | int (`OrderAddress` object via the `billingAddress` relation)                |
-| `shipping_address_id` | int       | no       | int (`OrderAddress` object via the `shippingAddress` relation)               |
-| `shipping_option_id`  | int       | no       | int (`CarrierOption` object via the `shippingOption` relation)               |
-| `canceled_at`         | timestamp | no       |                                                                              |
-
-#### Create an Order
-
-An order is created when a customer visits your online store, selects one or more products, and completes the checkout process.
-When a customer places an order through the storefront, the order details are automatically generated in the admin panel. 
-From there, administrators can view, update, and process the order as needed.
+```php
+Shopper\Core\Models\Order          // The main order
+Shopper\Core\Models\OrderItem      // Products in the order
+Shopper\Core\Models\OrderAddress   // Billing and shipping addresses
+Shopper\Core\Models\OrderShipping  // Shipping and tracking information
+Shopper\Core\Models\OrderRefund    // Refund requests
+```
 
 ```php
 use Shopper\Core\Models\Order;
 
-$order = Order::query()->create([
-    'number' => generate_number(),
-    'customer_id' => Auth::id(),
-    'currency_code' => current_currency(),
+// The model implements
+- Shopper\Core\Models\Contracts\Order
+
+// Uses traits
+- SoftDeletes
+```
+
+### Extending the Model
+
+```php
+namespace App\Models;
+
+use Shopper\Core\Models\Order as BaseOrder;
+
+class Order extends BaseOrder
+{
+    // Add your customizations here
+}
+```
+
+Update `config/shopper/models.php`:
+
+```php
+return [
+    'order' => \App\Models\Order::class,
+];
+```
+
+## Database Schema
+
+### Order Table
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `number` | string(32) | no | - | Order number |
+| `price_amount` | integer | yes | null | Order price override (in cents) |
+| `status` | string(32) | no | pending | Order status enum |
+| `currency_code` | string | no | - | Currency code (USD, EUR, etc.) |
+| `notes` | text | yes | null | Order notes |
+| `parent_order_id` | bigint | yes | null | FK to parent order |
+| `payment_method_id` | bigint | yes | null | FK to payment method |
+| `channel_id` | bigint | yes | null | FK to channel |
+| `customer_id` | bigint | yes | null | FK to user |
+| `zone_id` | bigint | yes | null | FK to zone |
+| `billing_address_id` | bigint | yes | null | FK to order address |
+| `shipping_address_id` | bigint | yes | null | FK to order address |
+| `shipping_option_id` | bigint | yes | null | FK to carrier option |
+| `canceled_at` | timestamp | yes | null | Cancellation date |
+| `deleted_at` | timestamp | yes | null | Soft delete timestamp |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+### OrderItem Table
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | no | Primary key |
+| `name` | string | yes | Product name at time of purchase |
+| `sku` | string | yes | Product SKU at time of purchase |
+| `quantity` | integer | no | Quantity ordered |
+| `unit_price_amount` | integer | no | Unit price (in cents) |
+| `product_id` | bigint | no | Polymorphic relation ID |
+| `product_type` | string | no | Polymorphic relation type |
+| `order_id` | bigint | no | FK to order |
+
+### OrderAddress Table
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | no | Primary key |
+| `customer_id` | bigint | no | FK to user |
+| `first_name` | string | no | First name |
+| `last_name` | string | no | Last name |
+| `company` | string | yes | Company name |
+| `street_address` | string | no | Street address |
+| `street_address_plus` | string | yes | Additional address line |
+| `postal_code` | string | no | Postal/ZIP code |
+| `city` | string | no | City |
+| `state` | string | yes | State/province/region |
+| `phone` | string | yes | Phone number |
+| `country_name` | string | yes | Country name |
+
+### OrderShipping Table
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | no | Primary key |
+| `shipped_at` | datetime | no | Shipment date |
+| `received_at` | datetime | yes | Delivery date |
+| `returned_at` | datetime | yes | Return date |
+| `tracking_number` | string | yes | Carrier tracking number |
+| `tracking_url` | string | yes | Tracking URL |
+| `voucher` | json | yes | Shipping voucher data |
+| `order_id` | bigint | no | FK to order |
+| `carrier_id` | bigint | yes | FK to carrier |
+
+### OrderRefund Table
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | no | Primary key |
+| `refund_reason` | string | yes | Refund reason |
+| `refund_amount` | integer | yes | Refund amount (in cents) |
+| `status` | string | no | Refund status enum |
+| `currency` | string | no | Currency code |
+| `notes` | string | yes | Admin notes |
+| `order_id` | bigint | no | FK to order |
+| `user_id` | bigint | yes | FK to user processing refund |
+
+## Order Status
+
+The `OrderStatus` enum defines available order states:
+
+```php
+use Shopper\Core\Enum\OrderStatus;
+
+OrderStatus::New        // new
+OrderStatus::Pending    // pending (default)
+OrderStatus::Register   // registered
+OrderStatus::Paid       // paid
+OrderStatus::Shipped    // shipped
+OrderStatus::Delivered  // delivered
+OrderStatus::Completed  // completed
+OrderStatus::Cancelled  // cancelled
+OrderStatus::Archived   // archived
+```
+
+| Status | Database Value | Color | Description |
+|--------|---------------|-------|-------------|
+| New | `new` | info | Newly placed order |
+| Pending | `pending` | warning | Awaiting processing |
+| Register | `registered` | primary | Order registered |
+| Paid | `paid` | green | Payment received |
+| Shipped | `shipped` | indigo | Order shipped |
+| Delivered | `delivered` | sky | Order delivered |
+| Completed | `completed` | teal | Order fulfilled |
+| Cancelled | `cancelled` | danger | Order cancelled |
+| Archived | `archived` | gray | Order archived |
+
+### Status Check Methods
+
+```php
+$order->isPending();     // true if status is Pending
+$order->isRegister();    // true if status is Register
+$order->isPaid();        // true if status is Paid
+$order->isShipped();     // true if status is Shipped
+$order->isCompleted();   // true if status is Completed
+$order->isNotCancelled(); // true if status is NOT Cancelled
+$order->canBeCancelled(); // true if Completed or New
+```
+
+## Refund Status
+
+The `OrderRefundStatus` enum defines refund states:
+
+```php
+use Shopper\Core\Enum\OrderRefundStatus;
+
+OrderRefundStatus::Pending        // pending (default)
+OrderRefundStatus::Awaiting       // awaiting
+OrderRefundStatus::Treatment      // treatment
+OrderRefundStatus::Partial_Refund // partial_refund
+OrderRefundStatus::Refunded       // refunded
+OrderRefundStatus::Rejected       // rejected
+OrderRefundStatus::Cancelled      // cancelled
+```
+
+## Relationships
+
+### Customer
+
+```php
+// Get the customer who placed the order
+$order->customer; // Returns User model
+
+// Query orders by customer
+Order::query()
+    ->where('customer_id', $userId)
+    ->get();
+```
+
+### Items
+
+```php
+// Get all items in the order
+$order->items; // Collection of OrderItem models
+
+// Add an item
+$order->items()->create([
+    'name' => $product->name,
+    'sku' => $product->sku,
+    'quantity' => 2,
+    'unit_price_amount' => $product->price_amount,
+    'product_id' => $product->id,
+    'product_type' => get_class($product),
+]);
+
+// Get item total (computed)
+$item->total; // unit_price_amount * quantity
+```
+
+### Addresses
+
+```php
+// Get shipping address
+$order->shippingAddress; // OrderAddress model
+
+// Get billing address
+$order->billingAddress; // OrderAddress model
+
+// Access full name
+$order->shippingAddress->full_name; // "John Doe"
+```
+
+### Shipping
+
+```php
+// Get shipping option
+$order->shippingOption; // CarrierOption model
+
+// Create shipping record
+OrderShipping::query()->create([
+    'order_id' => $order->id,
+    'carrier_id' => $carrierId,
+    'shipped_at' => now(),
+    'tracking_number' => 'TRACK123456',
+    'tracking_url' => 'https://carrier.com/track/TRACK123456',
 ]);
 ```
 
-But to get to this stage, you need to add a product to your basket, define a delivery and billing address, select your payment method and place your order.
-Don't worry, Shopper provides [Starter kits](https://github.com/shopperlabs/starter-kits) like Breeze to give you a code base for setting up your storefront.
+### Refund
 
-#### Front a storefront
+```php
+// Get order refund
+$order->refund; // OrderRefund model (HasOne)
 
-**Step 1** > Open the Product Detail page and **Add the product** to the cart as shown below.
+// Create a refund
+$order->refund()->create([
+    'refund_reason' => 'Product damaged',
+    'refund_amount' => $order->total(),
+    'currency' => $order->currency_code,
+    'status' => OrderRefundStatus::Pending,
+]);
+```
 
-<Frame caption="Product details">
-  <img src="/images/v2/store-product-detail.png" alt="product storefront" />
-</Frame>
+### Channel and Zone
 
-**Step 2** > Now proceed to checkout inside the Shopping Cart as shown below.
+```php
+// Get sales channel
+$order->channel; // Channel model
 
-<Frame caption="Shopping cart">
-  <img src="/images/v2/cart.png" alt="Shopping cart storefront" />
-</Frame>
+// Get zone (market)
+$order->zone; // Zone model
+```
 
-**Step 3** > Next, you will get redirected to the checkout page and fill in the necessary information regarding the Billing Address & Shipping Address as shown below.
+### Parent/Child Orders
 
-<Frame caption="Checkout billing address">
-  <img src="/images/v2/cart-step-address.png" alt="checkout address storefront" />
-</Frame>
+```php
+// Get parent order (for split orders)
+$order->parent; // Order model
 
-**Step 4** > After confirming add the shipping method and proceed to the payment step as shown in the below image.
+// Get child orders
+$order->children; // Collection of Order models
+```
 
-<Frame caption="Checkout shipping method">
-  <img src="/images/v2/cart-step-shipping.png" alt="checkout shipping storefront" />
-</Frame>
+## Computed Values
 
-**Step 5** > After choose your payment method, click on Place Order as shown in the below image.
+### Order Total
 
-<Frame caption="Checkout payment">
-  <img src="/images/v2/cart-step-payment.png" alt="checkout payment storefront" />
-</Frame>
+```php
+// Get order total from items
+$order->total(); // Sum of all item totals (in cents)
 
-**Step 6** > After clicking on Place Order, the next page will open like below then you will get an Order ID.
+// Get total as Price object
+$order->total_amount; // Price object with formatting
+```
 
-<Frame caption="Order place">
-  <img src="/images/v2/order-place.png" alt="order place storefront" />
-</Frame>
+## Events
 
-This order will be available in your administration cpanel.
+Order lifecycle events are dispatched via the `OrderObserver`:
 
-<Frame caption="Orders List with zones">
-  <img src="/images/v2/orders-with-zone.png" alt="Orders with zone" />
-</Frame>
+```php
+use Shopper\Core\Events\Orders\OrderCreated;
+use Shopper\Core\Events\Orders\OrderDeleted;
+use Shopper\Core\Events\Orders\OrderCompleted;
+use Shopper\Core\Events\Orders\OrderPaid;
+use Shopper\Core\Events\Orders\OrderRegistered;
+use Shopper\Core\Events\Orders\OrderCancel;
+use Shopper\Core\Events\Orders\OrderArchived;
+use Shopper\Core\Events\Orders\AddNoteToOrder;
+```
 
-[Zones](/v2/zones) are markets in which customers can place orders. By default, zones are not configured, but if you plan to 
-sell in different zones (Europe, Africa, or even a specific country such as England) you should configure them via your admin panel
+### Listening to Events
 
-### OrderItem
+```php
+// In your EventServiceProvider
+protected $listen = [
+    OrderCreated::class => [
+        SendOrderConfirmationEmail::class,
+        NotifyAdminOfNewOrder::class,
+    ],
+    OrderCompleted::class => [
+        SendOrderCompletedEmail::class,
+        UpdateInventory::class,
+    ],
+    OrderPaid::class => [
+        GenerateInvoice::class,
+    ],
+];
+```
 
-| Name                | Type    | Required | Notes                                                           |
-|---------------------|---------|----------|-----------------------------------------------------------------|
-| `id`                | autoinc |          | auto                                                            |
-| `name`              | string  | no       | The product name at the moment of buying                        |
-| `sku`               | string  | no       | Unique, default value is generated using collection name        |
-| `product`           | morph   | yes      | morph relation generate `product_id` and `product_type` columns |
-| `quantity`          | int     | yes      | Unique, default value is generated using collection name        |
-| `unit_price_amount` | int     | yes      | Unique, default value is generated using collection name        |
-| `order_id`          | int     | yes      | int (`Order` object via the `order` relation)                   |
+### Event Payload
 
-### OrderAddress
+```php
+// All order events contain the order instance
+class OrderCompleted implements ShouldQueueAfterCommit
+{
+    public function __construct(
+        public Order $order
+    ) {}
+}
+```
 
-| Name                  | Type    | Required | Notes                                           |
-|-----------------------|---------|----------|-------------------------------------------------|
-| `id`                  | autoinc |          | auto                                            |
-| `customer_id`         | int     | yes      | int (`User` object via the `customer` relation) |
-| `last_name`           | string  | yes      |                                                 |
-| `first_name`          | string  | yes      |                                                 |
-| `first_name`          | string  | yes      |                                                 |
-| `company`             | string  | no       |                                                 |
-| `street_address`      | string  | yes      |                                                 |
-| `street_address_plus` | string  | no       |                                                 |
-| `postal_code`         | string  | yes      |                                                 |
-| `city`                | string  | yes      |                                                 |
-| `phone`               | string  | yes      |                                                 |
-| `country_name`        | string  | no       | The country name                                |
+## Creating Orders
 
-### OrderRefund
+### Basic Order
 
-| Name       | Type    | Required | Notes                                            |
-|------------|---------|----------|--------------------------------------------------|
-| `id`       | autoinc |          | auto                                             |
-| `reason`   | string  | no       | The reason of the refund                         |
-| `amount`   | int     | yes      | The amount to refund                             |
-| `currency` | string  | yes      |                                                  |
-| `status`   | string  | yes      | `[OrderRefundStatus](#enums-types)` Enum value   |
-| `notes`    | string  | no       | Other notes for the refund: by the administrator |
-| `order_id` | int     | yes      | int (`Order` object via the `order` relation)    |
-| `user_id`  | int     | no       | int (`User` object via the `customer` relation)  |
+```php
+use Shopper\Core\Models\Order;
+use Shopper\Core\Enum\OrderStatus;
 
-### OrderShipping
+$order = Order::query()->create([
+    'number' => generate_number(),
+    'customer_id' => auth()->id(),
+    'currency_code' => current_currency(),
+    'channel_id' => $channelId,
+    'status' => OrderStatus::New,
+]);
+```
 
-| Name              | Type     | Required | Notes                                                               |
-|-------------------|----------|----------|---------------------------------------------------------------------|
-| `id`              | autoinc  |          | auto                                                                |
-| `shipped_at`      | datetime | yes      |                                                                     |
-| `received_at`     | datetime | no       |                                                                     |
-| `returned_at`     | datetime | no       |                                                                     |
-| `tracking_number` | string   | no       |                                                                     |
-| `tracking_url`    | string   | no       |                                                                     |
-| `voucher`         | json     | no       |                                                                     |
-| `order_id`        | int      | yes      | int (`Order` object via the `order` relation)                       |
-| `carrier_id`      | int      | no       | int (`Carrier` object via the `carrier` relation) Eg: DHL, UPS, etc |
+### Complete Order with Items and Addresses
 
-## Enums Types
+```php
+// Create addresses
+$shippingAddress = OrderAddress::query()->create([
+    'customer_id' => auth()->id(),
+    'first_name' => 'John',
+    'last_name' => 'Doe',
+    'street_address' => '123 Main St',
+    'city' => 'New York',
+    'postal_code' => '10001',
+    'country_name' => 'United States',
+    'phone' => '+1234567890',
+]);
 
-...
+$billingAddress = OrderAddress::query()->create([
+    'customer_id' => auth()->id(),
+    'first_name' => 'John',
+    'last_name' => 'Doe',
+    'street_address' => '123 Main St',
+    'city' => 'New York',
+    'postal_code' => '10001',
+    'country_name' => 'United States',
+]);
+
+// Create order
+$order = Order::query()->create([
+    'number' => generate_number(),
+    'customer_id' => auth()->id(),
+    'currency_code' => 'USD',
+    'shipping_address_id' => $shippingAddress->id,
+    'billing_address_id' => $billingAddress->id,
+    'shipping_option_id' => $carrierOptionId,
+    'zone_id' => $zoneId,
+]);
+
+// Add items from cart
+foreach ($cart->items as $cartItem) {
+    $order->items()->create([
+        'name' => $cartItem->product->name,
+        'sku' => $cartItem->product->sku,
+        'quantity' => $cartItem->quantity,
+        'unit_price_amount' => $cartItem->product->price_amount,
+        'product_id' => $cartItem->product->id,
+        'product_type' => get_class($cartItem->product),
+    ]);
+}
+```
+
+## Retrieving Orders
+
+```php
+use Shopper\Core\Models\Order;
+
+// Get all orders with relationships
+$orders = Order::query()
+    ->with(['customer', 'items', 'shippingAddress'])
+    ->latest()
+    ->get();
+
+// Get orders by status
+$pendingOrders = Order::query()
+    ->where('status', OrderStatus::Pending)
+    ->get();
+
+// Get customer's orders
+$customerOrders = Order::query()
+    ->where('customer_id', $customerId)
+    ->with('items.product')
+    ->latest()
+    ->paginate(10);
+
+// Get order by number
+$order = Order::query()
+    ->where('number', $orderNumber)
+    ->with(['items', 'shippingAddress', 'billingAddress', 'refund'])
+    ->firstOrFail();
+
+// Get orders for a channel
+$channelOrders = Order::query()
+    ->where('channel_id', $channelId)
+    ->get();
+
+// Get orders for a zone
+$zoneOrders = Order::query()
+    ->where('zone_id', $zoneId)
+    ->get();
+```
+
+## Order Number Generation
+
+Use the `generate_number()` helper to create unique order numbers:
+
+```php
+$orderNumber = generate_number();
+// Returns something like: "ORD-20240115-001234"
+```
 
 ## Components
 
-...
+```bash
+php artisan shopper:component:publish order
+```
+
+Creates `config/shopper/components/order.php`:
+
+```php
+use Shopper\Livewire;
+
+return [
+    'pages' => [
+        'order-index' => Livewire\Pages\Order\Index::class,
+        'order-detail' => Livewire\Pages\Order\Detail::class,
+    ],
+    'components' => [
+        //
+    ],
+];
+```
+
+## Storefront Example
+
+```php
+namespace App\Http\Controllers;
+
+use Shopper\Core\Models\Order;
+use Shopper\Core\Models\OrderAddress;
+use Shopper\Core\Enum\OrderStatus;
+
+class CheckoutController extends Controller
+{
+    public function store(Request $request)
+    {
+        $validated = $request->validate([
+            'shipping.first_name' => 'required|string',
+            'shipping.last_name' => 'required|string',
+            'shipping.street_address' => 'required|string',
+            'shipping.city' => 'required|string',
+            'shipping.postal_code' => 'required|string',
+            'shipping_option_id' => 'required|exists:carrier_options,id',
+        ]);
+
+        // Create shipping address
+        $shippingAddress = OrderAddress::query()->create([
+            'customer_id' => auth()->id(),
+            ...$validated['shipping'],
+        ]);
+
+        // Create order
+        $order = Order::query()->create([
+            'number' => generate_number(),
+            'customer_id' => auth()->id(),
+            'currency_code' => current_currency(),
+            'shipping_address_id' => $shippingAddress->id,
+            'billing_address_id' => $shippingAddress->id,
+            'shipping_option_id' => $validated['shipping_option_id'],
+            'channel_id' => current_channel()->id,
+        ]);
+
+        // Add cart items
+        foreach (Cart::items() as $item) {
+            $order->items()->create([
+                'name' => $item->product->name,
+                'sku' => $item->product->sku,
+                'quantity' => $item->quantity,
+                'unit_price_amount' => $item->product->price_amount,
+                'product_id' => $item->product->id,
+                'product_type' => get_class($item->product),
+            ]);
+        }
+
+        Cart::clear();
+
+        return redirect()->route('orders.show', $order);
+    }
+
+    public function show(Order $order)
+    {
+        abort_unless($order->customer_id === auth()->id(), 403);
+
+        return view('orders.show', [
+            'order' => $order->load(['items.product', 'shippingAddress']),
+        ]);
+    }
+}
+```
+
+## Order Status Flow
+
+| From Status | Possible Transitions |
+|-------------|---------------------|
+| New | Pending, Cancelled |
+| Pending | Register, Paid, Cancelled |
+| Register | Paid, Cancelled |
+| Paid | Shipped |
+| Shipped | Delivered |
+| Delivered | Completed |
+| Completed | Archived |
+| Cancelled | (terminal state) |

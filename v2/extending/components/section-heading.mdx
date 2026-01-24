@@ -1,0 +1,139 @@
+---
+title: 'Section Heading'
+description: 'Section titles with optional descriptions for organizing content'
+---
+
+import { ComponentPreview, PreviewSectionHeading, PreviewCard } from '/snippets/component-preview.jsx'
+
+The Section Heading component is used to introduce sections within a page. It displays a title with an optional description, providing context for the content that follows.
+
+## Preview
+
+<ComponentPreview centered={false}>
+  <PreviewSectionHeading
+    title="General Information"
+    description="Basic details about the product including name, description, and pricing."
+  />
+</ComponentPreview>
+
+## Usage
+
+```blade
+<x-shopper::section-heading
+    title="General Information"
+    description="Basic details about the product including name, description, and pricing."
+/>
+```
+
+## Props
+
+<ParamField path="title" type="string" required>
+  The section title text.
+</ParamField>
+
+<ParamField path="description" type="string" default="null">
+  Optional description text displayed below the title.
+</ParamField>
+
+## Examples
+
+### Title Only
+
+<ComponentPreview centered={false}>
+  <PreviewSectionHeading title="Pricing" />
+</ComponentPreview>
+
+```blade
+<x-shopper::section-heading title="Pricing" />
+```
+
+### With Description
+
+<ComponentPreview centered={false}>
+  <PreviewSectionHeading
+    title="Inventory"
+    description="Manage stock levels, SKU, and warehouse locations."
+  />
+</ComponentPreview>
+
+```blade
+<x-shopper::section-heading
+    title="Inventory"
+    description="Manage stock levels, SKU, and warehouse locations."
+/>
+```
+
+### Inside a Card
+
+The Section Heading is automatically used by the Card component when you pass a title prop:
+
+<ComponentPreview centered={false}>
+  <PreviewCard
+    title="Media"
+    description="Upload images and videos for this product."
+  >
+    <div className="h-24 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 flex items-center justify-center">
+      <span className="text-gray-500 dark:text-gray-400">Drop files here</span>
+    </div>
+  </PreviewCard>
+</ComponentPreview>
+
+```blade
+<x-shopper::card
+    title="Media"
+    description="Upload images and videos for this product."
+>
+    <div class="...">
+        <!-- File upload zone -->
+    </div>
+</x-shopper::card>
+```
+
+### Standalone Usage
+
+You can also use the section heading independently for custom layouts:
+
+```blade
+<div class="space-y-6">
+    <x-shopper::section-heading
+        title="Customer Details"
+        description="Personal information and contact details."
+    />
+
+    <div class="grid grid-cols-2 gap-4">
+        <!-- Form fields -->
+    </div>
+
+    <x-shopper::section-heading
+        title="Shipping Address"
+        description="Where orders will be delivered."
+    />
+
+    <div class="grid grid-cols-2 gap-4">
+        <!-- Address fields -->
+    </div>
+</div>
+```
+
+## Blade Component Source
+
+The Section Heading component is located at `packages/admin/resources/views/components/section-heading.blade.php`:
+
+```blade
+@props([
+    'title',
+    'description' => null,
+])
+
+<div {{ $attributes }}>
+    <x-filament::section.heading class="font-heading font-semibold text-gray-950 dark:text-white">
+        {{ $title }}
+    </x-filament::section.heading>
+
+    @if ($description)
+        <x-filament::section.description class="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
+            {{ $description }}
+        </x-filament::section.description>
+    @endif
+</div>
+```

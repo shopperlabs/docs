@@ -1,0 +1,221 @@
+---
+title: 'Empty State'
+description: 'Placeholder component for displaying when no data exists'
+---
+
+import { ComponentPreview, PreviewEmptyState } from '/snippets/component-preview.jsx'
+
+The Empty State component is used to display a helpful message when there's no data to show. It combines an illustration, title, description, and an optional call-to-action button.
+
+## Preview
+
+<ComponentPreview centered={false}>
+  <PreviewEmptyState
+    title="No products yet"
+    content="Get started by creating your first product. Products are the items you sell in your store."
+    buttonText="Create Product"
+  />
+</ComponentPreview>
+
+## Usage
+
+```blade
+<x-shopper::empty-state
+    title="No products yet"
+    content="Get started by creating your first product."
+    button="Create Product"
+    permission="add_products"
+    :url="route('shopper.products.create')"
+>
+    <img src="{{ asset('images/empty-products.svg') }}" alt="" class="h-auto w-full max-w-xs" />
+</x-shopper::empty-state>
+```
+
+## Props
+
+<ParamField path="title" type="string" required>
+  The main heading text for the empty state.
+</ParamField>
+
+<ParamField path="content" type="string" required>
+  Descriptive text explaining the empty state and what action can be taken.
+</ParamField>
+
+<ParamField path="button" type="string | false" default="false">
+  Text for the call-to-action button. Set to `false` to hide the button.
+</ParamField>
+
+<ParamField path="permission" type="string | false" default="false">
+  Permission name required to show the button. Uses Laravel's `@can` directive.
+</ParamField>
+
+<ParamField path="url" type="string | false" default="false">
+  URL for the button link. Use this for navigation to a create page.
+</ParamField>
+
+<ParamField path="panel" type="string | null" default="null">
+  Panel name to dispatch an event for opening a slide-over or modal. Alternative to `url`.
+</ParamField>
+
+## Examples
+
+### Basic Empty State
+
+<ComponentPreview centered={false}>
+  <PreviewEmptyState
+    title="No orders found"
+    content="When customers place orders, they will appear here."
+  />
+</ComponentPreview>
+
+```blade
+<x-shopper::empty-state
+    title="No orders found"
+    content="When customers place orders, they will appear here."
+>
+    <img src="{{ asset('images/empty-orders.svg') }}" alt="" />
+</x-shopper::empty-state>
+```
+
+### With URL Action
+
+```blade
+<x-shopper::empty-state
+    title="No categories"
+    content="Categories help organize your products for easier browsing."
+    button="Add Category"
+    permission="add_categories"
+    :url="route('shopper.categories.create')"
+>
+    <img src="{{ asset('images/empty-categories.svg') }}" alt="" />
+</x-shopper::empty-state>
+```
+
+### With Panel Action
+
+Use a panel action to open a slide-over or modal instead of navigating:
+
+```blade
+<x-shopper::empty-state
+    title="No attributes"
+    content="Attributes let you define extra product characteristics like color or size."
+    button="Create Attribute"
+    permission="add_attributes"
+    :panel="json_encode(['name' => 'attribute-form'])"
+>
+    <img src="{{ asset('images/empty-attributes.svg') }}" alt="" />
+</x-shopper::empty-state>
+```
+
+### Without Button
+
+When you don't want to show an action button:
+
+<ComponentPreview centered={false}>
+  <PreviewEmptyState
+    title="No reviews yet"
+    content="Reviews will appear here once customers start leaving feedback on their purchases."
+  />
+</ComponentPreview>
+
+```blade
+<x-shopper::empty-state
+    title="No reviews yet"
+    content="Reviews will appear here once customers start leaving feedback."
+>
+    <img src="{{ asset('images/empty-reviews.svg') }}" alt="" />
+</x-shopper::empty-state>
+```
+
+### Custom Slot Content
+
+The default slot is used for the illustration on the left side:
+
+```blade
+<x-shopper::empty-state
+    title="No discounts"
+    content="Create discount codes to offer promotions to your customers."
+    button="Create Discount"
+    permission="add_discounts"
+    :url="route('shopper.discounts.create')"
+>
+    {{-- Custom SVG or image --}}
+    <svg class="h-40 w-40 text-gray-400" ...>
+        <!-- Your custom illustration -->
+    </svg>
+</x-shopper::empty-state>
+```
+
+## Usage in Livewire Components
+
+Empty states are typically rendered conditionally when a collection is empty:
+
+```blade
+@if ($products->isEmpty())
+    <x-shopper::empty-state
+        title="No products"
+        content="Start building your catalog by adding your first product."
+        button="Add Product"
+        permission="add_products"
+        :url="route('shopper.products.create')"
+    >
+        <img src="{{ asset('images/empty-products.svg') }}" alt="" />
+    </x-shopper::empty-state>
+@else
+    {{-- Product list/table --}}
+@endif
+```
+
+## Blade Component Source
+
+The Empty State component is located at `packages/admin/resources/views/components/empty-state.blade.php`:
+
+```blade
+@props([
+    'title',
+    'content',
+    'button' => false,
+    'permission' => false,
+    'url' => false,
+    'panel' => null,
+])
+
+<div
+    {{ $attributes->twMerge(['class' => 'relative w-full lg:flex lg:items-center py-8 lg:py-12']) }}
+>
+    <div class="relative flex w-full justify-center lg:block lg:w-1/2">
+        {{ $slot }}
+    </div>
+
+    <div class="relative mt-10 flex w-full items-center justify-center lg:mt-0 lg:w-1/2 lg:py-20">
+        <div class="w-full text-center sm:max-w-md lg:text-left">
+            <h3
+                class="font-heading text-lg font-medium text-gray-900 sm:text-lg sm:leading-7 lg:text-2xl dark:text-white"
+            >
+                {{ $title }}
+            </h3>
+            <p class="mt-4 text-base text-gray-500 dark:text-gray-400">
+                {{ $content }}
+            </p>
+
+            @if ($permission)
+                @can($permission)
+                    @if ($url)
+                        <x-filament::button tag="a" :href="$url" class="mt-5">
+                            {{ $button }}
+                        </x-filament::button>
+                    @elseif ($panel)
+                        <x-filament::button
+                            type="button"
+                            wire:click="$dispatch('openPanel', {{ $panel }})"
+                            class="mt-5"
+                        >
+                            {{ $button }}
+                        </x-filament::button>
+                    @endif
+                @endcan
+            @endif
+        </div>
+    </div>
+</div>
+```

@@ -37,6 +37,7 @@ The model used is `Shopper\Core\Models\Inventory`.
 | `street_address_plus` | string  | no            | The second address details (optional)                                                                     |
 | `postal_code`         | string  | yes           | National identification code. (optional)                                                                  |
 | `city`                | string  | yes           | The city/settlement                                                                                       |
+| `state`              | string  | no            | Nullable, the state/province/region                                                                       |
 | `phone_number`        | string  | no            | Nullable                                                                                                  |
 | `priority`            | integer | default (`0`) | N/A                                                                                                       |
 | `latitude`            | decimal | no            | Nullable, GPS latitude coordinates                                                                        |
@@ -56,19 +57,21 @@ php artisan shopper:component:publish setting
 This file contains all Livewire components for settings. Here is only the list of inventory components
 
 ```php
+use Shopper\Livewire\Components;
 use Shopper\Livewire\Pages;
 
 return [
 
     'pages' => [
         // ...
-        'inventory-index' => Pages\Settings\Locations\Index::class,
-        'inventory-create' => Pages\Settings\Locations\Create::class,
-        'inventory-edit' => Pages\Settings\Locations\Edit::class,
+        'location-index' => Pages\Settings\Locations\Index::class,
+        'location-create' => Pages\Settings\Locations\Create::class,
+        'location-edit' => Pages\Settings\Locations\Edit::class,
         // ...
-    ];
+    ],
 
     'components' => [
+        'settings.locations.form' => Components\Settings\Locations\InventoryForm::class,
         // ...
     ],
 
@@ -85,7 +88,7 @@ In your administration area you must click on the "cog" icon to display the sett
 
 From your admin panel, on the blue sidebar click on the cog icon, go to `Settings > Locations`.
 
-<Frame caption="Settings > Locations">
+<Frame>
   <img src="/images/v2/setting-locations.png" alt="Setting location" />
 </Frame>
 
@@ -98,7 +101,7 @@ To create a new location, in your Locations page:
 - Fill all the required fields
 - Click the "Save" button
 
-<Frame caption="Create location">
+<Frame>
   <img src="/images/v2/setting-location-create.png" alt="Add location" />
 </Frame>
 
@@ -120,7 +123,7 @@ To set a default location:
 - Click on the "_Edit_" icon for the location you want to set as default
 - Toggle the **Set as default inventory** and hit the save button
 
-<Frame caption="Choose default location">
+<Frame>
   <img src="/images/v2/setting-location-default.png" alt="Default location" />
 </Frame>
 

@@ -1,7 +1,8 @@
 {
     "$schema": "https://mintlify.com/docs.json",
-    "theme": "aspen",
+    "theme": "mint",
     "name": "TALL Stack E-commerce Framework",
+    "description": "Headless e-commerce administration built with Laravel to create and manage online store.",
     "colors": {
         "primary": "#2563eb",
         "light": "#1C4ED8",
@@ -65,83 +66,176 @@
             },
             {
                 "version": "2.x",
-                "groups": [
+                "tabs": [
                     {
-                        "group": "Prologue",
-                        "pages": [
-                            "v2/getting-started",
-                            "v2/upgrade",
-                            "v2/contributing"
+                        "tab": "User Guide",
+                        "groups": [
+                            {
+                                "group": "Getting Started",
+                                "pages": [
+                                    "v2/user-guide/getting-started/introduction",
+                                    "v2/user-guide/getting-started/login",
+                                    "v2/user-guide/getting-started/dashboard"
+                                ]
+                            },
+                            {
+                                "group": "Store Setup",
+                                "pages": [
+                                    "v2/user-guide/store-setup/general-settings",
+                                    "v2/user-guide/store-setup/locations",
+                                    "v2/user-guide/store-setup/currencies",
+                                    "v2/user-guide/store-setup/zones",
+                                    "v2/user-guide/store-setup/legal"
+                                ]
+                            },
+                            {
+                                "group": "Catalog",
+                                "pages": [
+                                    "v2/user-guide/catalog/brands",
+                                    "v2/user-guide/catalog/categories",
+                                    "v2/user-guide/catalog/collections",
+                                    "v2/user-guide/catalog/attributes",
+                                    "v2/user-guide/catalog/products",
+                                    "v2/user-guide/catalog/variants"
+                                ]
+                            },
+                            {
+                                "group": "Sales",
+                                "pages": [
+                                    "v2/user-guide/sales/orders",
+                                    "v2/user-guide/sales/customers",
+                                    "v2/user-guide/sales/reviews"
+                                ]
+                            },
+                            {
+                                "group": "Marketing",
+                                "pages": [
+                                    "v2/user-guide/marketing/discounts",
+                                    "v2/user-guide/marketing/pricing"
+                                ]
+                            },
+                            {
+                                "group": "Administration",
+                                "pages": [
+                                    "v2/user-guide/administration/users",
+                                    "v2/user-guide/administration/roles",
+                                    "v2/user-guide/administration/two-factor"
+                                ]
+                            }
                         ]
                     },
                     {
-                        "group": "Getting Started",
-                        "pages": [
-                            "v2/requirements",
-                            "v2/installation",
-                            "v2/configuration"
+                        "tab": "Documentation",
+                        "groups": [
+                            {
+                                "group": "Prologue",
+                                "pages": [
+                                    "v2/getting-started",
+                                    "v2/upgrade",
+                                    "v2/contributing"
+                                ]
+                            },
+                            {
+                                "group": "Getting Started",
+                                "pages": [
+                                    "v2/requirements",
+                                    "v2/installation",
+                                    "v2/configuration"
+                                ]
+                            },
+                            {
+                                "group": "Core",
+                                "pages": [
+                                    "v2/products",
+                                    "v2/product-variants",
+                                    "v2/brands",
+                                    "v2/categories",
+                                    "v2/collections",
+                                    "v2/attributes",
+                                    "v2/customers",
+                                    "v2/orders",
+                                    "v2/discounts",
+                                    "v2/reviews"
+                                ]
+                            },
+                            {
+                                "group": "Configuration",
+                                "pages": [
+                                    "v2/setup-store",
+                                    "v2/channels",
+                                    "v2/locations",
+                                    "v2/currencies",
+                                    "v2/zones",
+                                    "v2/carriers",
+                                    "v2/media",
+                                    "v2/legal",
+                                    "v2/acl",
+                                    "v2/two-factor"
+                                ]
+                            },
+                            {
+                                "group": "Storefronts",
+                                "pages": [
+                                    "v2/starter-kits",
+                                    "v2/livewire-starter-kit",
+                                    "v2/blade-starter-kit",
+                                    "v2/inertia-starter-kit"
+                                ]
+                            }
                         ]
                     },
                     {
-                        "group": "Concepts",
-                        "pages": [
-                            "v2/setup-store",
-                            "v2/locations",
-                            "v2/acl",
-                            "v2/currencies",
-                            "v2/zones",
-                            "v2/legal",
-                            "v2/media",
-                            "v2/two-factor"
-                        ]
-                    },
-                    {
-                        "group": "Control Panel",
-                        "pages": [
-                            "v2/dashboard",
-                            "v2/brands",
-                            "v2/categories",
-                            "v2/collections",
-                            "v2/customers",
-                            "v2/attributes",
-                            "v2/products",
-                            "v2/product-variants",
-                            "v2/discounts",
-                            "v2/orders",
-                            "v2/reviews",
-                            "v2/pricing"
-                        ]
-                    },
-                    {
-                        "group": "Storefronts",
-                        "pages": [
-                            "v2/starter-kits",
-                            "v2/livewire-starter-kit",
-                            "v2/blade-starter-kit",
-                            "v2/inertia-starter-kit"
-                        ]
-                    },
-                    {
-                        "group": "Extending",
-                        "pages": [
-                            "v2/extending/overview",
-                            "v2/extending/control-panel",
-                            "v2/extending/navigation",
-                            "v2/extending/controllers",
-                            "v2/extending/events"
+                        "tab": "Extending",
+                        "groups": [
+                            {
+                                "group": "Admin Panel",
+                                "pages": [
+                                    "v2/extending/overview",
+                                    "v2/extending/control-panel",
+                                    "v2/extending/navigation",
+                                    "v2/extending/controllers",
+                                    "v2/extending/events"
+                                ]
+                            },
+                            {
+                                "group": "Sidebar",
+                                "pages": [
+                                    "v2/sidebar/overview",
+                                    "v2/sidebar/shopper-extension",
+                                    "v2/sidebar/standalone",
+                                    "v2/sidebar/configuration"
+                                ]
+                            },
+                            {
+                                "group": "Components",
+                                "pages": [
+                                    "v2/extending/components/overview",
+                                    "v2/extending/components/card",
+                                    "v2/extending/components/alert",
+                                    "v2/extending/components/heading",
+                                    "v2/extending/components/section-heading",
+                                    "v2/extending/components/empty-state",
+                                    "v2/extending/components/empty-card",
+                                    "v2/extending/components/stock-badge",
+                                    "v2/extending/components/loader",
+                                    "v2/extending/components/label",
+                                    "v2/extending/components/user-avatar",
+                                    "v2/extending/components/utilities"
+                                ]
+                            }
                         ]
                     }
                 ]
             }
         ],
         "global": {
-          "anchors": [
-            {
-                "anchor": "Community",
-                "href": "https://discord.gg/CC444Gy7",  
-                "icon": "discord"
-            }
-          ]
+            "anchors": [
+                {
+                    "anchor": "Community",
+                    "href": "https://discord.gg/CC444Gy7",
+                    "icon": "discord"
+                }
+            ]
         }
     },
     "logo": {
@@ -149,10 +243,10 @@
         "dark": "/logo/logo.svg"
     },
     "navbar": {
-      "primary": {
-        "type": "github",
-        "href": "https://github.com/shopperlabs/shopper"
-      }
+        "primary": {
+            "type": "github",
+            "href": "https://github.com/shopperlabs/shopper"
+        }
     },
     "contextual": {
         "options": [
@@ -175,7 +269,7 @@
     "redirects": [
         {
             "source": "/",
-            "destination": "/v2/getting-started"
+            "destination": "/v2/user-guide/getting-started/introduction"
         },
         {
             "source": "/acl",
@@ -188,6 +282,62 @@
         {
             "source": "/currencies",
             "destination": "/v2/currencies"
+        },
+        {
+            "source": "/carriers",
+            "destination": "/v2/carriers"
+        },
+        {
+            "source": "/channels",
+            "destination": "/v2/channels"
+        },
+        {
+            "source": "/extending/components/overview",
+            "destination": "/v2/extending/components/overview"
+        },
+        {
+            "source": "/extending/components/card",
+            "destination": "/v2/extending/components/card"
+        },
+        {
+            "source": "/extending/components/alert",
+            "destination": "/v2/extending/components/alert"
+        },
+        {
+            "source": "/extending/components/heading",
+            "destination": "/v2/extending/components/heading"
+        },
+        {
+            "source": "/extending/components/section-heading",
+            "destination": "/v2/extending/components/section-heading"
+        },
+        {
+            "source": "/extending/components/empty-state",
+            "destination": "/v2/extending/components/empty-state"
+        },
+        {
+            "source": "/extending/components/empty-card",
+            "destination": "/v2/extending/components/empty-card"
+        },
+        {
+            "source": "/extending/components/stock-badge",
+            "destination": "/v2/extending/components/stock-badge"
+        },
+        {
+            "source": "/extending/components/loader",
+            "destination": "/v2/extending/components/loader"
+        },
+        {
+            "source": "/extending/components/label",
+            "destination": "/v2/extending/components/label"
+        },
+        {
+            "source": "/extending/components/user-avatar",
+            "destination": "/v2/extending/components/user-avatar"
+        },
+        {
+            "source": "/extending/components/utilities",
+            "destination": "/v2/extending/components/utilities"
         },
         {
             "source": "/extending/empty-state",
@@ -246,6 +396,110 @@
             "destination": "/v2/upgrade"
         },
         {
+            "source": "/user-guide/getting-started/introduction",
+            "destination": "/v2/user-guide/getting-started/introduction"
+        },
+        {
+            "source": "/user-guide/getting-started/login",
+            "destination": "/v2/user-guide/getting-started/login"
+        },
+        {
+            "source": "/user-guide/getting-started/dashboard",
+            "destination": "/v2/user-guide/getting-started/dashboard"
+        },
+        {
+            "source": "/user-guide/store-setup/general-settings",
+            "destination": "/v2/user-guide/store-setup/general-settings"
+        },
+        {
+            "source": "/user-guide/store-setup/locations",
+            "destination": "/v2/user-guide/store-setup/locations"
+        },
+        {
+            "source": "/user-guide/store-setup/currencies",
+            "destination": "/v2/user-guide/store-setup/currencies"
+        },
+        {
+            "source": "/user-guide/store-setup/zones",
+            "destination": "/v2/user-guide/store-setup/zones"
+        },
+        {
+            "source": "/user-guide/store-setup/legal",
+            "destination": "/v2/user-guide/store-setup/legal"
+        },
+        {
+            "source": "/user-guide/catalog/brands",
+            "destination": "/v2/user-guide/catalog/brands"
+        },
+        {
+            "source": "/user-guide/catalog/categories",
+            "destination": "/v2/user-guide/catalog/categories"
+        },
+        {
+            "source": "/user-guide/catalog/collections",
+            "destination": "/v2/user-guide/catalog/collections"
+        },
+        {
+            "source": "/user-guide/catalog/attributes",
+            "destination": "/v2/user-guide/catalog/attributes"
+        },
+        {
+            "source": "/user-guide/catalog/products",
+            "destination": "/v2/user-guide/catalog/products"
+        },
+        {
+            "source": "/user-guide/catalog/variants",
+            "destination": "/v2/user-guide/catalog/variants"
+        },
+        {
+            "source": "/user-guide/sales/orders",
+            "destination": "/v2/user-guide/sales/orders"
+        },
+        {
+            "source": "/user-guide/sales/customers",
+            "destination": "/v2/user-guide/sales/customers"
+        },
+        {
+            "source": "/user-guide/sales/reviews",
+            "destination": "/v2/user-guide/sales/reviews"
+        },
+        {
+            "source": "/user-guide/marketing/discounts",
+            "destination": "/v2/user-guide/marketing/discounts"
+        },
+        {
+            "source": "/user-guide/marketing/pricing",
+            "destination": "/v2/user-guide/marketing/pricing"
+        },
+        {
+            "source": "/user-guide/administration/users",
+            "destination": "/v2/user-guide/administration/users"
+        },
+        {
+            "source": "/user-guide/administration/roles",
+            "destination": "/v2/user-guide/administration/roles"
+        },
+        {
+            "source": "/user-guide/administration/two-factor",
+            "destination": "/v2/user-guide/administration/two-factor"
+        },
+        {
+            "source": "/sidebar/overview",
+            "destination": "/v2/sidebar/overview"
+        },
+        {
+            "source": "/sidebar/shopper-extension",
+            "destination": "/v2/sidebar/shopper-extension"
+        },
+        {
+            "source": "/sidebar/standalone",
+            "destination": "/v2/sidebar/standalone"
+        },
+        {
+            "source": "/sidebar/configuration",
+            "destination": "/v2/sidebar/configuration"
+        },
+        {
             "source": "/zones",
             "destination": "/v2/zones"
         }
@@ -259,6 +513,5 @@
         "ga4": {
             "measurementId": "G-NNZ07903B6"
         }
-    },
-    "description": "Headless e-commerce administration built with Laravel to create and manage online store. "
+    }
 }
