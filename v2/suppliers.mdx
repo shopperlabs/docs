@@ -1,0 +1,358 @@
+---
+title: Suppliers
+description: Complete reference for the Supplier model, product sourcing, and dropshipping integration in Shopper.
+---
+
+Suppliers represent external vendors or manufacturers who provide products for your store. This is primarily used in **dropshipping** scenarios where products are shipped directly from the supplier to the customer, without you handling inventory.
+
+<Note>
+The supplier feature is gated behind a feature flag. It must be enabled in your `config/shopper/features.php` configuration file.
+</Note>
+
+## Model
+
+```php
+Shopper\Core\Models\Supplier
+```
+
+```php
+use Shopper\Core\Models\Supplier;
+
+// The model implements
+- Shopper\Core\Models\Contracts\Supplier
+
+// Uses traits
+- HasFactory
+- HasModelContract
+- HasSlug
+```
+
+### Extending the Model
+
+```php
+namespace App\Models;
+
+use Shopper\Core\Models\Supplier as BaseSupplier;
+
+class Supplier extends BaseSupplier
+{
+    // Add your customizations here
+}
+```
+
+Update `config/shopper/models.php`:
+
+```php
+return [
+    'supplier' => \App\Models\Supplier::class,
+];
+```
+
+## Feature Flag
+
+Enable the supplier feature in `config/shopper/features.php`:
+
+```php
+use Shopper\Core\Enum\FeatureState;
+
+return [
+    // ...
+    'supplier' => FeatureState::Enabled,
+];
+```
+
+When enabled, the Suppliers page appears under Products in the admin sidebar, and the supplier select field becomes visible on External product forms.
+
+## Database Schema
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `name` | string | no | - | Supplier name |
+| `slug` | string | yes | auto | URL-friendly identifier (unique) |
+| `email` | string | yes | null | Contact email |
+| `phone` | string | yes | null | Contact phone |
+| `contact_name` | string | yes | null | Primary contact person |
+| `website` | string | yes | null | Supplier website URL |
+| `description` | longText | yes | null | Detailed description |
+| `notes` | longText | yes | null | Internal notes |
+| `is_enabled` | boolean | no | false | Supplier visibility |
+| `metadata` | jsonb | yes | null | Additional custom data |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+## Relationships
+
+### Products
+
+A supplier can have many products linked to it:
+
+```php
+// Get all products from a supplier
+$supplier->products; // Collection<Product>
+
+// Get enabled products
+$supplier->products()
+    ->where('is_visible', true)
+    ->get();
+
+// Count products per supplier
+$supplier->products()->count();
+```
+
+### Product → Supplier
+
+Each product can optionally belong to one supplier:
+
+```php
+// Get a product's supplier
+$product->supplier; // Supplier (nullable)
+
+// Check if a product has a supplier
+if ($product->supplier_id) {
+    // This is a dropshipped product
+}
+
+// Get all products from a specific supplier
+Product::query()
+    ->where('supplier_id', $supplier->id)
+    ->get();
+```
+
+## Query Scopes
+
+```php
+use Shopper\Core\Models\Supplier;
+
+// Get only enabled suppliers
+Supplier::query()->enabled()->get();
+```
+
+## Creating Suppliers
+
+```php
+use Shopper\Core\Models\Supplier;
+
+$supplier = Supplier::query()->create([
+    'name' => 'TechParts Co., Ltd',
+    'email' => 'orders@techparts.com',
+    'phone' => '+86 755 1234 5678',
+    'contact_name' => 'Zhang Wei',
+    'website' => 'https://techparts.com',
+    'description' => 'Electronics components and accessories manufacturer based in Shenzhen.',
+    'notes' => 'Minimum order: 50 units. Lead time: 5-7 days.',
+    'is_enabled' => true,
+    'metadata' => [
+        'payment_terms' => 'net_30',
+        'currency' => 'USD',
+        'minimum_order' => 50,
+    ],
+]);
+```
+
+## Updating Status
+
+```php
+// Enable a supplier
+$supplier->updateStatus(enabled: true);
+
+// Disable a supplier
+$supplier->updateStatus(enabled: false);
+```
+
+## Retrieving Suppliers
+
+```php
+// Get all enabled suppliers
+$suppliers = Supplier::query()
+    ->enabled()
+    ->withCount('products')
+    ->get();
+
+// Find by slug
+$supplier = Supplier::query()
+    ->where('slug', 'techparts-co')
+    ->firstOrFail();
+
+// Search suppliers
+$results = Supplier::query()
+    ->where('name', 'like', "%{$search}%")
+    ->orWhere('email', 'like', "%{$search}%")
+    ->enabled()
+    ->get();
+```
+
+## Linking Products to Suppliers
+
+Products of type `External` can be linked to a supplier. The `supplier_id` column on the products table stores this relationship:
+
+```php
+use Shopper\Core\Enum\ProductType;
+use Shopper\Core\Models\Product;
+
+// Create an external product linked to a supplier
+$product = Product::query()->create([
+    'name' => 'Wireless Bluetooth Earbuds',
+    'slug' => 'wireless-bluetooth-earbuds',
+    'type' => ProductType::External,
+    'supplier_id' => $supplier->id,
+    'is_visible' => true,
+    // ... other product fields
+]);
+
+// Change a product's supplier
+$product->update(['supplier_id' => $newSupplier->id]);
+
+// Remove supplier link
+$product->update(['supplier_id' => null]);
+```
+
+## Dropshipping Workflow
+
+The supplier feature is designed to work with the [Fulfillment](/v2/fulfillment) system. Here's the complete flow:
+
+### 1. Setup
+
+```php
+// Create your supplier
+$supplier = Supplier::query()->create([
+    'name' => 'Shenzhen TechParts',
+    'email' => 'orders@techparts.com',
+    'is_enabled' => true,
+]);
+
+// Link products to supplier
+$product->update(['supplier_id' => $supplier->id]);
+```
+
+### 2. Customer Places Order
+
+When a customer orders a product linked to a supplier, the order is created normally. The item's `fulfillment_status` starts as `Pending`.
+
+### 3. Forward to Supplier
+
+After receiving the customer's payment, you place the order with your supplier using the customer's shipping address:
+
+```php
+use Shopper\Core\Enum\FulfillmentStatus;
+
+// Mark items as forwarded
+$order->items()
+    ->whereHas('product', fn ($q) => $q->where('supplier_id', $supplier->id))
+    ->update(['fulfillment_status' => FulfillmentStatus::ForwardedToSupplier]);
+```
+
+### 4. Supplier Ships
+
+When the supplier provides tracking information:
+
+```php
+$shipment = $order->shippings()->create([
+    'carrier_id' => $carrierId,
+    'tracking_number' => $supplierTracking,
+    'tracking_url' => $supplierTrackingUrl,
+    'shipped_at' => now(),
+]);
+
+$order->items()
+    ->where('fulfillment_status', FulfillmentStatus::ForwardedToSupplier)
+    ->update([
+        'order_shipping_id' => $shipment->id,
+        'fulfillment_status' => FulfillmentStatus::Shipped,
+    ]);
+```
+
+### 5. Delivery Confirmation
+
+```php
+$shipment->update(['received_at' => now()]);
+
+$shipment->items()->update([
+    'fulfillment_status' => FulfillmentStatus::Delivered,
+]);
+```
+
+## Querying by Supplier
+
+```php
+// Get all pending orders for a supplier
+$pendingItems = OrderItem::query()
+    ->whereIn('fulfillment_status', [
+        FulfillmentStatus::Pending,
+        FulfillmentStatus::ForwardedToSupplier,
+    ])
+    ->whereHas('product', fn ($q) => $q->where('supplier_id', $supplier->id))
+    ->with(['order.customer', 'order.shippingAddress'])
+    ->get();
+
+// Get supplier revenue (items sold)
+$revenue = OrderItem::query()
+    ->whereHas('product', fn ($q) => $q->where('supplier_id', $supplier->id))
+    ->where('fulfillment_status', FulfillmentStatus::Delivered)
+    ->sum(DB::raw('unit_price_amount * quantity'));
+```
+
+## Permissions
+
+The supplier feature uses the following permissions:
+
+| Permission | Description |
+|-----------|-------------|
+| `browse_suppliers` | View the suppliers list |
+| `read_suppliers` | View supplier details |
+| `add_suppliers` | Create new suppliers |
+| `edit_suppliers` | Update existing suppliers |
+| `delete_suppliers` | Delete suppliers |
+
+```php
+// Check permission
+$user->hasPermissionTo('browse_suppliers');
+
+// Assign permission to a role
+$role->givePermissionTo('browse_suppliers');
+```
+
+## Components
+
+The supplier feature registers its components through the product configuration. Publish the product components to customize:
+
+```bash
+php artisan shopper:component:publish product
+```
+
+This includes:
+
+```php
+// In config/shopper/components/product.php
+return [
+    'pages' => [
+        'supplier-index' => Livewire\Pages\Supplier\Index::class,
+        // ...
+    ],
+    'components' => [
+        'slide-overs.supplier-form' => Livewire\SlideOvers\SupplierForm::class,
+        // ...
+    ],
+];
+```
+
+## Metadata
+
+The `metadata` column (JSON) can store any additional supplier-specific data:
+
+```php
+$supplier = Supplier::query()->create([
+    'name' => 'FastShip Logistics',
+    'metadata' => [
+        'payment_terms' => 'net_30',
+        'currency' => 'USD',
+        'minimum_order' => 100,
+        'lead_time_days' => 7,
+        'return_policy' => '30 days',
+        'api_endpoint' => 'https://api.fastship.com/v2',
+    ],
+]);
+
+// Access metadata
+$terms = $supplier->metadata['payment_terms'];
+```

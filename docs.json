@@ -164,6 +164,8 @@
                                     "v2/attributes",
                                     "v2/customers",
                                     "v2/orders",
+                                    "v2/fulfillment",
+                                    "v2/suppliers",
                                     "v2/discounts",
                                     "v2/reviews"
                                 ]
