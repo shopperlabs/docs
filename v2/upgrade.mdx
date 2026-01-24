@@ -218,7 +218,7 @@ Key changes affecting Shopper users:
 
 **Likelihood of Impact: Medium**
 
-Three new models have been added to `config/shopper/models.php`: `address`, `inventory`, and `order`.
+New models have been added to `config/shopper/models.php`: `address`, `inventory`, `order`, and `supplier`.
 
 If you have a published `config/shopper/models.php`, add these entries:
 
@@ -228,8 +228,51 @@ return [
     // ... existing models ...
     'inventory' => \Shopper\Core\Models\Inventory::class,
     'order' => \Shopper\Core\Models\Order::class,
+    'supplier' => \Shopper\Core\Models\Supplier::class,
 ];
 ```
+
+### New Permissions
+
+**Likelihood of Impact: Medium**
+
+New permissions have been added for **reviews**, **product variants**, and **suppliers**. These must be created in your database for existing installations.
+
+Create the permissions and assign them to your admin role:
+
+```php
+use Shopper\Core\Models\Permission;
+use Spatie\Permission\Models\Role;
+
+Permission::generate('reviews', 'products');
+Permission::generate('product_variants', 'products');
+Permission::generate('suppliers', 'products');
+
+$admin = Role::findByName('administrator');
+$admin->givePermissionTo([
+    'browse_reviews',
+    'read_reviews',
+    'edit_reviews',
+    'add_reviews',
+    'delete_reviews',
+    'browse_product_variants',
+    'read_product_variants',
+    'edit_product_variants',
+    'add_product_variants',
+    'delete_product_variants',
+    'browse_suppliers',
+    'read_suppliers',
+    'edit_suppliers',
+    'add_suppliers',
+    'delete_suppliers',
+]);
+```
+
+You can run this code in a migration, a tinker session, or create the permissions directly from the admin UI in the Roles & Permissions settings page.
+
+<Warning>
+If you don't create these permissions, users attempting to access Reviews, Product Variants, or Suppliers pages will encounter authorization errors.
+</Warning>
 
 ### Order Number Generator Configuration
 
@@ -415,7 +458,8 @@ Use this checklist to ensure a complete upgrade:
 - [ ] Update `composer.json` dependencies
 - [ ] Run `composer update`
 - [ ] Update `config/shopper/core.php`: rename `users` to `roles`
-- [ ] Update `config/shopper/models.php`: add `address`, `inventory`, `order`
+- [ ] Update `config/shopper/models.php`: add `address`, `inventory`, `order`, `supplier`
+- [ ] Create new permissions for `reviews`, `product_variants`, and `suppliers`
 - [ ] Update `config/shopper/orders.php`: update generator configuration
 - [ ] Update User model to implement `ShopperUser` interface and trait
 - [ ] Replace repository usage with model contracts

@@ -85,6 +85,8 @@ return [
 | `product_id` | bigint | no | Polymorphic relation ID |
 | `product_type` | string | no | Polymorphic relation type |
 | `order_id` | bigint | no | FK to order |
+| `order_shipping_id` | bigint | yes | FK to order_shipping (shipment) |
+| `fulfillment_status` | string | yes | Fulfillment status enum value |
 
 ### OrderAddress Table
 
@@ -172,6 +174,34 @@ $order->isNotCancelled(); // true if status is NOT Cancelled
 $order->canBeCancelled(); // true if Completed or New
 ```
 
+## Fulfillment Status
+
+The `FulfillmentStatus` enum tracks individual item fulfillment, enabling partial shipments and multi-carrier delivery:
+
+```php
+use Shopper\Core\Enum\FulfillmentStatus;
+
+FulfillmentStatus::Pending              // pending
+FulfillmentStatus::ForwardedToSupplier  // forwarded_to_supplier (dropshipping)
+FulfillmentStatus::Processing           // processing
+FulfillmentStatus::Shipped              // shipped
+FulfillmentStatus::Delivered            // delivered
+FulfillmentStatus::Cancelled            // cancelled
+```
+
+| Status | Database Value | Color | Description |
+|--------|---------------|-------|-------------|
+| Pending | `pending` | warning | Awaiting processing |
+| Forwarded to Supplier | `forwarded_to_supplier` | info | Sent to external supplier (dropshipping) |
+| Processing | `processing` | primary | Being prepared |
+| Shipped | `shipped` | indigo | In transit |
+| Delivered | `delivered` | success | Received by customer |
+| Cancelled | `cancelled` | danger | Fulfillment cancelled |
+
+<Note>
+`FulfillmentStatus` is applied per **item**, not per order. This allows partial fulfillment when items ship at different times or from different carriers. See the [Fulfillment](/v2/fulfillment) page for complete workflows.
+</Note>
+
 ## Refund Status
 
 The `OrderRefundStatus` enum defines refund states:
@@ -238,18 +268,45 @@ $order->shippingAddress->full_name; // "John Doe"
 ### Shipping
 
 ```php
-// Get shipping option
+// Get the shipping option selected at checkout
 $order->shippingOption; // CarrierOption model
 
-// Create shipping record
-OrderShipping::query()->create([
-    'order_id' => $order->id,
+// Get all shipments for an order
+$order->shippings; // Collection of OrderShipping models
+
+// Create a shipment
+$shipment = $order->shippings()->create([
     'carrier_id' => $carrierId,
     'shipped_at' => now(),
     'tracking_number' => 'TRACK123456',
     'tracking_url' => 'https://carrier.com/track/TRACK123456',
 ]);
+
+// Link items to the shipment
+$order->items()
+    ->whereIn('id', [$itemId1, $itemId2])
+    ->update([
+        'order_shipping_id' => $shipment->id,
+        'fulfillment_status' => FulfillmentStatus::Shipped,
+    ]);
 ```
+
+### Item Shipment
+
+```php
+// Get the shipment for a specific item
+$item->shipment; // OrderShipping model (nullable)
+
+// Get the carrier for an item's shipment
+$item->shipment?->carrier; // Carrier model
+
+// Get all items in a shipment
+$shipment->items; // Collection of OrderItem models
+```
+
+<Note>
+For complete multi-shipment and dropshipping workflows, see the [Fulfillment](/v2/fulfillment) page.
+</Note>
 
 ### Refund
 

@@ -1,0 +1,398 @@
+---
+title: Fulfillment
+description: Complete guide to order fulfillment, multi-shipment management, and dropshipping workflows in Shopper.
+---
+
+Order fulfillment in Shopper is designed around the concept of **shipments** — physical packages sent to customers. A single order can have multiple shipments, each with its own carrier, tracking number, and set of items.
+
+## Architecture
+
+The fulfillment system connects three models:
+
+```
+Order (1) ──→ (many) OrderShipping (1) ──→ (many) OrderItem
+                      (shipment)                  (items in this package)
+```
+
+- **Order** has many **shipments** (`OrderShipping`)
+- Each **shipment** contains one or more **items** (`OrderItem`)
+- Each **item** tracks its own **fulfillment status** independently
+
+```php
+use Shopper\Core\Models\Order;
+use Shopper\Core\Models\OrderShipping;
+use Shopper\Core\Models\OrderItem;
+use Shopper\Core\Enum\FulfillmentStatus;
+```
+
+## Database Schema
+
+### OrderShipping Table
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | no | Primary key |
+| `order_id` | bigint | no | FK to order |
+| `carrier_id` | bigint | yes | FK to carrier |
+| `shipped_at` | datetime | no | When the shipment was dispatched |
+| `received_at` | datetime | yes | When the customer received it |
+| `returned_at` | datetime | yes | If the shipment was returned |
+| `tracking_number` | string | yes | Carrier tracking number |
+| `tracking_url` | string | yes | URL for customer tracking |
+| `voucher` | json | yes | Shipping label/voucher data |
+
+### OrderItem Fulfillment Columns
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `order_shipping_id` | bigint | yes | FK to the shipment this item belongs to |
+| `fulfillment_status` | string | yes | Current fulfillment state of this item |
+
+## Fulfillment Status
+
+The `FulfillmentStatus` enum defines the lifecycle of each item:
+
+```php
+use Shopper\Core\Enum\FulfillmentStatus;
+
+FulfillmentStatus::Pending              // Awaiting processing
+FulfillmentStatus::ForwardedToSupplier  // Sent to external supplier (dropshipping)
+FulfillmentStatus::Processing           // Being prepared for shipment
+FulfillmentStatus::Shipped              // In transit
+FulfillmentStatus::Delivered            // Received by customer
+FulfillmentStatus::Cancelled            // Fulfillment cancelled
+```
+
+### Status Flow
+
+| From | Possible Transitions |
+|------|---------------------|
+| Pending | Processing, ForwardedToSupplier, Cancelled |
+| ForwardedToSupplier | Processing, Shipped, Cancelled |
+| Processing | Shipped, Cancelled |
+| Shipped | Delivered |
+| Delivered | (terminal state) |
+| Cancelled | (terminal state) |
+
+## Relationships
+
+### Order → Shipments
+
+```php
+// Get all shipments for an order
+$order->shippings; // Collection<OrderShipping>
+
+// Load shipments with their carrier and items
+$order->load('shippings.carrier', 'shippings.items');
+
+// Check if order is fully shipped
+$allShipped = $order->items->every(
+    fn (OrderItem $item) => $item->fulfillment_status === FulfillmentStatus::Delivered
+);
+```
+
+### OrderShipping → Items
+
+```php
+// Get all items in a shipment
+$shipment->items; // Collection<OrderItem>
+
+// Get the carrier for this shipment
+$shipment->carrier; // Carrier model
+
+// Get the parent order
+$shipment->order; // Order model
+```
+
+### OrderItem → Shipment
+
+```php
+// Get the shipment for an item
+$item->shipment; // OrderShipping (nullable)
+
+// Get tracking info for an item
+$item->shipment?->tracking_number;
+$item->shipment?->tracking_url;
+$item->shipment?->carrier?->name;
+```
+
+## Creating Shipments
+
+### Single Shipment (All Items Together)
+
+When all items ship in one package:
+
+```php
+$order = Order::query()->find($orderId);
+
+// Create the shipment
+$shipment = $order->shippings()->create([
+    'carrier_id' => $carrier->id,
+    'tracking_number' => '1Z999AA10123456784',
+    'tracking_url' => 'https://ups.com/track?num=1Z999AA10123456784',
+    'shipped_at' => now(),
+]);
+
+// Link all items and update their status
+$order->items()->update([
+    'order_shipping_id' => $shipment->id,
+    'fulfillment_status' => FulfillmentStatus::Shipped,
+]);
+```
+
+### Partial Shipment (Split Across Packages)
+
+When items ship in multiple packages with different carriers:
+
+```php
+$order = Order::query()
+    ->with('items')
+    ->find($orderId);
+
+// First package: items 1 and 2 via Colissimo
+$shipment1 = $order->shippings()->create([
+    'carrier_id' => $colissimoId,
+    'tracking_number' => 'LP123456789FR',
+    'tracking_url' => 'https://laposte.fr/suivi/LP123456789FR',
+    'shipped_at' => now(),
+]);
+
+$order->items()
+    ->whereIn('id', [$item1->id, $item2->id])
+    ->update([
+        'order_shipping_id' => $shipment1->id,
+        'fulfillment_status' => FulfillmentStatus::Shipped,
+    ]);
+
+// Second package: item 3 via UPS (ships later)
+$shipment2 = $order->shippings()->create([
+    'carrier_id' => $upsId,
+    'tracking_number' => '1Z999AA10987654321',
+    'tracking_url' => 'https://ups.com/track?num=1Z999AA10987654321',
+    'shipped_at' => now(),
+]);
+
+$order->items()
+    ->where('id', $item3->id)
+    ->update([
+        'order_shipping_id' => $shipment2->id,
+        'fulfillment_status' => FulfillmentStatus::Shipped,
+    ]);
+```
+
+### Marking as Delivered
+
+```php
+// Mark a specific shipment as delivered
+$shipment->update(['received_at' => now()]);
+
+$shipment->items()->update([
+    'fulfillment_status' => FulfillmentStatus::Delivered,
+]);
+
+// Check if all items are delivered to complete the order
+$allDelivered = $order->items()
+    ->where('fulfillment_status', '!=', FulfillmentStatus::Delivered)
+    ->doesntExist();
+
+if ($allDelivered) {
+    $order->update(['status' => OrderStatus::Completed]);
+}
+```
+
+## Dropshipping Workflow
+
+For external products sourced from suppliers, the fulfillment flow includes an additional step where the order is forwarded to the supplier who ships directly to the customer.
+
+<Note>
+Dropshipping requires the [Supplier](/v2/suppliers) feature to be enabled. External products must be linked to a supplier.
+</Note>
+
+### Complete Dropshipping Flow
+
+```php
+use Shopper\Core\Models\Contracts\Supplier;
+
+$order = Order::query()
+    ->with('items.product.supplier')
+    ->find($orderId);
+
+// Step 1: Forward items to their suppliers
+foreach ($order->items as $item) {
+    if ($item->product->supplier_id) {
+        $item->update([
+            'fulfillment_status' => FulfillmentStatus::ForwardedToSupplier,
+        ]);
+    }
+}
+
+// Step 2: When the supplier ships, create the shipment
+$shipment = $order->shippings()->create([
+    'carrier_id' => $carrierId,
+    'tracking_number' => $trackingFromSupplier,
+    'tracking_url' => $trackingUrlFromSupplier,
+    'shipped_at' => now(),
+]);
+
+// Link supplier items to shipment
+$order->items()
+    ->where('fulfillment_status', FulfillmentStatus::ForwardedToSupplier)
+    ->update([
+        'order_shipping_id' => $shipment->id,
+        'fulfillment_status' => FulfillmentStatus::Shipped,
+    ]);
+```
+
+### Mixed Orders (Own Products + Supplier Products)
+
+An order can contain both your own products and dropshipped products:
+
+```php
+$order = Order::query()
+    ->with('items.product')
+    ->find($orderId);
+
+$ownItems = $order->items->filter(
+    fn ($item) => ! $item->product->supplier_id
+);
+
+$supplierItems = $order->items->filter(
+    fn ($item) => $item->product->supplier_id
+);
+
+// Ship your own products immediately
+if ($ownItems->isNotEmpty()) {
+    $shipment = $order->shippings()->create([
+        'carrier_id' => $yourCarrierId,
+        'tracking_number' => $yourTracking,
+        'shipped_at' => now(),
+    ]);
+
+    $order->items()
+        ->whereIn('id', $ownItems->pluck('id'))
+        ->update([
+            'order_shipping_id' => $shipment->id,
+            'fulfillment_status' => FulfillmentStatus::Shipped,
+        ]);
+}
+
+// Forward supplier items
+if ($supplierItems->isNotEmpty()) {
+    $order->items()
+        ->whereIn('id', $supplierItems->pluck('id'))
+        ->update([
+            'fulfillment_status' => FulfillmentStatus::ForwardedToSupplier,
+        ]);
+}
+```
+
+## Querying Fulfillment Data
+
+### Items by Status
+
+```php
+// Get all unfulfilled items across orders
+$unfulfilledItems = OrderItem::query()
+    ->whereNull('fulfillment_status')
+    ->orWhere('fulfillment_status', FulfillmentStatus::Pending)
+    ->with('order.customer')
+    ->get();
+
+// Get items waiting for supplier
+$awaitingSupplier = OrderItem::query()
+    ->where('fulfillment_status', FulfillmentStatus::ForwardedToSupplier)
+    ->with('product.supplier')
+    ->get();
+```
+
+### Orders Needing Attention
+
+```php
+// Orders with items not yet shipped
+$ordersToFulfill = Order::query()
+    ->whereHas('items', fn ($q) => $q
+        ->where('fulfillment_status', FulfillmentStatus::Pending)
+        ->orWhereNull('fulfillment_status')
+    )
+    ->with('items', 'shippings')
+    ->get();
+
+// Orders partially shipped
+$partiallyShipped = Order::query()
+    ->whereHas('items', fn ($q) => $q->where('fulfillment_status', FulfillmentStatus::Shipped))
+    ->whereHas('items', fn ($q) => $q->where('fulfillment_status', '!=', FulfillmentStatus::Shipped))
+    ->get();
+```
+
+### Shipment History
+
+```php
+// Get all shipments for a customer
+$customerShipments = OrderShipping::query()
+    ->whereHas('order', fn ($q) => $q->where('customer_id', $customerId))
+    ->with(['carrier', 'items', 'order'])
+    ->latest('shipped_at')
+    ->get();
+```
+
+## Handling Returns
+
+```php
+// Mark a shipment as returned
+$shipment->update(['returned_at' => now()]);
+
+// Update item statuses
+$shipment->items()->update([
+    'fulfillment_status' => FulfillmentStatus::Cancelled,
+]);
+```
+
+## Storefront Example
+
+### Order Tracking Page
+
+```php
+namespace App\Http\Controllers;
+
+use Shopper\Core\Models\Order;
+
+class OrderTrackingController extends Controller
+{
+    public function show(Order $order)
+    {
+        abort_unless($order->customer_id === auth()->id(), 403);
+
+        $order->load([
+            'items.shipment.carrier',
+            'shippings.carrier',
+            'shippings.items',
+        ]);
+
+        return view('orders.tracking', [
+            'order' => $order,
+            'shipments' => $order->shippings->map(fn ($shipment) => [
+                'carrier' => $shipment->carrier?->name,
+                'tracking_number' => $shipment->tracking_number,
+                'tracking_url' => $shipment->tracking_url,
+                'shipped_at' => $shipment->shipped_at,
+                'received_at' => $shipment->received_at,
+                'items' => $shipment->items->map(fn ($item) => [
+                    'name' => $item->name,
+                    'quantity' => $item->quantity,
+                    'status' => $item->fulfillment_status,
+                ]),
+            ]),
+        ]);
+    }
+}
+```
+
+## Best Practices
+
+| Practice | Description |
+|----------|-------------|
+| Update statuses atomically | Always update `order_shipping_id` and `fulfillment_status` together when shipping |
+| Complete orders automatically | Check if all items are delivered and update the order status accordingly |
+| Group items by carrier | Items from the same supplier or warehouse should share a shipment |
+| Store tracking URLs | Always provide `tracking_url` so customers can track packages directly |
+| Handle mixed orders | Process your own products and supplier products as separate shipments |
