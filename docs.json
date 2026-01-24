@@ -95,8 +95,18 @@
                                     "v2/user-guide/catalog/categories",
                                     "v2/user-guide/catalog/collections",
                                     "v2/user-guide/catalog/attributes",
-                                    "v2/user-guide/catalog/products",
-                                    "v2/user-guide/catalog/variants"
+                                    {
+                                        "group": "Products",
+                                        "pages": [
+                                            "v2/user-guide/catalog/products/overview",
+                                            "v2/user-guide/catalog/products/creating-product",
+                                            "v2/user-guide/catalog/products/standard-product",
+                                            "v2/user-guide/catalog/products/virtual-product",
+                                            "v2/user-guide/catalog/products/external-product",
+                                            "v2/user-guide/catalog/products/variant-product",
+                                            "v2/user-guide/catalog/products/managing-products"
+                                        ]
+                                    }
                                 ]
                             },
                             {
@@ -445,11 +455,19 @@
         },
         {
             "source": "/user-guide/catalog/products",
-            "destination": "/v2/user-guide/catalog/products"
+            "destination": "/v2/user-guide/catalog/products/overview"
+        },
+        {
+            "source": "/v2/user-guide/catalog/products",
+            "destination": "/v2/user-guide/catalog/products/overview"
         },
         {
             "source": "/user-guide/catalog/variants",
-            "destination": "/v2/user-guide/catalog/variants"
+            "destination": "/v2/user-guide/catalog/products/variant-product"
+        },
+        {
+            "source": "/v2/user-guide/catalog/variants",
+            "destination": "/v2/user-guide/catalog/products/variant-product"
         },
         {
             "source": "/user-guide/sales/orders",
