@@ -35,50 +35,66 @@ These commands will make Shopper expect files at `public/css/admin.css` and `pub
 
 ## Customize Shopper theme
 
-Shopper is built using Tallstack presets, but you are not limited to that because the base css file is already built for production.
+Shopper ships with a pre-compiled CSS file (`dist/shopper.css`) that works out of the box. However, if you want to customize the admin panel styles using Tailwind CSS, you can build your own theme by importing Shopper's `theme.css` file.
 
-But if you want to customize your dashboard using Tailwind css you must first install Tailwind in your project. You can read the [documentation](https://tailwindcss.com/v2/guides/laravel)
+Shopper provides a dedicated `theme.css` entry point that handles all internal imports (Tailwind, Filament, Shopper base styles, source detection, and plugins) so you don't have to wire them up manually.
 
 ### Setting up Tailwind CSS for your project
 
-Shopper using Tailwind CSS, there are some Tailwind plugins you need to install first: Plugin Forms and Typography, Autoprefixer. You can install them via NPM or Yarn:
+Install Tailwind CSS v4 with the Vite plugin and the required plugins:
 
 ```bash
-yarn add -D tailwindcss @tailwindcss/forms @tailwindcss/typography autoprefixer
+npm install -D tailwindcss @tailwindcss/vite @tailwindcss/forms @tailwindcss/typography
 ```
 
-After installing Tailwind, you need to create a `tailwind.config.js` file at the root of your project and add this content
-
-Just load the default shopper CSS inside your `./resources/css/shopper.css`
-
-```css
-@import '../../vendor/shopper/framework/resources/css/shopper.css';
-
-@source '../../../../app/Filament';
-@source '../../../../resources/views/filament';
-@source '../../../../vendor/filament/**/*.blade.php';
-@source '../../../../vendor/shopper/**/*.blade.php';
-```
-
-Add the theme’s CSS file to the Laravel plugin’s input array in vite.config.js:
+Add the `@tailwindcss/vite` plugin to your `vite.config.js`:
 
 ```js
-input: [
-    // ...
-    'resources/css/shopper.css',
-]
+import tailwindcss from '@tailwindcss/vite';
+
+export default defineConfig({
+    plugins: [
+        tailwindcss(),
+        laravel({
+            input: [
+                'resources/css/app.css',
+                'resources/css/shopper.css', // [!code highlight]
+            ],
+        }),
+    ],
+});
 ```
 
-<Warning>
-Shopper is based on filament and for this reason tailwind v4 support is based on filament support.
-</Warning>
+### Creating the theme file
+
+Create a `resources/css/shopper.css` file and import Shopper's theme entry point:
+
+```css
+@import '../../vendor/shopper/framework/resources/css/theme.css';
+```
+
+The `theme.css` file already includes Tailwind, Filament CSS, Shopper base styles and components, source detection for all required Blade views, and the `@tailwindcss/forms` and `@tailwindcss/typography` plugins. You don't need to configure any of that yourself.
+
+To add your own source paths (custom Livewire components, app modules, etc.) or custom styles, add them after the import:
+
+```css
+@import '../../vendor/shopper/framework/resources/css/theme.css';
+
+/* Additional source paths for your project */
+@source '../../resources/views/**/*.blade.php';
+@source '../../app-modules/**/resources/views/**/*.blade.php';
+
+/* Your custom styles */
+```
 
 ### Load theme
 
-In your `AppServiceProvider` or any other provide you want, you should add this on your boot method
+In your `AppServiceProvider` or any other provider, register the Vite theme in the `boot` method:
 
 ```php
-public function boot()
+use Shopper\Facades\Shopper;
+
+public function boot(): void
 {
     Shopper::serving(function (): void {
         Shopper::registerViteTheme('resources/css/shopper.css');
