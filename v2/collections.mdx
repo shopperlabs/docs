@@ -102,6 +102,35 @@ $collection->products()->detach($productId);
 $collection->products()->sync($productIds);
 ```
 
+### Zones
+
+Collections can be restricted to specific zones using a polymorphic many-to-many relationship via the `zone_has_relations` table.
+
+```php
+// Get all zones associated with a collection
+$collection->zones;
+
+// Attach zones to a collection
+$collection->zones()->attach([$zoneId1, $zoneId2]);
+
+// Detach zones
+$collection->zones()->detach($zoneId);
+
+// Sync zones
+$collection->zones()->sync($zoneIds);
+```
+
+You can also retrieve collections from a zone:
+
+```php
+use Shopper\Core\Models\Zone;
+
+$zone = Zone::query()->find($id);
+
+// Get all collections for this zone
+$zone->collections;
+```
+
 ### Rules (Automatic Collections)
 
 ```php
