@@ -1,0 +1,268 @@
+---
+title: Overview
+description: Official TypeScript type definitions for Laravel Shopper models and entities.
+---
+
+The `@shopperlabs/shopper-types` package provides comprehensive TypeScript type definitions for all Shopper models and entities. These types are useful when building storefronts, mobile apps, or any TypeScript application that interacts with the Shopper API.
+
+## Installation
+
+<CodeGroup>
+
+```bash npm
+npm install @shopperlabs/shopper-types
+```
+
+```bash yarn
+yarn add @shopperlabs/shopper-types
+```
+
+```bash pnpm
+pnpm add @shopperlabs/shopper-types
+```
+
+</CodeGroup>
+
+## Usage
+
+Import types directly from the package:
+
+```typescript
+import type { Product, ProductVariant, Order } from '@shopperlabs/shopper-types'
+
+// Use in your API calls
+async function getProduct(id: number): Promise<Product> {
+  const response = await fetch(`/api/products/${id}`)
+  return response.json()
+}
+
+// Type your component props
+interface ProductCardProps {
+  product: Product
+}
+```
+
+## Available Types
+
+The package exports types for all Shopper models:
+
+| Type | Description |
+|------|-------------|
+| `Product` | Product model with variants, categories, and media |
+| `ProductVariant` | Product variant with pricing and attributes |
+| `Order` | Order with items, addresses, and shipping |
+| `OrderItem` | Individual order line item |
+| `Customer` | Customer profile and addresses |
+| `Category` | Hierarchical product category |
+| `Brand` | Product brand |
+| `Collection` | Product collection (manual or automatic) |
+| `Attribute` | Product attribute definition |
+| `AttributeValue` | Attribute value option |
+| `Address` | Customer address |
+| `Channel` | Sales channel |
+| `Zone` | Shipping/pricing zone |
+| `Carrier` | Shipping carrier |
+| `CarrierOption` | Carrier shipping option |
+| `Currency` | Currency configuration |
+| `Discount` | Discount/coupon code |
+| `Inventory` | Inventory location |
+| `PaymentMethod` | Payment method |
+| `Review` | Product review |
+| `Supplier` | Product supplier |
+
+## Enums
+
+The package also exports enums for type-safe status checks:
+
+```typescript
+import {
+  ProductType,
+  OrderStatus,
+  CollectionType,
+  AddressType
+} from '@shopperlabs/shopper-types'
+
+// Check product type
+if (product.type === ProductType.VARIANT) {
+  // Handle variant product
+}
+
+// Check order status
+if (order.status === OrderStatus.COMPLETED) {
+  // Order is complete
+}
+```
+
+### Available Enums
+
+| Enum | Values |
+|------|--------|
+| `ProductType` | `STANDARD`, `VARIANT`, `VIRTUAL`, `EXTERNAL` |
+| `OrderStatus` | `PENDING`, `NEW`, `REGISTER`, `PAID`, `COMPLETED`, `SHIPPED`, `CANCELLED` |
+| `FulfillmentStatus` | `UNFULFILLED`, `PARTIALLY_FULFILLED`, `FULFILLED`, `CANCELLED` |
+| `CollectionType` | `MANUAL`, `AUTO` |
+| `CollectionCondition` | `ALL`, `ANY` |
+| `AddressType` | `BILLING`, `SHIPPING` |
+| `DiscountType` | `PERCENTAGE`, `FIXED_AMOUNT` |
+| `GenderType` | `MALE`, `FEMALE` |
+| `FieldType` | `TEXT`, `NUMBER`, `RICH_TEXT`, `SELECT`, `CHECKBOX`, `COLOR_PICKER`, `DATE_PICKER` |
+| `Weight` | `KG`, `G`, `LBS` |
+| `Length` | `M`, `CM`, `MM`, `FT`, `IN` |
+| `Volume` | `L`, `ML`, `GAL`, `FLOZ` |
+
+## Common Interfaces
+
+### Entity
+
+All models extend the base `Entity` interface:
+
+```typescript
+interface Entity {
+  id: number
+  created_at?: DateEntity
+  updated_at?: DateEntity
+  deleted_at?: DateEntity | null
+}
+```
+
+### DateEntity
+
+Dates are returned with both raw and human-readable formats:
+
+```typescript
+interface DateEntity {
+  date: Date
+  human: string // e.g., "2 hours ago"
+}
+```
+
+### Price
+
+Pricing information for products and variants:
+
+```typescript
+interface Price {
+  amount: number | null
+  compare_amount: number | null
+  cost_amount: number | null
+  currency_id: number
+  currency_code: string
+  currency?: Currency
+}
+```
+
+### ShippingFields
+
+Physical dimensions for shippable products:
+
+```typescript
+interface ShippingFields {
+  width_unit: Length
+  width_value: number | null
+  weight_unit: Weight
+  weight_value: number | null
+  height_unit: Length
+  height_value: number | null
+  depth_unit: Length
+  depth_value: number | null
+  volume_unit: Volume
+  volume_value: number | null
+}
+```
+
+## Example: Storefront Product List
+
+```typescript
+import type { Product, Category } from '@shopperlabs/shopper-types'
+import { ProductType } from '@shopperlabs/shopper-types'
+
+interface ProductListProps {
+  products: Product[]
+  category?: Category
+}
+
+function ProductList({ products, category }: ProductListProps) {
+  return (
+    <div>
+      {category && <h1>{category.name}</h1>}
+
+      {products.map((product) => (
+        <div key={product.id}>
+          <h2>{product.name}</h2>
+          <p>{product.description}</p>
+
+          {product.type === ProductType.VARIANT && (
+            <span>{product.variants?.length} variants</span>
+          )}
+
+          {product.prices?.[0] && (
+            <span>
+              {product.prices[0].currency_code} {product.prices[0].amount}
+            </span>
+          )}
+        </div>
+      ))}
+    </div>
+  )
+}
+```
+
+## Example: Order Details
+
+```typescript
+import type { Order, OrderItem } from '@shopperlabs/shopper-types'
+import { OrderStatus } from '@shopperlabs/shopper-types'
+
+function OrderDetails({ order }: { order: Order }) {
+  const statusColors: Record<OrderStatus, string> = {
+    [OrderStatus.PENDING]: 'yellow',
+    [OrderStatus.NEW]: 'blue',
+    [OrderStatus.PAID]: 'green',
+    [OrderStatus.SHIPPED]: 'purple',
+    [OrderStatus.COMPLETED]: 'green',
+    [OrderStatus.CANCELLED]: 'red',
+    [OrderStatus.REGISTER]: 'gray',
+  }
+
+  return (
+    <div>
+      <h1>Order #{order.number}</h1>
+
+      <span style={{ color: statusColors[order.status] }}>
+        {order.status}
+      </span>
+
+      <h2>Items</h2>
+      {order.items?.map((item: OrderItem) => (
+        <div key={item.id}>
+          <span>{item.name}</span>
+          <span>x{item.quantity}</span>
+          <span>{item.unit_price_amount}</span>
+        </div>
+      ))}
+
+      {order.shippingAddress && (
+        <div>
+          <h2>Shipping Address</h2>
+          <p>{order.shippingAddress.full_name}</p>
+          <p>{order.shippingAddress.street_address}</p>
+          <p>{order.shippingAddress.city}, {order.shippingAddress.state}</p>
+          <p>{order.shippingAddress.postal_code}</p>
+        </div>
+      )}
+    </div>
+  )
+}
+```
+
+## Source Code
+
+The types are open source and available on GitHub:
+
+<Card
+  title="GitHub Repository"
+  icon="github"
+  href="https://github.com/shopperlabs/shopper-types"
+>
+  View the source code and contribute to the types package.
+</Card>

@@ -1,0 +1,234 @@
+---
+title: Order Types
+description: TypeScript type definitions for Order, OrderItem, and related models.
+---
+
+## Order
+
+The `Order` interface represents a customer order.
+
+```typescript
+import type { Order } from '@shopperlabs/shopper-types'
+```
+
+### Definition
+
+```typescript
+interface Order extends Entity {
+  number: string
+  price_amount: number
+  notes: string | null
+  currency_code: string
+  total_amount?: number
+  status: OrderStatus
+  canceled_at: DateEntity | null
+  archived_at: DateEntity | null
+  zone_id: number | null
+  shipping_address_id: number | null
+  billing_address_id: number | null
+  payment_method_id: number | null
+  customer_id: number | null
+  channel_id: number | null
+  parent_order_id: number | null
+  shipping_option_id?: number | null
+
+  // Relationships
+  shippingOption?: CarrierOption
+  shippingAddress?: OrderAddress | null
+  billingAddress?: OrderAddress | null
+  paymentMethod?: PaymentMethod | null
+  zone?: Zone | null
+  channel?: Channel | null
+  parent?: Order | null
+  customer?: Customer
+  items?: OrderItem[]
+  shippings?: OrderShipping[]
+  children?: Order[]
+  refund?: OrderRefund
+}
+```
+
+### OrderStatus Enum
+
+```typescript
+enum OrderStatus {
+  PENDING = 'pending',
+  NEW = 'new',
+  REGISTER = 'register',
+  PAID = 'paid',
+  COMPLETED = 'completed',
+  SHIPPED = 'shipped',
+  CANCELLED = 'cancelled',
+}
+```
+
+### Usage Examples
+
+```typescript
+import type { Order } from '@shopperlabs/shopper-types'
+import { OrderStatus } from '@shopperlabs/shopper-types'
+
+// Check if order can be cancelled
+function canCancel(order: Order): boolean {
+  return [OrderStatus.PENDING, OrderStatus.NEW].includes(order.status)
+}
+
+// Calculate order total
+function calculateTotal(order: Order): number {
+  return order.items?.reduce((sum, item) => sum + item.total, 0) ?? 0
+}
+
+// Get status badge color
+function getStatusColor(status: OrderStatus): string {
+  const colors: Record<OrderStatus, string> = {
+    [OrderStatus.PENDING]: '#fbbf24',
+    [OrderStatus.NEW]: '#3b82f6',
+    [OrderStatus.REGISTER]: '#6b7280',
+    [OrderStatus.PAID]: '#10b981',
+    [OrderStatus.COMPLETED]: '#059669',
+    [OrderStatus.SHIPPED]: '#8b5cf6',
+    [OrderStatus.CANCELLED]: '#ef4444',
+  }
+  return colors[status]
+}
+```
+
+---
+
+## OrderItem
+
+The `OrderItem` interface represents a line item in an order.
+
+```typescript
+import type { OrderItem } from '@shopperlabs/shopper-types'
+```
+
+### Definition
+
+```typescript
+interface OrderItem extends Entity {
+  name: string
+  quantity: number
+  unit_price_amount: number | null
+  total: number
+  sku: string | null
+  product_id: number
+  product_type: string
+  order_id: number
+  order_shipping_id: number | null
+  fulfillment_status: FulfillmentStatus | null
+
+  // Relationships
+  order?: Order
+  shipment?: OrderShipping
+}
+```
+
+### FulfillmentStatus Enum
+
+```typescript
+enum FulfillmentStatus {
+  UNFULFILLED = 'unfulfilled',
+  PARTIALLY_FULFILLED = 'partially_fulfilled',
+  FULFILLED = 'fulfilled',
+  CANCELLED = 'cancelled',
+}
+```
+
+---
+
+## OrderAddress
+
+The `OrderAddress` interface represents a shipping or billing address for an order.
+
+```typescript
+import type { OrderAddress } from '@shopperlabs/shopper-types'
+```
+
+### Definition
+
+```typescript
+interface OrderAddress extends Entity {
+  first_name: string
+  last_name: string
+  full_name: string
+  street_address: string
+  street_address_plus: string | null
+  postal_code: string
+  city: string
+  state: string | null
+  company: string | null
+  phone: string | null
+  country_name: string | null
+  customer_id?: number | null
+  customer?: Customer
+}
+```
+
+---
+
+## OrderShipping
+
+The `OrderShipping` interface represents a shipment for an order.
+
+```typescript
+import type { OrderShipping } from '@shopperlabs/shopper-types'
+```
+
+### Definition
+
+```typescript
+interface OrderShipping extends Entity {
+  shipped_at: DateEntity
+  received_at: DateEntity | null
+  returned_at: DateEntity | null
+  tracking_number: string | null
+  tracking_url: string | null
+  voucher: Record<string, unknown> | null
+  order_id: number
+  carrier_id: number | null
+
+  // Relationships
+  order?: Order
+  carrier?: Carrier
+  items?: OrderItem[]
+}
+```
+
+---
+
+## OrderRefund
+
+The `OrderRefund` interface represents a refund for an order.
+
+```typescript
+import type { OrderRefund } from '@shopperlabs/shopper-types'
+```
+
+### Definition
+
+```typescript
+interface OrderRefund extends Entity {
+  refund_reason: string | null
+  refund_amount: number | null
+  status: OrderRefundStatus
+  notes: string | null
+  currency: string
+  order_id: number
+  user_id: number | null
+  order?: Order
+}
+```
+
+### OrderRefundStatus Enum
+
+```typescript
+enum OrderRefundStatus {
+  PENDING = 'pending',
+  TREATMENT = 'treatment',
+  PARTIAL_REFUND = 'partial-refund',
+  REFUNDED = 'refunded',
+  CANCELLED = 'cancelled',
+  REJECTED = 'rejected',
+}
+```

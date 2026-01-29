@@ -1,0 +1,264 @@
+---
+title: Catalog Types
+description: TypeScript type definitions for Category, Brand, Collection, and Attribute models.
+---
+
+## Category
+
+The `Category` interface represents a product category.
+
+```typescript
+import type { Category } from '@shopperlabs/shopper-types'
+```
+
+### Definition
+
+```typescript
+interface Category extends Entity {
+  name: string
+  slug: string
+  description: string | null
+  is_enabled: boolean
+  parent_id: number | null
+  metadata: Metadata
+  slug_path?: string
+
+  // Relationships
+  image?: Media | null
+  parent?: Category
+  children?: Category[]
+}
+```
+
+### Usage Examples
+
+```typescript
+import type { Category } from '@shopperlabs/shopper-types'
+
+// Build category tree
+function buildCategoryTree(categories: Category[]): Category[] {
+  const map = new Map<number, Category>()
+  const roots: Category[] = []
+
+  categories.forEach((cat) => map.set(cat.id, { ...cat, children: [] }))
+
+  categories.forEach((cat) => {
+    const category = map.get(cat.id)!
+    if (cat.parent_id && map.has(cat.parent_id)) {
+      map.get(cat.parent_id)!.children!.push(category)
+    } else {
+      roots.push(category)
+    }
+  })
+
+  return roots
+}
+
+// Get category breadcrumb
+function getCategoryPath(category: Category): string[] {
+  return category.slug_path?.split('/') ?? [category.slug]
+}
+```
+
+---
+
+## Brand
+
+The `Brand` interface represents a product brand.
+
+```typescript
+import type { Brand } from '@shopperlabs/shopper-types'
+```
+
+### Definition
+
+```typescript
+interface Brand extends Entity, SEOFields {
+  name: string
+  slug: string | null
+  website: string | null
+  description: string | null
+  position: number
+  is_enabled: boolean
+  metadata: Metadata
+
+  // Relationships
+  image?: Media | null
+}
+```
+
+---
+
+## Collection
+
+The `Collection` interface represents a product collection.
+
+```typescript
+import type { Collection } from '@shopperlabs/shopper-types'
+```
+
+### Definition
+
+```typescript
+interface Collection extends Entity, SEOFields {
+  name: string
+  slug: string
+  description?: string | null
+  type: CollectionType
+  match_conditions: CollectionCondition | null
+  sort: string | null
+  published_at: DateEntity | null
+  metadata: Metadata
+
+  // Relationships
+  image?: Media | null
+  rules?: CollectionRule[]
+  zones?: Zone[]
+}
+```
+
+### CollectionType Enum
+
+```typescript
+enum CollectionType {
+  MANUAL = 'manual',
+  AUTO = 'auto',
+}
+```
+
+### CollectionCondition Enum
+
+```typescript
+enum CollectionCondition {
+  ALL = 'all',
+  ANY = 'any',
+}
+```
+
+### CollectionRule Interface
+
+```typescript
+interface CollectionRule extends Entity {
+  rule: CollectionRuleType
+  operator: CollectionOperator
+  value: string
+  collection_id: number
+  collection?: Collection
+}
+
+enum CollectionRuleType {
+  PRODUCT_TITLE = 'product_title',
+  PRODUCT_PRICE = 'product_price',
+  COMPARE_AT_PRICE = 'compare_at_price',
+  INVENTORY_STOCK = 'inventory_stock',
+  PRODUCT_CATEGORY = 'product_category',
+  PRODUCT_BRAND = 'product_brand',
+}
+
+enum CollectionOperator {
+  EQUALS = 'equals',
+  NOT_EQUALS = 'not_equals',
+  LESS_THAN = 'less_than',
+  GREATER_THAN = 'greater_than',
+  STARTS_WITH = 'starts_with',
+  ENDS_WITH = 'ends_with',
+  CONTAINS = 'contains',
+  NOT_CONTAINS = 'not_contains',
+}
+```
+
+---
+
+## Attribute
+
+The `Attribute` interface represents a product attribute (color, size, etc.).
+
+```typescript
+import type { Attribute, AttributeValue } from '@shopperlabs/shopper-types'
+```
+
+### Attribute Definition
+
+```typescript
+interface Attribute extends Entity {
+  name: string
+  slug: string
+  type: FieldType
+  icon: string | null
+  description: string | null
+  is_enabled: boolean
+  is_searchable: boolean
+  is_filterable: boolean
+  type_formatted?: string
+
+  // Relationships
+  values?: AttributeValue[]
+}
+```
+
+### AttributeValue Definition
+
+```typescript
+interface AttributeValue {
+  id: number
+  value: string
+  key: string
+  position: number
+  attribute_id: number
+  attribute?: Attribute
+}
+```
+
+### FieldType Enum
+
+```typescript
+enum FieldType {
+  TEXT = 'text',
+  NUMBER = 'number',
+  RICH_TEXT = 'richtext',
+  SELECT = 'select',
+  CHECKBOX = 'checkbox',
+  COLOR_PICKER = 'colorpicker',
+  DATE_PICKER = 'datepicker',
+}
+```
+
+### Usage Examples
+
+```typescript
+import type { Attribute } from '@shopperlabs/shopper-types'
+import { FieldType } from '@shopperlabs/shopper-types'
+
+// Get filterable attributes
+function getFilterableAttributes(attributes: Attribute[]): Attribute[] {
+  return attributes.filter((attr) => attr.is_filterable && attr.is_enabled)
+}
+
+// Check if attribute has selectable values
+function hasSelectableValues(attribute: Attribute): boolean {
+  return [FieldType.SELECT, FieldType.CHECKBOX, FieldType.COLOR_PICKER]
+    .includes(attribute.type)
+}
+
+// Render attribute input based on type
+function getInputComponent(attribute: Attribute): string {
+  switch (attribute.type) {
+    case FieldType.TEXT:
+      return 'TextInput'
+    case FieldType.NUMBER:
+      return 'NumberInput'
+    case FieldType.RICH_TEXT:
+      return 'RichTextEditor'
+    case FieldType.SELECT:
+      return 'Select'
+    case FieldType.CHECKBOX:
+      return 'CheckboxGroup'
+    case FieldType.COLOR_PICKER:
+      return 'ColorPicker'
+    case FieldType.DATE_PICKER:
+      return 'DatePicker'
+    default:
+      return 'TextInput'
+  }
+}
+```

@@ -236,6 +236,21 @@
                                 ]
                             }
                         ]
+                    },
+                    {
+                        "tab": "Reference",
+                        "groups": [
+                            {
+                                "group": "TypeScript",
+                                "pages": [
+                                    "v2/reference/typescript-types",
+                                    "v2/reference/types/product",
+                                    "v2/reference/types/order",
+                                    "v2/reference/types/customer",
+                                    "v2/reference/types/catalog"
+                                ]
+                            }
+                        ]
                     }
                 ]
             }

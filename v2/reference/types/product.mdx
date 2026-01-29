@@ -1,0 +1,152 @@
+---
+title: Product Types
+description: TypeScript type definitions for Product and ProductVariant models.
+---
+
+## Product
+
+The `Product` interface represents a product in your catalog.
+
+```typescript
+import type { Product } from '@shopperlabs/shopper-types'
+```
+
+### Definition
+
+```typescript
+interface Product extends Entity, SEOFields, ShippingFields {
+  name: string
+  slug: string
+  sku?: string | null
+  barcode: string | null
+  description: string | null
+  security_stock: number | null
+  featured: boolean
+  is_visible: boolean
+  type: ProductType | null
+  published_at: DateEntity | null
+  external_id: string | null
+  stock: number
+  variants_stock?: number
+  supplier_id?: number | null
+  brand_id: number | null
+  metadata: Metadata
+
+  // Relationships
+  supplier?: Supplier
+  brand?: Brand
+  channels?: Channel[]
+  categories?: Category[]
+  options?: Attribute[]
+  collections?: Collection[]
+  variants?: ProductVariant[]
+  relatedProducts?: Product[]
+  images?: Media[] | null
+  reviews?: Review[]
+  prices?: Price[]
+}
+```
+
+### ProductType Enum
+
+```typescript
+enum ProductType {
+  EXTERNAL = 'external',
+  VIRTUAL = 'virtual',
+  STANDARD = 'standard',
+  VARIANT = 'variant',
+}
+```
+
+### Usage Examples
+
+```typescript
+import type { Product } from '@shopperlabs/shopper-types'
+import { ProductType } from '@shopperlabs/shopper-types'
+
+// Type checking
+function isVariantProduct(product: Product): boolean {
+  return product.type === ProductType.VARIANT
+}
+
+// With API response
+async function fetchProduct(slug: string): Promise<Product> {
+  const response = await fetch(`/api/products/${slug}`)
+  return response.json()
+}
+
+// Check stock
+function isInStock(product: Product): boolean {
+  if (product.type === ProductType.VARIANT) {
+    return (product.variants_stock ?? 0) > 0
+  }
+  return product.stock > 0
+}
+
+// Get main image
+function getProductImage(product: Product): string | null {
+  return product.images?.[0]?.url ?? null
+}
+```
+
+---
+
+## ProductVariant
+
+The `ProductVariant` interface represents a variant of a product (size, color, etc.).
+
+```typescript
+import type { ProductVariant } from '@shopperlabs/shopper-types'
+```
+
+### Definition
+
+```typescript
+interface ProductVariant extends Entity, ShippingFields {
+  name: string
+  sku?: string | null
+  barcode: string | null
+  ean: string | null
+  upc: string | null
+  position: number
+  allow_backorder: boolean
+  product_id: number
+  stock: number
+  metadata: Metadata
+
+  // Relationships
+  product?: Product
+  values?: AttributeValue[]
+  images?: Media[] | null
+  prices?: Price[]
+}
+```
+
+### Usage Examples
+
+```typescript
+import type { Product, ProductVariant } from '@shopperlabs/shopper-types'
+
+// Get variant by attribute values
+function findVariant(
+  product: Product,
+  attributes: Record<string, string>
+): ProductVariant | undefined {
+  return product.variants?.find((variant) => {
+    return variant.values?.every((value) => {
+      const attr = value.attribute
+      return attr && attributes[attr.slug] === value.key
+    })
+  })
+}
+
+// Check variant availability
+function isVariantAvailable(variant: ProductVariant): boolean {
+  return variant.stock > 0 || variant.allow_backorder
+}
+
+// Get variant price
+function getVariantPrice(variant: ProductVariant): number | null {
+  return variant.prices?.[0]?.amount ?? null
+}
+```

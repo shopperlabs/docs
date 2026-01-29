@@ -1,0 +1,180 @@
+---
+title: Customer Types
+description: TypeScript type definitions for Customer and Address models.
+---
+
+## Customer
+
+The `Customer` interface represents a customer in your store.
+
+```typescript
+import type { Customer } from '@shopperlabs/shopper-types'
+```
+
+### Definition
+
+```typescript
+interface Customer extends Entity {
+  first_name: string | null
+  last_name: string
+  email: string
+  gender: GenderType | null
+  phone_number: string | null
+  birth_date: Date | null
+  email_verified_at: Date | null
+  avatar: AvatarType
+  timezone?: string | null
+  opt_in: boolean
+  last_login_at: DateEntity | null
+  last_login_ip?: string | null
+
+  // Relationships
+  addresses?: Address[]
+}
+```
+
+### GenderType Enum
+
+```typescript
+enum GenderType {
+  MALE = 'male',
+  FEMALE = 'female',
+}
+```
+
+### AvatarType Interface
+
+```typescript
+interface AvatarType {
+  type: string
+  url: string
+  default: string
+}
+```
+
+### Usage Examples
+
+```typescript
+import type { Customer } from '@shopperlabs/shopper-types'
+
+// Get full name
+function getCustomerName(customer: Customer): string {
+  if (customer.first_name) {
+    return `${customer.first_name} ${customer.last_name}`
+  }
+  return customer.last_name
+}
+
+// Get default shipping address
+function getDefaultShippingAddress(customer: Customer) {
+  return customer.addresses?.find((addr) => addr.shipping_default)
+}
+
+// Check if customer has opted in to marketing
+function canSendMarketing(customer: Customer): boolean {
+  return customer.opt_in && customer.email_verified_at !== null
+}
+```
+
+---
+
+## Address
+
+The `Address` interface represents a customer address.
+
+```typescript
+import type { Address } from '@shopperlabs/shopper-types'
+```
+
+### Definition
+
+```typescript
+interface Address extends Entity {
+  first_name: string | null
+  last_name: string
+  full_name: string
+  company_name: string | null
+  street_address: string
+  street_address_plus?: string | null
+  postal_code: string
+  city: string
+  state: string | null
+  phone_number?: string | null
+  type: AddressType
+  shipping_default: boolean
+  billing_default: boolean
+  user_id: number
+  country_id: number
+
+  // Relationships
+  country?: Country
+}
+```
+
+### AddressType Enum
+
+```typescript
+enum AddressType {
+  BILLING = 'billing',
+  SHIPPING = 'shipping',
+}
+```
+
+### Usage Examples
+
+```typescript
+import type { Address } from '@shopperlabs/shopper-types'
+import { AddressType } from '@shopperlabs/shopper-types'
+
+// Format address for display
+function formatAddress(address: Address): string {
+  const lines = [
+    address.full_name,
+    address.company_name,
+    address.street_address,
+    address.street_address_plus,
+    `${address.city}, ${address.state ?? ''} ${address.postal_code}`,
+    address.country?.name,
+  ].filter(Boolean)
+
+  return lines.join('\n')
+}
+
+// Filter shipping addresses
+function getShippingAddresses(addresses: Address[]): Address[] {
+  return addresses.filter((addr) => addr.type === AddressType.SHIPPING)
+}
+```
+
+---
+
+## Country
+
+The `Country` interface represents a country.
+
+```typescript
+import type { Country } from '@shopperlabs/shopper-types'
+```
+
+### Definition
+
+```typescript
+interface Country {
+  id: number
+  name: string
+  name_official: string
+  region: string
+  subregion: string
+  cca3: string
+  cca2: string
+  flag: string
+  svg_flag: string
+  latitude: number
+  longitude: number
+  phone_calling_code: Record<string, unknown>
+  currencies: Record<string, unknown>
+
+  // Relationships
+  zones?: Zone[]
+}
+```
