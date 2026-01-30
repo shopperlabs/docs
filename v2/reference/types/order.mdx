@@ -21,7 +21,7 @@ interface Order extends Entity {
   currency_code: string
   total_amount?: number
   status: OrderStatus
-  canceled_at: DateEntity | null
+  cancelled_at: DateEntity | null
   archived_at: DateEntity | null
   zone_id: number | null
   shipping_address_id: number | null
