@@ -1,6 +1,6 @@
 ---
 title: Product Types
-description: TypeScript type definitions for Product and ProductVariant models.
+description: TypeScript type definitions for Product, ProductVariant, and ProductTag models.
 ---
 
 ## Product
@@ -19,6 +19,7 @@ interface Product extends Entity, SEOFields, ShippingFields {
   slug: string
   sku?: string | null
   barcode: string | null
+  summary: string | null
   description: string | null
   security_stock: number | null
   featured: boolean
@@ -39,6 +40,7 @@ interface Product extends Entity, SEOFields, ShippingFields {
   categories?: Category[]
   options?: Attribute[]
   collections?: Collection[]
+  tags?: ProductTag[]
   variants?: ProductVariant[]
   relatedProducts?: Product[]
   images?: Media[] | null
@@ -148,5 +150,45 @@ function isVariantAvailable(variant: ProductVariant): boolean {
 // Get variant price
 function getVariantPrice(variant: ProductVariant): number | null {
   return variant.prices?.[0]?.amount ?? null
+}
+```
+
+---
+
+## ProductTag
+
+The `ProductTag` interface represents a simple label attached to products.
+
+```typescript
+import type { ProductTag } from '@shopperlabs/shopper-types'
+```
+
+### Definition
+
+```typescript
+interface ProductTag extends Entity {
+  name: string
+  slug: string | null
+
+  // Relationships
+  products?: Product[]
+}
+```
+
+### Usage Examples
+
+```typescript
+import type { Product, ProductTag } from '@shopperlabs/shopper-types'
+
+// Filter products by tag
+function getProductsByTag(products: Product[], tagSlug: string): Product[] {
+  return products.filter((product) =>
+    product.tags?.some((tag) => tag.slug === tagSlug)
+  )
+}
+
+// Get all tag names for a product
+function getTagNames(product: Product): string[] {
+  return product.tags?.map((tag) => tag.name) ?? []
 }
 ```

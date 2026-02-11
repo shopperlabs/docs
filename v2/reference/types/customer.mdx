@@ -20,8 +20,8 @@ interface Customer extends Entity {
   email: string
   gender: GenderType | null
   phone_number: string | null
-  birth_date: Date | null
-  email_verified_at: Date | null
+  birth_date: string | null
+  email_verified_at: string | null
   avatar: AvatarType
   timezone?: string | null
   opt_in: boolean
@@ -101,6 +101,7 @@ interface Address extends Entity {
   state: string | null
   phone_number?: string | null
   type: AddressType
+  metadata: Metadata
   shipping_default: boolean
   billing_default: boolean
   user_id: number

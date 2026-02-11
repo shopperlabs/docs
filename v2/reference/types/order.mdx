@@ -31,6 +31,7 @@ interface Order extends Entity {
   channel_id: number | null
   parent_order_id: number | null
   shipping_option_id?: number | null
+  metadata: Metadata
 
   // Relationships
   shippingOption?: CarrierOption
@@ -52,12 +53,14 @@ interface Order extends Entity {
 
 ```typescript
 enum OrderStatus {
-  PENDING = 'pending',
+  ARCHIVED = 'archived',
   NEW = 'new',
-  REGISTER = 'register',
-  PAID = 'paid',
-  COMPLETED = 'completed',
   SHIPPED = 'shipped',
+  DELIVERED = 'delivered',
+  PENDING = 'pending',
+  PAID = 'paid',
+  REGISTER = 'registered',
+  COMPLETED = 'completed',
   CANCELLED = 'cancelled',
 }
 ```
@@ -81,12 +84,14 @@ function calculateTotal(order: Order): number {
 // Get status badge color
 function getStatusColor(status: OrderStatus): string {
   const colors: Record<OrderStatus, string> = {
-    [OrderStatus.PENDING]: '#fbbf24',
+    [OrderStatus.ARCHIVED]: '#6b7280',
     [OrderStatus.NEW]: '#3b82f6',
-    [OrderStatus.REGISTER]: '#6b7280',
-    [OrderStatus.PAID]: '#10b981',
-    [OrderStatus.COMPLETED]: '#059669',
     [OrderStatus.SHIPPED]: '#8b5cf6',
+    [OrderStatus.DELIVERED]: '#0ea5e9',
+    [OrderStatus.PENDING]: '#fbbf24',
+    [OrderStatus.PAID]: '#10b981',
+    [OrderStatus.REGISTER]: '#2563eb',
+    [OrderStatus.COMPLETED]: '#059669',
     [OrderStatus.CANCELLED]: '#ef4444',
   }
   return colors[status]
@@ -216,6 +221,7 @@ interface OrderRefund extends Entity {
   currency: string
   order_id: number
   user_id: number | null
+  metadata: Metadata
   order?: Order
 }
 ```

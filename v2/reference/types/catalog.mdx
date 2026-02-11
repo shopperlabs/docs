@@ -14,11 +14,12 @@ import type { Category } from '@shopperlabs/shopper-types'
 ### Definition
 
 ```typescript
-interface Category extends Entity {
+interface Category extends Entity, SEOFields {
   name: string
   slug: string
   description: string | null
   is_enabled: boolean
+  position: number
   parent_id: number | null
   metadata: Metadata
   slug_path?: string
@@ -27,6 +28,7 @@ interface Category extends Entity {
   image?: Media | null
   parent?: Category
   children?: Category[]
+  products?: Product[]
 }
 ```
 
@@ -114,6 +116,7 @@ interface Collection extends Entity, SEOFields {
   image?: Media | null
   rules?: CollectionRule[]
   zones?: Zone[]
+  products?: Product[]
 }
 ```
 
@@ -148,16 +151,20 @@ interface CollectionRule extends Entity {
 
 enum CollectionRuleType {
   PRODUCT_TITLE = 'product_title',
+  PRODUCT_BRAND = 'product_brand',
+  PRODUCT_CATEGORY = 'product_category',
   PRODUCT_PRICE = 'product_price',
   COMPARE_AT_PRICE = 'compare_at_price',
   INVENTORY_STOCK = 'inventory_stock',
-  PRODUCT_CATEGORY = 'product_category',
-  PRODUCT_BRAND = 'product_brand',
+  PRODUCT_CREATED_AT = 'product_created_at',
+  PRODUCT_FEATURED = 'product_featured',
+  PRODUCT_RATING = 'product_rating',
+  PRODUCT_SALES_COUNT = 'product_sales_count',
 }
 
 enum CollectionOperator {
-  EQUALS = 'equals',
-  NOT_EQUALS = 'not_equals',
+  EQUALS_TO = 'equals_to',
+  NOT_EQUAL_TO = 'not_equal_to',
   LESS_THAN = 'less_than',
   GREATER_THAN = 'greater_than',
   STARTS_WITH = 'starts_with',

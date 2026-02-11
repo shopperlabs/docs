@@ -50,6 +50,7 @@ The package exports types for all Shopper models:
 |------|-------------|
 | `Product` | Product model with variants, categories, and media |
 | `ProductVariant` | Product variant with pricing and attributes |
+| `ProductTag` | Simple label for cross-cutting product organization |
 | `Order` | Order with items, addresses, and shipping |
 | `OrderItem` | Individual order line item |
 | `Customer` | Customer profile and addresses |
@@ -98,10 +99,13 @@ if (order.status === OrderStatus.COMPLETED) {
 | Enum | Values |
 |------|--------|
 | `ProductType` | `STANDARD`, `VARIANT`, `VIRTUAL`, `EXTERNAL` |
-| `OrderStatus` | `PENDING`, `NEW`, `REGISTER`, `PAID`, `COMPLETED`, `SHIPPED`, `CANCELLED` |
+| `OrderStatus` | `ARCHIVED`, `NEW`, `SHIPPED`, `DELIVERED`, `PENDING`, `PAID`, `REGISTER`, `COMPLETED`, `CANCELLED` |
 | `FulfillmentStatus` | `UNFULFILLED`, `PARTIALLY_FULFILLED`, `FULFILLED`, `CANCELLED` |
+| `OrderRefundStatus` | `PENDING`, `TREATMENT`, `PARTIAL_REFUND`, `REFUNDED`, `CANCELLED`, `REJECTED` |
 | `CollectionType` | `MANUAL`, `AUTO` |
 | `CollectionCondition` | `ALL`, `ANY` |
+| `CollectionRuleType` | `PRODUCT_TITLE`, `PRODUCT_BRAND`, `PRODUCT_CATEGORY`, `PRODUCT_PRICE`, `COMPARE_AT_PRICE`, `INVENTORY_STOCK`, `PRODUCT_CREATED_AT`, `PRODUCT_FEATURED`, `PRODUCT_RATING`, `PRODUCT_SALES_COUNT` |
+| `CollectionOperator` | `EQUALS_TO`, `NOT_EQUAL_TO`, `LESS_THAN`, `GREATER_THAN`, `STARTS_WITH`, `ENDS_WITH`, `CONTAINS`, `NOT_CONTAINS` |
 | `AddressType` | `BILLING`, `SHIPPING` |
 | `DiscountType` | `PERCENTAGE`, `FIXED_AMOUNT` |
 | `GenderType` | `MALE`, `FEMALE` |
@@ -131,7 +135,7 @@ Dates are returned with both raw and human-readable formats:
 
 ```typescript
 interface DateEntity {
-  date: Date
+  date: string // e.g., "2026-02-11 14:30:00"
   human: string // e.g., "2 hours ago"
 }
 ```
@@ -215,13 +219,15 @@ import { OrderStatus } from '@shopperlabs/shopper-types'
 
 function OrderDetails({ order }: { order: Order }) {
   const statusColors: Record<OrderStatus, string> = {
-    [OrderStatus.PENDING]: 'yellow',
+    [OrderStatus.ARCHIVED]: 'gray',
     [OrderStatus.NEW]: 'blue',
-    [OrderStatus.PAID]: 'green',
     [OrderStatus.SHIPPED]: 'purple',
+    [OrderStatus.DELIVERED]: 'sky',
+    [OrderStatus.PENDING]: 'yellow',
+    [OrderStatus.PAID]: 'green',
+    [OrderStatus.REGISTER]: 'gray',
     [OrderStatus.COMPLETED]: 'green',
     [OrderStatus.CANCELLED]: 'red',
-    [OrderStatus.REGISTER]: 'gray',
   }
 
   return (
