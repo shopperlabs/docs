@@ -1,0 +1,102 @@
+---
+title: From v2.2 to v2.3
+description: How to upgrade your Shopper installation from v2.2 to v2.3.
+---
+
+<Info>
+**Estimated Upgrade Time:** 5-10 minutes for most applications.
+</Info>
+
+## Updating Dependencies
+
+Update your `composer.json` file to require Shopper 2.3:
+
+```json
+"require": {
+    "shopper/framework": "^2.3"
+}
+```
+
+Then run:
+
+```bash
+composer update -W
+```
+
+After updating Composer dependencies, run the migrations:
+
+```bash
+php artisan migrate
+```
+
+---
+
+## New Features
+
+### Product Tags
+
+Shopper 2.3 introduces **Product Tags** — simple, flat labels you can attach to products for cross-cutting organization. Unlike categories (hierarchical) or collections (rule-based), tags are flexible and ideal for seasonal labels, marketing campaigns, or storefront filtering.
+
+See the [Product Tags documentation](/v2/product-tags) for full details.
+
+#### New Permissions
+
+New permissions have been added for **tags**. For existing installations, create them and assign to your admin role:
+
+```php
+use Shopper\Core\Models\Permission;
+use Spatie\Permission\Models\Role;
+
+Permission::generate('tags', 'products');
+
+$admin = Role::findByName('administrator');
+$admin->givePermissionTo([
+    'browse_tags',
+    'read_tags',
+    'edit_tags',
+    'add_tags',
+    'delete_tags',
+]);
+```
+
+<Warning>
+If you don't create these permissions, users will not be able to access the Tags page or manage tags from the product form.
+</Warning>
+
+#### New Feature Flag
+
+A new `tag` feature flag has been added to `config/shopper/features.php`. If you have a published config file, add:
+
+```php
+use Shopper\Enum\FeatureState;
+
+return [
+    // ... existing features
+    'tag' => FeatureState::Enabled,
+];
+```
+
+Set to `FeatureState::Disabled` if you don't need tags in your store.
+
+#### Published Components
+
+If you have published product components via `php artisan shopper:component:publish product`, add the new tag page to your `config/shopper/components/product.php`:
+
+```php
+'pages' => [
+    // ... existing pages
+    'tag-index' => \Shopper\Livewire\Pages\Tag\Index::class,
+],
+```
+
+---
+
+## Migration Checklist
+
+- [ ] Update `composer.json` dependencies
+- [ ] Run `composer update`
+- [ ] Run `php artisan migrate` (creates `product_tags` table)
+- [ ] Create new permissions for `tags`
+- [ ] Update published config files if applicable (`features.php`, `components/product.php`)
+- [ ] Clear caches: `php artisan optimize:clear`
+- [ ] Test your application

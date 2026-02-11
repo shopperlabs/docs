@@ -141,7 +141,14 @@
                                 "group": "Prologue",
                                 "pages": [
                                     "v2/getting-started",
-                                    "v2/upgrade",
+                                    {
+                                        "group": "Upgrade Guide",
+                                        "pages": [
+                                            "v2/upgrade",
+                                            "v2/upgrade/v2-2-to-v2-3",
+                                            "v2/upgrade/v2-1-to-v2-2"
+                                        ]
+                                    },
                                     "v2/contributing"
                                 ]
                             },
@@ -158,6 +165,7 @@
                                 "pages": [
                                     "v2/products",
                                     "v2/product-variants",
+                                    "v2/product-tags",
                                     "v2/brands",
                                     "v2/categories",
                                     "v2/collections",

@@ -1,0 +1,188 @@
+---
+title: Product Tags
+description: Complete reference for the ProductTag model, relationships, and usage in Shopper.
+---
+
+Tags are simple labels you attach to products for cross-cutting organization. Unlike categories (hierarchical) or collections (rule-based), tags are flat and flexible — ideal for seasonal labels, marketing campaigns, or storefront filtering.
+
+## Model
+
+```php
+Shopper\Core\Models\ProductTag
+```
+
+The ProductTag model is a simple entity with no contract interface — it is not designed to be swappable.
+
+## Database Schema
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `name` | string | no | - | Tag name |
+| `slug` | string | yes | auto | URL-friendly identifier (unique) |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+## Relationships
+
+### Products
+
+Tags use the shared polymorphic `product_has_relations` pivot table, the same mechanism used by categories, collections, and channels.
+
+```php
+// Get all products for a tag
+$tag->products;
+
+// Count products
+$tag->products()->count();
+
+// Attach products
+$tag->products()->attach([$productId1, $productId2]);
+
+// Detach products
+$tag->products()->detach($productId);
+
+// Sync products
+$tag->products()->sync($productIds);
+```
+
+From the Product side:
+
+```php
+// Get all tags for a product
+$product->tags;
+
+// Attach tags
+$product->tags()->attach([$tagId1, $tagId2]);
+
+// Sync tags
+$product->tags()->sync($tagIds);
+```
+
+## Creating Tags
+
+```php
+use Shopper\Core\Models\ProductTag;
+
+$tag = ProductTag::query()->create([
+    'name' => 'Summer 2026',
+    'slug' => 'summer-2026', // Auto-generated if not provided
+]);
+
+// Attach to products
+$tag->products()->attach([$product1->id, $product2->id]);
+```
+
+## Retrieving Tags
+
+```php
+// Get all tags
+$tags = ProductTag::query()->get();
+
+// Get tags with product count
+$tags = ProductTag::query()
+    ->withCount('products')
+    ->orderBy('name')
+    ->get();
+
+// Find by slug
+$tag = ProductTag::query()
+    ->where('slug', 'summer-2026')
+    ->with('products')
+    ->firstOrFail();
+
+// Get tags for a specific product
+$tags = $product->tags()->get();
+```
+
+## Disabling Tag Feature
+
+If you don't need tags in your store, you can disable the feature entirely:
+
+```php
+// config/shopper/features.php
+use Shopper\Enum\FeatureState;
+
+return [
+    'tag' => FeatureState::Disabled,
+    // ...
+];
+```
+
+When disabled:
+- Tag menu item is hidden from the sidebar
+- Tag-related routes are not registered
+- Tag selection is removed from product forms
+
+## Components
+
+Tags are managed under the product components configuration. Publish to customize:
+
+```bash
+php artisan shopper:component:publish product
+```
+
+This includes the tag page in `config/shopper/components/product.php`:
+
+```php
+return [
+    'pages' => [
+        'tag-index' => \Shopper\Livewire\Pages\Tag\Index::class,
+        // ...
+    ],
+];
+```
+
+## Using Tags in Storefront
+
+### Controller Example
+
+```php
+namespace App\Http\Controllers;
+
+use Shopper\Core\Models\ProductTag;
+
+class TagController extends Controller
+{
+    public function index()
+    {
+        $tags = ProductTag::query()
+            ->withCount('products')
+            ->orderBy('name')
+            ->get();
+
+        return view('tags.index', compact('tags'));
+    }
+
+    public function show(string $slug)
+    {
+        $tag = ProductTag::query()
+            ->where('slug', $slug)
+            ->firstOrFail();
+
+        $products = $tag->products()
+            ->where('is_visible', true)
+            ->paginate(12);
+
+        return view('tags.show', compact('tag', 'products'));
+    }
+}
+```
+
+### Filtering Products by Tags
+
+```php
+use Shopper\Core\Models\Product;
+
+// Get products that have a specific tag
+$products = Product::query()
+    ->whereHas('tags', fn ($query) => $query->where('slug', 'summer-2026'))
+    ->publish()
+    ->get();
+
+// Get products that have any of the given tags
+$products = Product::query()
+    ->whereHas('tags', fn ($query) => $query->whereIn('slug', ['new-arrival', 'featured']))
+    ->publish()
+    ->paginate(12);
+```
