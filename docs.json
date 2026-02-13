@@ -187,6 +187,7 @@
                                     "v2/currencies",
                                     "v2/zones",
                                     "v2/carriers",
+                                    "v2/payment-methods",
                                     "v2/media",
                                     "v2/legal",
                                     "v2/acl",

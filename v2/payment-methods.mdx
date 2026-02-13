@@ -1,0 +1,283 @@
+---
+title: Payment Methods
+description: Complete reference for the PaymentMethod model, configuration, and payment management in Shopper.
+---
+
+Payment methods represent the ways customers can pay for their orders. Shopper provides a flexible system to manage multiple payment providers, each with its own logo, description, and customer-facing instructions.
+
+## Model
+
+```php
+Shopper\Core\Models\PaymentMethod
+```
+
+```php
+use Shopper\Core\Models\PaymentMethod;
+
+// The model implements
+- Shopper\Core\Models\Contracts\PaymentMethod
+
+// Uses traits
+- HasSlug
+- HasZones
+```
+
+## Database Schema
+
+### PaymentMethod Table
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `title` | string | no | - | Payment method name |
+| `slug` | string | yes | auto | URL-friendly identifier (unique) |
+| `logo` | string | yes | null | Path to the logo file |
+| `link_url` | string | yes | null | Payment provider website or documentation URL |
+| `description` | text | yes | null | Description displayed to customers when choosing a payment method |
+| `instructions` | text | yes | null | Instructions displayed to customers after placing an order |
+| `is_enabled` | boolean | no | false | Payment method visibility |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+## Contract
+
+The `PaymentMethod` contract defines the interface that all payment method models must implement:
+
+```php
+namespace Shopper\Core\Models\Contracts;
+
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
+
+interface PaymentMethod
+{
+    public function zones(): MorphToMany;
+}
+```
+
+Payment methods use zones to control availability by geographic region. A payment method can be assigned to multiple zones, and a zone can have multiple payment methods.
+
+## Relationships
+
+### Zones
+
+Payment methods can be scoped to specific geographic zones using the `HasZones` trait:
+
+```php
+// Get zones where this payment method is available
+$paymentMethod->zones;
+
+// Attach payment method to zones
+$paymentMethod->zones()->attach([$zoneId1, $zoneId2]);
+
+// Detach from zones
+$paymentMethod->zones()->detach($zoneId);
+```
+
+### Orders
+
+Orders reference payment methods via the `payment_method_id` foreign key:
+
+```php
+use Shopper\Core\Models\Order;
+
+// Get the payment method used for an order
+$order->paymentMethod;
+
+// Get all orders using a specific payment method
+Order::query()
+    ->where('payment_method_id', $paymentMethod->id)
+    ->get();
+```
+
+## Query Scopes
+
+```php
+use Shopper\Core\Models\PaymentMethod;
+
+// Get only enabled payment methods
+PaymentMethod::query()->enabled()->get();
+```
+
+## Logo Handling
+
+Payment method logos are stored as file paths and accessed through the `logo_url` accessor:
+
+```php
+$paymentMethod->logo;     // Raw file path (e.g., "payment/stripe.png")
+$paymentMethod->logo_url; // Full URL via shopper_asset() helper
+```
+
+## Creating Payment Methods
+
+### Basic Payment Method
+
+```php
+use Shopper\Core\Models\PaymentMethod;
+
+$paymentMethod = PaymentMethod::query()->create([
+    'title' => 'Credit Card',
+    'slug' => 'credit-card',
+    'link_url' => 'https://stripe.com',
+    'description' => 'Pay securely with your credit or debit card.',
+    'instructions' => 'Your card will be charged immediately upon order confirmation.',
+    'is_enabled' => true,
+]);
+```
+
+### Cash on Delivery
+
+```php
+$cod = PaymentMethod::query()->create([
+    'title' => 'Cash on Delivery',
+    'slug' => 'cash-on-delivery',
+    'description' => 'Pay with cash when your order is delivered.',
+    'instructions' => 'Please have the exact amount ready for the delivery driver.',
+    'is_enabled' => true,
+]);
+```
+
+### Bank Transfer
+
+```php
+$bankTransfer = PaymentMethod::query()->create([
+    'title' => 'Bank Transfer',
+    'slug' => 'bank-transfer',
+    'description' => 'Pay via direct bank transfer.',
+    'instructions' => 'Please transfer the total amount to the following account: IBAN XX00 0000 0000 0000. Use your order number as the payment reference.',
+    'is_enabled' => true,
+]);
+```
+
+### Zone-Scoped Payment Method
+
+```php
+$mobileMoney = PaymentMethod::query()->create([
+    'title' => 'Mobile Money',
+    'slug' => 'mobile-money',
+    'link_url' => 'https://notchpay.co',
+    'description' => 'Pay with your mobile money wallet.',
+    'is_enabled' => true,
+]);
+
+// Make available only in specific zones
+$mobileMoney->zones()->attach([$africaZoneId]);
+```
+
+## Retrieving Payment Methods
+
+```php
+use Shopper\Core\Models\PaymentMethod;
+
+// All enabled payment methods
+$methods = PaymentMethod::query()
+    ->enabled()
+    ->get();
+
+// Find by slug
+$method = PaymentMethod::query()
+    ->where('slug', 'credit-card')
+    ->first();
+
+// Payment methods available in a specific zone
+$methods = PaymentMethod::query()
+    ->enabled()
+    ->whereHas('zones', fn ($q) => $q->where('zone_id', $zoneId))
+    ->get();
+
+// Payment methods with no zone restriction (available everywhere)
+$globalMethods = PaymentMethod::query()
+    ->enabled()
+    ->whereDoesntHave('zones')
+    ->get();
+```
+
+## Working with Orders
+
+When creating an order, associate it with the selected payment method:
+
+```php
+use Shopper\Core\Models\Order;
+
+$order = Order::query()->create([
+    'number' => $orderNumber,
+    'customer_id' => $customerId,
+    'payment_method_id' => $paymentMethod->id,
+    // ... other order fields
+]);
+
+// Access the payment method from an order
+$order->paymentMethod->title;        // "Credit Card"
+$order->paymentMethod->instructions; // Post-order instructions
+```
+
+## Storefront Example
+
+### Checkout Payment Selection
+
+```php
+namespace App\Http\Controllers;
+
+use Shopper\Core\Models\PaymentMethod;
+use Shopper\Core\Models\Zone;
+
+class CheckoutController extends Controller
+{
+    public function showPayment()
+    {
+        $zone = $this->getCustomerZone();
+
+        $paymentMethods = PaymentMethod::query()
+            ->enabled()
+            ->where(function ($query) use ($zone): void {
+                $query->whereHas('zones', fn ($q) => $q->where('zone_id', $zone?->id))
+                    ->orWhereDoesntHave('zones');
+            })
+            ->get();
+
+        return view('checkout.payment', compact('paymentMethods'));
+    }
+
+    public function storePayment(Request $request)
+    {
+        $paymentMethod = PaymentMethod::query()->findOrFail(
+            $request->input('payment_method_id')
+        );
+
+        session()->put('checkout.payment_method_id', $paymentMethod->id);
+
+        return redirect()->route('checkout.review');
+    }
+
+    private function getCustomerZone(): ?Zone
+    {
+        $address = Cart::shippingAddress();
+
+        return Zone::query()
+            ->whereHas('countries', fn ($q) => $q->where('name', $address->country_name))
+            ->first();
+    }
+}
+```
+
+<Note>
+Payment methods without any zone assignment are considered globally available and will be shown to all customers regardless of their location.
+</Note>
+
+## Use Cases
+
+| Payment Method | Description |
+|----------------|-------------|
+| Credit Card | Online card payments via Stripe, PayPal, etc. |
+| Bank Transfer | Direct bank wire transfer |
+| Cash on Delivery | Payment at delivery time |
+| Mobile Money | Mobile wallet payments (M-Pesa, Orange Money, etc.) |
+| PayPal | PayPal account or guest checkout |
+| Cryptocurrency | Bitcoin, Ethereum, etc. |
+
+| Scenario | Implementation |
+|----------|----------------|
+| Single payment provider | Create one enabled payment method |
+| Region-specific methods | Use zones to restrict availability |
+| Offline payments | Use `instructions` field for post-order guidance |
+| Gateway documentation | Use `link_url` to reference provider docs |
+| Display at checkout | Query enabled methods filtered by customer zone |
