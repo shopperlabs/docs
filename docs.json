@@ -554,8 +554,12 @@
         }
     },
     "integrations": {
-        "ga4": {
-            "measurementId": "G-NNZ07903B6"
-        }
+      "ga4": {
+        "measurementId": "G-NNZ07903B6"
+      },
+      "plausible": {
+        "domain": "laravelshopper.dev",
+        "server": "analytics.universy.app/js/script.outbound-links.pageview-props.js"
+      }
     }
 }
