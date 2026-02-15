@@ -559,7 +559,7 @@
       },
       "plausible": {
         "domain": "laravelshopper.dev",
-        "server": "analytics.universy.app/js/script.outbound-links.pageview-props.js"
+        "server": "analytics.universy.app"
       }
     }
 }
