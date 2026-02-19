@@ -1,0 +1,69 @@
+---
+title: "Demo Store"
+description: "A fully functional e-commerce demo built with Laravel Shopper to showcase real-world usage."
+---
+
+We've built a complete demo store to showcase what's possible with Shopper. It's a fully functional e-commerce application
+with a storefront and admin panel, so you can explore how Shopper works in a real-world scenario.
+
+<Frame>
+  <img src="/images/demo-store.jpg" alt="Shopper Demo Store" />
+</Frame>
+
+<a href="https://demo.laravelshopper.dev" target="_blank">
+  Visit the live demo &rarr;
+</a>
+
+## What's included
+
+The demo store covers the full e-commerce experience:
+
+- **Product catalog** with categories, collections, attribute filtering, and search
+- **Product pages** with variant selection, image gallery, multi-currency pricing, and reviews
+- **Multi-step checkout** with address selection, shipping method, and payment (Stripe, NotchPay, Cash)
+- **Customer accounts** with profile management, address book, and order history
+- **Blog** with articles, categories, featured images, and rich content
+- **Multi-zone support** with country-based currency switching and shipping options
+- **Admin panel** at `/cpanel` powered by Shopper with Filament
+
+## Admin panel access
+
+You can log in to the admin panel at [`/cpanel`](https://demo.laravelshopper.dev/cpanel):
+
+- **Email:** `admin@laravelshopper.dev`
+- **Password:** `demo.Shopper@2026!`
+
+<Warning>
+  The demo database is reset periodically. Please be respectful when editing data.
+</Warning>
+
+## Source code
+
+The full source code is available on GitHub. You can clone it and run it locally to explore the codebase, modify it,
+or use it as a starting point for your own store.
+
+<Card title="GitHub Repository" icon="github" href="https://github.com/shopperlabs/demo.laravelshopper.dev">
+  Browse the source code on GitHub
+</Card>
+
+### Running locally
+
+```bash
+git clone https://github.com/shopperlabs/demo.laravelshopper.dev.git shopper-demo && cd shopper-demo
+composer install
+npm install && npm run build
+composer setup
+```
+
+Then access the storefront at the URL provided by your local server.
+
+## Tech stack
+
+| Layer | Technology |
+|---|---|
+| Framework | Laravel 12 |
+| Admin panel | Shopper + Filament 4 |
+| Reactivity | Livewire 3 + Volt |
+| UI components | Flux UI |
+| Styling | Tailwind CSS 4 |
+| Deployment | Docker + FrankenPHP (Octane) |

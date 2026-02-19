@@ -152,6 +152,7 @@
                   "group": "Prologue",
                   "pages": [
                     "v2/getting-started",
+                    "v2/demo-store",
                     {
                       "group": "Upgrade Guide",
                       "pages": [
@@ -281,9 +282,16 @@
         "dark": "/logo/logo.svg"
     },
     "navbar": {
+        "links": [
+            {
+                "type": "github",
+                "href": "https://github.com/shopperlabs/shopper"
+            }
+        ],
         "primary": {
-            "type": "github",
-            "href": "https://github.com/shopperlabs/shopper"
+            "type": "button",
+            "label": "Live Demo",
+            "href": "https://demo.laravelshopper.dev"
         }
     },
     "contextual": {
