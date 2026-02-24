@@ -234,6 +234,52 @@ This enables partial fulfillment: different items in the same order can be at di
 
 If you query or manipulate order items directly, be aware of these new columns. No action is required unless you have custom logic that conflicts.
 
+### Order Detail Page Decomposed into Components
+
+**Likelihood of Impact: Medium**
+
+The order detail page has been restructured from a single monolithic page into independent, overridable Livewire components. Each section of the page is now its own component, registered in `config/shopper/components/order.php`.
+
+Components marked **New** were added in v2.5. Components marked **Existing** were already present but have been refactored.
+
+| Component | Alias | Type | Description |
+|-----------|-------|------|-------------|
+| `Index` | `shopper-order-index` | Existing | Order listing with filters and tabs |
+| `Detail` | `shopper-order-detail` | Existing | Order detail page (refactored, now uses sub-components) |
+| **`Shipments`** | `shopper-order-shipments` | **New** | Centralized shipment list with filters and tab navigation |
+| **`Fulfillment`** | `shopper-order-fulfillment` | **New** | Fulfillment progress stepper, shipping address, create shipment button |
+| **`OrderCustomer`** | `shopper-order-customer` | **New** | Customer info, shipping and billing addresses |
+| **`OrderItems`** | `shopper-order-items` | **New** | Paginated order items with fulfillment status badges |
+| **`OrderNotes`** | `shopper-order-notes` | **New** | Notes editor with save action |
+| **`OrderSummary`** | `shopper-order-summary` | **New** | Financial summary, shipping method, payment method |
+| **`ShipmentTimeline`** | `shopper-order-shipment-timeline` | **New** | Shipment event timeline with "Add event" action |
+| **`CreateShippingLabel`** | `shopper-slide-overs.create-shipping-label` | **New** | Slide-over form to create a shipment and assign unfulfilled items |
+| **`ShipmentDetail`** | `shopper-slide-overs.shipment-detail` | **New** | Slide-over with shipment detail, event timeline, and delivery actions |
+
+If you have published order components via `php artisan shopper:component:publish order`, update your `config/shopper/components/order.php` to include the new entries:
+
+```php
+'pages' => [
+    'order-index' => \Shopper\Livewire\Pages\Order\Index::class,
+    'order-detail' => \Shopper\Livewire\Pages\Order\Detail::class,
+    'order-shipments' => \Shopper\Livewire\Pages\Order\Shipments::class, // [!code ++]
+],
+'components' => [
+    'order-customer' => \Shopper\Livewire\Components\Orders\OrderCustomer::class, // [!code ++]
+    'order-fulfillment' => \Shopper\Livewire\Components\Orders\Fulfillment::class, // [!code ++]
+    'order-items' => \Shopper\Livewire\Components\Orders\OrderItems::class, // [!code ++]
+    'order-notes' => \Shopper\Livewire\Components\Orders\OrderNotes::class, // [!code ++]
+    'order-shipment-timeline' => \Shopper\Livewire\Components\Orders\ShipmentTimeline::class, // [!code ++]
+    'order-summary' => \Shopper\Livewire\Components\Orders\OrderSummary::class, // [!code ++]
+    'slide-overs.create-shipping-label' => \Shopper\Livewire\SlideOvers\CreateShippingLabel::class, // [!code ++]
+    'slide-overs.shipment-detail' => \Shopper\Livewire\SlideOvers\ShipmentDetail::class, // [!code ++]
+],
+```
+
+<Tip>
+You can override any component by pointing the config key to your own class. For example, to customize how order items are displayed, create your own component extending `Shopper\Livewire\Components\Orders\OrderItems` and update the config entry.
+</Tip>
+
 ### OrderShipping: Status Column & Events
 
 **Likelihood of Impact: Medium**
@@ -330,6 +376,7 @@ A new Shipments page in the admin panel provides a centralized view of all shipm
 - [ ] Replace `$paymentMethod->logo` with `$paymentMethod->logoUrl()`
 - [ ] Replace `$carrier->logo` with `$carrier->logoUrl()`
 - [ ] If using a custom Order model: implement the new contract methods
+- [ ] If published order components: update `config/shopper/components/order.php` with new entries
 - [ ] Optional: `composer require shopper/stripe` for Stripe payments
 - [ ] Clear caches: `php artisan optimize:clear`
 - [ ] Test your application
