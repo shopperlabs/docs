@@ -162,6 +162,7 @@
                       "group": "Upgrade Guide",
                       "pages": [
                         "v2/upgrade",
+                        "v2/upgrade/v2-4-to-v2-5",
                         "v2/upgrade/v2-2-to-v2-3",
                         "v2/upgrade/v2-1-to-v2-2"
                       ]
