@@ -53,6 +53,10 @@ The package exports types for all Shopper models:
 | `ProductTag` | Simple label for cross-cutting product organization |
 | `Order` | Order with items, addresses, and shipping |
 | `OrderItem` | Individual order line item |
+| `OrderShipping` | Shipment with tracking and carrier |
+| `OrderShippingEvent` | Tracking event in a shipment timeline |
+| `OrderAddress` | Shipping or billing address on an order |
+| `OrderRefund` | Refund request for an order |
 | `Customer` | Customer profile and addresses |
 | `Category` | Hierarchical product category |
 | `Brand` | Product brand |
@@ -79,18 +83,22 @@ The package also exports enums for type-safe status checks:
 import {
   ProductType,
   OrderStatus,
+  PaymentStatus,
+  ShippingStatus,
   CollectionType,
   AddressType
 } from '@shopperlabs/shopper-types'
 
-// Check product type
 if (product.type === ProductType.VARIANT) {
   // Handle variant product
 }
 
-// Check order status
 if (order.status === OrderStatus.COMPLETED) {
   // Order is complete
+}
+
+if (order.payment_status === PaymentStatus.AUTHORIZED) {
+  // Payment can be captured
 }
 ```
 
@@ -99,9 +107,12 @@ if (order.status === OrderStatus.COMPLETED) {
 | Enum | Values |
 |------|--------|
 | `ProductType` | `STANDARD`, `VARIANT`, `VIRTUAL`, `EXTERNAL` |
-| `OrderStatus` | `ARCHIVED`, `NEW`, `SHIPPED`, `DELIVERED`, `PENDING`, `PAID`, `REGISTER`, `COMPLETED`, `CANCELLED` |
-| `FulfillmentStatus` | `UNFULFILLED`, `PARTIALLY_FULFILLED`, `FULFILLED`, `CANCELLED` |
-| `OrderRefundStatus` | `PENDING`, `TREATMENT`, `PARTIAL_REFUND`, `REFUNDED`, `CANCELLED`, `REJECTED` |
+| `OrderStatus` | `NEW`, `PROCESSING`, `COMPLETED`, `CANCELLED`, `ARCHIVED` |
+| `PaymentStatus` | `PENDING`, `AUTHORIZED`, `PAID`, `PARTIALLY_REFUNDED`, `REFUNDED`, `VOIDED` |
+| `ShippingStatus` | `UNFULFILLED`, `PARTIALLY_SHIPPED`, `SHIPPED`, `PARTIALLY_DELIVERED`, `DELIVERED`, `PARTIALLY_RETURNED`, `RETURNED` |
+| `FulfillmentStatus` | `PENDING`, `FORWARDED_TO_SUPPLIER`, `PROCESSING`, `SHIPPED`, `DELIVERED`, `CANCELLED` |
+| `ShipmentStatus` | `PENDING`, `PICKED_UP`, `IN_TRANSIT`, `AT_SORTING_CENTER`, `OUT_FOR_DELIVERY`, `DELIVERED`, `DELIVERY_FAILED`, `RETURNED` |
+| `OrderRefundStatus` | `PENDING`, `AWAITING`, `TREATMENT`, `PARTIAL_REFUND`, `REFUNDED`, `CANCELLED`, `REJECTED` |
 | `CollectionType` | `MANUAL`, `AUTO` |
 | `CollectionCondition` | `ALL`, `ANY` |
 | `CollectionRuleType` | `PRODUCT_TITLE`, `PRODUCT_BRAND`, `PRODUCT_CATEGORY`, `PRODUCT_PRICE`, `COMPARE_AT_PRICE`, `INVENTORY_STOCK`, `PRODUCT_CREATED_AT`, `PRODUCT_FEATURED`, `PRODUCT_RATING`, `PRODUCT_SALES_COUNT` |
@@ -215,28 +226,26 @@ function ProductList({ products, category }: ProductListProps) {
 
 ```typescript
 import type { Order, OrderItem } from '@shopperlabs/shopper-types'
-import { OrderStatus } from '@shopperlabs/shopper-types'
+import { OrderStatus, PaymentStatus, ShippingStatus } from '@shopperlabs/shopper-types'
 
 function OrderDetails({ order }: { order: Order }) {
   const statusColors: Record<OrderStatus, string> = {
-    [OrderStatus.ARCHIVED]: 'gray',
-    [OrderStatus.NEW]: 'blue',
-    [OrderStatus.SHIPPED]: 'purple',
-    [OrderStatus.DELIVERED]: 'sky',
-    [OrderStatus.PENDING]: 'yellow',
-    [OrderStatus.PAID]: 'green',
-    [OrderStatus.REGISTER]: 'gray',
-    [OrderStatus.COMPLETED]: 'green',
-    [OrderStatus.CANCELLED]: 'red',
+    [OrderStatus.NEW]: '#3b82f6',
+    [OrderStatus.PROCESSING]: '#2563eb',
+    [OrderStatus.COMPLETED]: '#059669',
+    [OrderStatus.CANCELLED]: '#ef4444',
+    [OrderStatus.ARCHIVED]: '#6b7280',
   }
 
   return (
     <div>
       <h1>Order #{order.number}</h1>
 
-      <span style={{ color: statusColors[order.status] }}>
-        {order.status}
-      </span>
+      <div>
+        <span style={{ color: statusColors[order.status] }}>{order.status}</span>
+        <span>{order.payment_status}</span>
+        <span>{order.shipping_status}</span>
+      </div>
 
       <h2>Items</h2>
       {order.items?.map((item: OrderItem) => (

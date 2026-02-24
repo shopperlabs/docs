@@ -57,7 +57,9 @@ return [
 | `id` | bigint | no | auto | Primary key |
 | `number` | string(32) | no | - | Order number |
 | `price_amount` | integer | yes | null | Order price override (in cents) |
-| `status` | string(32) | no | pending | Order status enum |
+| `status` | string(32) | no | new | Order status enum |
+| `payment_status` | string(32) | no | pending | Payment status enum |
+| `shipping_status` | string(32) | no | unfulfilled | Shipping status enum |
 | `currency_code` | string | no | - | Currency code (USD, EUR, etc.) |
 | `notes` | text | yes | null | Order notes |
 | `parent_order_id` | bigint | yes | null | FK to parent order |
@@ -69,6 +71,7 @@ return [
 | `shipping_address_id` | bigint | yes | null | FK to order address |
 | `shipping_option_id` | bigint | yes | null | FK to carrier option |
 | `cancelled_at` | timestamp | yes | null | Cancellation date |
+| `archived_at` | timestamp | yes | null | Archive date |
 | `deleted_at` | timestamp | yes | null | Soft delete timestamp |
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
@@ -110,7 +113,8 @@ return [
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | bigint | no | Primary key |
-| `shipped_at` | datetime | no | Shipment date |
+| `status` | string(32) | yes | Shipment status enum |
+| `shipped_at` | datetime | yes | Shipment date |
 | `received_at` | datetime | yes | Delivery date |
 | `returned_at` | datetime | yes | Return date |
 | `tracking_number` | string | yes | Carrier tracking number |
@@ -134,44 +138,105 @@ return [
 
 ## Order Status
 
-The `OrderStatus` enum defines available order states:
+Every order tracks three independent statuses: order status, payment status, and shipping status. This separation allows each aspect of the order to progress independently — for example, an order can be paid before it's shipped, or partially shipped while still processing.
+
+### Order Status
+
+The `OrderStatus` enum tracks the overall lifecycle of the order:
 
 ```php
 use Shopper\Core\Enum\OrderStatus;
 
-OrderStatus::New        // new
-OrderStatus::Pending    // pending (default)
-OrderStatus::Register   // registered
-OrderStatus::Paid       // paid
-OrderStatus::Shipped    // shipped
-OrderStatus::Delivered  // delivered
-OrderStatus::Completed  // completed
-OrderStatus::Cancelled  // cancelled
-OrderStatus::Archived   // archived
+OrderStatus::New         // new (default)
+OrderStatus::Processing  // processing
+OrderStatus::Completed   // completed
+OrderStatus::Cancelled   // cancelled
+OrderStatus::Archived    // archived
 ```
 
 | Status | Database Value | Color | Description |
 |--------|---------------|-------|-------------|
 | New | `new` | info | Newly placed order |
-| Pending | `pending` | warning | Awaiting processing |
-| Register | `registered` | primary | Order registered |
-| Paid | `paid` | green | Payment received |
-| Shipped | `shipped` | indigo | Order shipped |
-| Delivered | `delivered` | sky | Order delivered |
-| Completed | `completed` | teal | Order fulfilled |
+| Processing | `processing` | primary | Order is being prepared |
+| Completed | `completed` | teal | Order fulfilled and delivered |
 | Cancelled | `cancelled` | danger | Order cancelled |
-| Archived | `archived` | gray | Order archived |
+| Archived | `archived` | gray | Removed from active list |
+
+### Payment Status
+
+The `PaymentStatus` enum tracks whether payment has been collected. It is updated automatically by the [`PaymentProcessingService`](/v2/payments#processing-payments) as transactions succeed.
+
+```php
+use Shopper\Core\Enum\PaymentStatus;
+
+PaymentStatus::Pending             // pending (default)
+PaymentStatus::Authorized          // authorized
+PaymentStatus::Paid                // paid
+PaymentStatus::PartiallyRefunded   // partially_refunded
+PaymentStatus::Refunded            // refunded
+PaymentStatus::Voided              // voided
+```
+
+| Status | Database Value | Color | Description |
+|--------|---------------|-------|-------------|
+| Pending | `pending` | warning | Awaiting payment |
+| Authorized | `authorized` | info | Funds held, not yet captured |
+| Paid | `paid` | success | Funds collected |
+| Partially Refunded | `partially_refunded` | orange | Some amount refunded |
+| Refunded | `refunded` | gray | Full amount refunded |
+| Voided | `voided` | danger | Cancelled before capture |
+
+<Note>
+For the full payment lifecycle, capture strategies, and transaction recording, see the [Payments](/v2/payments) page.
+</Note>
+
+### Shipping Status
+
+The `ShippingStatus` enum tracks the overall shipping state at the order level. It reflects the combined state of all shipments on the order.
+
+```php
+use Shopper\Core\Enum\ShippingStatus;
+
+ShippingStatus::Unfulfilled        // unfulfilled (default)
+ShippingStatus::PartiallyShipped   // partially_shipped
+ShippingStatus::Shipped            // shipped
+ShippingStatus::PartiallyDelivered // partially_delivered
+ShippingStatus::Delivered          // delivered
+ShippingStatus::PartiallyReturned  // partially_returned
+ShippingStatus::Returned           // returned
+```
+
+| Status | Database Value | Color | Description |
+|--------|---------------|-------|-------------|
+| Unfulfilled | `unfulfilled` | warning | No items shipped yet |
+| Partially Shipped | `partially_shipped` | info | Some items shipped |
+| Shipped | `shipped` | indigo | All items shipped |
+| Partially Delivered | `partially_delivered` | primary | Some packages delivered |
+| Delivered | `delivered` | success | All packages delivered |
+| Partially Returned | `partially_returned` | orange | Some items returned |
+| Returned | `returned` | gray | All items returned |
+
+<Note>
+For shipment-level tracking (individual packages with carriers and tracking numbers), see the [Fulfillment](/v2/fulfillment) page.
+</Note>
 
 ### Status Check Methods
 
 ```php
-$order->isPending();     // true if status is Pending
-$order->isRegister();    // true if status is Register
-$order->isPaid();        // true if status is Paid
-$order->isShipped();     // true if status is Shipped
-$order->isCompleted();   // true if status is Completed
-$order->isNotCancelled(); // true if status is NOT Cancelled
-$order->canBeCancelled(); // true if Completed or New
+$order->isNew();               // true if status is New
+$order->isProcessing();        // true if status is Processing
+$order->isCompleted();         // true if status is Completed
+$order->isArchived();          // true if status is Archived
+$order->isNotCancelled();      // true if status is NOT Cancelled
+$order->canBeCancelled();      // true if not Cancelled/Archived and shipping is Unfulfilled
+
+$order->isPaid();              // true if payment_status is Paid
+$order->isPaymentPending();    // true if payment_status is Pending
+$order->isPaymentAuthorized(); // true if payment_status is Authorized
+$order->isRefunded();          // true if payment_status is Refunded
+
+$order->isShipped();           // true if shipping_status is Shipped
+$order->isShippingPending();   // true if shipping_status is Unfulfilled
 ```
 
 ## Fulfillment Status
@@ -357,49 +422,22 @@ $order->total_amount; // Price object with formatting
 
 ## Events
 
-Order lifecycle events are dispatched via the `OrderObserver`:
+Order lifecycle events are dispatched automatically throughout the order lifecycle:
 
 ```php
 use Shopper\Core\Events\Orders\OrderCreated;
-use Shopper\Core\Events\Orders\OrderDeleted;
-use Shopper\Core\Events\Orders\OrderCompleted;
 use Shopper\Core\Events\Orders\OrderPaid;
-use Shopper\Core\Events\Orders\OrderRegistered;
+use Shopper\Core\Events\Orders\OrderShipped;
+use Shopper\Core\Events\Orders\OrderCompleted;
 use Shopper\Core\Events\Orders\OrderCancel;
 use Shopper\Core\Events\Orders\OrderArchived;
+use Shopper\Core\Events\Orders\OrderDeleted;
+use Shopper\Core\Events\Orders\OrderShipmentCreated;
+use Shopper\Core\Events\Orders\OrderShipmentDelivered;
 use Shopper\Core\Events\Orders\AddNoteToOrder;
 ```
 
-### Listening to Events
-
-```php
-// In your EventServiceProvider
-protected $listen = [
-    OrderCreated::class => [
-        SendOrderConfirmationEmail::class,
-        NotifyAdminOfNewOrder::class,
-    ],
-    OrderCompleted::class => [
-        SendOrderCompletedEmail::class,
-        UpdateInventory::class,
-    ],
-    OrderPaid::class => [
-        GenerateInvoice::class,
-    ],
-];
-```
-
-### Event Payload
-
-```php
-// All order events contain the order instance
-class OrderCompleted implements ShouldQueueAfterCommit
-{
-    public function __construct(
-        public Order $order
-    ) {}
-}
-```
+For the full events reference including shipment events, payload details, and usage examples, see the [Events](/v2/events#order-events) page.
 
 ## Creating Orders
 
@@ -479,8 +517,8 @@ $orders = Order::query()
     ->get();
 
 // Get orders by status
-$pendingOrders = Order::query()
-    ->where('status', OrderStatus::Pending)
+$newOrders = Order::query()
+    ->where('status', OrderStatus::New)
     ->get();
 
 // Get customer's orders
@@ -609,11 +647,8 @@ class CheckoutController extends Controller
 
 | From Status | Possible Transitions |
 |-------------|---------------------|
-| New | Pending, Cancelled |
-| Pending | Register, Paid, Cancelled |
-| Register | Paid, Cancelled |
-| Paid | Shipped |
-| Shipped | Delivered |
-| Delivered | Completed |
+| New | Processing, Cancelled, Archived |
+| Processing | Completed, Cancelled |
 | Completed | Archived |
 | Cancelled | (terminal state) |
+| Archived | (terminal state) |

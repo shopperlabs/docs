@@ -298,35 +298,9 @@ Product lifecycle events are dispatched automatically:
 use Shopper\Core\Events\Products\ProductCreated;
 use Shopper\Core\Events\Products\ProductUpdated;
 use Shopper\Core\Events\Products\ProductDeleted;
-use Shopper\Core\Events\Products\ProductPurchased;
 ```
 
-### Listening to Events
-
-```php
-// In your EventServiceProvider
-protected $listen = [
-    ProductCreated::class => [
-        SendProductCreatedNotification::class,
-        SyncProductToExternalService::class,
-    ],
-    ProductPurchased::class => [
-        DecreaseProductInventory::class, // Built-in listener
-    ],
-];
-```
-
-### Event Payload
-
-```php
-// All product events contain the product instance
-class ProductCreated
-{
-    public function __construct(
-        public Product $product
-    ) {}
-}
-```
+For the full events reference including payload details and usage examples, see the [Events](/v2/events#product-events) page.
 
 ## Stock Management
 
@@ -343,6 +317,63 @@ $product->variants_stock;
 if ($product->stock <= $product->security_stock) {
     // Low stock alert
 }
+```
+
+### Avoiding N+1 Queries
+
+Accessing `$product->stock` triggers an individual `SUM(quantity)` query on the `inventory_histories` table for each product.
+When iterating over a collection (e.g. listing 50 products on a page), this results in 50 separate queries — a classic N+1 problem.
+
+Use `loadCurrentStock()` to batch-load stock for an entire collection in a **single query**:
+
+```php
+use Shopper\Core\Models\Product;
+
+$products = Product::query()->with('variants')->get();
+
+// 1 query instead of N
+Product::loadCurrentStock($products);
+
+// For variant-type products, also batch-load variant stock
+$variants = $products
+    ->filter(fn ($p) => $p->canUseVariants())
+    ->flatMap->variants;
+
+ProductVariant::loadCurrentStock($variants);
+
+// Now $product->stock and $variant->stock use preloaded values — no extra queries
+foreach ($products as $product) {
+    echo $product->name . ': ' . $product->stock;
+}
+```
+
+You can also batch-load stock for a **specific inventory location**:
+
+```php
+Product::loadStockForInventory($products, $inventoryId);
+```
+
+### Preventing Lazy Stock Loading
+
+Following the same pattern as Laravel's `Model::preventLazyLoading()`, you can opt-in to catch
+unoptimized stock access during development. When enabled, accessing `$product->stock` without
+prior batch-loading throws a `LazyStockLoadingException`:
+
+```php
+use Shopper\Core\Models\Product;
+
+// In a service provider boot() method
+Product::preventLazyStockLoading(! app()->isProduction());
+```
+
+This helps you catch N+1 stock queries early. The exception message tells you exactly which model
+and method to use:
+
+```
+Attempted to lazy load stock on model [Shopper\Core\Models\Product]
+but lazy stock loading is disabled.
+Use [Shopper\Core\Models\Product::loadCurrentStock($collection)]
+to batch-load stock before accessing $model->stock.
 ```
 
 ## Pricing

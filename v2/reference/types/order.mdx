@@ -5,7 +5,7 @@ description: TypeScript type definitions for Order, OrderItem, and related model
 
 ## Order
 
-The `Order` interface represents a customer order.
+The `Order` interface represents a customer order with three independent statuses tracking order progress, payment, and shipping.
 
 ```typescript
 import type { Order } from '@shopperlabs/shopper-types'
@@ -21,6 +21,8 @@ interface Order extends Entity {
   currency_code: string
   total_amount?: number
   status: OrderStatus
+  payment_status: PaymentStatus
+  shipping_status: ShippingStatus
   cancelled_at: DateEntity | null
   archived_at: DateEntity | null
   zone_id: number | null
@@ -51,17 +53,46 @@ interface Order extends Entity {
 
 ### OrderStatus Enum
 
+Tracks the overall lifecycle of the order.
+
 ```typescript
 enum OrderStatus {
-  ARCHIVED = 'archived',
   NEW = 'new',
-  SHIPPED = 'shipped',
-  DELIVERED = 'delivered',
-  PENDING = 'pending',
-  PAID = 'paid',
-  REGISTER = 'registered',
+  PROCESSING = 'processing',
   COMPLETED = 'completed',
   CANCELLED = 'cancelled',
+  ARCHIVED = 'archived',
+}
+```
+
+### PaymentStatus Enum
+
+Tracks whether payment has been collected.
+
+```typescript
+enum PaymentStatus {
+  PENDING = 'pending',
+  AUTHORIZED = 'authorized',
+  PAID = 'paid',
+  PARTIALLY_REFUNDED = 'partially_refunded',
+  REFUNDED = 'refunded',
+  VOIDED = 'voided',
+}
+```
+
+### ShippingStatus Enum
+
+Tracks the overall shipping state at the order level.
+
+```typescript
+enum ShippingStatus {
+  UNFULFILLED = 'unfulfilled',
+  PARTIALLY_SHIPPED = 'partially_shipped',
+  SHIPPED = 'shipped',
+  PARTIALLY_DELIVERED = 'partially_delivered',
+  DELIVERED = 'delivered',
+  PARTIALLY_RETURNED = 'partially_returned',
+  RETURNED = 'returned',
 }
 ```
 
@@ -69,32 +100,33 @@ enum OrderStatus {
 
 ```typescript
 import type { Order } from '@shopperlabs/shopper-types'
-import { OrderStatus } from '@shopperlabs/shopper-types'
+import { OrderStatus, PaymentStatus, ShippingStatus } from '@shopperlabs/shopper-types'
 
-// Check if order can be cancelled
 function canCancel(order: Order): boolean {
-  return [OrderStatus.PENDING, OrderStatus.NEW].includes(order.status)
+  return (
+    order.status !== OrderStatus.CANCELLED &&
+    order.status !== OrderStatus.ARCHIVED &&
+    order.shipping_status === ShippingStatus.UNFULFILLED
+  )
 }
 
-// Calculate order total
-function calculateTotal(order: Order): number {
-  return order.items?.reduce((sum, item) => sum + item.total, 0) ?? 0
+function canCapture(order: Order): boolean {
+  return order.payment_status === PaymentStatus.AUTHORIZED
 }
 
-// Get status badge color
 function getStatusColor(status: OrderStatus): string {
   const colors: Record<OrderStatus, string> = {
-    [OrderStatus.ARCHIVED]: '#6b7280',
     [OrderStatus.NEW]: '#3b82f6',
-    [OrderStatus.SHIPPED]: '#8b5cf6',
-    [OrderStatus.DELIVERED]: '#0ea5e9',
-    [OrderStatus.PENDING]: '#fbbf24',
-    [OrderStatus.PAID]: '#10b981',
-    [OrderStatus.REGISTER]: '#2563eb',
+    [OrderStatus.PROCESSING]: '#2563eb',
     [OrderStatus.COMPLETED]: '#059669',
     [OrderStatus.CANCELLED]: '#ef4444',
+    [OrderStatus.ARCHIVED]: '#6b7280',
   }
   return colors[status]
+}
+
+function calculateTotal(order: Order): number {
+  return order.items?.reduce((sum, item) => sum + item.total, 0) ?? 0
 }
 ```
 
@@ -102,7 +134,7 @@ function getStatusColor(status: OrderStatus): string {
 
 ## OrderItem
 
-The `OrderItem` interface represents a line item in an order.
+The `OrderItem` interface represents a line item in an order. Each item tracks its own fulfillment status independently.
 
 ```typescript
 import type { OrderItem } from '@shopperlabs/shopper-types'
@@ -131,11 +163,15 @@ interface OrderItem extends Entity {
 
 ### FulfillmentStatus Enum
 
+Tracks item-level fulfillment, enabling partial shipments and multi-carrier delivery.
+
 ```typescript
 enum FulfillmentStatus {
-  UNFULFILLED = 'unfulfilled',
-  PARTIALLY_FULFILLED = 'partially_fulfilled',
-  FULFILLED = 'fulfilled',
+  PENDING = 'pending',
+  FORWARDED_TO_SUPPLIER = 'forwarded_to_supplier',
+  PROCESSING = 'processing',
+  SHIPPED = 'shipped',
+  DELIVERED = 'delivered',
   CANCELLED = 'cancelled',
 }
 ```
@@ -174,7 +210,7 @@ interface OrderAddress extends Entity {
 
 ## OrderShipping
 
-The `OrderShipping` interface represents a shipment for an order.
+The `OrderShipping` interface represents a shipment — a physical package sent to the customer. Each shipment tracks its own delivery progress and has a timeline of tracking events.
 
 ```typescript
 import type { OrderShipping } from '@shopperlabs/shopper-types'
@@ -184,7 +220,8 @@ import type { OrderShipping } from '@shopperlabs/shopper-types'
 
 ```typescript
 interface OrderShipping extends Entity {
-  shipped_at: DateEntity
+  status: ShipmentStatus | null
+  shipped_at: DateEntity | null
   received_at: DateEntity | null
   returned_at: DateEntity | null
   tracking_number: string | null
@@ -197,6 +234,52 @@ interface OrderShipping extends Entity {
   order?: Order
   carrier?: Carrier
   items?: OrderItem[]
+  events?: OrderShippingEvent[]
+}
+```
+
+### ShipmentStatus Enum
+
+Tracks the delivery progress of a single package.
+
+```typescript
+enum ShipmentStatus {
+  PENDING = 'pending',
+  PICKED_UP = 'picked_up',
+  IN_TRANSIT = 'in_transit',
+  AT_SORTING_CENTER = 'at_sorting_center',
+  OUT_FOR_DELIVERY = 'out_for_delivery',
+  DELIVERED = 'delivered',
+  DELIVERY_FAILED = 'delivery_failed',
+  RETURNED = 'returned',
+}
+```
+
+---
+
+## OrderShippingEvent
+
+The `OrderShippingEvent` interface represents a tracking event in a shipment's timeline.
+
+```typescript
+import type { OrderShippingEvent } from '@shopperlabs/shopper-types'
+```
+
+### Definition
+
+```typescript
+interface OrderShippingEvent extends Entity {
+  status: ShipmentStatus
+  description: string | null
+  location: string | null
+  latitude: number | null
+  longitude: number | null
+  occurred_at: DateEntity | null
+  metadata: Record<string, unknown> | null
+  order_shipping_id: number
+
+  // Relationships
+  shipment?: OrderShipping
 }
 ```
 
@@ -231,8 +314,9 @@ interface OrderRefund extends Entity {
 ```typescript
 enum OrderRefundStatus {
   PENDING = 'pending',
+  AWAITING = 'awaiting',
   TREATMENT = 'treatment',
-  PARTIAL_REFUND = 'partial-refund',
+  PARTIAL_REFUND = 'partial_refund',
   REFUNDED = 'refunded',
   CANCELLED = 'cancelled',
   REJECTED = 'rejected',

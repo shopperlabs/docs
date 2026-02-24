@@ -16,6 +16,11 @@
             "anchor": "Community",
             "icon": "discord",
             "href": "https://discord.gg/r4VUvHm34"
+          },
+          {
+            "anchor": "Blog",
+            "icon": "newspaper",
+            "href": "https://laravelshopper.dev/blog"
           }
         ]
       },
@@ -157,6 +162,7 @@
                       "group": "Upgrade Guide",
                       "pages": [
                         "v2/upgrade",
+                        "v2/upgrade/v2-4-to-v2-5",
                         "v2/upgrade/v2-2-to-v2-3",
                         "v2/upgrade/v2-1-to-v2-2"
                       ]
@@ -173,7 +179,7 @@
                   ]
                 },
                 {
-                  "group": "Core",
+                  "group": "Catalog",
                   "pages": [
                     "v2/products",
                     "v2/product-variants",
@@ -181,13 +187,25 @@
                     "v2/brands",
                     "v2/categories",
                     "v2/collections",
-                    "v2/attributes",
+                    "v2/attributes"
+                  ]
+                },
+                {
+                  "group": "Sales",
+                  "pages": [
                     "v2/customers",
                     "v2/orders",
-                    "v2/fulfillment",
-                    "v2/suppliers",
+                    "v2/payments",
+                    "v2/fulfillment"
+                  ]
+                },
+                {
+                  "group": "Commerce",
+                  "pages": [
                     "v2/discounts",
-                    "v2/reviews"
+                    "v2/reviews",
+                    "v2/suppliers",
+                    "v2/events"
                   ]
                 },
                 {
@@ -195,9 +213,9 @@
                   "pages": [
                     "v2/setup-store",
                     "v2/channels",
+                    "v2/zones",
                     "v2/locations",
                     "v2/currencies",
-                    "v2/zones",
                     "v2/carriers",
                     "v2/payment-methods",
                     "v2/media",
@@ -226,8 +244,7 @@
                     "v2/extending/overview",
                     "v2/extending/control-panel",
                     "v2/extending/navigation",
-                    "v2/extending/controllers",
-                    "v2/extending/events"
+                    "v2/extending/controllers"
                   ]
                 },
                 {
@@ -254,6 +271,17 @@
                     "v2/extending/components/label",
                     "v2/extending/components/user-avatar",
                     "v2/extending/components/utilities"
+                  ]
+                }
+              ]
+            },
+            {
+              "tab": "Addons",
+              "groups": [
+                {
+                  "group": "Payments",
+                  "pages": [
+                    "v2/addons/stripe"
                   ]
                 }
               ]
@@ -388,10 +416,6 @@
         {
             "source": "/extending/empty-state",
             "destination": "/v2/extending/empty-state"
-        },
-        {
-            "source": "/extending/events",
-            "destination": "/v2/extending/events"
         },
         {
             "source": "/extending/forms",

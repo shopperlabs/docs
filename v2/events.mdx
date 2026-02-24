@@ -1,0 +1,255 @@
+---
+title: Events
+description: Reference for all events dispatched by Shopper during order and product lifecycle operations.
+---
+
+Shopper dispatches events at key moments in the order and product lifecycle. These events allow you to hook into the system and add custom behavior — sending notifications, syncing with external services, updating analytics, or triggering workflows — without modifying any Shopper code.
+
+All events are located in the `Shopper\Core\Events` namespace and are organized by domain.
+
+```php
+use Shopper\Core\Events\Orders\OrderCompleted;
+use Shopper\Core\Events\Orders\OrderPaid;
+use Shopper\Core\Events\Products\ProductCreated;
+```
+
+## Listening to Events
+
+Register listeners in your application's `EventServiceProvider` or use Laravel's event discovery:
+
+```php
+use Shopper\Core\Events\Orders\OrderCompleted;
+use Shopper\Core\Events\Orders\OrderPaid;
+
+protected $listen = [
+    OrderPaid::class => [
+        GenerateInvoice::class,
+        SendPaymentConfirmation::class,
+    ],
+    OrderCompleted::class => [
+        SendOrderCompletedEmail::class,
+    ],
+];
+```
+
+Every event carries the relevant model as a public property, accessible directly in your listener:
+
+```php
+use Shopper\Core\Events\Orders\OrderPaid;
+
+class GenerateInvoice
+{
+    public function handle(OrderPaid $event): void
+    {
+        $order = $event->order;
+
+        $order->load('items', 'customer', 'billingAddress');
+
+        Invoice::generate($order);
+    }
+}
+```
+
+## Order Events
+
+Order events cover the full lifecycle of a purchase — from creation to completion, cancellation, or archival.
+
+### Available Events
+
+| Event | Payload | Trigger |
+|-------|---------|---------|
+| `OrderCreated` | `Order $order` | Order is inserted in the database |
+| `OrderPaid` | `Order $order` | Admin marks order as paid |
+| `OrderCompleted` | `Order $order` | Admin marks order as completed |
+| `OrderShipped` | `Order $order` | All items reach shipped status |
+| `OrderCancel` | `Order $order` | Admin cancels the order |
+| `OrderArchived` | `Order $order` | Admin archives the order |
+| `OrderDeleted` | `Order $order` | Order is soft-deleted |
+| `AddNoteToOrder` | `Order $order` | Admin adds a note to the order |
+
+All order events carry a single `public Order $order` property.
+
+### Lifecycle Flow
+
+```
+OrderCreated
+    │
+    ├── OrderPaid
+    │       │
+    │       ├── OrderShipped ──→ OrderCompleted
+    │       │
+    │       └── OrderCancel
+    │
+    ├── OrderCancel
+    │
+    ├── OrderArchived
+    │
+    └── OrderDeleted
+```
+
+### How They Are Dispatched
+
+`OrderCreated` and `OrderDeleted` are dispatched automatically via the model observer. They fire on every insert and soft-delete, regardless of where the operation originates.
+
+```php
+use Shopper\Core\Models\Order;
+
+$order = Order::query()->create([...]);
+```
+
+Status-related events (`OrderPaid`, `OrderCompleted`, `OrderCancel`, `OrderArchived`) are dispatched from the admin panel when an administrator changes the order status.
+
+`OrderShipped` is dispatched by `SyncOrderShippingStatusAction` when the aggregated shipping status of all items transitions to `Shipped`. This happens automatically after shipment events are recorded — you don't dispatch it manually.
+
+### Queueing
+
+Most order events implement `ShouldQueueAfterCommit`, meaning listeners run on the queue after the database transaction commits. `AddNoteToOrder` is synchronous.
+
+| Event | Queued |
+|-------|--------|
+| `OrderCreated` | Yes |
+| `OrderPaid` | Yes |
+| `OrderCompleted` | Yes |
+| `OrderShipped` | Yes |
+| `OrderCancel` | Yes |
+| `OrderArchived` | Yes |
+| `OrderDeleted` | Yes |
+| `AddNoteToOrder` | No |
+
+## Shipment Events
+
+Shipment events track the creation and delivery of individual packages within an order. A single order can have multiple shipments.
+
+### Available Events
+
+| Event | Payload | Trigger |
+|-------|---------|---------|
+| `OrderShipmentCreated` | `Order $order` | A new shipment is created with a shipping label |
+| `OrderShipmentDelivered` | `Order $order`, `OrderShipping $shipment` | A shipment is marked as delivered |
+
+`OrderShipmentDelivered` is the only event that carries two properties — the order and the specific shipment that was delivered. This is useful when an order has multiple packages and you need to know which one arrived.
+
+```php
+use Shopper\Core\Events\Orders\OrderShipmentDelivered;
+
+class NotifyCustomerOfDelivery
+{
+    public function handle(OrderShipmentDelivered $event): void
+    {
+        $order = $event->order;
+        $shipment = $event->shipment;
+
+        $trackingNumber = $shipment->tracking_number;
+        $deliveredItems = $shipment->items;
+    }
+}
+```
+
+### Shipment vs Order Events
+
+Shipment events fire at the **package level**, order events fire at the **order level**:
+
+| Scenario | Events fired |
+|----------|-------------|
+| First package shipped (2 of 3 items) | `OrderShipmentCreated` |
+| Second package shipped (last item) | `OrderShipmentCreated`, `OrderShipped` |
+| First package delivered | `OrderShipmentDelivered` |
+| Last package delivered | `OrderShipmentDelivered`, then `OrderCompleted` (if order is processing) |
+
+## Product Events
+
+Product events are dispatched when products are created, updated, or deleted through the admin panel.
+
+### Available Events
+
+| Event | Payload | Trigger |
+|-------|---------|---------|
+| `ProductCreated` | `Product $product` | Product is created via admin |
+| `ProductUpdated` | `Product $product` | Product is updated via admin |
+| `ProductDeleted` | `Product $product` | Product is deleted via admin |
+
+```php
+use Shopper\Core\Events\Products\ProductCreated;
+
+class SyncProductToCatalog
+{
+    public function handle(ProductCreated $event): void
+    {
+        $product = $event->product;
+
+        ExternalCatalog::push($product);
+    }
+}
+```
+
+<Note>
+Product events are synchronous (`ProductCreated`, `ProductUpdated`) except for `ProductDeleted` which implements `ShouldQueueAfterCommit`.
+</Note>
+
+## Example: Order Notification System
+
+Here's how you might use Shopper events to build a notification flow for your store. Each listener handles a single responsibility.
+
+Register your listeners:
+
+```php
+use Shopper\Core\Events\Orders\OrderCreated;
+use Shopper\Core\Events\Orders\OrderPaid;
+use Shopper\Core\Events\Orders\OrderShipped;
+use Shopper\Core\Events\Orders\OrderShipmentDelivered;
+
+protected $listen = [
+    OrderCreated::class => [
+        SendOrderConfirmationToCustomer::class,
+        NotifyWarehouseTeam::class,
+    ],
+    OrderPaid::class => [
+        GenerateInvoice::class,
+        SyncPaymentToAccounting::class,
+    ],
+    OrderShipped::class => [
+        SendShippingConfirmation::class,
+    ],
+    OrderShipmentDelivered::class => [
+        SendDeliveryConfirmation::class,
+        RequestProductReview::class,
+    ],
+];
+```
+
+A listener that sends a shipping confirmation:
+
+```php
+use Shopper\Core\Events\Orders\OrderShipped;
+
+class SendShippingConfirmation implements ShouldQueue
+{
+    public function handle(OrderShipped $event): void
+    {
+        $order = $event->order;
+
+        $order->load('customer', 'shippings.carrier');
+
+        Mail::to($order->customer->email)
+            ->send(new OrderShippedMail($order));
+    }
+}
+```
+
+## All Events Reference
+
+| Namespace | Event | Payload | Queued |
+|-----------|-------|---------|--------|
+| `Events\Orders` | `OrderCreated` | `Order $order` | Yes |
+| `Events\Orders` | `OrderPaid` | `Order $order` | Yes |
+| `Events\Orders` | `OrderCompleted` | `Order $order` | Yes |
+| `Events\Orders` | `OrderShipped` | `Order $order` | Yes |
+| `Events\Orders` | `OrderCancel` | `Order $order` | Yes |
+| `Events\Orders` | `OrderArchived` | `Order $order` | Yes |
+| `Events\Orders` | `OrderDeleted` | `Order $order` | Yes |
+| `Events\Orders` | `AddNoteToOrder` | `Order $order` | No |
+| `Events\Orders` | `OrderShipmentCreated` | `Order $order` | Yes |
+| `Events\Orders` | `OrderShipmentDelivered` | `Order $order`, `OrderShipping $shipment` | Yes |
+| `Events\Products` | `ProductCreated` | `Product $product` | No |
+| `Events\Products` | `ProductUpdated` | `Product $product` | No |
+| `Events\Products` | `ProductDeleted` | `Product $product` | Yes |

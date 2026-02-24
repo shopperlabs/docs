@@ -1,0 +1,382 @@
+---
+title: From v2.4 to v2.5
+description: How to upgrade your Shopper installation from v2.4 to v2.5.
+---
+
+<Info>
+**Estimated Upgrade Time:** 15-30 minutes for most applications.
+</Info>
+
+## Updating Dependencies
+
+Update your `composer.json` file to require Shopper 2.5:
+
+```json
+"require": {
+    "shopper/framework": "^2.5"
+}
+```
+
+Then run:
+
+```bash
+composer update -W
+```
+
+After updating Composer dependencies, run the migrations:
+
+```bash
+php artisan migrate
+```
+
+<Note>
+The `shopper/payment` package is now a dependency of `shopper/framework` and is installed automatically. It provides the payment driver system, transaction tracking, and the `PaymentProcessingService`.
+
+For Stripe support, install the driver addon separately: `composer require shopper/stripe`. See the [Stripe addon documentation](/v2/addons/stripe) for setup instructions.
+</Note>
+
+---
+
+## High Impact Changes
+
+### Three-Status Order System
+
+**Likelihood of Impact: High**
+
+The monolithic `OrderStatus` enum has been split into three independent enums, each tracking a different concern:
+
+| Concern | Enum | Values |
+|---------|------|--------|
+| Order lifecycle | `OrderStatus` | `New`, `Processing`, `Completed`, `Cancelled`, `Archived` |
+| Payment | `PaymentStatus` | `Pending`, `Authorized`, `Paid`, `PartiallyRefunded`, `Refunded`, `Voided` |
+| Shipping | `ShippingStatus` | `Unfulfilled`, `PartiallyShipped`, `Shipped`, `PartiallyDelivered`, `Delivered`, `PartiallyReturned`, `Returned` |
+
+The old `OrderStatus` values `Pending`, `Registered`, `Paid`, `Shipped`, `Delivered`, and `Returned` have been removed. You must update any code that references these values.
+
+#### Before (v2.4)
+
+```php
+use Shopper\Core\Enum\OrderStatus;
+
+// Check payment
+if ($order->status === OrderStatus::Paid) {
+    // ...
+}
+
+// Check shipping
+if ($order->status === OrderStatus::Shipped) {
+    // ...
+}
+
+// Check delivery
+if ($order->status === OrderStatus::Delivered) {
+    // ...
+}
+```
+
+#### After (v2.5)
+
+```php
+use Shopper\Core\Enum\OrderStatus;
+use Shopper\Core\Enum\PaymentStatus;
+use Shopper\Core\Enum\ShippingStatus;
+
+// Check payment
+if ($order->payment_status === PaymentStatus::Paid) {
+    // ...
+}
+
+// Check shipping
+if ($order->shipping_status === ShippingStatus::Shipped) {
+    // ...
+}
+
+// Check delivery
+if ($order->shipping_status === ShippingStatus::Delivered) {
+    // ...
+}
+```
+
+<Tip>
+The Order model now provides convenience methods for common status checks: `isNew()`, `isProcessing()`, `isCompleted()`, `isArchived()`, `isPaid()`, `isPaymentAuthorized()`, `isRefunded()`, `isShipped()`, `isShippingPending()`.
+</Tip>
+
+#### Automatic Data Migration
+
+The migration automatically maps your existing order statuses to the new three-status system. No manual data migration is needed.
+
+| Old `status` value | New `status` | New `payment_status` | New `shipping_status` |
+|---|---|---|---|
+| `pending` | `new` | `pending` | `unfulfilled` |
+| `registered` | `processing` | `pending` | `unfulfilled` |
+| `paid` | `processing` | `paid` | `unfulfilled` |
+| `shipped` | `processing` | `paid` | `shipped` |
+| `delivered` | `processing` | `paid` | `delivered` |
+| `completed` | `completed` | `paid` | *(unchanged)* |
+| `cancelled` | `cancelled` | *(unchanged)* | *(unchanged)* |
+
+<Warning>
+If you have custom order status values beyond the ones listed above, they will **not** be migrated automatically. You must handle them manually before or after running `php artisan migrate`.
+</Warning>
+
+### PaymentMethod & Carrier Logo Handling
+
+**Likelihood of Impact: High**
+
+The `logo` column has been removed from both the `payment_methods` and `carriers` tables. Logos are now managed through [Spatie Media Library](https://spatie.be/docs/laravel-medialibrary). A new `driver` column has been added to both tables.
+
+#### Before (v2.4)
+
+```php
+// Accessing logos
+$paymentMethod->logo; // string|null — file path
+$carrier->logo;       // string|null — file path
+```
+
+#### After (v2.5)
+
+```php
+// Accessing logos via Media Library
+$paymentMethod->logoUrl(); // ?string — full URL or null
+$carrier->logoUrl();       // ?string — full URL or null
+```
+
+Both models now implement `Spatie\MediaLibrary\HasMedia` and use the `HasMedia` trait.
+
+<Warning>
+If you stored logos using the old `logo` column, you need to manually re-upload them through the admin panel or migrate the files to the media library programmatically. The old column data is removed by the migration.
+</Warning>
+
+### Payment System
+
+**Likelihood of Impact: High**
+
+Shopper 2.5 introduces a complete payment driver system through the new `shopper/payment` package, which is included as a dependency of `shopper/framework`.
+
+Key components:
+
+- **`PaymentProcessingService`** — orchestrates payment operations (initiate, authorize, capture, refund, cancel) through drivers
+- **`PaymentTransaction`** model — records every payment operation with driver, type, status, amount, and provider reference
+- **`PaymentDriver`** contract — interface for implementing payment providers
+- **`PaymentManager`** — resolves and manages payment drivers (a manual driver is included by default)
+
+New enums in `Shopper\Payment\Enum`:
+
+| Enum | Values |
+|------|--------|
+| `TransactionType` | `Initiate`, `Authorize`, `Capture`, `Refund`, `Cancel` |
+| `TransactionStatus` | `Pending`, `Success`, `Failed` |
+
+The admin panel now includes a **Capture payment** button on the order detail page for orders with `PaymentStatus::Authorized`. For Stripe payments, install the addon: `composer require shopper/stripe`.
+
+See the [Payments documentation](/v2/payments) for the full API reference.
+
+---
+
+## Medium Impact Changes
+
+### Order Contract Interface
+
+**Likelihood of Impact: Medium**
+
+If you implement a custom Order model through the `Shopper\Core\Models\Contracts\Order` interface, you must add the following methods:
+
+```php
+public function setDefaultOrderStatus(): void;
+public function canBeCancelled(): bool;
+public function isNotCancelled(): bool;
+public function isNew(): bool;
+public function isProcessing(): bool;
+public function isCompleted(): bool;
+public function isArchived(): bool;
+public function isPaid(): bool;
+public function isPaymentPending(): bool;
+public function isPaymentAuthorized(): bool;
+public function isRefunded(): bool;
+public function isShipped(): bool;
+public function isShippingPending(): bool;
+```
+
+<Tip>
+Use `Shopper\Core\Models\Order` as a reference implementation. The model sets default statuses automatically via `setDefaultOrderStatus()` in its `booted()` method.
+</Tip>
+
+### Column Renamed: `canceled_at` to `cancelled_at`
+
+**Likelihood of Impact: Medium**
+
+The `canceled_at` column on the orders table has been renamed to `cancelled_at` (double-L British spelling) for consistency.
+
+#### Before (v2.4)
+
+```php
+$order->canceled_at;
+```
+
+#### After (v2.5)
+
+```php
+$order->cancelled_at;
+```
+
+Update any code, queries, or Blade templates that reference the old column name.
+
+### OrderItem Fulfillment Tracking
+
+**Likelihood of Impact: Medium**
+
+Two new columns have been added to the `order_items` table:
+
+- `fulfillment_status` — tracks per-item fulfillment using the new `FulfillmentStatus` enum (`Pending`, `ForwardedToSupplier`, `Processing`, `Shipped`, `Delivered`, `Cancelled`)
+- `order_shipping_id` — links each item to a specific shipment
+
+This enables partial fulfillment: different items in the same order can be at different fulfillment stages and shipped in different packages.
+
+If you query or manipulate order items directly, be aware of these new columns. No action is required unless you have custom logic that conflicts.
+
+### Order Detail Page Decomposed into Components
+
+**Likelihood of Impact: Medium**
+
+The order detail page has been restructured from a single monolithic page into independent, overridable Livewire components. Each section of the page is now its own component, registered in `config/shopper/components/order.php`.
+
+Components marked **New** were added in v2.5. Components marked **Existing** were already present but have been refactored.
+
+| Component | Alias | Type | Description |
+|-----------|-------|------|-------------|
+| `Index` | `shopper-order-index` | Existing | Order listing with filters and tabs |
+| `Detail` | `shopper-order-detail` | Existing | Order detail page (refactored, now uses sub-components) |
+| **`Shipments`** | `shopper-order-shipments` | **New** | Centralized shipment list with filters and tab navigation |
+| **`Fulfillment`** | `shopper-order-fulfillment` | **New** | Fulfillment progress stepper, shipping address, create shipment button |
+| **`OrderCustomer`** | `shopper-order-customer` | **New** | Customer info, shipping and billing addresses |
+| **`OrderItems`** | `shopper-order-items` | **New** | Paginated order items with fulfillment status badges |
+| **`OrderNotes`** | `shopper-order-notes` | **New** | Notes editor with save action |
+| **`OrderSummary`** | `shopper-order-summary` | **New** | Financial summary, shipping method, payment method |
+| **`ShipmentTimeline`** | `shopper-order-shipment-timeline` | **New** | Shipment event timeline with "Add event" action |
+| **`CreateShippingLabel`** | `shopper-slide-overs.create-shipping-label` | **New** | Slide-over form to create a shipment and assign unfulfilled items |
+| **`ShipmentDetail`** | `shopper-slide-overs.shipment-detail` | **New** | Slide-over with shipment detail, event timeline, and delivery actions |
+
+If you have published order components via `php artisan shopper:component:publish order`, update your `config/shopper/components/order.php` to include the new entries:
+
+```php
+'pages' => [
+    'order-index' => \Shopper\Livewire\Pages\Order\Index::class,
+    'order-detail' => \Shopper\Livewire\Pages\Order\Detail::class,
+    'order-shipments' => \Shopper\Livewire\Pages\Order\Shipments::class, // [!code ++]
+],
+'components' => [
+    'order-customer' => \Shopper\Livewire\Components\Orders\OrderCustomer::class, // [!code ++]
+    'order-fulfillment' => \Shopper\Livewire\Components\Orders\Fulfillment::class, // [!code ++]
+    'order-items' => \Shopper\Livewire\Components\Orders\OrderItems::class, // [!code ++]
+    'order-notes' => \Shopper\Livewire\Components\Orders\OrderNotes::class, // [!code ++]
+    'order-shipment-timeline' => \Shopper\Livewire\Components\Orders\ShipmentTimeline::class, // [!code ++]
+    'order-summary' => \Shopper\Livewire\Components\Orders\OrderSummary::class, // [!code ++]
+    'slide-overs.create-shipping-label' => \Shopper\Livewire\SlideOvers\CreateShippingLabel::class, // [!code ++]
+    'slide-overs.shipment-detail' => \Shopper\Livewire\SlideOvers\ShipmentDetail::class, // [!code ++]
+],
+```
+
+<Tip>
+You can override any component by pointing the config key to your own class. For example, to customize how order items are displayed, create your own component extending `Shopper\Livewire\Components\Orders\OrderItems` and update the config entry.
+</Tip>
+
+### OrderShipping: Status Column & Events
+
+**Likelihood of Impact: Medium**
+
+The `order_shipping` table has a new `status` column (using the `ShipmentStatus` enum with 8 values) and the `shipped_at` column is now nullable. A new `order_shipping_events` table tracks the complete delivery timeline for each shipment.
+
+The `OrderShipping` model now uses the `HasFulfillmentTransitions` trait, which provides a state machine for valid status transitions:
+
+```php
+use Shopper\Core\Enum\ShipmentStatus;
+
+// Check allowed transitions
+$shipment->canTransitionTo(ShipmentStatus::InTransit); // bool
+
+// Execute a transition (logs an event automatically)
+$shipment->transitionTo(ShipmentStatus::InTransit, [
+    'location' => 'Distribution Center',
+    'description' => 'Package picked up by carrier',
+]);
+```
+
+See the [Fulfillment documentation](/v2/fulfillment) for the full transition map.
+
+---
+
+## Low Impact Changes
+
+### New Events
+
+**Likelihood of Impact: Low**
+
+Three new events have been added in `Shopper\Core\Events\Orders`:
+
+| Event | When it fires |
+|-------|---------------|
+| `OrderArchived` | An order is archived |
+| `OrderShipmentCreated` | A new shipment is created for an order |
+| `OrderShipmentDelivered` | A shipment is marked as delivered |
+
+The `SyncOrderShippingStatusListener` automatically listens to `OrderShipmentCreated` and syncs the order's `shipping_status` based on all items' fulfillment states.
+
+### New Enums
+
+**Likelihood of Impact: Low**
+
+Four new enums have been added to `Shopper\Core\Enum`:
+
+| Enum | Values |
+|------|--------|
+| `PaymentStatus` | `Pending`, `Authorized`, `Paid`, `PartiallyRefunded`, `Refunded`, `Voided` |
+| `ShippingStatus` | `Unfulfilled`, `PartiallyShipped`, `Shipped`, `PartiallyDelivered`, `Delivered`, `PartiallyReturned`, `Returned` |
+| `ShipmentStatus` | `Pending`, `PickedUp`, `InTransit`, `AtSortingCenter`, `OutForDelivery`, `Delivered`, `DeliveryFailed`, `Returned` |
+| `FulfillmentStatus` | `Pending`, `ForwardedToSupplier`, `Processing`, `Shipped`, `Delivered`, `Cancelled` |
+
+All follow the same pattern as existing enums: backed string enums implementing `HasColor`, `HasIcon`, and `HasLabel`.
+
+### Translation Keys
+
+**Likelihood of Impact: Low**
+
+New translation keys have been added under `shopper-core::status.*` for the new enums. If you have published and customized the Shopper core translations, add the new keys from the `packages/core/resources/lang/en/status.php` file.
+
+The old `OrderStatus` translation keys for removed values (`pending`, `registered`, `paid`, `shipped`, `delivered`, `returned`) are no longer used.
+
+---
+
+## New Features
+
+### Payment Driver System
+
+The new `shopper/payment` package provides a driver-based payment architecture. Drivers handle payment operations while Shopper manages the order's `payment_status` automatically. A manual driver is included for offline payments, and [Stripe](/v2/addons/stripe) is available as an addon.
+
+### Capture Payment in Admin
+
+Orders with `PaymentStatus::Authorized` now display a **Capture payment** button on the order detail page. Clicking it calls the payment driver's `capturePayment()` method, records a transaction, and updates the payment status to `Paid`.
+
+### Shipment Tracking
+
+Each shipment now tracks its delivery progress through a `ShipmentStatus` state machine with automatic event logging. The `OrderShippingEvent` model records status changes with timestamps, location data, and optional GPS coordinates.
+
+### Shipments Management
+
+A new Shipments page in the admin panel provides a centralized view of all shipments with filtering by status, order, and carrier.
+
+---
+
+## Migration Checklist
+
+- [ ] Update `composer.json`: require `shopper/framework: ^2.5`
+- [ ] Run `composer update -W`
+- [ ] Run `php artisan migrate`
+- [ ] Replace removed `OrderStatus` values with `PaymentStatus` / `ShippingStatus` equivalents
+- [ ] Rename `$order->canceled_at` to `$order->cancelled_at`
+- [ ] Replace `$paymentMethod->logo` with `$paymentMethod->logoUrl()`
+- [ ] Replace `$carrier->logo` with `$carrier->logoUrl()`
+- [ ] If using a custom Order model: implement the new contract methods
+- [ ] If published order components: update `config/shopper/components/order.php` with new entries
+- [ ] Optional: `composer require shopper/stripe` for Stripe payments
+- [ ] Clear caches: `php artisan optimize:clear`
+- [ ] Test your application
