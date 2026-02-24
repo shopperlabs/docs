@@ -7,21 +7,26 @@ Order fulfillment in Shopper is designed around the concept of **shipments** —
 
 ## Architecture
 
-The fulfillment system connects three models:
+The fulfillment system connects four models:
 
 ```
 Order (1) ──→ (many) OrderShipping (1) ──→ (many) OrderItem
-                      (shipment)                  (items in this package)
+                      (shipment)    │              (items in this package)
+                                    └──→ (many) OrderShippingEvent
+                                                 (tracking timeline)
 ```
 
-- **Order** has many **shipments** (`OrderShipping`)
-- Each **shipment** contains one or more **items** (`OrderItem`)
+- **Order** has many **shipments** (`OrderShipping`) and tracks overall `shipping_status`
+- Each **shipment** has its own `status` (ShipmentStatus) and a timeline of **events** (`OrderShippingEvent`)
 - Each **item** tracks its own **fulfillment status** independently
 
 ```php
 use Shopper\Core\Models\Order;
 use Shopper\Core\Models\OrderShipping;
+use Shopper\Core\Models\OrderShippingEvent;
 use Shopper\Core\Models\OrderItem;
+use Shopper\Core\Enum\ShippingStatus;
+use Shopper\Core\Enum\ShipmentStatus;
 use Shopper\Core\Enum\FulfillmentStatus;
 ```
 
@@ -34,12 +39,27 @@ use Shopper\Core\Enum\FulfillmentStatus;
 | `id` | bigint | no | Primary key |
 | `order_id` | bigint | no | FK to order |
 | `carrier_id` | bigint | yes | FK to carrier |
-| `shipped_at` | datetime | no | When the shipment was dispatched |
+| `status` | string(32) | yes | Shipment status enum |
+| `shipped_at` | datetime | yes | When the shipment was dispatched |
 | `received_at` | datetime | yes | When the customer received it |
 | `returned_at` | datetime | yes | If the shipment was returned |
 | `tracking_number` | string | yes | Carrier tracking number |
 | `tracking_url` | string | yes | URL for customer tracking |
 | `voucher` | json | yes | Shipping label/voucher data |
+
+### OrderShippingEvent Table
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | no | Primary key |
+| `order_shipping_id` | bigint | no | FK to shipment |
+| `status` | string(32) | no | Shipment status at this event |
+| `description` | text | yes | Event description |
+| `location` | string | yes | Location name |
+| `latitude` | decimal(10,7) | yes | GPS latitude |
+| `longitude` | decimal(10,7) | yes | GPS longitude |
+| `occurred_at` | datetime | yes | When the event occurred |
+| `metadata` | json | yes | Additional event data |
 
 ### OrderItem Fulfillment Columns
 
@@ -74,6 +94,93 @@ FulfillmentStatus::Cancelled            // Fulfillment cancelled
 | Delivered | (terminal state) |
 | Cancelled | (terminal state) |
 
+## Shipping Status (Order Level)
+
+The `ShippingStatus` enum lives on the **Order** model and reflects the combined state of all its shipments. It answers "has this order been shipped/delivered?".
+
+```php
+use Shopper\Core\Enum\ShippingStatus;
+
+ShippingStatus::Unfulfilled        // No items shipped yet
+ShippingStatus::PartiallyShipped   // Some items shipped
+ShippingStatus::Shipped            // All items shipped
+ShippingStatus::PartiallyDelivered // Some packages delivered
+ShippingStatus::Delivered          // All packages delivered
+ShippingStatus::PartiallyReturned  // Some items returned
+ShippingStatus::Returned           // All items returned
+```
+
+## Shipment Status (Package Level)
+
+The `ShipmentStatus` enum lives on the **OrderShipping** model and tracks the delivery progress of a single package. Each shipment goes through this lifecycle independently.
+
+```php
+use Shopper\Core\Enum\ShipmentStatus;
+
+ShipmentStatus::Pending         // Label created, waiting for pickup
+ShipmentStatus::PickedUp        // Carrier collected the package
+ShipmentStatus::InTransit       // On the way
+ShipmentStatus::AtSortingCenter // At a sorting facility
+ShipmentStatus::OutForDelivery  // With the local delivery driver
+ShipmentStatus::Delivered       // Delivered to the customer
+ShipmentStatus::DeliveryFailed  // Delivery attempt failed
+ShipmentStatus::Returned        // Returned to sender
+```
+
+### Shipment Transitions
+
+The `HasFulfillmentTransitions` trait on `OrderShipping` enforces valid state transitions:
+
+| From | Possible Transitions |
+|------|---------------------|
+| Pending | PickedUp, Returned |
+| PickedUp | InTransit, DeliveryFailed, Returned |
+| InTransit | AtSortingCenter, OutForDelivery, DeliveryFailed, Returned |
+| AtSortingCenter | InTransit, OutForDelivery, DeliveryFailed, Returned |
+| OutForDelivery | Delivered, DeliveryFailed, Returned |
+| Delivered | Returned |
+| DeliveryFailed | InTransit, OutForDelivery, Returned |
+| Returned | (terminal state) |
+
+```php
+$shipment->canTransitionTo(ShipmentStatus::InTransit); // true or false
+
+$shipment->allowedTransitions(); // Collection of valid next statuses
+
+$shipment->canBeDelivered(); // shorthand for canTransitionTo(Delivered)
+```
+
+### Transitioning Shipment Status
+
+Use `transitionTo()` to update the shipment status. It validates the transition and automatically logs a tracking event:
+
+```php
+$shipment->transitionTo(ShipmentStatus::PickedUp, [
+    'description' => 'Package collected by carrier',
+    'location' => 'Paris Distribution Center',
+    'latitude' => 48.8566,
+    'longitude' => 2.3522,
+]);
+```
+
+This creates an `OrderShippingEvent` record with the status, timestamp, and optional location data.
+
+### Tracking Events
+
+Each shipment has a timeline of events that record its journey:
+
+```php
+$shipment->events; // Collection<OrderShippingEvent>
+
+$shipment->events()->create([
+    'status' => ShipmentStatus::InTransit,
+    'description' => 'Package departed sorting facility',
+    'location' => 'Lyon Hub',
+    'occurred_at' => now(),
+    'metadata' => ['facility_code' => 'LYS-01'],
+]);
+```
+
 ## Relationships
 
 ### Order → Shipments
@@ -91,7 +198,7 @@ $allShipped = $order->items->every(
 );
 ```
 
-### OrderShipping → Items
+### OrderShipping → Items & Events
 
 ```php
 // Get all items in a shipment
@@ -102,6 +209,9 @@ $shipment->carrier; // Carrier model
 
 // Get the parent order
 $shipment->order; // Order model
+
+// Get the tracking timeline
+$shipment->events; // Collection<OrderShippingEvent>
 ```
 
 ### OrderItem → Shipment

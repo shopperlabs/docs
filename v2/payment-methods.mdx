@@ -36,6 +36,7 @@ use Shopper\Core\Models\PaymentMethod;
 | `description` | text | yes | null | Description displayed to customers when choosing a payment method |
 | `instructions` | text | yes | null | Instructions displayed to customers after placing an order |
 | `is_enabled` | boolean | no | false | Payment method visibility |
+| `driver` | string | yes | null | Payment driver code (`stripe`, `manual`, etc.) — added by `shopper/payment` |
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
 
@@ -55,6 +56,10 @@ interface PaymentMethod
 ```
 
 Payment methods use zones to control availability by geographic region. A payment method can be assigned to multiple zones, and a zone can have multiple payment methods.
+
+<Note>
+The `driver` column connects a payment method to a registered payment driver (`stripe`, `manual`, `paypal`, etc.). When the `PaymentProcessingService` processes a payment, it uses this value to resolve the correct driver. See [Payments](/v2/payments) for driver registration and the full payment lifecycle.
+</Note>
 
 ## Relationships
 
@@ -100,11 +105,15 @@ PaymentMethod::query()->enabled()->get();
 
 ## Logo Handling
 
-Payment method logos are stored as file paths and accessed through the `logo_url` accessor:
+Payment method logos use Spatie Media Library. The `logoUrl()` method returns the first media URL from the thumbnail collection, with a fallback to the payment driver's logo:
 
 ```php
-$paymentMethod->logo;     // Raw file path (e.g., "payment/stripe.png")
-$paymentMethod->logo_url; // Full URL via shopper_asset() helper
+$paymentMethod->logoUrl(); // Media library URL or null
+
+use Shopper\Payment\Services\PaymentProcessingService;
+
+$service = resolve(PaymentProcessingService::class);
+$service->getLogoUrl($paymentMethod); // Media URL → driver logo → null
 ```
 
 ## Creating Payment Methods
@@ -117,6 +126,7 @@ use Shopper\Core\Models\PaymentMethod;
 $paymentMethod = PaymentMethod::query()->create([
     'title' => 'Credit Card',
     'slug' => 'credit-card',
+    'driver' => 'stripe',
     'link_url' => 'https://stripe.com',
     'description' => 'Pay securely with your credit or debit card.',
     'instructions' => 'Your card will be charged immediately upon order confirmation.',
@@ -130,6 +140,7 @@ $paymentMethod = PaymentMethod::query()->create([
 $cod = PaymentMethod::query()->create([
     'title' => 'Cash on Delivery',
     'slug' => 'cash-on-delivery',
+    'driver' => 'manual',
     'description' => 'Pay with cash when your order is delivered.',
     'instructions' => 'Please have the exact amount ready for the delivery driver.',
     'is_enabled' => true,
@@ -142,6 +153,7 @@ $cod = PaymentMethod::query()->create([
 $bankTransfer = PaymentMethod::query()->create([
     'title' => 'Bank Transfer',
     'slug' => 'bank-transfer',
+    'driver' => 'manual',
     'description' => 'Pay via direct bank transfer.',
     'instructions' => 'Please transfer the total amount to the following account: IBAN XX00 0000 0000 0000. Use your order number as the payment reference.',
     'is_enabled' => true,

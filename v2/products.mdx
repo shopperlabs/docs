@@ -298,35 +298,9 @@ Product lifecycle events are dispatched automatically:
 use Shopper\Core\Events\Products\ProductCreated;
 use Shopper\Core\Events\Products\ProductUpdated;
 use Shopper\Core\Events\Products\ProductDeleted;
-use Shopper\Core\Events\Products\ProductPurchased;
 ```
 
-### Listening to Events
-
-```php
-// In your EventServiceProvider
-protected $listen = [
-    ProductCreated::class => [
-        SendProductCreatedNotification::class,
-        SyncProductToExternalService::class,
-    ],
-    ProductPurchased::class => [
-        DecreaseProductInventory::class, // Built-in listener
-    ],
-];
-```
-
-### Event Payload
-
-```php
-// All product events contain the product instance
-class ProductCreated
-{
-    public function __construct(
-        public Product $product
-    ) {}
-}
-```
+For the full events reference including payload details and usage examples, see the [Events](/v2/events#product-events) page.
 
 ## Stock Management
 
