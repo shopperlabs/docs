@@ -170,6 +170,43 @@ $variant->inStock(); // true/false
 $variant->allow_backorder;
 ```
 
+### Avoiding N+1 Queries
+
+When displaying a product page with multiple variants, accessing `$variant->stock` on each variant
+triggers an individual query. Use `loadCurrentStock()` to batch-load stock in a single query:
+
+```php
+use Shopper\Core\Models\ProductVariant;
+
+$product = Product::query()->with('variants')->find($id);
+
+// 1 query for all variants instead of 1 per variant
+ProductVariant::loadCurrentStock($product->variants);
+
+// Stock is now preloaded — no additional queries
+foreach ($product->variants as $variant) {
+    echo $variant->name . ': ' . $variant->stock;
+}
+```
+
+To batch-load stock for a specific inventory location:
+
+```php
+ProductVariant::loadStockForInventory($product->variants, $inventoryId);
+```
+
+To catch unoptimized stock access during development:
+
+```php
+// In a service provider boot() method
+ProductVariant::preventLazyStockLoading(! app()->isProduction());
+```
+
+When enabled, accessing `$variant->stock` without prior batch-loading throws a
+`LazyStockLoadingException` with a clear message telling you to use `loadCurrentStock()`.
+
+For more details on the batch-loading pattern, see the [Products Stock Management](/v2/products#avoiding-n1-queries) section.
+
 ## Pricing
 
 Variants use the `HasPrices` trait:
