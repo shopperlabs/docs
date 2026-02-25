@@ -315,12 +315,7 @@
                 "type": "github",
                 "href": "https://github.com/shopperlabs/shopper"
             }
-        ],
-        "primary": {
-            "type": "button",
-            "label": "Live Demo",
-            "href": "https://demo.laravelshopper.dev"
-        }
+        ]
     },
     "contextual": {
         "options": [
