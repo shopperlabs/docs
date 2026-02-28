@@ -576,6 +576,102 @@
         {
             "source": "/zones",
             "destination": "/v2/zones"
+        },
+        {
+            "source": "/addons/stripe",
+            "destination": "/v2/addons/stripe"
+        },
+        {
+            "source": "/cart",
+            "destination": "/v2/cart"
+        },
+        {
+            "source": "/demo-store",
+            "destination": "/v2/demo-store"
+        },
+        {
+            "source": "/events",
+            "destination": "/v2/events"
+        },
+        {
+            "source": "/fulfillment",
+            "destination": "/v2/fulfillment"
+        },
+        {
+            "source": "/payment-methods",
+            "destination": "/v2/payment-methods"
+        },
+        {
+            "source": "/payments",
+            "destination": "/v2/payments"
+        },
+        {
+            "source": "/product-tags",
+            "destination": "/v2/product-tags"
+        },
+        {
+            "source": "/reference/typescript-types",
+            "destination": "/v2/reference/typescript-types"
+        },
+        {
+            "source": "/reference/types/catalog",
+            "destination": "/v2/reference/types/catalog"
+        },
+        {
+            "source": "/reference/types/customer",
+            "destination": "/v2/reference/types/customer"
+        },
+        {
+            "source": "/reference/types/order",
+            "destination": "/v2/reference/types/order"
+        },
+        {
+            "source": "/reference/types/product",
+            "destination": "/v2/reference/types/product"
+        },
+        {
+            "source": "/suppliers",
+            "destination": "/v2/suppliers"
+        },
+        {
+            "source": "/upgrade/v2-1-to-v2-2",
+            "destination": "/v2/upgrade/v2-1-to-v2-2"
+        },
+        {
+            "source": "/upgrade/v2-2-to-v2-3",
+            "destination": "/v2/upgrade/v2-2-to-v2-3"
+        },
+        {
+            "source": "/upgrade/v2-4-to-v2-5",
+            "destination": "/v2/upgrade/v2-4-to-v2-5"
+        },
+        {
+            "source": "/user-guide/catalog/products/creating-product",
+            "destination": "/v2/user-guide/catalog/products/creating-product"
+        },
+        {
+            "source": "/user-guide/catalog/products/external-product",
+            "destination": "/v2/user-guide/catalog/products/external-product"
+        },
+        {
+            "source": "/user-guide/catalog/products/managing-products",
+            "destination": "/v2/user-guide/catalog/products/managing-products"
+        },
+        {
+            "source": "/user-guide/catalog/products/overview",
+            "destination": "/v2/user-guide/catalog/products/overview"
+        },
+        {
+            "source": "/user-guide/catalog/products/standard-product",
+            "destination": "/v2/user-guide/catalog/products/standard-product"
+        },
+        {
+            "source": "/user-guide/catalog/products/variant-product",
+            "destination": "/v2/user-guide/catalog/products/variant-product"
+        },
+        {
+            "source": "/user-guide/catalog/products/virtual-product",
+            "destination": "/v2/user-guide/catalog/products/virtual-product"
         }
     ],
     "seo": {
