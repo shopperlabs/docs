@@ -175,25 +175,37 @@ The priority order is: `Shopper::brandLogo()` > `config('shopper.admin.brand')` 
 
 ## Render hooks
 
-Shopper allows you to render Blade content at specific points in the admin panel layout. This is useful for integrating third-party packages that require Blade components in the layout, such as [Flux UI](https://fluxui.dev), [Wire Elements Modal](https://github.com/wire-elements/modal), or [Laravel Notify](https://github.com/mckenziearts/laravel-notify).
+Shopper allows you to render Blade content at specific points in the admin panel. This is useful for integrating third-party packages that require Blade components in the layout, such as [Flux UI](https://fluxui.dev), [Wire Elements Modal](https://github.com/wire-elements/modal), or [Laravel Notify](https://github.com/mckenziearts/laravel-notify), and for addons that need to inject content into specific pages.
 
 <Info>
-If you are familiar with [Filament's render hooks](https://filamentphp.com/docs/3.x/support/render-hooks), you already know how this works. Shopper's render hooks follow the same concept.
+If you are familiar with [Filament's render hooks](https://filamentphp.com/docs/5.x/support/render-hooks), you already know how this works. Shopper's render hooks follow the same concept.
 </Info>
+
+Render hooks are organized into scoped classes by business domain under the `Shopper\View` namespace:
+
+| Class | Scope |
+|-------|-------|
+| `LayoutRenderHook` | Head, body, header, content, dashboard, account, settings |
+| `ProductRenderHook` | Product index, edit, variant |
+| `OrderRenderHook` | Order index, detail, shipments, abandoned carts |
+| `CustomerRenderHook` | Customer index, create, show |
+| `CollectionRenderHook` | Collection index, edit |
+| `CatalogRenderHook` | Categories, brands, tags, attributes, reviews |
+| `SalesRenderHook` | Discounts, suppliers |
 
 ### Registering a render hook
 
-To register a render hook, call the `Shopper::renderHook()` method from a service provider's `boot` method. The first argument is the hook position (using the `RenderHook` enum), and the second is a closure that returns HTML:
+To register a render hook, call the `Shopper::renderHook()` method from a service provider's `boot` method. The first argument is the hook constant, and the second is a closure that returns HTML:
 
 ```php
 use Illuminate\Support\Facades\Blade;
-use Shopper\Enum\RenderHook;
 use Shopper\Facades\Shopper;
+use Shopper\View\LayoutRenderHook;
 
 public function boot(): void
 {
     Shopper::renderHook(
-        RenderHook::BodyEnd,
+        LayoutRenderHook::BODY_END,
         fn (): string => Blade::render('@livewire("wire-elements-modal")'),
     );
 }
@@ -203,40 +215,141 @@ Since all methods return the `ShopperPanel` instance, you can chain multiple cal
 
 ```php
 use Illuminate\Support\Facades\Blade;
-use Shopper\Enum\RenderHook;
 use Shopper\Facades\Shopper;
+use Shopper\View\LayoutRenderHook;
 
 public function boot(): void
 {
-    Shopper::renderHook(RenderHook::HeadEnd, fn (): string => Blade::render('@fluxStyles'))
-        ->renderHook(RenderHook::BodyEnd, fn (): string => Blade::render('<flux:modal />'))
-        ->renderHook(RenderHook::BodyEnd, fn (): string => Blade::render('<x-notify::notify />'))
+    Shopper::renderHook(LayoutRenderHook::HEAD_END, fn (): string => Blade::render('@fluxStyles'))
+        ->renderHook(LayoutRenderHook::BODY_END, fn (): string => Blade::render('<flux:modal />'))
+        ->renderHook(LayoutRenderHook::BODY_END, fn (): string => Blade::render('<x-notify::notify />'))
         ->registerViteTheme('resources/css/shopper.css')
         ->styles(['vendor/custom/lib.css'])
         ->scripts(['vendor/custom/lib.js']);
 }
 ```
 
+You can also use hooks from different scoped classes to inject content into specific pages:
+
+```php
+use Illuminate\Support\Facades\Blade;
+use Shopper\Facades\Shopper;
+use Shopper\View\ProductRenderHook;
+
+Shopper::renderHook(
+    ProductRenderHook::EDIT_HEADER_AFTER,
+    fn (): string => Blade::render('<livewire:my-addon.product-banner />'),
+);
+```
+
 ### Available render hooks
 
-| Hook | Enum | Description |
-|------|------|-------------|
-| Head Start | `RenderHook::HeadStart` | After the meta tags, before Filament styles and Shopper theme |
-| Head End | `RenderHook::HeadEnd` | End of `<head>`, after all styles and scripts |
-| Body Start | `RenderHook::BodyStart` | Start of `<body>`, before any content |
-| Body End | `RenderHook::BodyEnd` | End of `<body>`, after Filament scripts |
-| Content Start | `RenderHook::ContentStart` | Start of the main content area (inside the layout, after the sidebar) |
-| Content End | `RenderHook::ContentEnd` | End of the main content area |
+#### Layout
+
+| Constant | Class | Description |
+|----------|-------|-------------|
+| `HEAD_START` | `LayoutRenderHook` | After the meta tags, before Filament styles and Shopper theme |
+| `HEAD_END` | `LayoutRenderHook` | End of `<head>`, after all styles and scripts |
+| `BODY_START` | `LayoutRenderHook` | Start of `<body>`, before any content |
+| `BODY_END` | `LayoutRenderHook` | End of `<body>`, after Filament scripts |
+| `HEADER_START` | `LayoutRenderHook` | Start of the header bar content area |
+| `HEADER_END` | `LayoutRenderHook` | End of the header bar, before the site link and account dropdown |
+| `CONTENT_START` | `LayoutRenderHook` | Start of the main content area, after the sidebar |
+| `CONTENT_END` | `LayoutRenderHook` | End of the main content area |
+| `DASHBOARD_START` | `LayoutRenderHook` | Start of the dashboard page |
+| `DASHBOARD_END` | `LayoutRenderHook` | End of the dashboard page |
+| `ACCOUNT_START` | `LayoutRenderHook` | Before the account page content |
+| `ACCOUNT_END` | `LayoutRenderHook` | After the account page content |
+| `SETTINGS_INDEX_START` | `LayoutRenderHook` | Before the settings grid |
+| `SETTINGS_INDEX_END` | `LayoutRenderHook` | After the settings grid |
+
+#### Products
+
+| Constant | Class | Description |
+|----------|-------|-------------|
+| `INDEX_TABLE_BEFORE` | `ProductRenderHook` | Before the products table |
+| `INDEX_TABLE_AFTER` | `ProductRenderHook` | After the products table |
+| `EDIT_HEADER_AFTER` | `ProductRenderHook` | After the product edit page heading |
+| `EDIT_TABS_BEFORE` | `ProductRenderHook` | Before the product edit tabs |
+| `EDIT_TABS_END` | `ProductRenderHook` | Before the closing of the product edit tabs |
+| `EDIT_CONTENT_BEFORE` | `ProductRenderHook` | Before the product edit tab content |
+| `EDIT_CONTENT_AFTER` | `ProductRenderHook` | After the product edit tab content |
+| `VARIANT_HEADER_AFTER` | `ProductRenderHook` | After the variant page heading |
+| `VARIANT_MAIN_AFTER` | `ProductRenderHook` | After the variant main column |
+| `VARIANT_SIDEBAR_AFTER` | `ProductRenderHook` | After the variant sidebar column |
+
+#### Orders
+
+| Constant | Class | Description |
+|----------|-------|-------------|
+| `INDEX_TABLE_BEFORE` | `OrderRenderHook` | Before the orders table |
+| `INDEX_TABLE_AFTER` | `OrderRenderHook` | After the orders table |
+| `DETAIL_HEADER_AFTER` | `OrderRenderHook` | After the order detail sticky header |
+| `DETAIL_MAIN_BEFORE` | `OrderRenderHook` | Before the order detail main content |
+| `DETAIL_MAIN_AFTER` | `OrderRenderHook` | After the order detail main column |
+| `DETAIL_SIDEBAR_BEFORE` | `OrderRenderHook` | Before the order detail sidebar |
+| `DETAIL_SIDEBAR_AFTER` | `OrderRenderHook` | After the order detail sidebar |
+| `SHIPMENTS_TABLE_BEFORE` | `OrderRenderHook` | Before the shipments table |
+| `SHIPMENTS_TABLE_AFTER` | `OrderRenderHook` | After the shipments table |
+| `ABANDONED_CARTS_TABLE_BEFORE` | `OrderRenderHook` | Before the abandoned carts table |
+| `ABANDONED_CARTS_TABLE_AFTER` | `OrderRenderHook` | After the abandoned carts table |
+
+#### Customers
+
+| Constant | Class | Description |
+|----------|-------|-------------|
+| `INDEX_TABLE_BEFORE` | `CustomerRenderHook` | Before the customers table |
+| `INDEX_TABLE_AFTER` | `CustomerRenderHook` | After the customers table |
+| `CREATE_FORM_BEFORE` | `CustomerRenderHook` | Before the create customer form |
+| `CREATE_FORM_AFTER` | `CustomerRenderHook` | After the create customer form |
+| `SHOW_HEADER_AFTER` | `CustomerRenderHook` | After the customer show page header |
+| `SHOW_TABS_BEFORE` | `CustomerRenderHook` | Before the customer show tabs |
+| `SHOW_TABS_END` | `CustomerRenderHook` | Before the closing of the customer show tabs |
+| `SHOW_CONTENT_BEFORE` | `CustomerRenderHook` | Before the customer show tab content |
+| `SHOW_CONTENT_AFTER` | `CustomerRenderHook` | After the customer show tab content |
+
+#### Collections
+
+| Constant | Class | Description |
+|----------|-------|-------------|
+| `INDEX_TABLE_BEFORE` | `CollectionRenderHook` | Before the collections table |
+| `INDEX_TABLE_AFTER` | `CollectionRenderHook` | After the collections table |
+| `EDIT_FORM_BEFORE` | `CollectionRenderHook` | Before the collection edit form |
+| `EDIT_FORM_AFTER` | `CollectionRenderHook` | After the collection edit form |
+
+#### Catalog
+
+| Constant | Class | Description |
+|----------|-------|-------------|
+| `CATEGORIES_TABLE_BEFORE` | `CatalogRenderHook` | Before the categories table |
+| `CATEGORIES_TABLE_AFTER` | `CatalogRenderHook` | After the categories table |
+| `BRANDS_TABLE_BEFORE` | `CatalogRenderHook` | Before the brands table |
+| `BRANDS_TABLE_AFTER` | `CatalogRenderHook` | After the brands table |
+| `TAGS_TABLE_BEFORE` | `CatalogRenderHook` | Before the tags table |
+| `TAGS_TABLE_AFTER` | `CatalogRenderHook` | After the tags table |
+| `ATTRIBUTES_TABLE_BEFORE` | `CatalogRenderHook` | Before the attributes table |
+| `ATTRIBUTES_TABLE_AFTER` | `CatalogRenderHook` | After the attributes table |
+| `REVIEWS_TABLE_BEFORE` | `CatalogRenderHook` | Before the reviews table |
+| `REVIEWS_TABLE_AFTER` | `CatalogRenderHook` | After the reviews table |
+
+#### Sales
+
+| Constant | Class | Description |
+|----------|-------|-------------|
+| `DISCOUNTS_TABLE_BEFORE` | `SalesRenderHook` | Before the discounts table |
+| `DISCOUNTS_TABLE_AFTER` | `SalesRenderHook` | After the discounts table |
+| `SUPPLIERS_TABLE_BEFORE` | `SalesRenderHook` | Before the suppliers table |
+| `SUPPLIERS_TABLE_AFTER` | `SalesRenderHook` | After the suppliers table |
 
 ### Example: Wire Elements Modal
 
 ```php
 use Illuminate\Support\Facades\Blade;
-use Shopper\Enum\RenderHook;
 use Shopper\Facades\Shopper;
+use Shopper\View\LayoutRenderHook;
 
 Shopper::renderHook(
-    RenderHook::BodyEnd,
+    LayoutRenderHook::BODY_END,
     fn (): string => Blade::render('@livewire("wire-elements-modal")'),
 );
 ```
@@ -245,22 +358,22 @@ Shopper::renderHook(
 
 ```php
 use Illuminate\Support\Facades\Blade;
-use Shopper\Enum\RenderHook;
 use Shopper\Facades\Shopper;
+use Shopper\View\LayoutRenderHook;
 
-Shopper::renderHook(RenderHook::HeadEnd, fn (): string => Blade::render('@fluxStyles'))
-    ->renderHook(RenderHook::BodyEnd, fn (): string => Blade::render('@fluxScripts'));
+Shopper::renderHook(LayoutRenderHook::HEAD_END, fn (): string => Blade::render('@fluxStyles'))
+    ->renderHook(LayoutRenderHook::BODY_END, fn (): string => Blade::render('@fluxScripts'));
 ```
 
 ### Example: Laravel Notify
 
 ```php
 use Illuminate\Support\Facades\Blade;
-use Shopper\Enum\RenderHook;
 use Shopper\Facades\Shopper;
+use Shopper\View\LayoutRenderHook;
 
 Shopper::renderHook(
-    RenderHook::BodyEnd,
+    LayoutRenderHook::BODY_END,
     fn (): string => Blade::render('<x-notify::notify />'),
 );
 ```

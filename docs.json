@@ -194,6 +194,7 @@
                   "group": "Sales",
                   "pages": [
                     "v2/customers",
+                    "v2/cart",
                     "v2/orders",
                     "v2/payments",
                     "v2/fulfillment"
