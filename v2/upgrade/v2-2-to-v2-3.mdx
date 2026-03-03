@@ -93,10 +93,20 @@ If you have published product components via `php artisan shopper:component:publ
 
 ## Migration Checklist
 
-- [ ] Update `composer.json` dependencies
-- [ ] Run `composer update`
-- [ ] Run `php artisan migrate` (creates `product_tags` table)
-- [ ] Create new permissions for `tags`
-- [ ] Update published config files if applicable (`features.php`, `components/product.php`)
-- [ ] Clear caches: `php artisan optimize:clear`
-- [ ] Test your application
+<Steps>
+  <Step title="Update dependencies">
+    Update `shopper/framework` to `^2.3` in `composer.json`, then run `composer update -W`.
+  </Step>
+  <Step title="Run migrations">
+    Run `php artisan migrate` to create the `product_tags` table.
+  </Step>
+  <Step title="Create new permissions">
+    Run `Permission::generate('tags', 'products')` and assign the five generated permissions (`browse_tags`, `read_tags`, `edit_tags`, `add_tags`, `delete_tags`) to the `administrator` role.
+  </Step>
+  <Step title="Update published config files">
+    If you have published `config/shopper/features.php`, add the `tag` feature flag. If you have published `config/shopper/components/product.php`, add the `tag-index` component entry.
+  </Step>
+  <Step title="Clear caches">
+    Run `php artisan optimize:clear`.
+  </Step>
+</Steps>

@@ -447,20 +447,38 @@ The following features are deprecated and will be removed in v3.0:
 
 ## Migration Checklist
 
-Use this checklist to ensure a complete upgrade:
-
-- [ ] Update PHP to ^8.3
-- [ ] Update Laravel to ^11.0 or ^12.0
-- [ ] Update `composer.json` dependencies
-- [ ] Run `composer update`
-- [ ] Update `config/shopper/core.php`: rename `users` to `roles`
-- [ ] Update `config/shopper/models.php`: add `address`, `inventory`, `order`, `supplier`
-- [ ] Create new permissions for `reviews`, `product_variants`, and `suppliers`
-- [ ] Update `config/shopper/orders.php`: update generator configuration
-- [ ] Update User model to implement `ShopperUser` interface and trait
-- [ ] Replace repository usage with model contracts
-- [ ] Update custom button components to Filament buttons
-- [ ] Update custom modal components if overridden
-- [ ] Run `php artisan migrate`
-- [ ] Clear caches: `php artisan optimize:clear`
-- [ ] Test your application thoroughly
+<Steps>
+  <Step title="Update requirements">
+    Ensure your environment runs PHP ^8.3 and Laravel ^11.0 or ^12.0 before proceeding.
+  </Step>
+  <Step title="Update dependencies">
+    Update `shopper/framework` to `^2.2` in `composer.json`, then run `composer update -W`.
+  </Step>
+  <Step title="Run migrations">
+    Run `php artisan migrate` to apply all new migrations.
+  </Step>
+  <Step title="Rename `users` key to `roles` in config">
+    In `config/shopper/core.php`, rename the `users` key to `roles` and update its sub-keys (`admin_role` → `admin`, `default_role` → `user`).
+  </Step>
+  <Step title="Add new models to configuration">
+    In `config/shopper/models.php`, add the `address`, `inventory`, `order`, and `supplier` entries if you have a published config file.
+  </Step>
+  <Step title="Create new permissions">
+    Run `Permission::generate()` for `reviews`, `product_variants`, and `suppliers`, then assign the generated permissions to the `administrator` role.
+  </Step>
+  <Step title="Update order number generator configuration">
+    In `config/shopper/orders.php`, update the generator array to include the new `separator` and `date_format` keys.
+  </Step>
+  <Step title="Update User model">
+    Replace `extends ShopperUser` with `implements ShopperUserContract` and add `use ShopperUser` in your `App\Models\User` class.
+  </Step>
+  <Step title="Replace repository usage">
+    Replace all direct repository class usage with model contracts resolved via `resolve(ContractClass::class)` or direct model queries.
+  </Step>
+  <Step title="Update custom Blade components">
+    Replace `<x-shopper::buttons.*>` with the equivalent `<x-filament::button>` variants. Update any overridden modal components to their slide-over replacements.
+  </Step>
+  <Step title="Clear caches">
+    Run `php artisan optimize:clear`.
+  </Step>
+</Steps>

@@ -188,6 +188,75 @@ When `allow_backorder` is `true` on a product or variant, the cart's `add()` and
 
 The `user_id` foreign key on the `inventory_histories` table is now nullable. This accommodates stock changes triggered by automated processes rather than an admin action. No action is required.
 
+### System Permissions Cleanup
+
+Three system permissions have been removed from the seeder and are no longer created on fresh installations:
+
+| Removed permission | Reason |
+|---|---|
+| `manage_mail` | No longer used by any component |
+| `impersonate` | No longer used by any component |
+| `setting_analytics` | No longer used by any component |
+
+For existing installations these permissions remain in your database but have no effect. You can delete them manually if you want to keep your permissions table clean:
+
+```php
+use Shopper\Models\Permission;
+
+Permission::query()->whereIn('name', ['manage_mail', 'impersonate', 'setting_analytics'])->delete();
+```
+
+### Server-Side Authorization Enforced Across Admin Components
+
+**Likelihood of Impact: Medium for custom roles**
+
+All admin Livewire pages and slide-overs now enforce permissions server-side via `$this->authorize()`. Previously, many components relied only on sidebar visibility to restrict access — a direct URL or Livewire call was enough to bypass the check.
+
+The following table lists every area that is now protected and the permission required:
+
+| Area | Permission |
+|---|---|
+| Settings pages (General, Carriers, Payment Methods, Taxes, Tax Zones, Legal) | `access_setting` |
+| Tax rate overrides slide-over | `access_setting` |
+| Shipping zone and rate slide-overs | `access_setting` |
+| Team management pages and slide-overs | `view_users` |
+| Product attributes slide-over | `edit_attributes` |
+| Product pricing slide-over | `edit_products` |
+| Choose product attributes slide-over | `edit_products` |
+| Related products slide-over | `edit_products` |
+| Generate variants slide-over | `edit_product_variants` |
+| Update variant slide-over | `edit_product_variants` |
+| Collection products and rules slide-overs | `edit_collections` |
+| Re-order categories slide-over | `edit_categories` |
+| Create shipping label slide-over | `edit_orders` |
+| Reviews index page and detail slide-over | `browse_reviews` |
+| Tags index page | `browse_tags` |
+
+The `administrator` role is not affected as it holds all permissions by default. For custom roles, assign the relevant permissions before upgrading:
+
+```php
+use Spatie\Permission\Models\Role;
+
+$role = Role::findByName('manager');
+
+$role->givePermissionTo([
+    'access_setting',
+    'view_users',
+    'edit_attributes',
+    'edit_products',
+    'edit_product_variants',
+    'edit_collections',
+    'edit_categories',
+    'edit_orders',
+    'browse_reviews',
+    'browse_tags',
+]);
+```
+
+<Warning>
+Review all custom roles in your installation and assign the permissions appropriate to their scope before upgrading. Users with insufficient permissions will receive a 403 response.
+</Warning>
+
 ### Shopper Enums Now Implement `Shopper\Core\Contracts`
 
 Shopper's internal enums (`OrderStatus`, `ProductType`, etc.) now implement `HasLabel`, `HasIcon`, `HasColor`, and `HasDescription` from `Shopper\Core\Contracts` instead of `Filament\Support\Contracts`. This removes the Filament dependency from `shopper/core` and keeps the core package framework-agnostic.
@@ -251,5 +320,8 @@ Shopper now has a first-class addon API for packaging extensions. An addon can r
   </Step>
   <Step title="Update role config key">
     Replace `config('shopper.core.users.admin_role')` with `config('shopper.admin.roles.admin')` if you referenced it directly.
+  </Step>
+  <Step title="Review custom role permissions">
+    Assign `access_setting`, `view_users`, `edit_attributes`, `edit_products`, `edit_product_variants`, `edit_collections`, `edit_categories`, `edit_orders`, `browse_reviews`, and `browse_tags` to any custom role that should access the corresponding areas. Optionally delete the unused `manage_mail`, `impersonate`, and `setting_analytics` permissions from your database.
   </Step>
 </Steps>
