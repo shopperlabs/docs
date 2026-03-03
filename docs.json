@@ -162,6 +162,7 @@
                       "group": "Upgrade Guide",
                       "pages": [
                         "v2/upgrade",
+                        "v2/upgrade/v2-5-to-v2-6",
                         "v2/upgrade/v2-4-to-v2-5",
                         "v2/upgrade/v2-2-to-v2-3",
                         "v2/upgrade/v2-1-to-v2-2"
@@ -175,7 +176,8 @@
                   "pages": [
                     "v2/requirements",
                     "v2/installation",
-                    "v2/configuration"
+                    "v2/configuration",
+                    "v2/dashboard"
                   ]
                 },
                 {
@@ -197,7 +199,8 @@
                     "v2/cart",
                     "v2/orders",
                     "v2/payments",
-                    "v2/fulfillment"
+                    "v2/fulfillment",
+                    "v2/taxes"
                   ]
                 },
                 {
@@ -245,7 +248,9 @@
                     "v2/extending/overview",
                     "v2/extending/control-panel",
                     "v2/extending/navigation",
-                    "v2/extending/controllers"
+                    "v2/extending/controllers",
+                    "v2/render-hooks",
+                    "v2/addons"
                   ]
                 },
                 {

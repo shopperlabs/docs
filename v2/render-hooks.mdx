@@ -1,0 +1,246 @@
+---
+title: Render Hooks
+description: Inject custom HTML, Livewire components, or Blade views into specific positions across the admin panel without modifying Shopper's core views.
+---
+
+Render hooks give you named injection points inside Shopper's admin views. Instead of overriding templates, you register a callback on a hook name and Shopper renders your content in the right place at the right time.
+
+This is the recommended way to extend any admin page adding a custom banner to the order detail sidebar, inserting a widget above the product list, or injecting tracking scripts into the page head.
+
+## Registering a Hook
+
+Hooks are registered on the `ShopperPanel` instance via the `Shopper` facade. The recommended place to register them is in the `boot()` method of your application's service provider or in a dedicated extension service provider.
+
+```php
+use Shopper\Facades\Shopper;
+use Shopper\View\OrderRenderHook;
+
+Shopper::renderHook(
+    OrderRenderHook::DETAIL_SIDEBAR_AFTER,
+    fn (): string => view('orders.custom-sidebar-widget')->render(),
+);
+```
+
+The callback receives no arguments and must return a `string`. You can return any HTML, a rendered Blade view, or a Livewire component tag.
+
+### Returning a Blade View
+
+```php
+use Shopper\Facades\Shopper;
+use Shopper\View\ProductRenderHook;
+
+Shopper::renderHook(
+    ProductRenderHook::EDIT_CONTENT_AFTER,
+    fn (): string => view('products.seo-panel')->render(),
+);
+```
+
+### Returning a Livewire Component
+
+```php
+use Shopper\Facades\Shopper;
+use Shopper\View\CustomerRenderHook;
+
+Shopper::renderHook(
+    CustomerRenderHook::SHOW_TABS_END,
+    fn (): string => '<livewire:customer-loyalty-tab />',
+);
+```
+
+### Registering Multiple Hooks
+
+You can chain multiple `renderHook()` calls on the same `Shopper` instance:
+
+```php
+use Shopper\Facades\Shopper;
+use Shopper\View\LayoutRenderHook;
+
+Shopper::renderHook(
+    LayoutRenderHook::HEAD_END,
+    fn (): string => '<script src="https://cdn.example.com/analytics.js" defer></script>',
+);
+
+Shopper::renderHook(
+    LayoutRenderHook::BODY_START,
+    fn (): string => view('analytics.noscript-tag')->render(),
+);
+```
+
+Multiple callbacks registered on the same hook are rendered in the order they were registered, concatenated together.
+
+## Disabling a Hook
+
+Hooks registered from an addon respect the addon's enabled state they are never registered when the addon is disabled. For application-level hooks, you can conditionally register them:
+
+```php
+if (config('features.custom_order_widget')) {
+    Shopper::renderHook(
+        OrderRenderHook::DETAIL_MAIN_AFTER,
+        fn (): string => view('orders.external-status')->render(),
+    );
+}
+```
+
+## Available Hooks
+
+### Layout Hooks
+
+`LayoutRenderHook` covers the global admin layout present on every page.
+
+| Constant | Hook Name | Position |
+|----------|-----------|----------|
+| `HEAD_START` | `shopper::head.start` | Immediately after `<head>` |
+| `HEAD_END` | `shopper::head.end` | Immediately before `</head>` |
+| `BODY_START` | `shopper::body.start` | Immediately after `<body>` |
+| `BODY_END` | `shopper::body.end` | Immediately before `</body>` |
+| `HEADER_START` | `shopper::header.start` | Start of the top navigation bar |
+| `HEADER_END` | `shopper::header.end` | End of the top navigation bar |
+| `CONTENT_START` | `shopper::content.start` | Before the main page content area |
+| `CONTENT_END` | `shopper::content.end` | After the main page content area |
+| `DASHBOARD_START` | `shopper::dashboard.start` | Top of the dashboard page |
+| `DASHBOARD_END` | `shopper::dashboard.end` | Bottom of the dashboard page |
+| `ACCOUNT_START` | `shopper::account.start` | Top of the account/profile page |
+| `ACCOUNT_END` | `shopper::account.end` | Bottom of the account/profile page |
+| `SETTINGS_INDEX_START` | `shopper::settings.index.start` | Top of the settings index page |
+| `SETTINGS_INDEX_END` | `shopper::settings.index.end` | Bottom of the settings index page |
+
+### Product Hooks
+
+`ProductRenderHook` targets the product list and product edit pages.
+
+| Constant | Hook Name | Position |
+|----------|-----------|----------|
+| `INDEX_TABLE_BEFORE` | `shopper::products.index.table.before` | Above the products table |
+| `INDEX_TABLE_AFTER` | `shopper::products.index.table.after` | Below the products table |
+| `EDIT_HEADER_AFTER` | `shopper::product.edit.header.after` | Below the product page header |
+| `EDIT_TABS_BEFORE` | `shopper::product.edit.tabs.before` | Before the edit page tabs |
+| `EDIT_TABS_END` | `shopper::product.edit.tabs.end` | After the last edit page tab (use to add new tabs) |
+| `EDIT_CONTENT_BEFORE` | `shopper::product.edit.content.before` | Before the active tab content |
+| `EDIT_CONTENT_AFTER` | `shopper::product.edit.content.after` | After the active tab content |
+| `VARIANT_HEADER_AFTER` | `shopper::product.variant.header.after` | Below the variant page header |
+| `VARIANT_MAIN_AFTER` | `shopper::product.variant.main.after` | After the variant main content area |
+| `VARIANT_SIDEBAR_AFTER` | `shopper::product.variant.sidebar.after` | After the variant sidebar |
+
+### Order Hooks
+
+`OrderRenderHook` targets the order list, order detail, shipments, and abandoned carts pages.
+
+| Constant | Hook Name | Position |
+|----------|-----------|----------|
+| `INDEX_TABLE_BEFORE` | `shopper::orders.index.table.before` | Above the orders table |
+| `INDEX_TABLE_AFTER` | `shopper::orders.index.table.after` | Below the orders table |
+| `DETAIL_HEADER_AFTER` | `shopper::order.detail.header.after` | Below the order detail page header |
+| `DETAIL_MAIN_BEFORE` | `shopper::order.detail.main.before` | Before the main content column |
+| `DETAIL_MAIN_AFTER` | `shopper::order.detail.main.after` | After the main content column |
+| `DETAIL_SIDEBAR_BEFORE` | `shopper::order.detail.sidebar.before` | Before the sidebar column |
+| `DETAIL_SIDEBAR_AFTER` | `shopper::order.detail.sidebar.after` | After the sidebar column |
+| `SHIPMENTS_TABLE_BEFORE` | `shopper::shipments.index.table.before` | Above the shipments table |
+| `SHIPMENTS_TABLE_AFTER` | `shopper::shipments.index.table.after` | Below the shipments table |
+| `ABANDONED_CARTS_TABLE_BEFORE` | `shopper::abandoned-carts.table.before` | Above the abandoned carts table |
+| `ABANDONED_CARTS_TABLE_AFTER` | `shopper::abandoned-carts.table.after` | Below the abandoned carts table |
+
+### Customer Hooks
+
+`CustomerRenderHook` targets the customer list and customer detail pages.
+
+| Constant | Hook Name | Position |
+|----------|-----------|----------|
+| `INDEX_TABLE_BEFORE` | `shopper::customers.index.table.before` | Above the customers table |
+| `INDEX_TABLE_AFTER` | `shopper::customers.index.table.after` | Below the customers table |
+| `CREATE_FORM_BEFORE` | `shopper::customer.create.form.before` | Before the new customer form |
+| `CREATE_FORM_AFTER` | `shopper::customer.create.form.after` | After the new customer form |
+| `SHOW_HEADER_AFTER` | `shopper::customer.show.header.after` | Below the customer detail header |
+| `SHOW_TABS_BEFORE` | `shopper::customer.show.tabs.before` | Before the customer detail tabs |
+| `SHOW_TABS_END` | `shopper::customer.show.tabs.end` | After the last customer tab (use to add new tabs) |
+| `SHOW_CONTENT_BEFORE` | `shopper::customer.show.content.before` | Before the active tab content |
+| `SHOW_CONTENT_AFTER` | `shopper::customer.show.content.after` | After the active tab content |
+
+### Collection Hooks
+
+`CollectionRenderHook` targets the collection list and collection edit pages.
+
+| Constant | Hook Name | Position |
+|----------|-----------|----------|
+| `INDEX_TABLE_BEFORE` | `shopper::collections.index.table.before` | Above the collections table |
+| `INDEX_TABLE_AFTER` | `shopper::collections.index.table.after` | Below the collections table |
+| `EDIT_FORM_BEFORE` | `shopper::collection.edit.form.before` | Before the collection edit form |
+| `EDIT_FORM_AFTER` | `shopper::collection.edit.form.after` | After the collection edit form |
+
+### Catalog Hooks
+
+`CatalogRenderHook` covers the catalog support pages: categories, brands, tags, attributes, and reviews.
+
+| Constant | Hook Name | Position |
+|----------|-----------|----------|
+| `CATEGORIES_TABLE_BEFORE` | `shopper::categories.index.table.before` | Above the categories table |
+| `CATEGORIES_TABLE_AFTER` | `shopper::categories.index.table.after` | Below the categories table |
+| `BRANDS_TABLE_BEFORE` | `shopper::brands.index.table.before` | Above the brands table |
+| `BRANDS_TABLE_AFTER` | `shopper::brands.index.table.after` | Below the brands table |
+| `TAGS_TABLE_BEFORE` | `shopper::tags.index.table.before` | Above the tags table |
+| `TAGS_TABLE_AFTER` | `shopper::tags.index.table.after` | Below the tags table |
+| `ATTRIBUTES_TABLE_BEFORE` | `shopper::attributes.index.table.before` | Above the attributes table |
+| `ATTRIBUTES_TABLE_AFTER` | `shopper::attributes.index.table.after` | Below the attributes table |
+| `REVIEWS_TABLE_BEFORE` | `shopper::reviews.index.table.before` | Above the reviews table |
+| `REVIEWS_TABLE_AFTER` | `shopper::reviews.index.table.after` | Below the reviews table |
+
+### Sales Hooks
+
+`SalesRenderHook` covers the discounts and suppliers pages.
+
+| Constant | Hook Name | Position |
+|----------|-----------|----------|
+| `DISCOUNTS_TABLE_BEFORE` | `shopper::discounts.index.table.before` | Above the discounts table |
+| `DISCOUNTS_TABLE_AFTER` | `shopper::discounts.index.table.after` | Below the discounts table |
+| `SUPPLIERS_TABLE_BEFORE` | `shopper::suppliers.index.table.before` | Above the suppliers table |
+| `SUPPLIERS_TABLE_AFTER` | `shopper::suppliers.index.table.after` | Below the suppliers table |
+
+## Example: Injecting an External Status Badge on Order Detail
+
+A real-world scenario: your store syncs orders to a fulfillment service (ShipStation, ShipBob, etc.) and you want to display the external status directly on the order detail page, without modifying any Shopper files.
+
+Create a Livewire component:
+
+```php
+use Livewire\Component;
+use Livewire\Attributes\Locked;
+
+final class ExternalOrderStatus extends Component
+{
+    #[Locked]
+    public int $orderId;
+
+    public function render(): \Illuminate\Contracts\View\View
+    {
+        $status = ExternalFulfillmentService::getStatus($this->orderId);
+
+        return view('livewire.external-order-status', ['status' => $status]);
+    }
+}
+```
+
+Register the hook in your service provider:
+
+```php
+use Shopper\Facades\Shopper;
+use Shopper\View\OrderRenderHook;
+
+public function boot(): void
+{
+    Shopper::renderHook(
+        OrderRenderHook::DETAIL_SIDEBAR_AFTER,
+        fn (): string => '<livewire:external-order-status :order-id="$order->id" />',
+    );
+}
+```
+
+## Using Hook Constants vs. Raw Strings
+
+Always use the class constants instead of raw hook name strings. They are checked by static analysis, will trigger IDE autocompletion, and won't silently break if a hook name changes in a future release.
+
+```php
+use Shopper\View\ProductRenderHook;
+
+Shopper::renderHook(ProductRenderHook::EDIT_CONTENT_AFTER, fn () => '...');
+
+Shopper::renderHook('shopper::product.edit.content.after', fn () => '...');
+```

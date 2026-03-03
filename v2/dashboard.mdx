@@ -1,43 +1,125 @@
 ---
 title: Dashboard
-description: Learn how to manage Dashboard in your Shopper administration.
+description: Overview of the admin dashboard, analytics components, the setup guide, and how to customize or replace the dashboard page.
 ---
 
-The dashboard is a user-customizable screen. One of Shopper's main goals is to enable stores to easily customize the modules.
-
-## Overview
-
-When you log into the control panel, you will be taken to the dashboard — a customizable screen dispatch with a Livewire component!
-
-Shopper is a free open-source e-commerce application based on the [TALL Stack](https://tallstack.dev) and aims to build an e-commerce administration using only [Livewire](https://laravel.livewire.com) components.
-
-The navigation at the left contains the available panels for everyday use:
-
-<Frame caption="The dashboard and the Getting Started panel">
-  <img src="/images/v2/dashboard.png" alt="Shopper Global Set Example" />
-</Frame>
-
-Clicking on each icon will open the panel or shows a list of available panels.
+The dashboard is the first screen after login. It shows store health at a glance: revenue trends, key metrics, recent orders, top products, and an onboarding guide that auto-dismisses once the store is configured.
 
 ## Components
 
-The component that displays the dashboard is quite simple, so you can easily replace it to put your own.
+The dashboard is composed of five Livewire components, each with independent caching and a focused responsibility.
 
-The component used is `Shopper\Livewire\Pages\Dashboard` and can also be found in the components file `config/shopper/components/dashboard.php`.
+### RevenueChart
+
+Displays monthly revenue as a bar chart for the last 12 months. Data is grouped by month in a single aggregated query and cached with stale-while-revalidate semantics (fresh for 5 minutes, stale up to 30 minutes).
+
+The chart supports a currency filter — when you have multiple active currencies, a dropdown lets you switch between them. The Y-axis and tooltip are formatted using `Intl.NumberFormat` with the store's locale and currency symbol.
+
+### StatCards
+
+Shows four summary cards comparing the current month to the previous month:
+
+| Card | Metric | Scope |
+|------|--------|-------|
+| Revenue | Sum of `price_amount` on paid orders | Current currency |
+| Products | Total product count, monthly new products for trend | All types |
+| Orders | Count of paid orders, monthly count for trend | All currencies |
+| Customers | Count of users with the `customer` scope, monthly new customers for trend | — |
+
+Each card shows the percentage change versus the previous month, with a green/red trend indicator.
+
+### RecentOrders
+
+A table of the 10 most recent orders. Each row shows the order number, customer name, total amount, payment status, and a link to the order detail page.
+
+### TopSellingProducts
+
+Ranks the top 5 products by total quantity sold. Variant sales are aggregated back to the parent product. Each row shows the product thumbnail, name, total units sold, and average review score.
+
+### SetupGuide
+
+An interactive checklist that guides new stores through the essential configuration steps. It auto-detects completion by querying the database:
+
+| Step | Completed when |
+|------|---------------|
+| Add a product | At least one product exists |
+| Create a collection | At least one collection exists |
+| Set up shipping zones | At least one enabled shipping zone exists |
+| Set up payment methods | At least one enabled payment method exists |
+| Configure taxes | At least one tax zone exists |
+
+When all steps are marked complete, the guide saves a `setup_guide_done` setting and dispatches a `setup-guide-completed` event to hide itself. It does not reappear on subsequent visits.
+
+## Customizing the Dashboard
+
+The dashboard page component is registered in the components configuration file. You can replace it with your own implementation.
+
+Publish the configuration:
+
+```bash
+php artisan vendor:publish --tag=shopper-config
+```
+
+Then open `config/shopper/components/dashboard.php` and replace the page class:
 
 ```php
-namespace Shopper\Livewire\Pages;
+use Shopper\Livewire\Pages;
+
+return [
+    'pages' => [
+        'dashboard' => Pages\Dashboard::class,
+    ],
+    'components' => [
+        'side-panel' => Components\SlideOverPanel::class,
+    ],
+];
+```
+
+Point it to your own component:
+
+```php
+'pages' => [
+    'dashboard' => App\Livewire\Pages\Dashboard::class,
+],
+```
+
+Your component only needs to render the correct view with the app layout. The simplest override:
+
+```php
+namespace App\Livewire\Pages;
 
 use Illuminate\Contracts\View\View;
+use Livewire\Component;
 
-class Dashboard extends AbstractPageComponent
+final class Dashboard extends Component
 {
     public function render(): View
     {
-        return view('shopper::livewire.pages.dashboard')
+        return view('dashboard.index')
             ->layout('shopper::components.layouts.app', [
-                'title' => __('shopper::layout.sidebar.dashboard'),
+                'title' => 'Dashboard',
             ]);
     }
 }
 ```
+
+## Adding Content via Render Hooks
+
+If you only want to inject content above or below the dashboard without replacing the entire page, use the layout render hooks:
+
+```php
+use Shopper\Facades\Shopper;
+use Shopper\View\LayoutRenderHook;
+
+Shopper::renderHook(
+    LayoutRenderHook::DASHBOARD_START,
+    fn (): string => view('dashboard.store-alert-banner')->render(),
+);
+
+Shopper::renderHook(
+    LayoutRenderHook::DASHBOARD_END,
+    fn (): string => view('dashboard.custom-reports')->render(),
+);
+```
+
+See the [Render Hooks](/v2/render-hooks) documentation for the full list of available injection points.

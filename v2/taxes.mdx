@@ -1,0 +1,381 @@
+---
+title: Taxes
+description: Configure tax zones, rates, and override rules to calculate taxes accurately per region, VAT-inclusive or sales-tax-exclusive.
+---
+
+Shopper calculates taxes per line item, based on where an order is being shipped. You define geographic zones, assign percentage rates to each zone, and optionally override those rates for specific products, product types, or categories. The cart pipeline applies all of this automatically during checkout.
+
+All tax amounts are stored in **cents** as unsigned integers, consistent with the rest of the monetary system.
+
+## How It Works
+
+The tax system has four main pieces:
+
+1. **TaxZone**: a geographic area (country, or country + province) with a tax inclusion policy and an optional custom provider
+2. **TaxRate**: a percentage rate attached to a zone; one rate per zone is marked as the default
+3. **TaxRateRule**: a targeting rule on a rate; when a cart line matches a rule, its rate takes priority over the zone's default
+4. **TaxCalculationProvider**: the service responsible for receiving a taxable item and a context, and returning `TaxLine` value objects
+
+When the cart is being calculated, the `CalculateTax` pipeline step reads the shipping address, resolves the matching `TaxZone`, picks the applicable `TaxRate`, and persists a `CartLineTaxLine` record for every cart line with a non-zero tax amount.
+
+## Tax Zones
+
+A tax zone defines where a tax configuration applies. It maps to a country and optionally to a specific province or state within that country. The most important setting on a zone is `is_tax_inclusive`, which determines whether prices already include tax (VAT, common in Europe) or whether tax is added on top (sales tax, common in the US).
+
+```php
+use Shopper\Core\Models\Country;
+use Shopper\Core\Models\TaxZone;
+
+$france = Country::query()->where('cca2', 'FR')->firstOrFail();
+
+TaxZone::query()->create([
+    'country_id' => $france->id,
+    'name' => 'Standard VAT',
+    'is_tax_inclusive' => true,
+]);
+```
+
+```php
+$usa = Country::query()->where('cca2', 'US')->firstOrFail();
+
+TaxZone::query()->create([
+    'country_id' => $usa->id,
+    'province_code' => 'CA',
+    'name' => 'California Sales Tax',
+    'is_tax_inclusive' => false,
+]);
+```
+
+When the calculator resolves a zone for a shipping address, it first tries to find a zone matching both the country and province. If none exists, it falls back to a country-level zone with no `province_code`.
+
+The `display_name` accessor produces a human-readable label by combining country and zone name: `France — Standard VAT`.
+
+### Zone Schema
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `country_id` | `unsignedBigInteger` | The country this zone applies to |
+| `province_code` | `nullable string` | ISO province/state code (`CA`, `NY`, `IDF`) |
+| `name` | `nullable string` | Optional label to identify the zone in the admin |
+| `is_tax_inclusive` | `boolean` | Whether prices already include tax (VAT) or not (sales tax) |
+| `provider_id` | `nullable unsignedBigInteger` | Custom tax provider; falls back to the system default when null |
+| `parent_id` | `nullable unsignedBigInteger` | Parent zone for hierarchical configurations |
+| `metadata` | `nullable jsonb` | Arbitrary data for custom providers |
+
+The combination of `country_id` and `province_code` is unique, you cannot have two zones for the same country/province pair.
+
+### Zone Relationships
+
+| Relationship | Type | Description |
+|---|---|---|
+| `country()` | `BelongsTo` | The country this zone is scoped to |
+| `rates()` | `HasMany` | All tax rates defined for this zone |
+| `provider()` | `BelongsTo` | The custom tax provider assigned to this zone |
+| `parent()` | `BelongsTo` | Parent zone |
+| `children()` | `HasMany` | Child zones |
+
+## Tax Rates
+
+Each zone has one or more rates. One rate should be marked as `is_default` it applies to every item in the zone that does not match a more specific override rule.
+
+```php
+use Shopper\Core\Models\TaxRate;
+
+TaxRate::query()->create([
+    'tax_zone_id' => $franceZone->id,
+    'name' => 'TVA 20%',
+    'code' => 'FR_VAT_STANDARD',
+    'rate' => 20.0,
+    'is_default'  => true,
+]);
+```
+
+France has a reduced VAT rate of 5.5% on food. You can define it as a separate non-default rate on the same zone, then target it at the right product category using a rule:
+
+```php
+TaxRate::query()->create([
+    'tax_zone_id' => $franceZone->id,
+    'name' => 'TVA reduce 5.5%',
+    'code' => 'FR_VAT_REDUCED',
+    'rate' => 5.5,
+    'is_default' => false,
+]);
+```
+
+### Tax Rate Schema
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `tax_zone_id` | `unsignedBigInteger` | The zone this rate belongs to |
+| `name` | `string` | Display name shown on invoices (`TVA 20%`) |
+| `code` | `nullable string` | Machine-readable identifier (`FR_VAT_STANDARD`) |
+| `rate` | `decimal(8,4)` | Percentage value `20.0` means 20% |
+| `is_default` | `boolean` | Applied when no override rule matches the item |
+| `is_combinable` | `boolean` | Whether this rate stacks with rates from a parent zone |
+| `metadata` | `nullable jsonb` | Arbitrary data for external providers |
+
+### Rate Relationships
+
+| Relationship | Type | Description |
+|---|---|---|
+| `taxZone()` | `BelongsTo` | The zone this rate is attached to |
+| `rules()` | `HasMany` | Override rules that activate this rate for specific items |
+
+## Tax Rate Rules
+
+Rules let you override the default rate for specific items. The calculator checks all non-default rates with rules first. The first rule that matches the cart line wins; if none matches, the zone's default rate is used.
+
+A rule has two fields: `reference_type` identifies what kind of entity to match, and `reference_id` holds the specific value to match against.
+
+```php
+use Shopper\Core\Models\TaxRateRule;
+
+TaxRateRule::query()->create([
+    'tax_rate_id' => $reducedRate->id,
+    'reference_type' => 'category',
+    'reference_id' => (string) $foodCategory->id,
+]);
+```
+
+This rule tells the calculator: "whenever a cart line belongs to the food category, use the 5.5% rate instead of the default 20%."
+
+You can also target a specific product:
+
+```php
+TaxRateRule::query()->create([
+    'tax_rate_id' => $zeroVatRate->id,
+    'reference_type' => 'product',
+    'reference_id' => (string) $childrenBook->id,
+]);
+```
+
+Or an entire product type — useful for applying different rules to virtual goods versus physical ones:
+
+```php
+TaxRateRule::query()->create([
+    'tax_rate_id' => $digitalRate->id,
+    'reference_type' => 'product_type',
+    'reference_id' => 'virtual',
+]);
+```
+
+### Rule Reference Types
+
+| `reference_type` | `reference_id` | Matches when |
+|---|---|---|
+| `product_type` | A `ProductType` enum value (`standard`, `virtual`, `external`) | The item's product type equals the value |
+| `product` | A product primary key, as a string | The item's exact product ID matches |
+| `category` | A category primary key, as a string | The item belongs to that category |
+
+The combination of `tax_rate_id`, `reference_type`, and `reference_id` is unique you cannot attach the same rule twice to the same rate.
+
+## Inclusive vs Exclusive Taxes
+
+The `is_tax_inclusive` flag on the zone controls the math behind the tax amount.
+
+**Tax-exclusive** (sales tax): tax is added on top of the price. The customer pays more than the listed price:
+
+```
+tax = unit_price × rate / 100
+total = unit_price + tax
+```
+
+A $100 product with a 10% exclusive tax costs **$110** at checkout.
+
+**Tax-inclusive** (VAT): tax is already embedded in the listed price. The customer pays exactly the listed price, but the tax authority receives a portion:
+
+```
+tax = price − (price / (1 + rate / 100))
+total = price (unchanged)
+```
+
+A €100 product with 20% VAT inclusive: tax = €100 - (€100 / 1.2) = **€16.67**, amount before tax = **€83.33**.
+
+Shopper handles both formulas automatically in `SystemTaxProvider`. The zone's `is_tax_inclusive` value is also propagated through the pipeline context so storefronts can present prices correctly showing "VAT included" or displaying tax as an addition at checkout.
+
+## Cart Integration
+
+Tax calculation is part of the cart pipeline and runs automatically whenever you call `Cart::calculate()`. The `CalculateTax` step runs after discounts are applied, ensuring taxes are computed on the post-discount amount.
+
+The step does the following for each cart line:
+
+1. Reads the cart's shipping address country and province
+2. Builds a `TaxCalculationContext` from those values
+3. Passes a `CartLineTaxAdapter` for the line to `TaxCalculator::calculate()`
+4. Deletes any existing `CartLineTaxLine` records for that line
+5. Creates new `CartLineTaxLine` records with the resulting tax lines
+6. Accumulates the tax total on the pipeline context
+
+```php
+use Shopper\Cart\Facades\Cart;
+
+$cart = Cart::calculate($cart);
+
+$cart->tax_amount;
+
+foreach ($cart->lines as $line) {
+    $line->taxLines;
+}
+```
+
+If no matching tax zone exists for the shipping address, the `CalculateTax` step skips silently and no tax lines are created.
+
+## Persisting Tax Lines on Orders
+
+When a cart is converted into an order, tax lines are snapshotted onto the order using `CreateOrderTaxLinesAction`. This snapshot preserves the exact tax breakdown at the moment of purchase future changes to zones or rates have no impact on historical orders.
+
+```php
+use Shopper\Core\Actions\CreateOrderTaxLinesAction;
+
+app(CreateOrderTaxLinesAction::class)->execute($order);
+```
+
+The action resolves the shipping address country, runs `TaxCalculator::calculate()` for each order item, creates an `OrderTaxLine` record for each result, and updates `tax_amount` on both the order item and the order itself.
+
+### OrderTaxLine Schema
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `taxable_type` | `string` | Polymorphic type (`Order` or `OrderItem`) |
+| `taxable_id` | `unsignedBigInteger` | Polymorphic ID |
+| `tax_rate_id` | `nullable unsignedBigInteger` | Reference to the rate used at time of purchase |
+| `code` | `string` | Rate code snapshot |
+| `name` | `string` | Rate name snapshot |
+| `rate` | `decimal(8,4)` | Rate percentage snapshot |
+| `amount` | `unsignedInteger` | Tax amount in cents |
+
+### Accessing Tax Lines on an Order
+
+```php
+use Shopper\Core\Models\Contracts\Order;
+
+$order = resolve(Order::class)::query()
+    ->with(['items.taxLines', 'taxLines'])
+    ->find($orderId);
+
+$order->tax_amount;
+
+foreach ($order->items as $item) {
+    $item->tax_amount;
+
+    foreach ($item->taxLines as $taxLine) {
+        $taxLine->name;
+        $taxLine->rate;
+        $taxLine->amount;
+    }
+}
+```
+
+## Custom Tax Providers
+
+The built-in `SystemTaxProvider` handles most use cases. For regions that require an external API like Avalara, TaxJar, or a homegrown tax service, you can implement the `TaxCalculationProvider` contract and assign it to specific zones.
+
+The contract is simple:
+
+```php
+use Shopper\Core\Contracts\TaxCalculationProvider;
+use Shopper\Core\Contracts\TaxableItem;
+use Shopper\Core\Taxes\TaxCalculationContext;
+use Shopper\Core\Taxes\TaxLine;
+
+interface TaxCalculationProvider
+{
+    public function identifier(): string;
+
+    /** @return array<int, TaxLine> */
+    public function getTaxLines(TaxableItem $item, TaxCalculationContext $context): array;
+}
+```
+
+Here is a complete implementation that calls a fictional external tax API:
+
+```php
+use Shopper\Core\Contracts\TaxCalculationProvider;
+use Shopper\Core\Contracts\TaxableItem;
+use Shopper\Core\Taxes\TaxCalculationContext;
+use Shopper\Core\Taxes\TaxLine;
+
+final class AvalaraTaxProvider implements TaxCalculationProvider
+{
+    public function __construct(
+        private readonly AvalartaClient $client,
+    ) {}
+
+    public function identifier(): string
+    {
+        return 'avalara';
+    }
+
+    public function getTaxLines(TaxableItem $item, TaxCalculationContext $context): array
+    {
+        $response = $this->client->calculate(
+            amount: $item->getTaxableAmount() * $item->getQuantity(),
+            countryCode: $context->countryCode,
+            provinceCode: $context->provinceCode,
+        );
+
+        return [
+            new TaxLine(
+                taxRateId: 0,
+                name: $response->description,
+                code: $response->jurisdictionCode,
+                rate: $response->rate,
+                amount: $response->taxAmountInCents,
+            ),
+        ];
+    }
+}
+```
+
+Register the provider in your service provider:
+
+```php
+use Shopper\Core\Contracts\TaxCalculationProvider;
+
+$this->app->bind(TaxCalculationProvider::class, AvalaraTaxProvider::class);
+```
+
+Then create a `TaxProvider` record and link it to the zone that should use it:
+
+```php
+use Shopper\Core\Models\TaxProvider;
+
+$provider = TaxProvider::query()->create([
+    'identifier' => 'avalara',
+    'is_enabled' => true,
+]);
+
+$usZone->update(['provider_id' => $provider->id]);
+```
+
+When the calculator resolves a zone that has an enabled provider, it instantiates that provider from the container instead of falling back to the system default. Each unique country/province combination is cached in memory for the duration of the request, so the provider is only resolved once per zone.
+
+### The TaxCalculationContext
+
+The `TaxCalculationContext` is a read-only value object that carries the geographic information needed to resolve the correct zone and provider:
+
+| Property | Type | Description |
+|---|---|---|
+| `countryCode` | `string` | ISO 3166-1 alpha-2 country code (`FR`, `US`, `DE`) |
+| `provinceCode` | `?string` | ISO province/state code (`CA`, `NY`) |
+| `customerId` | `?int` | The authenticated customer's ID, for future customer-level tax rules |
+| `resolvedZone` | `?TaxZone` | Pre-resolved zone; set internally by the calculator to avoid redundant queries |
+
+### The TaxableItem Contract
+
+Any object you pass to `TaxCalculator::calculate()` must implement `Shopper\Core\Contracts\TaxableItem`:
+
+| Method | Return | Description |
+|--------|--------|-------------|
+| `getTaxableAmount()` | `int` | Unit price in cents, after any item-level adjustments |
+| `getQuantity()` | `int` | Item quantity |
+| `getProductType()` | `?string` | Product type value (`standard`, `virtual`, `external`) |
+| `getProductId()` | `?int` | The product's primary key |
+| `getCategoryIds()` | `array<int, int>` | Primary keys of all categories the product belongs to |
+
+Shopper ships two ready-made adapters:
+
+- `CartLineTaxAdapter` wraps a `CartLine` for use during cart calculation; taxable amount is the post-discount line total divided by quantity
+- `OrderItemTaxAdapter` wraps an `OrderItem` for use in `CreateOrderTaxLinesAction`; taxable amount is the raw `unit_price_amount` in cents
+
+If you are building a custom checkout flow or need to calculate taxes outside of a cart, you can implement `TaxableItem` directly on any of your objects and call `TaxCalculator::calculate()` with a manually constructed `TaxCalculationContext`.
