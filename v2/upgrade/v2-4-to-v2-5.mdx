@@ -368,15 +368,32 @@ A new Shipments page in the admin panel provides a centralized view of all shipm
 
 ## Migration Checklist
 
-- [ ] Update `composer.json`: require `shopper/framework: ^2.5`
-- [ ] Run `composer update -W`
-- [ ] Run `php artisan migrate`
-- [ ] Replace removed `OrderStatus` values with `PaymentStatus` / `ShippingStatus` equivalents
-- [ ] Rename `$order->canceled_at` to `$order->cancelled_at`
-- [ ] Replace `$paymentMethod->logo` with `$paymentMethod->logoUrl()`
-- [ ] Replace `$carrier->logo` with `$carrier->logoUrl()`
-- [ ] If using a custom Order model: implement the new contract methods
-- [ ] If published order components: update `config/shopper/components/order.php` with new entries
-- [ ] Optional: `composer require shopper/stripe` for Stripe payments
-- [ ] Clear caches: `php artisan optimize:clear`
-- [ ] Test your application
+<Steps>
+  <Step title="Update dependencies">
+    Update `shopper/framework` to `^2.5` in `composer.json`, then run `composer update -W`.
+  </Step>
+  <Step title="Run migrations">
+    Run `php artisan migrate` to apply all new migrations, including the three-status order system and the media library columns for payment methods and carriers.
+  </Step>
+  <Step title="Replace removed OrderStatus values">
+    Replace all references to the removed `OrderStatus` values (`Pending`, `Registered`, `Paid`, `Shipped`, `Delivered`, `Returned`) with the equivalent `PaymentStatus` and `ShippingStatus` values.
+  </Step>
+  <Step title="Rename `canceled_at` to `cancelled_at`">
+    Update any code, queries, or Blade templates that reference `$order->canceled_at` to use `$order->cancelled_at`.
+  </Step>
+  <Step title="Replace logo property with `logoUrl()`">
+    Replace `$paymentMethod->logo` and `$carrier->logo` with `$paymentMethod->logoUrl()` and `$carrier->logoUrl()`. Re-upload existing logos through the admin panel if needed.
+  </Step>
+  <Step title="Update custom Order model">
+    If you use a custom Order model implementing `Shopper\Core\Models\Contracts\Order`, add the new contract methods (`isNew()`, `isPaid()`, `isShipped()`, etc.).
+  </Step>
+  <Step title="Update published order components">
+    If you have published `config/shopper/components/order.php`, add the new page and component entries for shipments, fulfillment, customer, items, notes, summary, and the two new slide-overs.
+  </Step>
+  <Step title="Install Stripe addon (optional)">
+    Run `composer require shopper/stripe` if you want Stripe payment support. See the [Stripe addon documentation](/v2/addons/stripe) for setup.
+  </Step>
+  <Step title="Clear caches">
+    Run `php artisan optimize:clear`.
+  </Step>
+</Steps>

@@ -1,0 +1,215 @@
+---
+title: Addons
+description: Extend the Shopper admin panel with self-contained addons, register routes, sidebar items, Livewire components, views, and settings without modifying core files.
+---
+
+Addons are the recommended way to package Shopper extensions. An addon is a self-contained unit that registers its routes, Livewire components, sidebar entries, views, and settings items through the `ShopperPanel` at boot time. When an addon is disabled, none of its assets are registered.
+
+## Creating an Addon
+
+An addon is a class that extends `Shopper\Addon\BaseAddon` and implements `Shopper\Contracts\ShopperAddon`. The contract requires four methods:
+
+| Method | Return | Description |
+|--------|--------|-------------|
+| `getId()` | `string` | Unique kebab-case identifier (`my-addon`) |
+| `getName()` | `string` | Display name; `BaseAddon` derives it from `getId()` automatically |
+| `register(ShopperPanel $panel)` | `void` | Called at registration time, bind routes, components, views, settings |
+| `boot(ShopperPanel $panel)` | `void` | Called after all addons are registered, use for cross-addon dependencies |
+| `isEnabled()` | `bool` | `BaseAddon` reads `config('shopper.addons.<id>')`, defaulting to `true` |
+
+A minimal addon looks like this:
+
+```php
+use Shopper\Addon\BaseAddon;
+use Shopper\ShopperPanel;
+
+final class AnalyticsAddon extends BaseAddon
+{
+    public function getId(): string
+    {
+        return 'analytics';
+    }
+
+    public function register(ShopperPanel $panel): void
+    {
+        $panel->addonRoutes(fn () => require __DIR__.'/../routes/analytics.php');
+
+        $panel->addonLivewireComponents([
+            'analytics-dashboard' => \App\Livewire\Analytics\Dashboard::class,
+            'analytics-report' => \App\Livewire\Analytics\Report::class,
+        ]);
+
+        $panel->addonViews('analytics', __DIR__.'/../resources/views');
+    }
+}
+```
+
+## Registering an Addon
+
+Register the addon in your application's service provider using the `Shopper` facade:
+
+```php
+use Shopper\Facades\Shopper;
+
+public function boot(): void
+{
+    Shopper::addon(new AnalyticsAddon);
+}
+```
+
+The `AddonManager` checks `isEnabled()` before registering. If the addon is disabled via config, `register()` is never called and nothing is loaded.
+
+## What an Addon Can Register
+
+### Routes
+
+```php
+$panel->addonRoutes(function () {
+    Route::middleware(['shopper'])->group(function () {
+        Route::get('/analytics', AnalyticsDashboard::class)->name('shopper.analytics.index');
+        Route::get('/analytics/{report}', AnalyticsReport::class)->name('shopper.analytics.report');
+    });
+});
+```
+
+### Livewire Components
+
+```php
+$panel->addonLivewireComponents([
+    'analytics-dashboard' => \App\Livewire\Analytics\Dashboard::class,
+]);
+```
+
+### Sidebar Navigation
+
+Pass a sidebar class that implements Shopper's sidebar extension interface:
+
+```php
+$panel->addonSidebar(\App\Sidebar\AnalyticsSidebar::class);
+```
+
+### Blade Views
+
+Register a view namespace so your Blade views are accessible as `analytics::dashboard`:
+
+```php
+$panel->addonViews('analytics', __DIR__.'/../resources/views');
+```
+
+### Settings Items
+
+Add entries to the Settings page. Each entry is a class-string mapped to a boolean controlling its visibility:
+
+```php
+$panel->addonSettingItems([
+    \App\Livewire\Settings\AnalyticsSettings::class => true,
+]);
+```
+
+### Permissions
+
+Declare additional permissions your addon introduces. They will be seeded alongside Shopper's built-in permissions:
+
+```php
+$panel->addonPermissions([
+    'browse_analytics',
+    'export_analytics',
+]);
+```
+
+### Styles and Scripts
+
+Inject additional CSS or JS assets into the admin panel's layout:
+
+```php
+$panel->addonStyles([asset('css/analytics.css')]);
+
+$panel->addonScripts([asset('js/analytics.js')]);
+```
+
+## Disabling an Addon
+
+Set the addon's ID to `false` in `config/shopper/addons.php`:
+
+```php
+return [
+    'analytics' => false,
+];
+```
+
+When set to `false`, `BaseAddon::isEnabled()` returns `false` and the addon's `register()` method is never called. Routes, components, sidebar entries, and assets are not loaded.
+
+## Checking if an Addon is Active
+
+```php
+use Shopper\Facades\Shopper;
+
+Shopper::hasAddon('analytics');
+
+$addon = Shopper::getAddon('analytics');
+$addon->getName();
+```
+
+## Full Example: A Loyalty Points Addon
+
+Here is a complete addon that adds a loyalty points feature to the Shopper admin:
+
+```php
+use Shopper\Addon\BaseAddon;
+use Shopper\ShopperPanel;
+
+final class LoyaltyAddon extends BaseAddon
+{
+    public function getId(): string
+    {
+        return 'loyalty';
+    }
+
+    public function register(ShopperPanel $panel): void
+    {
+        $panel->addonRoutes(function () {
+            Route::middleware(['shopper'])->prefix('loyalty')->name('shopper.loyalty.')->group(function () {
+                Route::get('/', \App\Livewire\Loyalty\Index::class)->name('index');
+                Route::get('/tiers', \App\Livewire\Loyalty\Tiers::class)->name('tiers');
+            });
+        });
+
+        $panel->addonLivewireComponents([
+            'loyalty-index' => \App\Livewire\Loyalty\Index::class,
+            'loyalty-tiers' => \App\Livewire\Loyalty\Tiers::class,
+            'loyalty-customer-points' => \App\Livewire\Loyalty\CustomerPoints::class,
+        ]);
+
+        $panel->addonViews('loyalty', __DIR__.'/../resources/views');
+
+        $panel->addonSidebar(\App\Sidebar\LoyaltySidebar::class);
+
+        $panel->addonPermissions([
+            'browse_loyalty',
+            'edit_loyalty',
+        ]);
+
+        $panel->addonSettingItems([
+            \App\Livewire\Settings\LoyaltySettings::class => true,
+        ]);
+    }
+
+    public function boot(ShopperPanel $panel): void
+    {
+        \Shopper\View\CustomerRenderHook::class;
+
+        $panel->renderHook(
+            \Shopper\View\CustomerRenderHook::SHOW_TABS_END,
+            fn (): string => '<livewire:loyalty-customer-points />',
+        );
+    }
+}
+```
+
+Register it once in your service provider:
+
+```php
+use Shopper\Facades\Shopper;
+
+Shopper::addon(new LoyaltyAddon);
+```

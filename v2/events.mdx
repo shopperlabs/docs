@@ -1,11 +1,14 @@
 ---
 title: Events
-description: Reference for all events dispatched by Shopper during order and product lifecycle operations.
+description: Reference for all events dispatched by Shopper during order, product, and cart lifecycle operations.
 ---
 
-Shopper dispatches events at key moments in the order and product lifecycle. These events allow you to hook into the system and add custom behavior — sending notifications, syncing with external services, updating analytics, or triggering workflows — without modifying any Shopper code.
+Shopper dispatches events at key moments in the order, product, and cart lifecycle. These events allow you to hook into the system and add custom behavior — sending notifications, syncing with external services, updating analytics, or triggering workflows — without modifying any Shopper code.
 
-All events are located in the `Shopper\Core\Events` namespace and are organized by domain.
+Events are organized by domain across two namespaces:
+
+- `Shopper\Core\Events` — order and product events
+- `Shopper\Cart\Events` — cart events
 
 ```php
 use Shopper\Core\Events\Orders\OrderCompleted;
@@ -62,10 +65,10 @@ Order events cover the full lifecycle of a purchase — from creation to complet
 | `OrderPaid` | `Order $order` | Admin marks order as paid |
 | `OrderCompleted` | `Order $order` | Admin marks order as completed |
 | `OrderShipped` | `Order $order` | All items reach shipped status |
-| `OrderCancel` | `Order $order` | Admin cancels the order |
+| `OrderCancelled` | `Order $order` | Admin cancels the order |
 | `OrderArchived` | `Order $order` | Admin archives the order |
 | `OrderDeleted` | `Order $order` | Order is soft-deleted |
-| `AddNoteToOrder` | `Order $order` | Admin adds a note to the order |
+| `OrderNoteAdded` | `Order $order` | Admin adds a note to the order |
 
 All order events carry a single `public Order $order` property.
 
@@ -78,9 +81,9 @@ OrderCreated
     │       │
     │       ├── OrderShipped ──→ OrderCompleted
     │       │
-    │       └── OrderCancel
+    │       └── OrderCancelled
     │
-    ├── OrderCancel
+    ├── OrderCancelled
     │
     ├── OrderArchived
     │
@@ -97,13 +100,13 @@ use Shopper\Core\Models\Order;
 $order = Order::query()->create([...]);
 ```
 
-Status-related events (`OrderPaid`, `OrderCompleted`, `OrderCancel`, `OrderArchived`) are dispatched from the admin panel when an administrator changes the order status.
+Status-related events (`OrderPaid`, `OrderCompleted`, `OrderCancelled`, `OrderArchived`) are dispatched from the admin panel when an administrator changes the order status.
 
 `OrderShipped` is dispatched by `SyncOrderShippingStatusAction` when the aggregated shipping status of all items transitions to `Shipped`. This happens automatically after shipment events are recorded — you don't dispatch it manually.
 
 ### Queueing
 
-Most order events implement `ShouldQueueAfterCommit`, meaning listeners run on the queue after the database transaction commits. `AddNoteToOrder` is synchronous.
+All order events implement `ShouldDispatchAfterCommit`, meaning listeners run on the queue after the database transaction commits.
 
 | Event | Queued |
 |-------|--------|
@@ -111,10 +114,10 @@ Most order events implement `ShouldQueueAfterCommit`, meaning listeners run on t
 | `OrderPaid` | Yes |
 | `OrderCompleted` | Yes |
 | `OrderShipped` | Yes |
-| `OrderCancel` | Yes |
+| `OrderCancelled` | Yes |
 | `OrderArchived` | Yes |
 | `OrderDeleted` | Yes |
-| `AddNoteToOrder` | No |
+| `OrderNoteAdded` | Yes |
 
 ## Shipment Events
 
@@ -124,10 +127,10 @@ Shipment events track the creation and delivery of individual packages within an
 
 | Event | Payload | Trigger |
 |-------|---------|---------|
-| `OrderShipmentCreated` | `Order $order` | A new shipment is created with a shipping label |
+| `OrderShipmentCreated` | `Order $order`, `OrderShipping $shipment` | A new shipment is created with a shipping label |
 | `OrderShipmentDelivered` | `Order $order`, `OrderShipping $shipment` | A shipment is marked as delivered |
 
-`OrderShipmentDelivered` is the only event that carries two properties — the order and the specific shipment that was delivered. This is useful when an order has multiple packages and you need to know which one arrived.
+Both shipment events carry two properties — the order and the specific shipment. This is useful when an order has multiple packages and you need to know which one was created or delivered.
 
 ```php
 use Shopper\Core\Events\Orders\OrderShipmentDelivered;
@@ -183,7 +186,7 @@ class SyncProductToCatalog
 ```
 
 <Note>
-Product events are synchronous (`ProductCreated`, `ProductUpdated`) except for `ProductDeleted` which implements `ShouldQueueAfterCommit`.
+All product events implement `ShouldDispatchAfterCommit` — listeners run on the queue after the database transaction commits.
 </Note>
 
 ## Example: Order Notification System
@@ -236,6 +239,47 @@ class SendShippingConfirmation implements ShouldQueue
 }
 ```
 
+## Cart Events
+
+Cart events are dispatched when a cart reaches a key state during the checkout process.
+
+### Available Events
+
+| Event | Payload | Trigger |
+|-------|---------|---------|
+| `CartCompleted` | `Cart $cart` | Cart is converted to an order |
+| `CouponApplied` | `Cart $cart`, `string $code` | A coupon code is successfully applied to the cart |
+| `CouponRemoved` | `Cart $cart`, `string $code` | A coupon code is removed from the cart |
+
+Cart events are in the `Shopper\Cart\Events` namespace:
+
+```php
+use Shopper\Cart\Events\CartCompleted;
+use Shopper\Cart\Events\CouponApplied;
+use Shopper\Cart\Events\CouponRemoved;
+```
+
+### Example: Sending a Cart Recovery Email on Coupon Removal
+
+```php
+use Shopper\Cart\Events\CouponRemoved;
+
+class OfferAlternativeCoupon
+{
+    public function handle(CouponRemoved $event): void
+    {
+        $cart = $event->cart;
+        $removedCode = $event->code;
+
+        $customer = $cart->customer;
+
+        if ($customer) {
+            Mail::to($customer->email)->send(new AlternativeDiscountMail($cart));
+        }
+    }
+}
+```
+
 ## All Events Reference
 
 | Namespace | Event | Payload | Queued |
@@ -244,12 +288,15 @@ class SendShippingConfirmation implements ShouldQueue
 | `Events\Orders` | `OrderPaid` | `Order $order` | Yes |
 | `Events\Orders` | `OrderCompleted` | `Order $order` | Yes |
 | `Events\Orders` | `OrderShipped` | `Order $order` | Yes |
-| `Events\Orders` | `OrderCancel` | `Order $order` | Yes |
+| `Events\Orders` | `OrderCancelled` | `Order $order` | Yes |
 | `Events\Orders` | `OrderArchived` | `Order $order` | Yes |
 | `Events\Orders` | `OrderDeleted` | `Order $order` | Yes |
-| `Events\Orders` | `AddNoteToOrder` | `Order $order` | No |
-| `Events\Orders` | `OrderShipmentCreated` | `Order $order` | Yes |
+| `Events\Orders` | `OrderNoteAdded` | `Order $order` | Yes |
+| `Events\Orders` | `OrderShipmentCreated` | `Order $order`, `OrderShipping $shipment` | Yes |
 | `Events\Orders` | `OrderShipmentDelivered` | `Order $order`, `OrderShipping $shipment` | Yes |
-| `Events\Products` | `ProductCreated` | `Product $product` | No |
-| `Events\Products` | `ProductUpdated` | `Product $product` | No |
+| `Events\Products` | `ProductCreated` | `Product $product` | Yes |
+| `Events\Products` | `ProductUpdated` | `Product $product` | Yes |
 | `Events\Products` | `ProductDeleted` | `Product $product` | Yes |
+| `Cart\Events` | `CartCompleted` | `Cart $cart` | No |
+| `Cart\Events` | `CouponApplied` | `Cart $cart`, `string $code` | No |
+| `Cart\Events` | `CouponRemoved` | `Cart $cart`, `string $code` | No |

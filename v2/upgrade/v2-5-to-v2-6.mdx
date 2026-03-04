@@ -1,0 +1,327 @@
+---
+title: From v2.5 to v2.6
+description: How to upgrade your Shopper installation from v2.5 to v2.6.
+---
+
+<Info>
+**Estimated Upgrade Time:** 15–45 minutes depending on how much you customized auth models and event listeners.
+</Info>
+
+## Updating Dependencies
+
+Update your `composer.json` to require Shopper 2.6:
+
+```json
+"require": {
+    "shopper/framework": "^2.6"
+}
+```
+
+Then run:
+
+```bash
+composer update -W
+```
+
+After updating, run the migrations:
+
+```bash
+php artisan migrate
+```
+
+<Note>
+v2.6 ships one new package: `shopper/cart`. The tax system is built into `shopper/core`. Both are included in `shopper/framework` and installed automatically. Their migrations run with the standard `php artisan migrate` command.
+</Note>
+
+---
+
+## High Impact Changes
+
+### Auth Models and Traits Moved from Core to Admin
+
+**Likelihood of Impact: High**
+
+The `Role` and `Permission` models, the `ShopperUser` and `HasProfilePhoto` traits, and the `spatie/laravel-permission` dependency have all moved from `shopper/core` to `shopper/admin`.
+
+If you import any of these directly in your application code, update the namespaces:
+
+| Before (v2.5) | After (v2.6) |
+|---|---|
+| `Shopper\Core\Models\Role` | `Shopper\Models\Role` |
+| `Shopper\Core\Models\Permission` | `Shopper\Models\Permission` |
+| `Shopper\Core\Models\Contracts\ShopperUser` | `Shopper\Models\Contracts\ShopperUser` |
+| `Shopper\Core\Traits\ShopperUser` | `Shopper\Traits\InteractsWithShopper` |
+| `Shopper\Core\Models\Traits\HasProfilePhoto` | `Shopper\Traits\HasProfilePhoto` |
+
+The old namespaces are still present in `shopper/core` as deprecated aliases and will continue to work until v3.0, but you should migrate at your earliest convenience.
+
+The role configuration has also moved. If you referenced the admin role from `config/shopper/core.php`, update to `config/shopper/admin.php`:
+
+#### Before (v2.5)
+
+```php
+config('shopper.core.users.admin_role')
+```
+
+#### After (v2.6)
+
+```php
+config('shopper.admin.roles.admin')
+```
+
+---
+
+## Medium Impact Changes
+
+### New Migrations
+
+v2.6 adds 15 new migrations across two packages. Run `php artisan migrate` after updating.
+
+**Tax system (shopper/core):**
+
+| Migration | Description |
+|-----------|-------------|
+| `2026_02_24_000001_create_tax_providers_table` | Tax provider registry |
+| `2026_02_24_000002_create_tax_zones_table` | Geographic tax zones |
+| `2026_02_24_000003_create_tax_rates_table` | Rates and override rules |
+| `2026_02_25_000001_add_tax_amount_to_orders_table` | `tax_amount` column on orders |
+| `2026_02_25_000002_add_tax_columns_to_order_items_table` | `tax_amount` and `tax_rate_id` on order items |
+| `2026_02_25_000003_create_order_tax_lines_table` | Tax line snapshots |
+| `2026_02_25_000004_add_allow_backorder_to_products_table` | `allow_backorder` column on products |
+| `2026_02_25_000005_make_user_id_nullable_on_inventory_histories_table` | `user_id` becomes nullable |
+
+**Cart package (shopper/cart):**
+
+| Migration | Description |
+|-----------|-------------|
+| `2026_03_01_000001_create_carts_table` | Cart model |
+| `2026_03_01_000002_create_cart_lines_table` | Cart line items |
+| `2026_03_01_000003_create_cart_addresses_table` | Billing and shipping addresses |
+| `2026_03_01_000004_create_cart_line_adjustments_table` | Discount adjustments per line |
+| `2026_03_01_000005_create_cart_line_tax_lines_table` | Tax lines per cart line |
+
+**Performance (shopper/admin):**
+
+| Migration | Description |
+|-----------|-------------|
+| `2026_02_26_000001_add_status_indexes_to_orders_table` | Indexes on order status columns |
+
+### Order and Product Event Renaming
+
+**Likelihood of Impact: Medium**
+
+Two events have been renamed for consistency. If you registered listeners for either of these events, update your `EventServiceProvider`:
+
+| Before (v2.5) | After (v2.6) |
+|---|---|
+| `Shopper\Core\Events\Orders\OrderCancel` | `Shopper\Core\Events\Orders\OrderCancelled` |
+| `Shopper\Core\Events\Orders\AddNoteToOrder` | `Shopper\Core\Events\Orders\OrderNoteAdded` |
+
+#### Before (v2.5)
+
+```php
+use Shopper\Core\Events\Orders\OrderCancel;
+use Shopper\Core\Events\Orders\AddNoteToOrder;
+
+protected $listen = [
+    OrderCancel::class => [CancelOrderHandler::class],
+    AddNoteToOrder::class => [NotifyTeam::class],
+];
+```
+
+#### After (v2.6)
+
+```php
+use Shopper\Core\Events\Orders\OrderCancelled;
+use Shopper\Core\Events\Orders\OrderNoteAdded;
+
+protected $listen = [
+    OrderCancelled::class => [CancelOrderHandler::class],
+    OrderNoteAdded::class => [NotifyTeam::class],
+];
+```
+
+### Render Hooks — Enum Replaced by Scoped Classes
+
+**Likelihood of Impact: Medium**
+
+The `RenderHook` enum (`Shopper\Enum\RenderHook`) from v2.5 had 6 layout-level hooks. It has been replaced by seven scoped classes organized by business domain. If you used any of these hooks, update to `LayoutRenderHook`:
+
+| Before (v2.5) | After (v2.6) |
+|---|---|
+| `RenderHook::HeadStart` | `LayoutRenderHook::HEAD_START` |
+| `RenderHook::HeadEnd` | `LayoutRenderHook::HEAD_END` |
+| `RenderHook::BodyStart` | `LayoutRenderHook::BODY_START` |
+| `RenderHook::BodyEnd` | `LayoutRenderHook::BODY_END` |
+| `RenderHook::ContentStart` | `LayoutRenderHook::CONTENT_START` |
+| `RenderHook::ContentEnd` | `LayoutRenderHook::CONTENT_END` |
+
+The new classes are in the `Shopper\View` namespace. See the [Render Hooks](/v2/render-hooks) documentation for the complete list of available hooks across all 7 scoped classes.
+
+#### Before (v2.5)
+
+```php
+use Shopper\Enum\RenderHook;
+
+Shopper::renderHook(RenderHook::HeadEnd, fn () => '...');
+```
+
+#### After (v2.6)
+
+```php
+use Shopper\View\LayoutRenderHook;
+
+Shopper::renderHook(LayoutRenderHook::HEAD_END, fn () => '...');
+```
+
+---
+
+## Low Impact Changes
+
+### `allow_backorder` Column Added to Products
+
+A new boolean column `allow_backorder` has been added to the products table. It defaults to `false`. No action is required — the migration handles it automatically.
+
+When `allow_backorder` is `true` on a product or variant, the cart's `add()` and `update()` methods skip the stock availability check entirely, allowing the item to be added regardless of inventory level.
+
+### `user_id` Nullable on Inventory Histories
+
+The `user_id` foreign key on the `inventory_histories` table is now nullable. This accommodates stock changes triggered by automated processes rather than an admin action. No action is required.
+
+### System Permissions Cleanup
+
+Three system permissions have been removed from the seeder and are no longer created on fresh installations:
+
+| Removed permission | Reason |
+|---|---|
+| `manage_mail` | No longer used by any component |
+| `impersonate` | No longer used by any component |
+| `setting_analytics` | No longer used by any component |
+
+For existing installations these permissions remain in your database but have no effect. You can delete them manually if you want to keep your permissions table clean:
+
+```php
+use Shopper\Models\Permission;
+
+Permission::query()->whereIn('name', ['manage_mail', 'impersonate', 'setting_analytics'])->delete();
+```
+
+### Server-Side Authorization Enforced Across Admin Components
+
+**Likelihood of Impact: Medium for custom roles**
+
+All admin Livewire pages and slide-overs now enforce permissions server-side via `$this->authorize()`. Previously, many components relied only on sidebar visibility to restrict access — a direct URL or Livewire call was enough to bypass the check.
+
+The following table lists every area that is now protected and the permission required:
+
+| Area | Permission |
+|---|---|
+| Settings pages (General, Carriers, Payment Methods, Taxes, Tax Zones, Legal) | `access_setting` |
+| Tax rate overrides slide-over | `access_setting` |
+| Shipping zone and rate slide-overs | `access_setting` |
+| Team management pages and slide-overs | `view_users` |
+| Product attributes slide-over | `edit_attributes` |
+| Product pricing slide-over | `edit_products` |
+| Choose product attributes slide-over | `edit_products` |
+| Related products slide-over | `edit_products` |
+| Generate variants slide-over | `edit_product_variants` |
+| Update variant slide-over | `edit_product_variants` |
+| Collection products and rules slide-overs | `edit_collections` |
+| Re-order categories slide-over | `edit_categories` |
+| Create shipping label slide-over | `edit_orders` |
+| Reviews index page and detail slide-over | `browse_reviews` |
+| Tags index page | `browse_tags` |
+
+The `administrator` role is not affected as it holds all permissions by default. For custom roles, assign the relevant permissions before upgrading:
+
+```php
+use Spatie\Permission\Models\Role;
+
+$role = Role::findByName('manager');
+
+$role->givePermissionTo([
+    'access_setting',
+    'view_users',
+    'edit_attributes',
+    'edit_products',
+    'edit_product_variants',
+    'edit_collections',
+    'edit_categories',
+    'edit_orders',
+    'browse_reviews',
+    'browse_tags',
+]);
+```
+
+<Warning>
+Review all custom roles in your installation and assign the permissions appropriate to their scope before upgrading. Users with insufficient permissions will receive a 403 response.
+</Warning>
+
+### Shopper Enums Now Implement `Shopper\Core\Contracts`
+
+Shopper's internal enums (`OrderStatus`, `ProductType`, etc.) now implement `HasLabel`, `HasIcon`, `HasColor`, and `HasDescription` from `Shopper\Core\Contracts` instead of `Filament\Support\Contracts`. This removes the Filament dependency from `shopper/core` and keeps the core package framework-agnostic.
+
+This has no impact on your application. Since Shopper runs on top of Filament, your own custom enums can continue to implement either `Filament\Support\Contracts` or `Shopper\Core\Contracts` — the method signatures are identical.
+
+---
+
+## New Features
+
+### Cart Package
+
+`shopper/cart` is now bundled with Shopper. It provides a full cart management system with pipeline-based calculation, discount validation, tax integration, and order conversion. See the [Cart documentation](/v2/cart) for setup and usage.
+
+### Tax System
+
+A built-in tax system is now available. Configure tax zones per country (or country + province), assign rates, and define override rules for specific products, product types, or categories. Taxes are calculated automatically in the cart pipeline. See the [Taxes documentation](/v2/taxes) for full details.
+
+### Dashboard Analytics
+
+The dashboard now includes five new Livewire components: a 12-month revenue bar chart, stat cards with month-over-month trends, a recent orders table, a top-selling products table, and an interactive setup guide. All data is cached with stale-while-revalidate semantics. See the [Dashboard documentation](/v2/dashboard).
+
+### Abandoned Carts
+
+A new admin page at **Orders → Abandoned Carts** lists carts that have been inactive for longer than the configured threshold (default: 60 minutes). The threshold is configurable in `config/shopper/cart.php`:
+
+```php
+'abandoned_after_minutes' => 60,
+```
+
+### Addon System
+
+Shopper now has a first-class addon API for packaging extensions. An addon can register routes, Livewire components, sidebar entries, views, settings items, and permissions as a single unit. See the [Addons documentation](/v2/addons).
+
+### Render Hooks
+
+62 named render hooks are now available across all admin pages. Use them to inject content into specific positions without modifying any Shopper views. See the [Render Hooks documentation](/v2/render-hooks).
+
+---
+
+## Migration Checklist
+
+<Steps>
+  <Step title="Update dependencies">
+    Run `composer update -W` after updating `shopper/framework` to `^2.6`.
+  </Step>
+  <Step title="Run migrations">
+    Run `php artisan migrate` to apply all 15 new migrations.
+  </Step>
+  <Step title="Update auth model namespaces">
+    Replace `Shopper\Core\Models\Role` → `Shopper\Models\Role` and `Shopper\Core\Models\Permission` → `Shopper\Models\Permission` wherever you import them.
+  </Step>
+  <Step title="Update auth trait namespaces">
+    Replace `Shopper\Core\Traits\ShopperUser` → `Shopper\Traits\InteractsWithShopper` and `Shopper\Core\Models\Traits\HasProfilePhoto` → `Shopper\Traits\HasProfilePhoto`.
+  </Step>
+  <Step title="Update renamed events">
+    Replace `OrderCancel` → `OrderCancelled` and `AddNoteToOrder` → `OrderNoteAdded` in your event listeners.
+  </Step>
+  <Step title="Update render hooks">
+    Replace the old `RenderHook` enum constants with the new scoped class constants if you used render hooks in v2.5.
+  </Step>
+  <Step title="Update role config key">
+    Replace `config('shopper.core.users.admin_role')` with `config('shopper.admin.roles.admin')` if you referenced it directly.
+  </Step>
+  <Step title="Review custom role permissions">
+    Assign `access_setting`, `view_users`, `edit_attributes`, `edit_products`, `edit_product_variants`, `edit_collections`, `edit_categories`, `edit_orders`, `browse_reviews`, and `browse_tags` to any custom role that should access the corresponding areas. Optionally delete the unused `manage_mail`, `impersonate`, and `setting_analytics` permissions from your database.
+  </Step>
+</Steps>

@@ -1,0 +1,606 @@
+---
+title: Cart
+description: Manage shopping carts with pipeline-based calculation, discount validation, tax integration, and order conversion.
+---
+
+The `shopper/cart` package handles everything between "Add to cart" and "Place order". It manages cart lines, validates stock, applies discounts, calculates taxes, and converts completed carts into orders — all through a clean, testable API.
+
+Every monetary value is stored in **cents** as an unsigned integer. A product priced at $25.00 is stored as `2500`.
+
+## How It Works
+
+The cart system has five main pieces:
+
+1. **CartManager** handles cart operations: add, update, remove, apply coupons, calculate totals
+2. **CartSessionManager** persists the current cart in the session for storefront use
+3. **Pipeline system** calculates totals through a configurable chain of pipes (subtotals → discounts → taxes → total)
+4. **DiscountValidator** enforces coupon rules: eligibility, usage limits, zones, minimum amounts
+5. **CreateOrderFromCartAction** converts a cart into an order within a database transaction
+
+## Cart Manager
+
+The `CartManager` is the primary API for all cart operations. It is registered as a singleton and injected with the `CartPipelineRunner`.
+
+```php
+use Shopper\Cart\CartManager;
+
+$manager = resolve(CartManager::class);
+```
+
+### Adding Items
+
+Pass any model that implements `Priceable` — typically a `Product` or `ProductVariant`. The manager looks up the unit price from the purchasable's price list using the cart's currency.
+
+```php
+$line = $manager->add($cart, $product);
+
+$line = $manager->add($cart, $product, quantity: 3);
+
+$line = $manager->add($cart, $variant, metadata: [
+    'gift_wrap' => true,
+    'message' => 'Happy birthday!',
+]);
+```
+
+Adding the same purchasable twice increments the existing line's quantity instead of creating a duplicate.
+
+```php
+$manager->add($cart, $product, quantity: 2); // quantity: 2
+$manager->add($cart, $product, quantity: 3); // quantity: 5
+```
+
+### Stock Validation
+
+Every `add()` and `update()` call checks available stock. If the purchasable implements `Stockable` and `allow_backorder` is false, an `InsufficientStockException` is thrown when the requested quantity exceeds available inventory.
+
+```php
+use Shopper\Cart\Exceptions\InsufficientStockException;
+
+try {
+    $manager->add($cart, $product, quantity: 100);
+} catch (InsufficientStockException $e) {
+    $e->purchasable; // The product or variant
+    $e->available;   // Current stock level
+    $e->requested;   // Quantity that was requested
+}
+```
+
+Products with `allow_backorder` set to `true` bypass stock checks entirely.
+
+### Updating a Line
+
+```php
+$updated = $manager->update($cart, $lineId, [
+    'quantity' => 5,
+]);
+
+$updated = $manager->update($cart, $lineId, [
+    'metadata' => ['gift_wrap' => false],
+]);
+```
+
+### Removing Lines
+
+```php
+$manager->remove($cart, $lineId);
+
+$manager->clear($cart);
+```
+
+### Applying Coupons
+
+The `applyCoupon()` method validates that the discount code exists in the database before setting it on the cart. The actual discount calculation happens during the pipeline.
+
+```php
+use Shopper\Cart\Exceptions\InvalidDiscountException;
+
+try {
+    $manager->applyCoupon($cart, 'SUMMER20');
+} catch (InvalidDiscountException $e) {
+    // Discount code not found
+}
+
+$manager->removeCoupon($cart);
+```
+
+Removing a coupon also deletes all line adjustments that were created by the discount pipeline.
+
+### Adding Addresses
+
+```php
+use Shopper\Core\Enum\AddressType;
+
+$manager->addAddress($cart, AddressType::Shipping, [
+    'first_name' => 'John',
+    'last_name' => 'Doe',
+    'address_1' => '123 Main St',
+    'city' => 'New York',
+    'postal_code' => '10001',
+    'country_id' => $countryId,
+]);
+
+$manager->addAddress($cart, AddressType::Billing, $billingData);
+```
+
+If an address of the same type already exists, it is updated instead of duplicated.
+
+### Calculating Totals
+
+```php
+use Shopper\Cart\Pipelines\CartPipelineContext;
+
+$context = $manager->calculate($cart);
+
+$context->subtotal;      // Sum of line subtotals (before discounts/tax)
+$context->discountTotal; // Total discount amount
+$context->taxTotal;      // Total tax amount
+$context->total;         // Final total
+$context->taxInclusive;  // Whether tax is included in prices
+```
+
+### Completed Cart Guard
+
+All mutating operations (`add`, `update`, `remove`, `clear`, `applyCoupon`, `removeCoupon`) throw `CartCompletedException` if the cart has already been completed. This prevents modifications after an order has been placed.
+
+```php
+use Shopper\Cart\Exceptions\CartCompletedException;
+
+$cart->update(['completed_at' => now()]);
+
+$manager->add($cart, $product); // throws CartCompletedException
+```
+
+## Session Management
+
+The `CartSessionManager` handles cart persistence in the HTTP session. Use it in your storefront to retrieve or create the current customer's cart.
+
+### Using the Facade
+
+```php
+use Shopper\Cart\Facades\Cart;
+
+$cart = Cart::current();
+
+$cart = Cart::create();
+
+$cart = Cart::create(['channel_id' => $channelId, 'zone_id' => $zoneId]);
+
+Cart::use($existingCart);
+
+Cart::associate($user);
+
+Cart::forget();
+```
+
+### Behavior
+
+- `current()` returns `null` if no cart exists in the session and `auto_create` is `false`
+- `current()` returns `null` if the session cart has been completed (it won't return stale carts)
+- `create()` stores the new cart's ID in the session and sets the `currency_code` from `shopper_currency()`
+- `associate()` sets the `customer_id` on the current cart — call this after login
+- `forget()` removes the cart ID from the session without deleting the cart itself
+
+## Models
+
+### Cart
+
+```php
+Shopper\Cart\Models\Cart
+```
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | | Primary key |
+| `customer_id` | bigint | Yes | FK to `users` |
+| `channel_id` | bigint | Yes | FK to `shopper_channels` |
+| `zone_id` | bigint | Yes | FK to `shopper_zones` |
+| `currency_code` | string | | ISO currency code (e.g. `USD`) |
+| `coupon_code` | string | Yes | Applied discount code |
+| `completed_at` | timestamp | Yes | Set when cart is converted to order |
+| `metadata` | json | Yes | Custom data |
+| `created_at` | timestamp | | |
+| `updated_at` | timestamp | | |
+
+#### Relationships
+
+```php
+$cart->lines;            // HasMany<CartLine>
+$cart->addresses;        // HasMany<CartAddress>
+$cart->customer;         // BelongsTo<User>
+$cart->channel;          // BelongsTo<Channel>
+$cart->zone;             // BelongsTo<Zone>
+```
+
+#### Methods
+
+```php
+$cart->isCompleted();       // bool — checks if completed_at is set
+$cart->shippingAddress();   // ?CartAddress — address with type Shipping
+$cart->billingAddress();    // ?CartAddress — address with type Billing
+```
+
+### CartLine
+
+```php
+Shopper\Cart\Models\CartLine
+```
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | | Primary key |
+| `cart_id` | bigint | | FK to cart |
+| `purchasable_type` | string | | Morph type (`Product`, `ProductVariant`, etc.) |
+| `purchasable_id` | bigint | | Morph ID |
+| `quantity` | unsigned int | | Item quantity |
+| `unit_price_amount` | unsigned int | | Price per unit in cents |
+| `metadata` | json | Yes | Custom data |
+
+#### Relationships
+
+```php
+$line->cart;           // BelongsTo<Cart>
+$line->purchasable;    // MorphTo — Product, ProductVariant, etc.
+$line->adjustments;    // HasMany<CartLineAdjustment>
+$line->taxLines;       // HasMany<CartLineTaxLine>
+```
+
+### CartAddress
+
+```php
+Shopper\Cart\Models\CartAddress
+```
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | | Primary key |
+| `cart_id` | bigint | | FK to cart |
+| `type` | string | | `shipping` or `billing` (AddressType enum) |
+| `country_id` | bigint | Yes | FK to `shopper_countries` |
+| `first_name` | string | Yes | |
+| `last_name` | string | | |
+| `company` | string | Yes | |
+| `address_1` | string | | Street address |
+| `address_2` | string | Yes | Apartment, suite, etc. |
+| `city` | string | | |
+| `state` | string | Yes | |
+| `postal_code` | string | | |
+| `phone` | string | Yes | |
+
+The `full_name` accessor combines `first_name` and `last_name`.
+
+### CartLineAdjustment
+
+```php
+Shopper\Cart\Models\CartLineAdjustment
+```
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | | Primary key |
+| `cart_line_id` | bigint | | FK to cart line |
+| `discount_id` | bigint | Yes | FK to discount |
+| `amount` | unsigned int | | Discount amount in cents |
+| `code` | string | Yes | Coupon code |
+
+### CartLineTaxLine
+
+```php
+Shopper\Cart\Models\CartLineTaxLine
+```
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | | Primary key |
+| `cart_line_id` | bigint | | FK to cart line |
+| `tax_rate_id` | bigint | Yes | FK to tax rate |
+| `code` | string | | Tax code |
+| `name` | string | | Tax name (e.g. "VAT") |
+| `rate` | decimal(8,4) | | Tax rate (e.g. `20.0000` for 20%) |
+| `amount` | unsigned int | | Tax amount in cents |
+
+## Calculation Pipeline
+
+Cart totals are calculated through a pipeline of configurable steps. Each pipe receives a `CartPipelineContext`, performs its calculation, and passes it to the next pipe.
+
+### Default Pipeline
+
+```php
+use Shopper\Cart\Pipelines\CalculateLines;
+use Shopper\Cart\Pipelines\ApplyDiscounts;
+use Shopper\Cart\Pipelines\CalculateTax;
+use Shopper\Cart\Pipelines\Calculate;
+
+// config/shopper/cart.php
+'pipelines' => [
+    'cart' => [
+        CalculateLines::class,
+        ApplyDiscounts::class,
+        CalculateTax::class,
+        Calculate::class,
+    ],
+],
+```
+
+### Pipeline Steps
+
+**1. CalculateLines** — Computes the subtotal for each line (`unit_price_amount × quantity`) and sums them into `$context->subtotal`.
+
+**2. ApplyDiscounts** — If the cart has a `coupon_code`, validates the discount through `DiscountValidator` and calculates the discount amount. For percentage discounts, each line gets `(lineSubtotal × rate / 100)`. For fixed amount discounts, the amount is distributed proportionally across lines. Creates `CartLineAdjustment` records.
+
+**3. CalculateTax** — Resolves the shipping address country and calculates tax for each line using the core `TaxCalculator`. The taxable amount per line is `(lineSubtotal - discountAmount)`. Creates `CartLineTaxLine` records.
+
+**4. Calculate** — Computes the final total. If tax is inclusive: `total = subtotal - discountTotal`. If tax is exclusive: `total = subtotal - discountTotal + taxTotal`. The minimum total is always `0`.
+
+### Custom Pipeline
+
+You can replace or extend the pipeline in `config/shopper/cart.php`. Add a custom pipe to handle shipping costs, loyalty points, or any other calculation:
+
+```php
+'pipelines' => [
+    'cart' => [
+        CalculateLines::class,
+        ApplyDiscounts::class,
+        App\Cart\Pipes\ApplyShippingCost::class,
+        CalculateTax::class,
+        Calculate::class,
+    ],
+],
+```
+
+Your custom pipe must implement `__invoke(CartPipelineContext $context, Closure $next)`:
+
+```php
+namespace App\Cart\Pipes;
+
+use Closure;
+use Shopper\Cart\Pipelines\CartPipelineContext;
+
+final class ApplyShippingCost
+{
+    public function __invoke(CartPipelineContext $context, Closure $next): mixed
+    {
+        // Your calculation logic here
+
+        return $next($context);
+    }
+}
+```
+
+## Discount Validation
+
+When a coupon is applied during the pipeline, the `DiscountValidator` runs a series of checks before the discount is calculated. Each check produces a clear, translatable error message.
+
+### Validation Rules
+
+| Rule | Condition | Error Key |
+|------|-----------|-----------|
+| Active | `discount->is_active` must be true | `discount.not_active` |
+| Started | `discount->start_at` must be in the past | `discount.not_started` |
+| Not expired | `discount->end_at` must be null or in the future | `discount.expired` |
+| Usage limit | Total uses must be under the global limit | `discount.usage_limit_reached` |
+| Per-user limit | Customer must not have exceeded their per-user limit | `discount.already_used` |
+| Eligibility | If restricted to specific customers, the cart customer must be in the list | `discount.customer_not_eligible` |
+| Requires login | If eligibility is set, the cart must have a `customer_id` | `discount.requires_login` |
+| Zone | If the discount has a `zone_id`, it must match `cart->zone_id` | `discount.not_available_in_zone` |
+| Minimum amount | Cart subtotal must meet the minimum purchase requirement | `discount.min_amount_not_reached` |
+| Minimum quantity | Total line quantity must meet the minimum quantity requirement | `discount.min_quantity_not_reached` |
+
+### Discount Application Modes
+
+Discounts support two application scopes via `discount->apply_to`:
+
+- **Order** (`DiscountApplyTo::Order`) — applies to all cart lines
+- **Specific products** — applies only to lines matching the products/variants configured on the discount
+
+And two discount types:
+
+- **Percentage** — each applicable line gets `(lineSubtotal × value / 100)`
+- **Fixed amount** — the fixed amount is distributed proportionally across applicable lines based on their share of the total subtotal
+
+## Order Conversion
+
+The `CreateOrderFromCartAction` converts a completed cart into an order. This is the bridge between the storefront cart and the order management system.
+
+```php
+use Shopper\Cart\Actions\CreateOrderFromCartAction;
+
+$action = resolve(CreateOrderFromCartAction::class);
+$order = $action->execute($cart);
+```
+
+### What Happens
+
+The entire operation runs inside a database transaction with a `FOR UPDATE` lock on the cart:
+
+1. **Calculates totals** — runs the full pipeline to get final amounts
+2. **Creates order addresses** — copies cart shipping/billing addresses to `OrderAddress` records
+3. **Creates the order** — with `price_amount`, `tax_amount`, `currency_code`, and all foreign keys
+4. **Creates order items** — one per cart line, including the discount amount from adjustments
+5. **Creates order tax lines** — via `CreateOrderTaxLinesAction`
+6. **Increments discount usage** — if a coupon was applied, increments `total_use` on the discount
+7. **Marks cart as completed** — sets `completed_at` to prevent further modifications
+8. **Dispatches `CartCompleted` event** — with the cart and the created order
+
+<Note>
+If the cart has already been completed, `CartCompletedException` is thrown before any work begins. The `FOR UPDATE` lock prevents race conditions from concurrent checkout attempts.
+</Note>
+
+## Events
+
+| Event | Dispatched When | Properties |
+|-------|-----------------|------------|
+| `CartCompleted` | Cart is converted to an order | `Cart $cart`, `Order $order` |
+| `CouponApplied` | Coupon code is set on a cart | `Cart $cart`, `string $code` |
+| `CouponRemoved` | Coupon code is cleared from a cart | `Cart $cart` |
+
+```php
+use Shopper\Cart\Events\CartCompleted;
+use Shopper\Cart\Events\CouponApplied;
+use Shopper\Cart\Events\CouponRemoved;
+```
+
+## Configuration
+
+Publish the configuration file:
+
+```bash
+php artisan vendor:publish --tag=shopper-cart-config
+```
+
+```php
+// config/shopper/cart.php
+
+return [
+    'pipelines' => [
+        'cart' => [
+            CalculateLines::class,
+            ApplyDiscounts::class,
+            CalculateTax::class,
+            Calculate::class,
+        ],
+    ],
+
+    'session' => [
+        'key' => 'shopper_cart',     // Session key for storing cart ID
+        'auto_create' => false,      // Auto-create cart when current() is called
+    ],
+
+    'prune_after_days' => 30,        // Days before abandoned carts are pruned
+
+    'models' => [
+        'cart' => Cart::class,       // Swappable via model contracts
+        'cart_line' => CartLine::class,
+    ],
+];
+```
+
+### Model Swapping
+
+The `Cart` and `CartLine` models implement core contracts (`CartContract`, `CartLineContract`) and use the `HasModelContract` trait. You can replace them with your own models:
+
+```php
+// config/shopper/cart.php
+'models' => [
+    'cart' => App\Models\Cart::class,
+    'cart_line' => App\Models\CartLine::class,
+],
+```
+
+Your custom models must implement the corresponding contracts from `Shopper\Core\Models\Contracts`.
+
+## Pruning Abandoned Carts
+
+Abandoned carts (never completed) are cleaned up with a scheduled command:
+
+```bash
+php artisan shopper:prune-carts
+php artisan shopper:prune-carts --days=7
+```
+
+By default, carts that haven't been updated in the last 30 days (configurable via `prune_after_days`) are deleted. Only carts where `completed_at` is `null` are pruned — completed carts are kept as historical records.
+
+Schedule the command in your `routes/console.php`:
+
+```php
+use Illuminate\Support\Facades\Schedule;
+
+Schedule::command('shopper:prune-carts')->daily();
+```
+
+## Storefront Example
+
+Here is a complete cart-to-checkout flow for a storefront application.
+
+### Initializing the Cart
+
+```php
+use Shopper\Cart\Facades\Cart;
+
+// In middleware or controller — get or create the cart
+$cart = Cart::current() ?? Cart::create([
+    'channel_id' => $channel->id,
+    'zone_id' => $zone->id,
+]);
+
+// After login — associate the customer
+Cart::associate(auth()->user());
+```
+
+### Adding Products
+
+```php
+use Shopper\Cart\CartManager;
+use Shopper\Cart\Exceptions\InsufficientStockException;
+use Shopper\Cart\Facades\Cart;
+
+$cart = Cart::current();
+$manager = resolve(CartManager::class);
+
+try {
+    $manager->add($cart, $product, quantity: 2);
+} catch (InsufficientStockException $e) {
+    return back()->with('error', "Only {$e->available} items available.");
+}
+```
+
+### Displaying Cart Totals
+
+```php
+$context = $manager->calculate($cart);
+
+// In your Blade template
+Subtotal: {{ format_money($context->subtotal, $cart->currency_code) }}
+Discount: -{{ format_money($context->discountTotal, $cart->currency_code) }}
+Tax: {{ format_money($context->taxTotal, $cart->currency_code) }}
+Total: {{ format_money($context->total, $cart->currency_code) }}
+```
+
+### Applying a Coupon
+
+```php
+use Shopper\Cart\Exceptions\InvalidDiscountException;
+
+try {
+    $manager->applyCoupon($cart, $couponCode);
+} catch (InvalidDiscountException $e) {
+    return back()->with('error', $e->getMessage());
+}
+
+// Recalculate to see the discount
+$context = $manager->calculate($cart);
+```
+
+### Setting Addresses
+
+```php
+use Shopper\Core\Enum\AddressType;
+
+$manager->addAddress($cart, AddressType::Shipping, [
+    'first_name' => $request->first_name,
+    'last_name' => $request->last_name,
+    'address_1' => $request->address,
+    'city' => $request->city,
+    'postal_code' => $request->postal_code,
+    'country_id' => $request->country_id,
+]);
+```
+
+### Converting to Order
+
+```php
+use Shopper\Cart\Actions\CreateOrderFromCartAction;
+use Shopper\Cart\Facades\Cart;
+
+$action = resolve(CreateOrderFromCartAction::class);
+$order = $action->execute(Cart::current());
+
+Cart::forget();
+
+// Continue to payment processing
+$service = resolve(PaymentProcessingService::class);
+$result = $service->initiate($order);
+```
+
+<Note>
+After converting the cart to an order, call `Cart::forget()` to clear the session. The cart is marked as completed and cannot be modified, but the session should be cleaned up so `Cart::current()` returns `null`. See the [Payments](/v2/payments) page for processing the order payment.
+</Note>

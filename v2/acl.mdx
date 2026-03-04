@@ -5,23 +5,15 @@ description: Manage user roles and permissions with Laravel Permission integrati
 
 Manage access and permissions of your users and members in your store. The entire system of roles and permissions in Shopper is implemented by the package
 [spatie/laravel-permission](https://github.com/spatie/laravel-permission). Because all permissions will be registered on Laravel's gate, you can test if a user
-has a permission with Laravel's default [can()](https://laravel.com/v2/11.x/authorization#via-blade-templates) function.
+has a permission with Laravel's default [can()](https://laravel.com/docs/authorization#via-blade-templates) function.
 
-To access dashboard, you need to have the role `administrator` this role can be found in the configuration file `config/shopper/core.php`.
+To access the dashboard, a user must have the `administrator` role. Role names are configured in `config/shopper/admin.php`:
 
 ```php
-/*
-|--------------------------------------------------------------------------
-| Configurations for the user
-|--------------------------------------------------------------------------
-|
-| User configuration to manage user access using spatie/laravel-permission.
-|
-*/
-
-'users' => [
-  'admin_role' => 'administrator',
-  'default_role' => 'user',
+'roles' => [
+    'admin'   => 'administrator',
+    'manager' => 'manager',
+    'user'    => 'user',
 ],
 ```
 
@@ -60,12 +52,12 @@ Permissions are associated with roles. Depending on the role that a member has, 
 
 All this management of roles and permissions is done using the [Laravel Permission](https://github.com/spatie/laravel-permission) package from [Spatie](https://spatie.be).
 
-At installation Laravel Shopper comes with 3 roles: **Administrator**, **Manager** and **User**, the user role cannot be modified from the administration interface
+At installation Shopper comes with 3 roles: **Administrator**, **Manager** and **User**, the user role cannot be modified from the administration interface
 because it is the role that will be assigned to any customer who will create his account on your shop.
 
 ## RBAC ACL
 
-RBAC (Role Based Access Control) or ACL (Access Control Layer) is an approach to restricting system access for users using roles system, Laravel Shopper allow to define
+RBAC (Role Based Access Control) or ACL (Access Control Layer) is an approach to restricting system access for users using roles system, Shopper allow to define
 the level of access for each user. With roles a user can access menus, pages. It is important to know that one Administrator can have multiple roles assigned.
 
 To view the roles and permissions management page, you must go to the **Settings > Staff & Permissions**
@@ -76,7 +68,7 @@ To view the roles and permissions management page, you must go to the **Settings
 
 ## Model
 
-The model used for the **Role** is `Shopper\Core\Models\Role` this model extend from the Spatie Role model.
+The model used for the **Role** is `Shopper\Models\Role` this model extend from the Spatie Role model.
 
 | Name             | Type    | Required | Notes                                                       |
 |------------------|---------|----------|-------------------------------------------------------------|
@@ -87,7 +79,7 @@ The model used for the **Role** is `Shopper\Core\Models\Role` this model extend 
 | `description`    | text    | no       | Nullable, the role description                              |
 | `can_be_removed` | boolean | no       | Default `true`, defines if a role can be deleted.           |
 
-And the **Permission** model is `Shopper\Core\Models\Permission`
+And the **Permission** model is `Shopper\Models\Permission`
 
 | Name             | Type    | Required | Notes                                                             |
 |------------------|---------|----------|-------------------------------------------------------------------|
@@ -102,34 +94,16 @@ And the **Permission** model is `Shopper\Core\Models\Permission`
 The **Permission** model has some groups as shown here
 
 ```php
-namespace Shopper\Core\Models\User;
+use Shopper\Models\Permission;
 
-use Spatie\Permission\Models\Permission as SpatiePermission;
-
-class Permission extends SpatiePermission
-{
-  /**
-   * Get a lists of permissions groups.
-   */
-  public static function groups(): array
-  {
-    return [
-      'system' => __('System'),
-      'brands' => __('Brands'),
-      'categories' => __('Categories'),
-      'collections' => __('Collections'),
-      'products' => __('Products'),
-      'customers' => __('Customers'),
-      'orders' => __('Orders'),
-      'discounts' => __('Discounts'),
-    ];
-  }
-}
+Permission::groups();
 ```
+
+This returns the eight built-in groups: `system`, `brands`, `categories`, `collections`, `products`, `customers`, `orders`, `discounts`.
 
 ## Components
 
-During the installation of Laravel Shopper, no component files are published by default to ensure a streamlined and hassle-free setup.
+During the installation of Shopper, no component files are published by default to ensure a streamlined and hassle-free setup.
 However, if you need to customize or replace any components, you can easily publish them using the following Artisan command:
 
 ```bash
