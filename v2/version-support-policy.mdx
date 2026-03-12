@@ -1,0 +1,30 @@
+---
+title: Version Support Policy
+description: Learn about Shopper's versioning scheme, support windows, and release cadence.
+---
+
+| Version | Filament | New features              | Bug fixes                            | Security fixes                         |
+|---------|----------|---------------------------|--------------------------------------|----------------------------------------|
+| 1.x     | 2.x     | ❌ ended Jul 1 2023        | ❌ ended Jul 1 2023                   | ❌ ended Jul 1 2023                     |
+| 2.x     | 4.x     | ✅ until Jun 2026          | ✅ until Sep 2026                     | ✅ until Jan 2027                       |
+| 3.x     | 5.x     | ✅ until 4.x stable release | ✅ ~1 year after 4.x stable release  | ✅ ~2 years after 4.x stable release   |
+
+## New features
+
+Pull requests for new features are only accepted for the latest major version. Once a new major version is released, the Shopper team will no longer accept pull requests for new features in previous versions. Any open pull requests will either be redirected to target the latest major version or closed, depending on conflicts with the new target branch.
+
+Shopper's major versions are loosely aligned with Filament's major releases. However, a new Filament major does not automatically trigger a new Shopper major. If a Filament upgrade requires minimal changes for Shopper users, it may ship as a minor Shopper release instead.
+
+## Bug fixes
+
+After a major version is released, the Shopper team will continue to merge pull requests for bug fixes in the previous major version for one year. After this period, pull requests for that version will no longer be accepted.
+
+The Shopper team processes bug reports for supported versions in chronological order, though critical bugs may be prioritized. Bug fixes are typically developed only for the latest major version. However, contributors can backport fixes to other supported versions by submitting pull requests.
+
+## Security fixes
+
+The Shopper team currently plans to continue providing security fixes for major versions for at least two years.
+
+If you discover a security vulnerability in Shopper, please report it through [GitHub](https://github.com/shopperlabs/shopper/security). All security vulnerabilities will be addressed promptly.
+
+Please note that while a Shopper version may receive security fixes, its underlying dependencies (PHP, Laravel, Filament, and Livewire) may no longer be supported. Therefore, applications using older versions of Shopper could still be vulnerable to security issues in these dependencies.
