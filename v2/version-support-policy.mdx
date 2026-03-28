@@ -3,25 +3,27 @@ title: Version Support Policy
 description: Learn about Shopper's versioning scheme, support windows, and release cadence.
 ---
 
-| Version | Filament | New features              | Bug fixes                            | Security fixes                         |
-|---------|----------|---------------------------|--------------------------------------|----------------------------------------|
-| 1.x     | 2.x     | ❌ ended Jul 1 2023        | ❌ ended Jul 1 2023                   | ❌ ended Jul 1 2023                     |
-| 2.x     | 4.x     | ✅ until Jun 2026          | ✅ until Sep 2026                     | ✅ until Jan 2027                       |
-| 3.x     | 5.x     | ✅ until 4.x stable release | ✅ ~1 year after 4.x stable release  | ✅ ~2 years after 4.x stable release   |
+Shopper follows [Semantic Versioning](https://semver.org/). Minor and patch releases never contain breaking changes. Major releases are aligned with Filament's major versions, though a Filament major bump does not automatically trigger a Shopper major if the upgrade requires minimal changes for users.
 
-## New features
+## Support Policy
+
+| Version | Filament | New features               | Bug fixes                           | Security fixes                        |
+|---------|----------|----------------------------|-------------------------------------|---------------------------------------|
+| 1.x     | 2.x     | Ended Jul 2023             | Ended Jul 2023                      | Ended Jul 2023                        |
+| 2.x     | 4.x     | Until October 2026         | Until April 2027                    | Until October 2027                    |
+| 3.x     | 5.x     | Until Shopper 4.x stable release   | ~1 year after Shopper 4.x stable release    | ~2 years after Shopper 4.x stable release     |
+
+## New Features
 
 Pull requests for new features are only accepted for the latest major version. Once a new major version is released, the Shopper team will no longer accept pull requests for new features in previous versions. Any open pull requests will either be redirected to target the latest major version or closed, depending on conflicts with the new target branch.
 
-Shopper's major versions are loosely aligned with Filament's major releases. However, a new Filament major does not automatically trigger a new Shopper major. If a Filament upgrade requires minimal changes for Shopper users, it may ship as a minor Shopper release instead.
-
-## Bug fixes
+## Bug Fixes
 
 After a major version is released, the Shopper team will continue to merge pull requests for bug fixes in the previous major version for one year. After this period, pull requests for that version will no longer be accepted.
 
 The Shopper team processes bug reports for supported versions in chronological order, though critical bugs may be prioritized. Bug fixes are typically developed only for the latest major version. However, contributors can backport fixes to other supported versions by submitting pull requests.
 
-## Security fixes
+## Security Fixes
 
 The Shopper team currently plans to continue providing security fixes for major versions for at least two years.
 

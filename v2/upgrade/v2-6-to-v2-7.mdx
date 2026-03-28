@@ -216,7 +216,18 @@ class User extends Authenticatable implements HasStoreAuthentication, HasStoreAu
 }
 ```
 
-Database columns remain unchanged — no migration needed.
+The two-factor columns on the users table have been renamed to avoid conflicts with Laravel Fortify's own 2FA columns. Update the `$hidden` array on your User model:
+
+```php
+protected $hidden = [
+    'password',
+    'remember_token',
+    'two_factor_secret', // [!code --]
+    'two_factor_recovery_codes', // [!code --]
+    'store_two_factor_secret', // [!code ++]
+    'store_two_factor_recovery_codes', // [!code ++]
+];
+```
 
 ### Filament HasForms to HasSchemas
 
@@ -306,8 +317,8 @@ A new `MoneyInput` Filament form component that handles currency-aware conversio
   <Step title="Update slide-over imports">
     Replace `Shopper\Livewire\Components\SlideOverComponent` with `Laravelcm\LivewireSlideOvers\SlideOverComponent` in any custom slide-overs.
   </Step>
-  <Step title="Update 2FA traits">
-    Replace `TwoFactorAuthenticatable` with the new interfaces and traits if you override the User model.
+  <Step title="Update 2FA traits and hidden fields">
+    Replace `TwoFactorAuthenticatable` with the new interfaces and traits if you override the User model. Update your `$hidden` array to use `store_two_factor_secret` and `store_two_factor_recovery_codes` instead of the old column names.
   </Step>
   <Step title="Update dependencies">
     Run `composer update -W` after setting `shopper/framework` to `^2.7`.

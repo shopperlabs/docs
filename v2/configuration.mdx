@@ -1,152 +1,182 @@
 ---
 title: "Configuration"
-description: "Configuration options for Shopper"
+description: "Configure the admin panel, models, features, and settings in your Shopper installation."
 ---
 
-Shopper uses standard Laravel config files and environment variables for application-level settings.
+Shopper publishes its configuration files to `config/shopper/` during installation. These files control the admin panel behavior, model resolution, feature flags, media handling, and more. Component configuration files are published separately on demand.
 
-With the installation of Shopper you will find new configurations files located in `config/shopper/`.
-Shopper is a build components blocks, and by default all configuration files are not published and will be published in a `components` folder inside the Shopper configuration folder.
+## Configuration Files
 
-Here's the list of configuration files that are published during installation
+The following files are published by `php artisan shopper:install`:
 
-``` files
-config/shopper/
-    admin.php
-    auth.php
-    core.php
-    features.php
-    media.php
-    models.php
-    orders.php
-    routes.php
-    settings.php
-```
+| File | Package | Purpose |
+|------|---------|---------|
+| `admin.php` | admin | Admin panel prefix, domain, roles, branding, locales |
+| `auth.php` | admin | Authentication guard, 2FA toggle, password reset |
+| `core.php` | core | Database table prefix, barcode type |
+| `features.php` | admin | Feature flags for each admin module |
+| `media.php` | admin | Media storage, MIME types, max sizes, image conversions |
+| `models.php` | admin | Model class resolution for every Shopper entity |
+| `orders.php` | core | Order number generator format |
+| `routes.php` | admin | Additional middleware and custom route files |
+| `settings.php` | admin | Settings page registry |
 
-### Control Panel
+Additional config files are published when you install optional packages like `shopper/cart` (`cart.php`), `shopper/payment` (`payment.php`), `shopper/shipping` (`shipping.php`), and `shopper/stripe` (`stripe.php`).
 
-By default, when you install the package, the dashboard is accessible via the prefix `/cpanel`.
-You can update this configuration in the `admin.php` file, or you can add the `SHOPPER_PREFIX` variable to your `.env` environment file.
+## Admin Panel
+
+By default, the admin panel is accessible at `/cpanel`. You can change this prefix in `config/shopper/admin.php` or by adding the `SHOPPER_PREFIX` variable to your `.env` file:
 
 ```php config/shopper/admin.php
 'prefix' => env('SHOPPER_PREFIX', 'cpanel'),
 ```
 
 <Tip>
-If you update this configuration, you have to republish the assets to take the new link.
-The assets are dynamically loaded by a symbolic link named as the prefix.
-
-```php
-php artisan shopper:link
-```
+  If you change the prefix, run `php artisan shopper:link` to recreate the asset symlink with the new name.
 </Tip>
 
-If you want to configure a specific domain, you can add a `SHOPPER_DOMAIN` variable to your environment file.
-This config will use [Laravel](https://laravel.com/v2/routing#route-group-subdomain-routing) `Route::domain()` function
+To bind the admin panel to a specific domain, set the `SHOPPER_DOMAIN` environment variable. This uses Laravel's `Route::domain()` under the hood:
 
-```php
+```php config/shopper/admin.php
 'domain' => env('SHOPPER_DOMAIN'),
 ```
 
-### Database tables prefix
+You can also customize the admin panel branding (logo, favicon, Filament primary color) and add custom CSS or JS assets:
 
-During installation, all tables are prefixed with `sh_` so that they don't conflict with existing tables in your application database.
-If you change this prefix after installation, you'll need to refresh migration for the configuration to take effect.
+```php config/shopper/admin.php
+'brand' => null,
+'favicon' => null,
+'filament_color' => '#2563eb',
+
+'resources' => [
+    'stylesheets' => [],
+    'scripts' => [],
+],
+```
+
+## Database Table Prefix
+
+All Shopper tables are prefixed with `sh_` by default so they do not conflict with your application's existing tables.
 
 ```php config/shopper/core.php
 'table_prefix' => 'sh_',
 ```
 
-Run laravel refresh migration command: `php artisan migrate:refresh`
-Re-run the Shopper Database table seeder: `php artisan db:seed --class=\Shopper\Core\Database\Seeders\ShopperSeeder`
-
 <Warning>
-If you do this knowing that you already have data in your database, you risk losing it. Think carefully, because you'll be on your own afterwards.
+  Set the table prefix before running `php artisan shopper:install`. Changing it after installation requires writing a custom migration to rename all existing Shopper tables.
 </Warning>
 
-### Models
+## Feature Flags
 
-Models used are defined in the models config `shopper/models.php` file, if you want to use your own models you can replace them on this file.
+The `features.php` config controls which sections of the admin panel are active. Set any feature to `FeatureState::Disabled` to hide it from the UI entirely:
 
-```php
-use Shopper\Core\Models;
+```php config/shopper/features.php
+use Shopper\Enum\FeatureState;
 
 return [
-    'address' => Models\Address::class,
-
-    'brand' => Models\Brand::class,
-
-    'category' => Models\Category::class,
-
-    'collection' => Models\Collection::class,
-
-    'product' => Models\Product::class,
-
-    'variant' => Models\ProductVariant::class,
-
-    'channel' => Models\Channel::class,
-
-    'inventory' => Models\Inventory::class,
-
-    'order' => Models\Order::class,
+    'attribute' => FeatureState::Enabled,
+    'brand' => FeatureState::Enabled,
+    'category' => FeatureState::Enabled,
+    'collection' => FeatureState::Enabled,
+    'discount' => FeatureState::Enabled,
+    'review' => FeatureState::Enabled,
+    'supplier' => FeatureState::Disabled,
+    'tag' => FeatureState::Enabled,
 ];
 ```
 
-### Added Middleware
+For example, if your store does not use product reviews, set `'review' => FeatureState::Disabled` and the reviews page, sidebar link, and product form tab disappear from the admin panel.
 
-Shopper gives you the ability to add extra middlewares. All these middlewares will be applied to authenticated routes
+## Models
+
+Shopper resolves model classes through `config/shopper/models.php`. To use your own model for any entity, replace the class in this file. The entire system (admin panel, relationships, route bindings) uses the configured class automatically.
+
+Models that have media support (images, thumbnails) use the `Shopper\Models` namespace from the admin package. Models without media use the `Shopper\Core\Models` namespace from the core package. When swapping a model, extend the class listed in the config comment for that entry.
+
+```php config/shopper/models.php
+use Shopper\Models;
+
+return [
+    'address' => Shopper\Core\Models\Address::class,
+    'brand' => Models\Brand::class,
+    'category' => Models\Category::class,
+    'collection' => Models\Collection::class,
+    'product' => Models\Product::class,
+    'variant' => Models\ProductVariant::class,
+    'channel' => Shopper\Core\Models\Channel::class,
+    'inventory' => Shopper\Core\Models\Inventory::class,
+    'order' => Shopper\Core\Models\Order::class,
+    'supplier' => Shopper\Core\Models\Supplier::class,
+    'tax_zone' => Shopper\Core\Models\TaxZone::class,
+    'tax_rate' => Shopper\Core\Models\TaxRate::class,
+];
+```
+
+See the [Introduction](/v2/getting-started) page for more details on model swapping and extensibility.
+
+## Authentication
+
+The `auth.php` config controls the authentication guard, two-factor authentication, and password reset flow for the admin panel:
+
+```php config/shopper/auth.php
+return [
+    'guard' => 'web',
+    '2fa_enabled' => false,
+    'password_reset' => true,
+];
+```
+
+Set `2fa_enabled` to `true` to require two-factor authentication for admin users. See the [Two-Factor Authentication](/v2/two-factor) page for setup details.
+
+## Middleware
+
+Shopper lets you add extra middleware to all authenticated admin routes. This is useful for logging, rate limiting, or custom access control:
 
 ```php config/shopper/routes.php
 'middleware' => [],
 ```
 
-### Additional dashboard routes
+## Custom Routes
 
-By default, none of your routes in the `web.php` file will be accessible and loaded in the shopper administration.
-Routes added in the sidebar have the middleware applied to the dashboard, you must fill in an additional routing file and this will be automatically loaded by Shopper
+By default, your `web.php` routes are not loaded inside the admin panel. To add custom routes that share Shopper's authentication middleware, point to a dedicated route file:
 
 ```php config/shopper/routes.php
-// E.g.: base_path('routes/shopper.php')
-'custom_file' => null,
+'custom_file' => base_path('routes/shopper.php'),
 ```
 
-### Components
+Routes defined in this file are automatically loaded with the admin panel's middleware stack.
 
-The main features of Shopper is to handle Livewire components to add new functionalities to your admin panel.
+## Components
 
-For this purpose you have components files that lists each Livewire components used within Shopper.
-You can extend component to add functionality and even change the view to fit your own logic.
+Shopper's admin UI is built from Livewire components that you can override individually. Each feature has a component configuration file listing its pages and components.
 
-Here is a list of components files available. All these files can be published with `php artisan shopper:component:publish`
-
-```files
-config/shopper/components
-    account.php
-    brand.php
-    category.php
-    collection.php
-    customer.php
-    dashboard.php
-    discount.php
-    order.php
-    product.php
-    review.php
-    setting.php
-```
-
-You can publish each file individually, allowing you to replace or customize components.
-All you need to do is issue the same command, but this time specify the name of the configuration file
+To publish a feature's component config, run the publish command with the feature name:
 
 ```bash
-php artisan shopper:component:publish brand
+php artisan shopper:component:publish category
 ```
 
-### Settings
+This creates `config/shopper/components/category.php` where you can point any component to your own class. Available features:
 
-Settings are a very important part of an e-commerce site administration.
-Shopper uses a class-based approach for settings, allowing you to easily add, remove or disable settings pages.
+| Feature | Config file |
+|---------|------------|
+| `account` | `components/account.php` |
+| `brand` | `components/brand.php` |
+| `category` | `components/category.php` |
+| `collection` | `components/collection.php` |
+| `customer` | `components/customer.php` |
+| `dashboard` | `components/dashboard.php` |
+| `discount` | `components/discount.php` |
+| `order` | `components/order.php` |
+| `product` | `components/product.php` |
+| `review` | `components/review.php` |
+| `setting` | `components/setting.php` |
 
-Each setting is a class that implements the `Shopper\Contracts\SettingItem` interface. The configuration file `settings.php` registers which settings are enabled or disabled.
+You can publish all component configs at once with `php artisan shopper:component:publish` (no argument).
+
+## Settings
+
+Shopper uses a class-based approach for settings pages. Each setting is a class that implements the `Shopper\Contracts\SettingItem` interface. The `settings.php` config registers which settings are enabled:
 
 ```php config/shopper/settings.php
 use Shopper\Settings\Items;
@@ -160,13 +190,15 @@ return [
         Items\CarrierSetting::class => true,
         Items\LegalSetting::class => true,
         Items\ZoneSetting::class => true,
+        Items\TaxSetting::class => true,
+        Items\CurrencySetting::class => true,
     ],
 ];
 ```
 
-To disable a setting page, simply set its value to `false`.
+To disable a setting page, set its value to `false`.
 
-#### Creating a custom setting
+### Creating a Custom Setting
 
 To create your own setting page, extend the `Shopper\Settings\Setting` base class:
 
@@ -213,14 +245,13 @@ Then register it in the `settings.php` config file:
 
 ```php
 'items' => [
-    // ... existing settings
     App\Settings\MyCustomSetting::class => true,
 ],
 ```
 
-#### Programmatic registration
+### Programmatic Registration
 
-You can also register settings programmatically via the `SettingManager`:
+You can also register settings at runtime through the `SettingManager`:
 
 ```php
 use Shopper\Settings\SettingManager;
@@ -229,6 +260,29 @@ app(SettingManager::class)->add(App\Settings\MyCustomSetting::class);
 ```
 
 <Warning>
-Be careful: if you disable items from the configuration, you will no longer have access to certain interfaces,
-and this can make the user experience more complex.
+  Disabling setting items removes the corresponding interface from the admin panel. Make sure your team does not need access to those settings before disabling them.
 </Warning>
+
+## Order Number Format
+
+The `orders.php` config controls how order numbers are generated. You can customize the prefix, separator, date format, and sequence padding:
+
+```php config/shopper/orders.php
+'generator' => [
+    'prefix' => 'ORD',
+    'separator' => '-',
+    'date_format' => 'Ymd',
+    'start_sequence_from' => 1,
+    'pad_length' => 6,
+    'pad_string' => '0',
+],
+```
+
+Examples of generated numbers depending on configuration:
+
+| Configuration | Result |
+|---------------|--------|
+| Default | `ORD-20260328-000001` |
+| `'prefix' => null` | `20260328-000001` |
+| `'date_format' => null` | `ORD-000001` |
+| `'prefix' => null, 'date_format' => null` | `000001` |
