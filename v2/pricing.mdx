@@ -3,7 +3,67 @@ title: Pricing
 description: Learn how to manage Pricing in your Shopper administration.
 ---
 
-### Model
+## Money Storage Standard
+
+Shopper follows the **Stripe/Shopify standard**: all monetary values are stored in the **smallest currency unit**. For currencies with subdivisions (USD, EUR, GBP), that means cents. For zero-decimal currencies (XAF, JPY, KRW), values are stored as-is.
+
+For USD, $29.99 is stored as `2999`. For XAF, 15000 FCFA is stored as `15000`:
+
+```php
+Price::create(['amount' => 2999, 'currency_id' => $usdCurrency->id]);
+
+Price::create(['amount' => 15000, 'currency_id' => $xafCurrency->id]);
+```
+
+### Display
+
+Use `shopper_money_format()` to convert from smallest unit to human-readable format:
+
+```php
+shopper_money_format(2999, 'USD');   // "$29.99"
+shopper_money_format(15000, 'XAF');  // "15 000 FCFA"
+```
+
+The helper automatically handles the division for subdivision currencies and passes zero-decimal currencies through unchanged.
+
+### Zero-Decimal Currencies
+
+Use these helpers for currency-aware logic:
+
+```php
+zero_decimal_currencies();              // ['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KRW', 'XAF', ...]
+is_no_division_currency('XAF');         // true
+is_no_division_currency('USD');         // false
+```
+
+### MoneyInput Component
+
+For Filament forms, use the `MoneyInput` component instead of `TextInput` for monetary fields. It handles conversion between human values (form) and smallest unit (database) automatically:
+
+```php
+use Shopper\Components\Form\MoneyInput;
+
+MoneyInput::make('amount')
+    ->currency('USD')                    // string or closure
+    ->suffix('USD');
+```
+
+For zero-decimal currencies, the component adjusts the mask precision to 0 automatically.
+
+If no currency is specified, `MoneyInput` defaults to the shop's configured currency via `shopper_currency()`.
+
+### Table Columns
+
+Use the `->currency()` macro on Filament `TextColumn` for displaying monetary values:
+
+```php
+TextColumn::make('amount')
+    ->currency(fn ($record) => $record->currencyCode)
+```
+
+This macro uses `shopper_money_format()` internally.
+
+## Model
 
 The model used is `Shopper\Core\Models\Price`.
 

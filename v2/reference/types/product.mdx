@@ -66,18 +66,15 @@ enum ProductType {
 import type { Product } from '@shopperlabs/shopper-types'
 import { ProductType } from '@shopperlabs/shopper-types'
 
-// Type checking
 function isVariantProduct(product: Product): boolean {
   return product.type === ProductType.VARIANT
 }
 
-// With API response
 async function fetchProduct(slug: string): Promise<Product> {
   const response = await fetch(`/api/products/${slug}`)
   return response.json()
 }
 
-// Check stock
 function isInStock(product: Product): boolean {
   if (product.type === ProductType.VARIANT) {
     return (product.variants_stock ?? 0) > 0
@@ -85,7 +82,6 @@ function isInStock(product: Product): boolean {
   return product.stock > 0
 }
 
-// Get main image
 function getProductImage(product: Product): string | null {
   return product.images?.[0]?.url ?? null
 }
@@ -129,7 +125,6 @@ interface ProductVariant extends Entity, ShippingFields {
 ```typescript
 import type { Product, ProductVariant } from '@shopperlabs/shopper-types'
 
-// Get variant by attribute values
 function findVariant(
   product: Product,
   attributes: Record<string, string>
@@ -142,12 +137,10 @@ function findVariant(
   })
 }
 
-// Check variant availability
 function isVariantAvailable(variant: ProductVariant): boolean {
   return variant.stock > 0 || variant.allow_backorder
 }
 
-// Get variant price
 function getVariantPrice(variant: ProductVariant): number | null {
   return variant.prices?.[0]?.amount ?? null
 }
@@ -180,14 +173,12 @@ interface ProductTag extends Entity {
 ```typescript
 import type { Product, ProductTag } from '@shopperlabs/shopper-types'
 
-// Filter products by tag
 function getProductsByTag(products: Product[], tagSlug: string): Product[] {
   return products.filter((product) =>
     product.tags?.some((tag) => tag.slug === tagSlug)
   )
 }
 
-// Get all tag names for a product
 function getTagNames(product: Product): string[] {
   return product.tags?.map((tag) => tag.name) ?? []
 }

@@ -87,3 +87,46 @@ In the Two-factor authentication section, use the Disable button for the authent
 <Frame>
   <img src="/images/v2/two-factor-disable.png" alt="Two factor disable Screenshot" />
 </Frame>
+
+## Developer Integration
+
+### Interfaces and Traits
+
+Two-factor authentication is implemented through two focused interfaces (following the Interface Segregation Principle):
+
+**`Shopper\Contracts\HasStoreAuthentication`** — manages the TOTP secret and QR code:
+- `getStoreAuthenticationSecret(): ?string`
+- `saveStoreAuthenticationSecret(?string $secret): void`
+- `getStoreAuthenticationHolderName(): string`
+- `getStoreAuthenticationQrCodeSvg(): string`
+- `getStoreAuthenticationQrCodeUrl(): string`
+
+**`Shopper\Contracts\HasStoreAuthenticationRecovery`** — manages recovery codes:
+- `getStoreAuthenticationRecoveryCodes(): ?array`
+- `saveStoreAuthenticationRecoveryCodes(?array $codes): void`
+- `replaceStoreAuthenticationRecoveryCode(string $code): void`
+
+The default implementation is provided by two traits:
+
+```php
+use Shopper\Contracts\HasStoreAuthentication;
+use Shopper\Contracts\HasStoreAuthenticationRecovery;
+use Shopper\Traits\InteractsWithStoreAuthentication;
+use Shopper\Traits\InteractsWithStoreAuthenticationRecovery;
+
+class User extends Authenticatable implements HasStoreAuthentication, HasStoreAuthenticationRecovery
+{
+    use InteractsWithStoreAuthentication;
+    use InteractsWithStoreAuthenticationRecovery;
+}
+```
+
+### Database Columns
+
+The following columns are added to the `users` table by Shopper's migrations:
+
+| Column | Type | Description |
+|---|---|---|
+| `two_factor_secret` | text (nullable) | Encrypted TOTP secret |
+| `two_factor_recovery_codes` | text (nullable) | Encrypted JSON array of recovery codes |
+| `two_factor_confirmed_at` | timestamp (nullable) | When 2FA was confirmed |

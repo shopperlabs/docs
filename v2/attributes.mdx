@@ -15,12 +15,7 @@ Shopper\Core\Models\AttributeValue  // Possible values for an attribute
 Shopper\Core\Models\AttributeProduct // Pivot linking attributes to products
 ```
 
-```php
-use Shopper\Core\Models\Attribute;
-
-// The model implements
-- Shopper\Core\Models\Contracts\Attribute
-```
+The model used is `Shopper\Core\Models\Attribute`, implementing `Shopper\Core\Models\Contracts\Attribute`.
 
 ## Database Schema
 
@@ -88,36 +83,36 @@ FieldType::Number       // Numeric input
 
 ### Type Checking Methods
 
+Each attribute type has helper methods to determine its behavior:
+
 ```php
-// Check if attribute accepts multiple values
-$attribute->hasMultipleValues(); // true for Checkbox, ColorPicker
-
-// Check if attribute uses single selection
-$attribute->hasSingleValue(); // true for Select
-
-// Check if attribute uses custom text input
-$attribute->hasTextValue(); // true for Text, Number, RichText, DatePicker
-
-// Get types that require predefined values
-Attribute::fieldsWithValues(); // [Checkbox, ColorPicker, Select]
+$attribute->hasMultipleValues();
+$attribute->hasSingleValue();
+$attribute->hasTextValue();
+Attribute::fieldsWithValues();
 ```
+
+`hasMultipleValues()` returns `true` for Checkbox and ColorPicker. `hasSingleValue()` returns `true` for Select. `hasTextValue()` returns `true` for Text, Number, RichText, and DatePicker. `fieldsWithValues()` returns the types that require predefined values.
 
 ## Relationships
 
 ### Values
 
 ```php
-// Get all values for an attribute
-$attribute->values; // Collection of AttributeValue models
+$attribute->values;
+```
 
-// Add a new value
+To add values to an attribute:
+
+```php
 $attribute->values()->create([
     'value' => 'Red',
     'key' => 'color-red',
     'position' => 1,
 ]);
+```
 
-// Create multiple values
+```php
 $attribute->values()->createMany([
     ['value' => 'Small', 'key' => 'size-s', 'position' => 1],
     ['value' => 'Medium', 'key' => 'size-m', 'position' => 2],
@@ -128,15 +123,20 @@ $attribute->values()->createMany([
 ### Products
 
 ```php
-// Get all products with this attribute
 $attribute->products;
+```
 
-// Attach attribute to product with a predefined value
+Attach an attribute to a product with a predefined value:
+
+```php
 $attribute->products()->attach($productId, [
     'attribute_value_id' => $valueId,
 ]);
+```
 
-// Attach attribute to product with a custom value
+Or with a custom value:
+
+```php
 $attribute->products()->attach($productId, [
     'attribute_custom_value' => 'Custom specification',
 ]);
@@ -147,10 +147,7 @@ $attribute->products()->attach($productId, [
 AttributeValue can be linked to product variants:
 
 ```php
-// Get variants with this value
 $attributeValue->variants;
-
-// Link value to variant
 $attributeValue->variants()->attach($variantId);
 ```
 
@@ -159,16 +156,14 @@ $attributeValue->variants()->attach($variantId);
 ```php
 use Shopper\Core\Models\Attribute;
 
-// Get only enabled attributes
 Attribute::query()->enabled()->get();
-
-// Get filterable attributes (for storefront filters)
 Attribute::query()->isFilterable()->get();
-
-// Get searchable attributes
 Attribute::query()->isSearchable()->get();
+```
 
-// Combine scopes
+Scopes can be combined:
+
+```php
 Attribute::query()
     ->enabled()
     ->isFilterable()
@@ -179,23 +174,18 @@ Attribute::query()
 ## Status Management
 
 ```php
-// Enable an attribute
 $attribute->updateStatus(true);
-
-// Disable an attribute
 $attribute->updateStatus(false);
 ```
 
 ## Display Helpers
 
 ```php
-// Get formatted type label for display
-$attribute->type_formatted; // Returns translated label like "Checkbox"
-
-// Get all available types with labels
+$attribute->type_formatted;
 Attribute::typesFields();
-// Returns: ['checkbox' => 'Checkbox', 'colorpicker' => 'Color Picker', ...]
 ```
+
+`type_formatted` returns a translated label like "Checkbox". `typesFields()` returns all available types with their labels.
 
 ## Working with AttributeProduct
 
@@ -252,7 +242,7 @@ $material = Attribute::query()->create([
 ## Assigning Attributes to Products
 
 ```php
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 
 $product = Product::query()->find($id);
 
@@ -354,7 +344,7 @@ return [
 namespace App\Http\Controllers;
 
 use Shopper\Core\Models\Attribute;
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 
 class ProductFilterController extends Controller
 {

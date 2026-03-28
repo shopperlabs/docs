@@ -491,17 +491,17 @@ CarrierOption::query()->enabled()->get();
 
 ## Price Handling
 
-CarrierOption prices are stored in cents and automatically converted:
+CarrierOption prices are stored in cents:
 
 ```php
 $option = CarrierOption::query()->create([
     'name' => 'Standard Shipping',
-    'price' => 10,
+    'price' => 1000,
     'zone_id' => $zoneId,
     'carrier_id' => $carrierId,
 ]);
 
-$option->price;
+shopper_money_format($option->price, $zone->currency->code);
 ```
 
 ## Creating Carriers

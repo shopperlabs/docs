@@ -12,7 +12,7 @@ Shopper\Core\Models\ProductVariant
 ```
 
 ```php
-use Shopper\Core\Models\ProductVariant;
+use Shopper\Models\ProductVariant;
 
 // The model implements
 - Shopper\Core\Models\Contracts\ProductVariant
@@ -176,7 +176,7 @@ When displaying a product page with multiple variants, accessing `$variant->stoc
 triggers an individual query. Use `loadCurrentStock()` to batch-load stock in a single query:
 
 ```php
-use Shopper\Core\Models\ProductVariant;
+use Shopper\Models\ProductVariant;
 
 $product = Product::query()->with('variants')->find($id);
 
@@ -221,14 +221,11 @@ $price = $variant->getPrice(); // ?Price model
 // Get price for a specific currency
 $price = $variant->getPrice('USD'); // ?Price model
 
-// Access price amounts (automatically converted from cents)
-$price->amount;         // e.g., 29.99
-$price->compare_amount; // e.g., 39.99 (original price)
-$price->cost_amount;    // e.g., 15.00 (cost price)
+$price->amount;         // e.g., 2999
+$price->compare_amount; // e.g., 3999
+$price->cost_amount;    // e.g., 1500
 
-// Get formatted price using Price helper
-$price->amountPrice();        // Shopper\Core\Helpers\Price object
-$price->amountPrice()->formatted; // "$29.99"
+shopper_money_format($price->amount, $price->currency_code);
 ```
 
 ## Media Management
@@ -251,8 +248,8 @@ $variant->getFirstMediaUrl('images');
 ### Basic Variant
 
 ```php
-use Shopper\Core\Models\ProductVariant;
-use Shopper\Core\Models\Product;
+use Shopper\Models\ProductVariant;
+use Shopper\Models\Product;
 
 $product = Product::query()->find($id);
 
@@ -317,7 +314,7 @@ $name = generateVariantName([$colorBlueId, $sizeLargeId]); // "Blue / Large"
 ## Retrieving Variants
 
 ```php
-use Shopper\Core\Models\ProductVariant;
+use Shopper\Models\ProductVariant;
 
 // Get all variants for a product
 $variants = ProductVariant::query()
@@ -367,7 +364,7 @@ $variant->delete(); // Triggers observer cleanup
 ## Working with Products
 
 ```php
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 use Shopper\Core\Enum\ProductType;
 
 // Create a variant product
@@ -498,8 +495,8 @@ return [
 ```php
 namespace App\Http\Controllers;
 
-use Shopper\Core\Models\Product;
-use Shopper\Core\Models\ProductVariant;
+use Shopper\Models\Product;
+use Shopper\Models\ProductVariant;
 
 class ProductController extends Controller
 {

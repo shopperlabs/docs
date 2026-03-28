@@ -7,30 +7,17 @@ Brands represent manufacturers or labels for your products. They help customers 
 
 ## Model
 
-```php
-Shopper\Core\Models\Brand
-```
-
-The Brand model implements the following interfaces:
-
-```php
-use Shopper\Core\Models\Brand;
-
-// The model implements
-- Shopper\Core\Models\Contracts\Brand
-- Spatie\MediaLibrary\HasMedia
-```
+The model used is `Shopper\Models\Brand`, implementing `Shopper\Core\Models\Contracts\Brand` and `Spatie\MediaLibrary\HasMedia`.
 
 ### Extending the Model
 
 ```php
 namespace App\Models;
 
-use Shopper\Core\Models\Brand as BaseBrand;
+use Shopper\Models\Brand as ShopperBrand;
 
-class Brand extends BaseBrand
+class Brand extends ShopperBrand
 {
-    // Add your customizations here
 }
 ```
 
@@ -66,16 +53,14 @@ return [
 A brand has many products:
 
 ```php
-// Get all products for a brand
-$brand->products; // Collection of Product models
-
-// Count products
+$brand->products;
 $brand->products()->count();
-
-// Get enabled products only
 $brand->products()->where('is_visible', true)->get();
+```
 
-// With eager loading
+With eager loading:
+
+```php
 $brands = Brand::with('products')->get();
 ```
 
@@ -84,12 +69,8 @@ $brands = Brand::with('products')->get();
 ### Enabled Brands
 
 ```php
-use Shopper\Core\Models\Brand;
-
-// Get only enabled brands
 Brand::query()->enabled()->get();
 
-// Combines with other queries
 Brand::query()
     ->enabled()
     ->orderBy('position')
@@ -101,13 +82,8 @@ Brand::query()
 ### Update Status
 
 ```php
-// Enable a brand
 $brand->updateStatus(true);
-
-// Disable a brand
 $brand->updateStatus(false);
-
-// Or directly update
 $brand->update(['is_enabled' => true]);
 ```
 
@@ -115,44 +91,45 @@ $brand->update(['is_enabled' => true]);
 
 ```php
 if ($brand->is_enabled) {
-    // Brand is visible on storefront
 }
 ```
 
 ## Media Management
 
-Brands use Spatie Media Library for logo management:
+Brands use [Spatie Media Library](https://spatie.be/docs/laravel-medialibrary/introduction) for logo management:
+
+The thumbnail collection name is defined in `config/shopper/media.php`:
 
 ```php
-// Add a logo
-$brand->addMedia($file)->toMediaCollection('default');
+$collection = config('shopper.media.storage.thumbnail_collection');
 
-// Get the logo URL
-$brand->getFirstMediaUrl('default');
+$brand->addMedia($file)->toMediaCollection($collection);
+$brand->getFirstMediaUrl($collection);
+$brand->getFirstMedia($collection);
+```
 
-// Get the media object
-$brand->getFirstMedia('default');
+From a URL:
 
-// Add from URL
+```php
 $brand->addMediaFromUrl('https://example.com/logo.png')
-    ->toMediaCollection('default');
+    ->toMediaCollection(config('shopper.media.storage.thumbnail_collection'));
 ```
 
 ## Creating Brands
 
 ```php
-use Shopper\Core\Models\Brand;
-
 $brand = Brand::query()->create([
     'name' => 'Nike',
-    'slug' => 'nike', // Auto-generated if not provided
     'website' => 'https://nike.com',
     'description' => 'Just Do It',
     'is_enabled' => true,
     'position' => 1,
 ]);
+```
 
-// With SEO fields
+The `slug` is auto-generated from the name if not provided. You can add SEO fields and a logo:
+
+```php
 $brand = Brand::query()->create([
     'name' => 'Adidas',
     'is_enabled' => true,
@@ -160,33 +137,40 @@ $brand = Brand::query()->create([
     'seo_description' => 'Shop official Adidas products...',
 ]);
 
-// Add logo after creation
 $brand->addMedia($logoFile)->toMediaCollection('default');
 ```
 
 ## Retrieving Brands
 
 ```php
-// Get all enabled brands
 $brands = Brand::query()
     ->enabled()
     ->orderBy('position')
     ->get();
+```
 
-// Get brands with products
+Brands with products:
+
+```php
 $brands = Brand::query()
     ->enabled()
     ->has('products')
     ->withCount('products')
     ->get();
+```
 
-// Get a specific brand by slug
+Find a specific brand by slug:
+
+```php
 $brand = Brand::query()
     ->where('slug', 'nike')
     ->with('products')
     ->firstOrFail();
+```
 
-// Get brands for navigation/filter
+For navigation or filter dropdowns:
+
+```php
 $brands = Brand::query()
     ->enabled()
     ->select(['id', 'name', 'slug'])
@@ -243,7 +227,7 @@ return [
 ```php
 namespace App\Http\Controllers;
 
-use Shopper\Core\Models\Brand;
+use Shopper\Models\Brand;
 
 class BrandController extends Controller
 {
@@ -283,7 +267,7 @@ For brands in multiple views (header, footer, filters):
 namespace App\View\Composers;
 
 use Illuminate\View\View;
-use Shopper\Core\Models\Brand;
+use Shopper\Models\Brand;
 
 class BrandsComposer
 {
@@ -298,7 +282,11 @@ class BrandsComposer
     }
 }
 
-// In AppServiceProvider
+```
+
+Register it in your `AppServiceProvider`:
+
+```php
 use Illuminate\Support\Facades\View;
 
 public function boot(): void
@@ -323,6 +311,5 @@ $brand->update([
     ],
 ]);
 
-// Access metadata
 $country = $brand->metadata['country_of_origin'] ?? null;
 ```

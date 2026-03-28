@@ -37,7 +37,6 @@ interface Category extends Entity, SEOFields {
 ```typescript
 import type { Category } from '@shopperlabs/shopper-types'
 
-// Build category tree
 function buildCategoryTree(categories: Category[]): Category[] {
   const map = new Map<number, Category>()
   const roots: Category[] = []

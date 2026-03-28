@@ -133,7 +133,7 @@ $distribution = [
 ### Via Product Model
 
 ```php
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 
 $product = Product::query()->find($id);
 
@@ -283,7 +283,7 @@ return [
 ```php
 namespace App\Http\Controllers;
 
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 
 class ProductController extends Controller
 {
@@ -334,7 +334,7 @@ class ProductController extends Controller
 ```php
 namespace App\Http\Controllers;
 
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 
 class ReviewController extends Controller
 {

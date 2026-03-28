@@ -14,7 +14,7 @@ Shopper\Core\Models\Product
 The Product model implements several interfaces and uses multiple traits to provide a complete feature set:
 
 ```php
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 
 // The model implements
 - Shopper\Core\Contracts\HasReviews
@@ -30,7 +30,7 @@ To customize the Product model, create your own model that extends the base clas
 ```php
 namespace App\Models;
 
-use Shopper\Core\Models\Product as BaseProduct;
+use Shopper\Core\Models\Product as CoreProduct;
 
 class Product extends BaseProduct
 {
@@ -60,10 +60,7 @@ return [
 | `is_visible` | boolean | no | false | Visibility on storefront |
 | `featured` | boolean | no | false | Featured product flag |
 | `security_stock` | integer | yes | 0 | Minimum stock alert threshold |
-| `old_price_amount` | integer | yes | null | Compare at price (in cents) |
-| `price_amount` | integer | yes | null | Current price (in cents) |
-| `cost_amount` | integer | yes | null | Cost per item (in cents) |
-| `backorder` | boolean | no | false | Allow backorders |
+| `allow_backorder` | boolean | no | false | Allow backorders |
 | `published_at` | datetime | no | now() | Publication date |
 | `seo_title` | string(60) | yes | null | SEO meta title |
 | `seo_description` | string(160) | yes | null | SEO meta description |
@@ -226,7 +223,7 @@ $product->relatedProducts()->attach([$productId1, $productId2]);
 ### Published Products
 
 ```php
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 
 // Get only published and visible products
 Product::query()->publish()->get();
@@ -327,7 +324,7 @@ When iterating over a collection (e.g. listing 50 products on a page), this resu
 Use `loadCurrentStock()` to batch-load stock for an entire collection in a **single query**:
 
 ```php
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 
 $products = Product::query()->with('variants')->get();
 
@@ -360,7 +357,7 @@ unoptimized stock access during development. When enabled, accessing `$product->
 prior batch-loading throws a `LazyStockLoadingException`:
 
 ```php
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 
 // In a service provider boot() method
 Product::preventLazyStockLoading(! app()->isProduction());
@@ -380,40 +377,34 @@ to batch-load stock before accessing $model->stock.
 
 Products use the `HasPrices` trait:
 
+Prices are managed through the polymorphic `prices` relationship. Each product can have multiple prices, one per currency. See the [Pricing documentation](/v2/pricing) for details.
+
 ```php
-// Get product price (returns Price model)
-$product->price;
+$price = $product->getPrice('USD');
 
-// Access amount (in cents)
-$product->price_amount;
-
-// Compare at price
-$product->old_price_amount;
-
-// Cost
-$product->cost_amount;
-
-// Format price for display
-shopper_money_format($product->price_amount); // "$29.99"
+shopper_money_format($price->amount, 'USD');
 ```
 
 ## Creating Products
 
 ```php
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 use Shopper\Core\Enum\ProductType;
 
 $product = Product::query()->create([
     'name' => 'Classic T-Shirt',
     'sku' => 'TSHIRT-001',
     'type' => ProductType::Standard,
-    'price_amount' => 2999, // $29.99 in cents
     'is_visible' => true,
     'published_at' => now(),
     'brand_id' => $brandId,
 ]);
 
-// Attach to categories
+$product->prices()->create([
+    'amount' => 2999,
+    'currency_id' => $currencyId,
+]);
+
 $product->categories()->attach([$categoryId]);
 
 // Add media

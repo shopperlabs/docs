@@ -63,6 +63,7 @@ php artisan vendor:publish --tag=shopper-config
 Then open `config/shopper/components/dashboard.php` and replace the page class:
 
 ```php
+use Shopper\Livewire\Components;
 use Shopper\Livewire\Pages;
 
 return [
@@ -70,7 +71,7 @@ return [
         'dashboard' => Pages\Dashboard::class,
     ],
     'components' => [
-        'side-panel' => Components\SlideOverPanel::class,
+        'locale-switcher' => Components\LocaleSwitcher::class,
     ],
 ];
 ```

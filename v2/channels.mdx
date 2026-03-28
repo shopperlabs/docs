@@ -209,7 +209,7 @@ $channels = Channel::query()
 ## Assigning Products to Channels
 
 ```php
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 
 $product = Product::query()->find($id);
 
@@ -235,7 +235,7 @@ $products = Product::query()
 namespace App\Http\Controllers;
 
 use Shopper\Core\Models\Channel;
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 
 class ProductController extends Controller
 {
@@ -261,7 +261,7 @@ class ProductController extends Controller
 namespace App\Http\Controllers\Api;
 
 use Shopper\Core\Models\Channel;
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 
 class ProductController extends Controller
 {

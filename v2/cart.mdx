@@ -516,13 +516,11 @@ Here is a complete cart-to-checkout flow for a storefront application.
 ```php
 use Shopper\Cart\Facades\Cart;
 
-// In middleware or controller — get or create the cart
 $cart = Cart::current() ?? Cart::create([
     'channel_id' => $channel->id,
     'zone_id' => $zone->id,
 ]);
 
-// After login — associate the customer
 Cart::associate(auth()->user());
 ```
 
@@ -548,7 +546,6 @@ try {
 ```php
 $context = $manager->calculate($cart);
 
-// In your Blade template
 Subtotal: {{ format_money($context->subtotal, $cart->currency_code) }}
 Discount: -{{ format_money($context->discountTotal, $cart->currency_code) }}
 Tax: {{ format_money($context->taxTotal, $cart->currency_code) }}
@@ -566,7 +563,6 @@ try {
     return back()->with('error', $e->getMessage());
 }
 
-// Recalculate to see the discount
 $context = $manager->calculate($cart);
 ```
 
@@ -596,7 +592,6 @@ $order = $action->execute(Cart::current());
 
 Cart::forget();
 
-// Continue to payment processing
 $service = resolve(PaymentProcessingService::class);
 $result = $service->initiate($order);
 ```

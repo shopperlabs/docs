@@ -176,26 +176,23 @@ $user->discounts; // Collection of Discount models
 
 ## Value Handling
 
-Fixed amount values are automatically converted:
+Fixed amount values are stored in cents. Percentage values are stored as-is.
 
 ```php
-// Create a $10 off discount
-$discount = Discount::query()->create([
+Discount::query()->create([
     'code' => 'SAVE10',
     'type' => DiscountType::FixedAmount,
-    'value' => 10, // Stored as 1000 (cents)
-    // ...
+    'value' => 1000,
+    ...
 ]);
+```
 
-// Reading the value
-$discount->value; // Returns 10 (dollars)
-
-// Create a 15% discount
-$discount = Discount::query()->create([
+```php
+Discount::query()->create([
     'code' => 'SAVE15',
     'type' => DiscountType::Percentage,
-    'value' => 15, // Stored as 15
-    // ...
+    'value' => 15,
+    ...
 ]);
 ```
 
@@ -411,8 +408,7 @@ class DiscountService
             return (int) ($amount * ($discount->value / 100));
         }
 
-        // Fixed amount (already in cents in DB, accessor returns dollars)
-        return $discount->value * 100;
+        return $discount->value;
     }
 }
 ```

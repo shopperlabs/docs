@@ -47,6 +47,24 @@ store and set the one that will be used by default. But once you've done this, i
   <img src="/images/v2/store-currency.png" alt="Store currency" />
 </Frame>
 
+## Zero-Decimal Currencies
+
+Some currencies have no subdivision (no "cents"). For example, the Japanese Yen (JPY) and the Central African CFA Franc (XAF) are stored as whole numbers — 1000 JPY is 1000, not 10.00.
+
+Shopper handles this automatically. The `is_no_division_currency()` helper checks if a currency code is zero-decimal, and `zero_decimal_currencies()` returns the full list:
+
+```php
+is_no_division_currency('XAF'); // true
+is_no_division_currency('USD'); // false
+
+zero_decimal_currencies();
+// ['BIF', 'CLP', 'DJF', 'GNF', 'HTG', 'JPY', 'KMF', 'KRW',
+//  'MGA', 'PYG', 'RWF', 'VND', 'VUV', 'XAF', 'XAG', 'XAU',
+//  'XDR', 'XOF', 'XPF']
+```
+
+The `shopper_money_format()` helper and the `MoneyInput` form component both use this to determine whether to divide/multiply by 100. See the [Pricing documentation](/v2/pricing) for details.
+
 ## Relation to Other Entities
 
 ### Store

@@ -17,15 +17,7 @@ Shopper\Core\Models\OrderShipping  // Shipping and tracking information
 Shopper\Core\Models\OrderRefund    // Refund requests
 ```
 
-```php
-use Shopper\Core\Models\Order;
-
-// The model implements
-- Shopper\Core\Models\Contracts\Order
-
-// Uses traits
-- SoftDeletes
-```
+The model used is `Shopper\Core\Models\Order`, implementing `Shopper\Core\Models\Contracts\Order`.
 
 ### Extending the Model
 
@@ -56,7 +48,7 @@ return [
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
 | `number` | string(32) | no | - | Order number |
-| `price_amount` | integer | yes | null | Order price override (in cents) |
+| `price_amount` | integer | yes | null | Order total in cents |
 | `status` | string(32) | no | new | Order status enum |
 | `payment_status` | string(32) | no | pending | Payment status enum |
 | `shipping_status` | string(32) | no | unfulfilled | Shipping status enum |
@@ -84,7 +76,7 @@ return [
 | `name` | string | yes | Product name at time of purchase |
 | `sku` | string | yes | Product SKU at time of purchase |
 | `quantity` | integer | no | Quantity ordered |
-| `unit_price_amount` | integer | no | Unit price (in cents) |
+| `unit_price_amount` | integer | no | Unit price in cents |
 | `product_id` | bigint | no | Polymorphic relation ID |
 | `product_type` | string | no | Polymorphic relation type |
 | `order_id` | bigint | no | FK to order |
@@ -288,10 +280,8 @@ OrderRefundStatus::Cancelled      // cancelled
 ### Customer
 
 ```php
-// Get the customer who placed the order
-$order->customer; // Returns User model
+$order->customer;
 
-// Query orders by customer
 Order::query()
     ->where('customer_id', $userId)
     ->get();
@@ -300,46 +290,42 @@ Order::query()
 ### Items
 
 ```php
-// Get all items in the order
-$order->items; // Collection of OrderItem models
+$order->items;
+```
 
-// Add an item
+To add an item to an order, retrieve the product price for the order's currency:
+
+```php
+$price = $product->getPrice('USD');
+
 $order->items()->create([
     'name' => $product->name,
     'sku' => $product->sku,
     'quantity' => 2,
-    'unit_price_amount' => $product->price_amount,
+    'unit_price_amount' => $price->amount,
     'product_id' => $product->id,
-    'product_type' => get_class($product),
+    'product_type' => $product->getMorphClass(),
 ]);
-
-// Get item total (computed)
-$item->total; // unit_price_amount * quantity
 ```
 
 ### Addresses
 
 ```php
-// Get shipping address
-$order->shippingAddress; // OrderAddress model
-
-// Get billing address
-$order->billingAddress; // OrderAddress model
-
-// Access full name
-$order->shippingAddress->full_name; // "John Doe"
+$order->shippingAddress;
+$order->billingAddress;
+$order->shippingAddress->full_name;
 ```
 
 ### Shipping
 
 ```php
-// Get the shipping option selected at checkout
-$order->shippingOption; // CarrierOption model
+$order->shippingOption;
+$order->shippings;
+```
 
-// Get all shipments for an order
-$order->shippings; // Collection of OrderShipping models
+To create a shipment and link items:
 
-// Create a shipment
+```php
 $shipment = $order->shippings()->create([
     'carrier_id' => $carrierId,
     'shipped_at' => now(),
@@ -347,7 +333,6 @@ $shipment = $order->shippings()->create([
     'tracking_url' => 'https://carrier.com/track/TRACK123456',
 ]);
 
-// Link items to the shipment
 $order->items()
     ->whereIn('id', [$itemId1, $itemId2])
     ->update([
@@ -359,14 +344,9 @@ $order->items()
 ### Item Shipment
 
 ```php
-// Get the shipment for a specific item
-$item->shipment; // OrderShipping model (nullable)
-
-// Get the carrier for an item's shipment
-$item->shipment?->carrier; // Carrier model
-
-// Get all items in a shipment
-$shipment->items; // Collection of OrderItem models
+$item->shipment;
+$item->shipment?->carrier;
+$shipment->items;
 ```
 
 <Note>
@@ -376,10 +356,12 @@ For complete multi-shipment and dropshipping workflows, see the [Fulfillment](/v
 ### Refund
 
 ```php
-// Get order refund
-$order->refund; // OrderRefund model (HasOne)
+$order->refund;
+```
 
-// Create a refund
+To create a refund:
+
+```php
 $order->refund()->create([
     'refund_reason' => 'Product damaged',
     'refund_amount' => $order->total(),
@@ -391,33 +373,27 @@ $order->refund()->create([
 ### Channel and Zone
 
 ```php
-// Get sales channel
-$order->channel; // Channel model
-
-// Get zone (market)
-$order->zone; // Zone model
+$order->channel;
+$order->zone;
 ```
 
 ### Parent/Child Orders
 
-```php
-// Get parent order (for split orders)
-$order->parent; // Order model
+For split orders, an order can have a parent and children:
 
-// Get child orders
-$order->children; // Collection of Order models
+```php
+$order->parent;
+$order->children;
 ```
 
 ## Computed Values
 
 ### Order Total
 
-```php
-// Get order total from items
-$order->total(); // Sum of all item totals (in cents)
+The `total()` method returns the sum of all item totals in cents:
 
-// Get total as Price object
-$order->total_amount; // Price object with formatting
+```php
+$order->total();
 ```
 
 ## Events
@@ -458,8 +434,9 @@ $order = Order::query()->create([
 
 ### Complete Order with Items and Addresses
 
+Create the shipping and billing addresses:
+
 ```php
-// Create addresses
 $shippingAddress = OrderAddress::query()->create([
     'customer_id' => auth()->id(),
     'first_name' => 'John',
@@ -481,7 +458,6 @@ $billingAddress = OrderAddress::query()->create([
     'country_name' => 'United States',
 ]);
 
-// Create order
 $order = Order::query()->create([
     'number' => generate_number(),
     'customer_id' => auth()->id(),
@@ -492,15 +468,16 @@ $order = Order::query()->create([
     'zone_id' => $zoneId,
 ]);
 
-// Add items from cart
 foreach ($cart->items as $cartItem) {
+    $price = $cartItem->product->getPrice($order->currency_code);
+
     $order->items()->create([
         'name' => $cartItem->product->name,
         'sku' => $cartItem->product->sku,
         'quantity' => $cartItem->quantity,
-        'unit_price_amount' => $cartItem->product->price_amount,
+        'unit_price_amount' => $price->amount,
         'product_id' => $cartItem->product->id,
-        'product_type' => get_class($cartItem->product),
+        'product_type' => $cartItem->product->getMorphClass(),
     ]);
 }
 ```
@@ -510,39 +487,33 @@ foreach ($cart->items as $cartItem) {
 ```php
 use Shopper\Core\Models\Order;
 
-// Get all orders with relationships
 $orders = Order::query()
     ->with(['customer', 'items', 'shippingAddress'])
     ->latest()
     ->get();
 
-// Get orders by status
 $newOrders = Order::query()
     ->where('status', OrderStatus::New)
     ->get();
+```
 
-// Get customer's orders
+Query orders by customer with pagination:
+
+```php
 $customerOrders = Order::query()
     ->where('customer_id', $customerId)
     ->with('items.product')
     ->latest()
     ->paginate(10);
+```
 
-// Get order by number
+Find an order by number:
+
+```php
 $order = Order::query()
     ->where('number', $orderNumber)
     ->with(['items', 'shippingAddress', 'billingAddress', 'refund'])
     ->firstOrFail();
-
-// Get orders for a channel
-$channelOrders = Order::query()
-    ->where('channel_id', $channelId)
-    ->get();
-
-// Get orders for a zone
-$zoneOrders = Order::query()
-    ->where('zone_id', $zoneId)
-    ->get();
 ```
 
 ## Order Number Generation
@@ -551,8 +522,9 @@ Use the `generate_number()` helper to create unique order numbers:
 
 ```php
 $orderNumber = generate_number();
-// Returns something like: "ORD-20240115-001234"
 ```
+
+This returns a formatted string like `ORD-20260327-001234`. The format is configurable in `config/shopper/orders.php`.
 
 ## Components
 
@@ -615,15 +587,16 @@ class CheckoutController extends Controller
             'channel_id' => current_channel()->id,
         ]);
 
-        // Add cart items
         foreach (Cart::items() as $item) {
+            $price = $item->product->getPrice($order->currency_code);
+
             $order->items()->create([
                 'name' => $item->product->name,
                 'sku' => $item->product->sku,
                 'quantity' => $item->quantity,
-                'unit_price_amount' => $item->product->price_amount,
+                'unit_price_amount' => $price->amount,
                 'product_id' => $item->product->id,
-                'product_type' => get_class($item->product),
+                'product_type' => $item->product->getMorphClass(),
             ]);
         }
 
