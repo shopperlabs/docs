@@ -1,25 +1,137 @@
 ---
 title: "Introduction"
-description: "Shopper is a Headless CMS that provides modular tools for creating unique e-commerce experiences"
+description: "Shopper is an open-source headless e-commerce package for Laravel that gives you composable building blocks to add commerce to your application."
 ---
 
-Shopper is a Headless CMS how provide a range collection of modular tools and components designed to help developers create unique and powerful e-commerce experiences.
+Shopper is an open-source headless e-commerce package for Laravel. It provides a production-ready admin panel, a flexible product catalog, and all the commerce logic your store needs, built on the tools you already know, without taking over your codebase.
 
 <Frame>
   <img src="/images/socialcard.png" alt="Shopper" />
 </Frame>
 
-Built on the flexibility of Laravel, Shopper provides the essential building blocks for crafting custom online stores.
-Developers have full control over their tech stack and the logic behind every feature, enabling them to tailor the platform
-to meet specific business needs.
+## Why Shopper?
 
-With Shopper, you can seamlessly integrate product management, order processing, payment gateways, and more, while maintaining
-the freedom to innovate and customize. Whether you're building a boutique shop or a large-scale marketplace, Shopper empowers
-you to create a commerce solution that stands out.
+There are several ways to add e-commerce to a Laravel application. You could integrate an external platform like Shopify, adopt a full e-commerce system like Lunar or Bagisto, or build everything from scratch. Each approach has trade-offs.
 
-## Is It Ready For Production?
+Shopper takes a different path. It is a Laravel package, not a platform. You install it into your existing application the same way you would install `spatie/laravel-permission` or `laravel/cashier`. Your routes, your middleware, your authentication, your deploy pipeline stay unchanged. You add e-commerce to your app, not the other way around.
 
-Not entirely, as Shopper remains under active development, offering new features and regular updates.
-But you can still install it to get your store up and running.
+### Building Blocks, Not a Monolith
 
-Every component is well-tested, and Shopper uses the [Semantic Versioning Scheme](https://semver.org/), meaning you won't face unexpected breaking changes.
+Most e-commerce systems assume one-size-fits-all. But selling cars is not the same as selling sneakers, and a subscription box service has nothing in common with a marketplace. Shopper recognizes this by giving you composable building blocks instead of a rigid platform.
+
+Every Eloquent model is swappable via configuration. Every Livewire component can be overridden. Every feature can be toggled on or off. You start with a solid, production-ready foundation and shape it to match your business.
+
+### Headless from Day One
+
+Shopper handles the commerce logic and the admin panel. You build the storefront with whatever stack your team already ships with. Blade, Livewire, Inertia, Next.js, Nuxt, React Native, or anything else. Shopper has no opinion on how you present your store to customers.
+
+### A Package, Not a Platform
+
+This distinction matters. A platform owns your application. You build on top of it, adapt to its conventions, and work within its constraints. A package is a tool you control. Shopper adds e-commerce capabilities to your Laravel application without replacing your User model, your authentication system, or your application structure.
+
+Your User model gains Shopper capabilities through a trait. The admin panel is a feature of your app, not the other way around. Your database is extended, not replaced.
+
+## Tech Stack
+
+Shopper is built on top of [Laravel](https://laravel.com), [Filament](https://filamentphp.com), and [Tailwind CSS](https://tailwindcss.com). The admin panel uses [Livewire](https://livewire.laravel.com) for its interactive components.
+
+<Note>
+  Although the admin panel uses Laravel Livewire, there is no requirement for the storefront to use Livewire. You can build your storefront with any stack.
+</Note>
+
+## Packages
+
+Shopper is made up of several Composer packages that work together:
+
+- `shopper/core` is the e-commerce engine: models, contracts, migrations, enums, observers, and all business logic. It has no dependency on any UI layer.
+
+- `shopper/admin` is the admin panel, built on [Filament](https://filamentphp.com), for managing products, orders, customers, and more. It extends core models with media support and provides all Livewire pages and components.
+
+- `shopper/cart` handles shopping cart management.
+
+- `shopper/payment` provides a driver-based payment processing architecture with an official [Stripe](https://stripe.com) addon (`shopper/stripe`).
+
+- `shopper/shipping` manages carriers, zones, and shipping rate calculation.
+
+- `shopper/types` is an npm package (`@shopperlabs/shopper-types`) with TypeScript type definitions for storefront development.
+
+The `core` package defines contracts (interfaces) for every model. The `admin` package extends core models with media support. When you swap a model via configuration, the entire system (admin panel, relationships, route bindings) uses your custom class automatically.
+
+## Key Features
+
+Shopper ships with everything you need to run an online store:
+
+<CardGroup cols={3}>
+  <Card title="Products" icon="box">
+    Variants, attributes, media, and multiple product types (standard, virtual, external, variant).
+  </Card>
+  <Card title="Orders" icon="cart-shopping">
+    Full order lifecycle with independent payment, shipping, and order statuses.
+  </Card>
+  <Card title="Categories" icon="folder-tree">
+    Unlimited hierarchical nesting with SEO fields and media.
+  </Card>
+  <Card title="Collections" icon="layer-group">
+    Manual or rule-based product grouping.
+  </Card>
+  <Card title="Customers" icon="users">
+    Customer profiles, addresses, and order history.
+  </Card>
+  <Card title="Discounts" icon="tags">
+    Discount codes with rules, conditions, and usage limits.
+  </Card>
+  <Card title="Inventory" icon="warehouse">
+    Multi-warehouse stock tracking with allocation and audit trails.
+  </Card>
+  <Card title="Shipping" icon="truck">
+    Carriers, zones, rates, and shipment tracking.
+  </Card>
+  <Card title="Payments" icon="credit-card">
+    Driver-based payment processing with Stripe support out of the box.
+  </Card>
+  <Card title="Brands" icon="store">
+    Organize products by brand with media and SEO.
+  </Card>
+  <Card title="Reviews" icon="star">
+    Customer product reviews and ratings.
+  </Card>
+  <Card title="Channels" icon="globe">
+    Multi-channel publishing for different storefronts.
+  </Card>
+</CardGroup>
+
+## Extensibility
+
+Shopper is designed to be extended, not forked. Three mechanisms make this possible.
+
+**Model swapping** lets you replace any Eloquent model with your own. Define your custom class in `config/shopper/models.php` and the entire system uses it, including the admin panel, relationships, and route model binding.
+
+**Component overriding** lets you replace any admin panel page or form. Run `php artisan shopper:component:publish {feature}` to get a configuration file where you can point any component to your own Livewire class.
+
+**Feature toggling** lets you disable entire sections of the admin panel. Set any feature to `FeatureState::Disabled` in `config/shopper/features.php` and it disappears from the UI.
+
+## Stability and Versioning
+
+Shopper follows [Semantic Versioning](https://semver.org/). Minor and patch releases never contain breaking changes. Every component is tested, and upgrade guides are published for every major version bump.
+
+For details on supported versions and maintenance windows, see the [Version Support Policy](/v2/version-support-policy).
+
+## When Shopper Fits
+
+Shopper is the right choice when you already have a Laravel application (or want to build one) and need to add e-commerce capabilities without adopting an opinionated platform. It works well when your storefront is non-standard: a product configurator, a subscription service, an auction site, or anything that does not fit the typical "browse and checkout" template.
+
+If you need a store running in an hour, Shopify is a better fit. If you need dynamic product attributes managed entirely through the admin UI, Lunar handles that well. If you are not in the Laravel ecosystem, MedusaJS is worth considering.
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Requirements" icon="server" href="/v2/requirements">
+    Check server requirements before installing.
+  </Card>
+  <Card title="Installation" icon="download" href="/v2/installation">
+    Install Shopper in your Laravel application.
+  </Card>
+  <Card title="Demo Store" icon="shop" href="/v2/demo-store">
+    Explore a working Shopper store.
+  </Card>
+</CardGroup>

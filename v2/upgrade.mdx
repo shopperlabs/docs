@@ -3,40 +3,34 @@ title: Upgrade Guide
 description: Guides for upgrading your Shopper installation between versions.
 ---
 
-When upgrading Shopper, always review the upgrade guide for your specific version jump. Each guide covers breaking changes, new features, and migration steps.
+Shopper documentation always reflects the latest release of the current major version. When a new minor version ships, the docs are updated to match. Upgrade guides document every breaking change, new feature, and migration step between versions.
+
+## Before You Start
+
+Before upgrading, take these precautions:
+
+1. **Back up your database.** E-commerce data (orders, customers, prices) is difficult to recover if a migration fails.
+2. **Run the upgrade on a staging environment first.** Verify everything works before touching production.
+3. **If upgrading across multiple versions** (e.g., v2.2 to v2.5), follow each guide in sequence. Do not skip versions.
+
+## Upgrade Guides
+
+| From | To | Summary |
+|------|-----|---------|
+| [v2.6](/v2/upgrade/v2-6-to-v2-7) | v2.7 | Money values stored in smallest currency unit (cents), slide-over components replaced, 2FA split into SOLID interfaces |
+| [v2.5](/v2/upgrade/v2-5-to-v2-6) | v2.6 | Cart package, tax system, auth models moved to admin package, event renaming, render hooks |
+| [v2.4](/v2/upgrade/v2-4-to-v2-5) | v2.5 | Order system split into three independent statuses (order, payment, shipping), payment drivers, shipment tracking |
+| [v2.2](/v2/upgrade/v2-2-to-v2-3) | v2.3 | Product Tags feature with new permissions and feature flag |
+| [v2.1](/v2/upgrade/v2-1-to-v2-2) | v2.2 | Repository pattern removed, Model Contracts system, Filament v4, ShopperUser trait, sidebar redesign |
 
 <Note>
-If you're upgrading across multiple versions (e.g., v2.1 → v2.3), follow each guide in sequence.
+  There is no upgrade guide for v2.3 to v2.4. That release only added Spanish translations and internal render hooks with no breaking changes.
 </Note>
-
-| Upgrade Path | Key Changes |
-|---|---|
-| [v2.5 → v2.6](/v2/upgrade/v2-5-to-v2-6) | Cart package, tax system, auth models moved, enum contracts, render hooks, addon system |
-| [v2.4 → v2.5](/v2/upgrade/v2-4-to-v2-5) | Three-status orders, payment drivers, shipment tracking |
-| [v2.2 → v2.3](/v2/upgrade/v2-2-to-v2-3) | Product Tags, new permissions |
-| [v2.1 → v2.2](/v2/upgrade/v2-1-to-v2-2) | Repository removal, Model Contracts, Filament v4, ShopperUser trait, sidebar redesign |
-
-## General Upgrade Steps
-
-Every Shopper upgrade follows the same pattern:
-
-```bash
-# 1. Update dependencies
-composer update -W
-
-# 2. Run migrations
-php artisan migrate
-
-# 3. Clear caches
-php artisan optimize:clear
-```
-
-Then review the specific guide for breaking changes and new configuration options.
 
 ## Getting Help
 
 If you encounter issues during an upgrade:
 
 - Check the [GitHub Issues](https://github.com/shopperlabs/shopper/issues)
-- Join our [Discord community](https://discord.gg/CC444Gy7)
+- Join the [Discord community](https://discord.gg/CC444Gy7)
 - Review the [changelog](https://github.com/shopperlabs/shopper/releases)
