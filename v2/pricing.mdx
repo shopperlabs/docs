@@ -1,34 +1,42 @@
 ---
 title: Pricing
-description: Learn how to manage Pricing in your Shopper administration.
+description: "Multi-currency pricing for products and variants with cents-based storage."
 ---
+
+Shopper supports multi-currency pricing for [products](/v2/products) and [product variants](/v2/product-variants). Each priceable model can have one price per currency, stored in a shared `prices` table through a polymorphic relationship. Prices are stored in **cents** following the Stripe/Shopify standard.
 
 ## Money Storage Standard
 
-Shopper follows the **Stripe/Shopify standard**: all monetary values are stored in the **smallest currency unit**. For currencies with subdivisions (USD, EUR, GBP), that means cents. For zero-decimal currencies (XAF, JPY, KRW), values are stored as-is.
-
-For USD, $29.99 is stored as `2999`. For XAF, 15000 FCFA is stored as `15000`:
+All monetary values are stored as integers in **cents**. $29.99 is stored as `2999` cents. For zero-decimal currencies (XAF, JPY, KRW), the value is stored as-is since the currency has no subdivision (15000 FCFA is stored as `15000`).
 
 ```php
-Price::create(['amount' => 2999, 'currency_id' => $usdCurrency->id]);
+use Shopper\Core\Models\Price;
 
-Price::create(['amount' => 15000, 'currency_id' => $xafCurrency->id]);
+Price::query()->create(['amount' => 2999, 'currency_id' => $usdCurrency->id]);
+
+Price::query()->create(['amount' => 15000, 'currency_id' => $xafCurrency->id]);
 ```
 
 ### Display
 
-Use `shopper_money_format()` to convert from smallest unit to human-readable format:
+Use `shopper_money_format()` to convert cents to a human-readable format. The helper divides by 100 for standard currencies and passes zero-decimal currencies through unchanged. It uses Laravel's `Number::currency()` with the application locale.
 
 ```php
 shopper_money_format(2999, 'USD');   // "$29.99"
 shopper_money_format(15000, 'XAF');  // "15 000 FCFA"
 ```
 
-The helper automatically handles the division for subdivision currencies and passes zero-decimal currencies through unchanged.
+### Default Currency
+
+The `shopper_currency()` helper returns the store's default currency code. It reads the `default_currency_id` setting, looks up the currency code, caches it for one hour, and falls back to `'USD'` if no default is configured.
+
+```php
+shopper_currency(); // "USD"
+```
 
 ### Zero-Decimal Currencies
 
-Use these helpers for currency-aware logic:
+These helpers let you check whether a currency uses decimal subdivisions:
 
 ```php
 zero_decimal_currencies();              // ['BIF', 'CLP', 'DJF', 'GNF', 'JPY', 'KRW', 'XAF', ...]
@@ -36,21 +44,231 @@ is_no_division_currency('XAF');         // true
 is_no_division_currency('USD');         // false
 ```
 
-### MoneyInput Component
+## Price Model
 
-For Filament forms, use the `MoneyInput` component instead of `TextInput` for monetary fields. It handles conversion between human values (form) and smallest unit (database) automatically:
+The model used is `Shopper\Core\Models\Price`. It implements `Shopper\Core\Models\Contracts\Price` and is not configurable via `config/shopper/models.php`.
+
+### Database Schema
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `priceable_type` | string | no | - | Morph type (product or variant) |
+| `priceable_id` | bigint | no | - | Foreign key to the priceable model |
+| `amount` | integer (unsigned) | yes | null | Selling price in cents |
+| `compare_amount` | integer (unsigned) | yes | null | Original/compare-at price in cents, for strikethrough display |
+| `cost_amount` | integer (unsigned) | yes | null | Cost price in cents, for margin and profit tracking |
+| `currency_id` | bigint | no | - | Foreign key to currencies table |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+### Price Fields
+
+Each price record has three amount fields that serve distinct business purposes:
+
+| Field | What it represents | Shown to customers | Example |
+|-------|-------------------|-------------------|---------|
+| `amount` | The current selling price | Yes | 1999 cents = $19.99 |
+| `compare_amount` | The original price before a sale or discount. Displayed as a strikethrough next to the selling price (what Shopify calls "compare at price") | Yes (as strikethrough) | 2999 cents = $29.99 |
+| `cost_amount` | What you paid your supplier. Used to calculate profit margins. Never displayed on the storefront | No | 850 cents = $8.50 |
+
+For a product on sale, you would set all three: cost at 850, selling at 1999, and compare-at at 2999. The storefront shows "$19.99 ~~$29.99~~" and you know the margin is $11.49.
+
+### Relationships
+
+The `priceable` relationship connects a price to its parent model (Product or ProductVariant):
+
+```php
+$price->priceable; // Returns the Product or ProductVariant
+```
+
+The `currency` relationship returns the currency for this price:
+
+```php
+$price->currency;       // Currency model
+$price->currency_code;  // "USD" (computed accessor)
+```
+
+### Price Helper
+
+The Price model provides three methods that return a `Shopper\Core\Helpers\Price` value object with both the raw amount and a pre-formatted string:
+
+```php
+$priceHelper = $price->amountPrice();
+$priceHelper->amount;    // 2999
+$priceHelper->formatted; // "$29.99"
+$priceHelper->currency;  // "USD"
+
+$price->compareAmountPrice(); // Same pattern for compare_amount
+$price->costAmountPrice();    // Same pattern for cost_amount
+```
+
+You can also create a Price helper directly:
+
+```php
+use Shopper\Core\Helpers\Price as PriceHelper;
+
+$helper = PriceHelper::from(2999, 'USD');
+$helper->formatted; // "$29.99"
+```
+
+## HasPrices Trait
+
+The `HasPrices` trait is used by [Product](/v2/products) and [ProductVariant](/v2/product-variants) to provide pricing capabilities. Any model implementing the `Shopper\Core\Contracts\Priceable` interface can use this trait.
+
+To get the price for the store's default currency:
+
+```php
+$price = $product->getPrice(); // ?Price model
+```
+
+To get the price for a specific currency:
+
+```php
+$price = $product->getPrice('EUR'); // ?Price model
+```
+
+The method checks if the `prices` relationship is already loaded to avoid extra queries. When eager-loaded, it filters the collection in memory instead of hitting the database.
+
+To access all prices:
+
+```php
+$product->prices; // Collection of Price models
+```
+
+## Currency Model
+
+The model used is `Shopper\Core\Models\Currency`. It implements `Shopper\Core\Models\Contracts\Currency` and has no timestamps.
+
+### Currency Schema
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `name` | string | no | - | Currency name (e.g., "US Dollar") |
+| `code` | string(10) | no | - | ISO 4217 code (e.g., "USD"), unique |
+| `symbol` | string(25) | no | - | Currency symbol (e.g., "$") |
+| `format` | string(50) | no | - | Display format pattern |
+| `exchange_rate` | decimal(10,2) | yes | null | Exchange rate relative to base currency |
+| `is_enabled` | boolean | no | true | Whether the currency is active |
+
+### Enabled Scope
+
+The Currency model has a global `enabled` scope that automatically filters out disabled currencies. All queries return only enabled currencies by default.
+
+```php
+use Shopper\Core\Models\Currency;
+
+Currency::query()->get(); // Only enabled currencies
+
+Currency::query()->withoutGlobalScopes()->get(); // All currencies, including disabled
+```
+
+### Zone Relationship
+
+Each currency can be associated with a [zone](/v2/zones) for region-specific pricing:
+
+```php
+$currency->zone; // ?Zone model
+```
+
+## Creating Prices
+
+To set a price on a product or variant, create a Price record through the `prices()` relationship:
+
+```php
+use Shopper\Models\Product;
+
+$product = Product::query()->find($id);
+
+$product->prices()->create([
+    'amount' => 2999,
+    'compare_amount' => 3999,
+    'cost_amount' => 850,
+    'currency_id' => $currencyId,
+]);
+```
+
+### Multi-Currency Pricing
+
+To set prices in multiple currencies at once, use the `SavePricingAction`. It accepts an array keyed by currency ID and creates or updates prices in a single pass:
+
+```php
+use Shopper\Actions\Store\Product\SavePricingAction;
+
+$pricing = [
+    $usdCurrencyId => [
+        'amount' => 2999,
+        'compare_amount' => 3999,
+        'cost_amount' => 850,
+    ],
+    $eurCurrencyId => [
+        'amount' => 2799,
+        'compare_amount' => 3799,
+        'cost_amount' => 800,
+    ],
+];
+
+app()->call(SavePricingAction::class, [
+    'pricing' => $pricing,
+    'model' => $product,
+]);
+```
+
+The action uses `updateOrCreate` on each entry, so existing prices for a currency are updated rather than duplicated.
+
+## Retrieving Prices
+
+To get a product's price for the default currency and format it for display:
+
+```php
+$price = $product->getPrice();
+
+if ($price) {
+    shopper_money_format($price->amount, $price->currency_code);
+}
+```
+
+To display a sale price with strikethrough:
+
+```php
+$price = $product->getPrice();
+
+if ($price && $price->compare_amount) {
+    $selling = shopper_money_format($price->amount, $price->currency_code);
+    $original = shopper_money_format($price->compare_amount, $price->currency_code);
+    // Display: "$19.99" with "$29.99" crossed out
+}
+```
+
+To eager-load prices and avoid N+1 queries when listing products:
+
+```php
+$products = Product::query()
+    ->publish()
+    ->with('prices.currency')
+    ->get();
+
+foreach ($products as $product) {
+    $price = $product->getPrice(); // No extra query, filtered from loaded relation
+}
+```
+
+## Admin Components
+
+### MoneyInput
+
+For Filament forms, use the `MoneyInput` component instead of `TextInput` for monetary fields. It handles conversion between human values (form) and cents (database) automatically:
 
 ```php
 use Shopper\Components\Form\MoneyInput;
 
 MoneyInput::make('amount')
-    ->currency('USD')                    // string or closure
+    ->currency('USD')
     ->suffix('USD');
 ```
 
-For zero-decimal currencies, the component adjusts the mask precision to 0 automatically.
-
-If no currency is specified, `MoneyInput` defaults to the shop's configured currency via `shopper_currency()`.
+For zero-decimal currencies, the component adjusts the mask precision to 0 automatically. If no currency is specified, `MoneyInput` defaults to the store's configured currency via `shopper_currency()`.
 
 ### Table Columns
 
@@ -63,39 +281,24 @@ TextColumn::make('amount')
 
 This macro uses `shopper_money_format()` internally.
 
-## Model
+### Publishing Components
 
-The model used is `Shopper\Core\Models\Price`.
-
-| Name             | Type    | Required | Notes                                                         |
-|------------------|---------|----------|---------------------------------------------------------------|
-| `id`             | autoinc |          | auto                                                          |
-| `amount`         | int     | no       | Nullable                                                      |
-| `compare_amount` | int     | no       | Nullable                                                      |
-| `cost_amount`    | int     | no       | Nullable                                                      |
-| `priceable`      | morphs  | yes      | Relation generate `priceable_id` and `priceable_type` columns |
-| `currency_id`    | int     | yes      | int (`Currency` object via the `currency` relation)           |
-
-
-### Components
-
-By default, pricing Livewire components are not published. To customize components, you must publish them.
+To customize the pricing Livewire components:
 
 ```bash
 php artisan shopper:component:publish product
 ```
 
-This command will publish all Livewire components used for product and price management (from pages to form components).
-Once you've published the component, you can find it in the `product.php` locate in the `config/shopper/components` folder.
+The pricing components are registered in `config/shopper/components/product.php`:
+
 ```php
 use Shopper\Livewire;
+use Shopper\Livewire\Components;
 
 return [
-  'components' => [
-        // ...
+    'components' => [
         'products.pricing' => Components\Products\Pricing::class,
         'slide-overs.manage-pricing' => Livewire\SlideOvers\ManagePricing::class,
-        // ...
-  ],
+    ],
 ];
 ```

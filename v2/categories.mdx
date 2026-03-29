@@ -71,12 +71,12 @@ Electronics (parent_id: null)
 
 ## Media
 
-Categories support image uploads through [Spatie MediaLibrary](https://spatie.be/docs/laravel-medialibrary). Two media collections are configured by default:
+Categories support two media collections through [Spatie MediaLibrary](https://spatie.be/docs/laravel-medialibrary), using the same config-driven collection names as [products](/v2/products#media).
 
-| Collection | Behavior | Description |
-|------------|----------|-------------|
-| `uploads` | Multiple files | General media collection for the category |
-| `thumbnail` | Single file | The primary image displayed in listings and navigation |
+| Collection | Config key | Behavior | Description |
+|------------|-----------|----------|-------------|
+| Default gallery | `shopper.media.storage.collection_name` | Multiple files | Category images |
+| Thumbnail | `shopper.media.storage.thumbnail_collection` | Single file | Primary image for listings and navigation |
 
 Both collections accept JPEG, PNG, WebP, AVIF, and SVG files by default (configurable in `config/shopper/media.php`).
 
@@ -148,10 +148,7 @@ Categories have a polymorphic many-to-many relationship with products through th
 $category->products;
 $category->products()->count();
 
-$category->products()
-    ->where('is_visible', true)
-    ->whereDate('published_at', '<=', now())
-    ->get();
+$category->products()->publish()->get();
 ```
 
 ## Available Tree Methods
@@ -222,7 +219,7 @@ public function getCustomPaths(): array
 ```
 
 <Note>
-  When a category has a parent, the `CategoryObserver` automatically prefixes the slug with the parent's slug on creation and update. For example, creating a "Laptops" category under a parent with slug `computers` produces the slug `computers-laptops`. This ensures slug uniqueness across the hierarchy.
+  When a category has a parent, the `CategoryObserver` automatically combines the parent's slug with the category name on creation and update. For example, creating a "Laptops" category under a parent with slug `computers` produces the slug `computers-laptops`. This ensures slug uniqueness across the hierarchy.
 </Note>
 
 ## Methods & Helpers
@@ -376,6 +373,18 @@ return [
     'category' => FeatureState::Disabled,
 ];
 ```
+
+### Permissions
+
+The admin panel generates four permissions for category management:
+
+| Permission | Description |
+|------------|-------------|
+| `browse_categories` | View the categories list |
+| `read_categories` | View a single category |
+| `add_categories` | Create new categories |
+| `edit_categories` | Edit existing categories |
+| `delete_categories` | Delete categories |
 
 ## Components
 

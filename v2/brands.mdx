@@ -1,15 +1,19 @@
 ---
 title: Brands
-description: Complete reference for the Brand model, relationships, and usage in Shopper.
+description: "Manage product brands with logos, SEO metadata, and storefront filtering."
 ---
 
-Brands represent manufacturers or labels for your products. They help customers identify and filter products from their favorite manufacturers.
+Brands represent manufacturers or labels for your products. They help customers identify and filter products from their favorite manufacturers, and they give your storefront structured navigation (e.g., a "Shop by Brand" page or a brand filter in search results).
 
 ## Model
 
-The model used is `Shopper\Models\Brand`, implementing `Shopper\Core\Models\Contracts\Brand` and `Spatie\MediaLibrary\HasMedia`.
+The model used is `Shopper\Models\Brand`, which extends `Shopper\Core\Models\Brand`. The core model provides the business logic, relationships, scopes, and slug generation. The admin model adds media collections and conversions through Spatie MediaLibrary.
+
+The core model implements `Shopper\Core\Models\Contracts\Brand` and uses the `HasSlug` trait for automatic slug generation with collision handling, and the `HasMediaCollections` trait for config-driven media support.
 
 ### Extending the Model
+
+To add custom behavior, extend the admin model and update your configuration:
 
 ```php
 namespace App\Models;
@@ -21,7 +25,7 @@ class Brand extends ShopperBrand
 }
 ```
 
-Update the configuration in `config/shopper/models.php`:
+Update `config/shopper/models.php`:
 
 ```php
 return [
@@ -37,119 +41,143 @@ return [
 | `name` | string | no | - | Brand name |
 | `slug` | string | yes | auto | URL-friendly identifier (unique) |
 | `website` | string | yes | null | Brand's official website URL |
-| `description` | longtext | yes | null | Brand description |
-| `position` | integer | no | 0 | Display order position |
+| `description` | longtext | yes | null | Brand description (supports rich text) |
+| `position` | smallint (unsigned) | no | 0 | Display order position |
 | `is_enabled` | boolean | no | false | Brand visibility status |
 | `seo_title` | string(60) | yes | null | SEO meta title |
 | `seo_description` | string(160) | yes | null | SEO meta description |
-| `metadata` | json | yes | null | Additional custom data |
+| `metadata` | jsonb | yes | null | Additional custom data |
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
+
+## Slug Generation
+
+The `HasSlug` trait generates unique slugs automatically. When you set the `slug` attribute, the trait runs it through `Str::slug()` and appends an incrementing suffix (`-1`, `-2`, etc.) if a collision is detected.
+
+The trait also provides a `findBySlug()` static method:
+
+```php
+use Shopper\Models\Brand;
+
+$brand = Brand::findBySlug('nike');
+```
 
 ## Relationships
 
 ### Products
 
-A brand has many products:
+A brand has many [products](/v2/products). This is a standard `HasMany` relationship using the configured product model.
 
 ```php
 $brand->products;
 $brand->products()->count();
-$brand->products()->where('is_visible', true)->get();
+```
+
+To get only published products for a brand (for storefront display):
+
+```php
+$brand->products()->publish()->get();
 ```
 
 With eager loading:
 
 ```php
-$brands = Brand::with('products')->get();
+$brands = Brand::query()->with('products')->get();
 ```
 
 ## Query Scopes
 
 ### Enabled Brands
 
-```php
-Brand::query()->enabled()->get();
+The `enabled` scope filters brands where `is_enabled` is `true`. Use it for all storefront queries to exclude draft or hidden brands.
 
-Brand::query()
-    ->enabled()
-    ->orderBy('position')
-    ->get();
+```php
+use Shopper\Models\Brand;
+
+Brand::query()->enabled()->orderBy('position')->get();
 ```
 
 ## Status Management
 
-### Update Status
+The `updateStatus()` method provides a convenient way to toggle brand visibility:
 
 ```php
-$brand->updateStatus(true);
-$brand->updateStatus(false);
+$brand->updateStatus(true);  // enable
+$brand->updateStatus(false); // disable
+```
+
+You can also update the field directly:
+
+```php
 $brand->update(['is_enabled' => true]);
 ```
 
-### Check Status
+## Media
 
-```php
-if ($brand->is_enabled) {
-}
-```
+Brands support two media collections through [Spatie MediaLibrary](https://spatie.be/docs/laravel-medialibrary), using the same config-driven collection names as [products](/v2/products#media).
 
-## Media Management
+| Collection | Config key | Behavior | Description |
+|------------|-----------|----------|-------------|
+| Default gallery | `shopper.media.storage.collection_name` | Multiple files | Brand images |
+| Thumbnail | `shopper.media.storage.thumbnail_collection` | Single file | Brand logo |
 
-Brands use [Spatie Media Library](https://spatie.be/docs/laravel-medialibrary/introduction) for logo management:
-
-The thumbnail collection name is defined in `config/shopper/media.php`:
+To add a brand logo:
 
 ```php
 $collection = config('shopper.media.storage.thumbnail_collection');
 
 $brand->addMedia($file)->toMediaCollection($collection);
-$brand->getFirstMediaUrl($collection);
-$brand->getFirstMedia($collection);
+```
+
+To retrieve the logo URL with a specific conversion:
+
+```php
+$collection = config('shopper.media.storage.thumbnail_collection');
+
+$url = $brand->getFirstMediaUrl($collection, 'medium');
 ```
 
 From a URL:
 
 ```php
-$brand->addMediaFromUrl('https://example.com/logo.png')
-    ->toMediaCollection(config('shopper.media.storage.thumbnail_collection'));
+$collection = config('shopper.media.storage.thumbnail_collection');
+
+$brand->addMediaFromUrl('https://example.com/nike-logo.png')
+    ->toMediaCollection($collection);
 ```
 
 ## Creating Brands
 
+To create a brand with a logo and SEO metadata:
+
 ```php
+use Shopper\Models\Brand;
+
 $brand = Brand::query()->create([
     'name' => 'Nike',
+    'slug' => 'nike',
     'website' => 'https://nike.com',
     'description' => 'Just Do It',
     'is_enabled' => true,
     'position' => 1,
-]);
-```
-
-The `slug` is auto-generated from the name if not provided. You can add SEO fields and a logo:
-
-```php
-$brand = Brand::query()->create([
-    'name' => 'Adidas',
-    'is_enabled' => true,
-    'seo_title' => 'Adidas - Official Products',
-    'seo_description' => 'Shop official Adidas products...',
+    'seo_title' => 'Nike - Official Products',
+    'seo_description' => 'Shop official Nike products including shoes, clothing, and accessories.',
 ]);
 
-$brand->addMedia($logoFile)->toMediaCollection('default');
+$collection = config('shopper.media.storage.thumbnail_collection');
+
+$brand->addMedia($logoFile)->toMediaCollection($collection);
 ```
 
 ## Retrieving Brands
 
+To get all enabled brands ordered by position:
+
 ```php
-$brands = Brand::query()
-    ->enabled()
-    ->orderBy('position')
-    ->get();
+Brand::query()->enabled()->orderBy('position')->get();
 ```
 
-Brands with products:
+To get brands that have at least one product, with product counts:
 
 ```php
 $brands = Brand::query()
@@ -159,16 +187,13 @@ $brands = Brand::query()
     ->get();
 ```
 
-Find a specific brand by slug:
+To find a brand by slug:
 
 ```php
-$brand = Brand::query()
-    ->where('slug', 'nike')
-    ->with('products')
-    ->firstOrFail();
+$brand = Brand::findBySlug('nike');
 ```
 
-For navigation or filter dropdowns:
+For navigation or filter dropdowns where you only need name and slug:
 
 ```php
 $brands = Brand::query()
@@ -178,28 +203,56 @@ $brands = Brand::query()
     ->get();
 ```
 
-## Disabling Brand Feature
+## Metadata
 
-If you don't need brands in your store, you can disable the feature entirely:
+The `metadata` JSON column lets you store additional custom data that doesn't warrant its own database column:
 
 ```php
-// config/shopper/features.php
+$brand->update([
+    'metadata' => [
+        'country_of_origin' => 'USA',
+        'founded_year' => 1964,
+        'social' => [
+            'instagram' => '@nike',
+            'twitter' => '@nike',
+        ],
+    ],
+]);
+
+$country = $brand->metadata['country_of_origin'] ?? null;
+```
+
+## Configuration
+
+### Disabling Brands
+
+If you don't need brands in your store, disable the feature in `config/shopper/features.php`:
+
+```php
 use Shopper\Enum\FeatureState;
 
 return [
     'brand' => FeatureState::Disabled,
-    // ...
 ];
 ```
 
-When disabled:
-- Brand menu item is hidden from the sidebar
-- Brand-related routes are not registered
-- Brand selection is removed from product forms
+When disabled, the brand menu item is hidden from the sidebar, brand-related routes are not registered, and brand selection is removed from product forms.
+
+### Permissions
+
+The admin panel generates four permissions for brand management:
+
+| Permission | Description |
+|------------|-------------|
+| `browse_brands` | View the brands list |
+| `read_brands` | View a single brand |
+| `add_brands` | Create new brands |
+| `edit_brands` | Edit existing brands |
+| `delete_brands` | Delete brands |
 
 ## Components
 
-Publish Livewire components to customize:
+To customize the admin UI for brand management:
 
 ```bash
 php artisan shopper:component:publish brand
@@ -220,9 +273,9 @@ return [
 ];
 ```
 
-## Using Brands in Storefront
+## Storefront Example
 
-### Controller Example
+This example shows a brand listing page and a brand detail page with its published products.
 
 ```php
 namespace App\Http\Controllers;
@@ -244,13 +297,10 @@ class BrandController extends Controller
 
     public function show(string $slug)
     {
-        $brand = Brand::query()
-            ->where('slug', $slug)
-            ->enabled()
-            ->firstOrFail();
+        $brand = Brand::findBySlug($slug);
 
         $products = $brand->products()
-            ->where('is_visible', true)
+            ->publish()
             ->paginate(12);
 
         return view('brands.show', compact('brand', 'products'));
@@ -260,10 +310,9 @@ class BrandController extends Controller
 
 ### View Composer
 
-For brands in multiple views (header, footer, filters):
+For brands that appear in multiple views (header, footer, filters), use a View Composer to avoid repeating the query:
 
 ```php
-// app/View/Composers/BrandsComposer.php
 namespace App\View\Composers;
 
 use Illuminate\View\View;
@@ -281,7 +330,6 @@ class BrandsComposer
         );
     }
 }
-
 ```
 
 Register it in your `AppServiceProvider`:
@@ -293,23 +341,4 @@ public function boot(): void
 {
     View::composer(['partials.brands', 'filters.brands'], BrandsComposer::class);
 }
-```
-
-## Metadata
-
-Store additional custom data using the metadata field:
-
-```php
-$brand->update([
-    'metadata' => [
-        'country_of_origin' => 'USA',
-        'founded_year' => 1964,
-        'social' => [
-            'instagram' => '@nike',
-            'twitter' => '@nike',
-        ],
-    ],
-]);
-
-$country = $brand->metadata['country_of_origin'] ?? null;
 ```

@@ -7,9 +7,13 @@ Collections are curated groups of products for marketing and merchandising. Unli
 
 ## Model
 
-The model used is `Shopper\Models\Collection`, implementing `Shopper\Core\Models\Contracts\Collection` and `Spatie\MediaLibrary\HasMedia`.
+The model used is `Shopper\Models\Collection`, which extends `Shopper\Core\Models\Collection`. The core model provides the business logic, relationships, scopes, rule evaluation, and slug generation. The admin model adds media collections and conversions through Spatie MediaLibrary.
+
+The core model implements `Shopper\Core\Models\Contracts\Collection` and uses the `HasSlug` trait for automatic slug generation with collision handling.
 
 ### Extending the Model
+
+To add custom behavior, extend the admin model and update your configuration:
 
 ```php
 namespace App\Models;
@@ -18,6 +22,7 @@ use Shopper\Models\Collection as ShopperCollection;
 
 class Collection extends ShopperCollection
 {
+}
 ```
 
 Update `config/shopper/models.php`:
@@ -129,11 +134,29 @@ $collection->rules()->create([
 ]);
 ```
 
+## Slug & Lookup
+
+The `HasSlug` trait generates unique slugs automatically and provides a `findBySlug()` static method:
+
+```php
+use Shopper\Models\Collection;
+
+$collection = Collection::findBySlug('summer-essentials');
+```
+
 ## Query Scopes
+
+Filter collections by type:
 
 ```php
 Collection::query()->manual()->get();
 Collection::query()->automatic()->get();
+```
+
+The `published` scope filters collections that have a `published_at` date in the past or present:
+
+```php
+Collection::query()->published()->get();
 ```
 
 ## Collection Rules
@@ -179,8 +202,8 @@ Rule::ProductSalesCount // Match total units sold
 ```php
 use Shopper\Core\Enum\Operator;
 
-Operator::Equals        // equals_to
-Operator::NotEquals     // not_equals_to
+Operator::EqualsTo      // equals_to
+Operator::NotEqualTo    // not_equal_to
 Operator::GreaterThan   // greater_than
 Operator::LessThan      // less_than
 Operator::StartsWith    // starts_with
@@ -294,19 +317,15 @@ $collection->rules()->create([
 All published collections:
 
 ```php
-$collections = Collection::query()
-    ->whereNotNull('published_at')
-    ->where('published_at', '<=', now())
-    ->get();
+$collections = Collection::query()->published()->get();
 ```
 
 A collection with its published products:
 
 ```php
-$collection = Collection::query()
-    ->where('slug', 'summer-essentials')
-    ->with(['products' => fn ($q) => $q->publish()])
-    ->firstOrFail();
+$collection = Collection::findBySlug('summer-essentials');
+
+$products = $collection->productsQuery()->publish()->get();
 ```
 
 Filter by type:
@@ -447,7 +466,34 @@ Configure your queue worker to process these jobs:
 php artisan queue:work
 ```
 
-## Disabling Collection Feature
+## Media
+
+Collections support two media collections through [Spatie MediaLibrary](https://spatie.be/docs/laravel-medialibrary), using the same config-driven collection names as [products](/v2/products#media).
+
+| Collection | Config key | Behavior | Description |
+|------------|-----------|----------|-------------|
+| Default gallery | `shopper.media.storage.collection_name` | Multiple files | Collection images |
+| Thumbnail | `shopper.media.storage.thumbnail_collection` | Single file | Collection cover image |
+
+To add a collection cover image:
+
+```php
+$mediaCollection = config('shopper.media.storage.thumbnail_collection');
+
+$collection->addMedia($file)->toMediaCollection($mediaCollection);
+```
+
+To retrieve the cover URL:
+
+```php
+$mediaCollection = config('shopper.media.storage.thumbnail_collection');
+
+$url = $collection->getFirstMediaUrl($mediaCollection, 'medium');
+```
+
+## Configuration
+
+### Disabling Collections
 
 ```php
 // config/shopper/features.php
@@ -458,7 +504,21 @@ return [
 ];
 ```
 
+### Permissions
+
+The admin panel generates five permissions for collection management:
+
+| Permission | Description |
+|------------|-------------|
+| `browse_collections` | View the collections list |
+| `read_collections` | View a single collection |
+| `add_collections` | Create new collections |
+| `edit_collections` | Edit existing collections |
+| `delete_collections` | Delete collections |
+
 ## Components
+
+To customize the admin UI for collection management:
 
 ```bash
 php artisan shopper:component:publish collection
@@ -496,8 +556,7 @@ class CollectionController extends Controller
     public function index()
     {
         $collections = Collection::query()
-            ->whereNotNull('published_at')
-            ->where('published_at', '<=', now())
+            ->published()
             ->withCount('products')
             ->get();
 
@@ -506,11 +565,7 @@ class CollectionController extends Controller
 
     public function show(string $slug)
     {
-        $collection = Collection::query()
-            ->where('slug', $slug)
-            ->whereNotNull('published_at')
-            ->with('rules') // Eager load rules for automatic collections
-            ->firstOrFail();
+        $collection = Collection::findBySlug($slug);
 
         // Works for both manual and automatic collections
         $products = $collection->productsQuery()

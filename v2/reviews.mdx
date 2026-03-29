@@ -7,16 +7,9 @@ Reviews allow customers to rate and review products. Shopper provides a flexible
 
 ## Model
 
-```php
-Shopper\Core\Models\Review
-```
+The model used is `Shopper\Core\Models\Review`. It implements `Shopper\Core\Models\Contracts\Review`. Unlike products or brands, the Review model is not configurable via `config/shopper/models.php` and has no admin model wrapper.
 
-```php
-use Shopper\Core\Models\Review;
-
-// The model implements
-- Shopper\Core\Models\Contracts\Review
-```
+Products gain review capabilities through the `InteractsWithReviews` trait, which implements the `Shopper\Core\Contracts\HasReviews` interface. This is already applied to the Product model.
 
 ## Database Schema
 
@@ -255,7 +248,35 @@ $userReviews = Review::query()
     ->get();
 ```
 
+## Configuration
+
+### Disabling Reviews
+
+If your store doesn't need product reviews, disable the feature in `config/shopper/features.php`:
+
+```php
+use Shopper\Enum\FeatureState;
+
+return [
+    'review' => FeatureState::Disabled,
+];
+```
+
+### Permissions
+
+The admin panel generates five permissions for review management:
+
+| Permission | Description |
+|------------|-------------|
+| `browse_reviews` | View the reviews list |
+| `read_reviews` | View a single review |
+| `add_reviews` | Create new reviews |
+| `edit_reviews` | Edit existing reviews |
+| `delete_reviews` | Delete reviews |
+
 ## Components
+
+To customize the admin UI for review management:
 
 ```bash
 php artisan shopper:component:publish review
@@ -289,10 +310,7 @@ class ProductController extends Controller
 {
     public function show(string $slug)
     {
-        $product = Product::query()
-            ->where('slug', $slug)
-            ->publish()
-            ->firstOrFail();
+        $product = Product::findBySlug($slug);
 
         // Get approved reviews
         $reviews = $product->ratings()

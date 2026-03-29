@@ -1,44 +1,63 @@
 ---
 title: Products
-description: Complete reference for the Product model, relationships, and usage in Shopper.
+description: Complete reference for the Product model, types, relationships, stock, pricing, and media.
 ---
 
-Products are the core of your e-commerce catalog. This documentation covers the Product model structure, relationships, types, and how to interact with products programmatically.
+Products are the core of your e-commerce catalog. Each product has a type that determines its capabilities: a Standard product is a simple physical item, a Variant product has multiple options like size and color, a Virtual product is a digital download, and an External product links to an external URL.
+
+## How Products Work
+
+Shopper uses a type-driven product system. When you create a product, you choose one of four types, and the system enables the right features automatically.
+
+| Type | Shipping | Variants | Attributes | Stock | Use case |
+|------|----------|----------|------------|-------|----------|
+| Standard | Yes | No | Yes | On the product itself | A book, a poster, a mug |
+| Variant | Yes | Yes | Yes | On each variant | A t-shirt with sizes and colors |
+| Virtual | No | No | Yes | On the product itself | An ebook, a software license, a course |
+| External | No | No | No | No | An affiliate product hosted on another site |
+
+**Standard** products hold their own price, stock, and media. They are the simplest product type and work for anything that does not need size/color options.
+
+**Variant** products are parents that hold the product description, images, and categories, but delegate pricing and stock to their child variants. Each variant represents a specific combination of options (e.g., "Blue / Large"). See the [Product Variants](/v2/product-variants) documentation for details.
+
+**Virtual** products behave like Standard products except they skip shipping. The `files` media collection lets you attach downloadable files that customers receive after purchase.
+
+**External** products store a URL to an external site. They have no stock, no shipping, and no checkout flow in Shopper.
+
+You can check a product's type and capabilities using the following methods:
+
+```php
+$product->isStandard();
+$product->isVariant();
+$product->isVirtual();
+$product->isExternal();
+
+$product->canUseShipping();
+$product->canUseAttributes();
+$product->canUseVariants();
+```
 
 ## Model
 
-```php
-Shopper\Core\Models\Product
-```
+The model used is `Shopper\Models\Product`, which extends `Shopper\Core\Models\Product`. The core model provides the business logic, relationships, scopes, stock management, pricing, and reviews. The admin model adds media collections and conversions through Spatie MediaLibrary.
 
-The Product model implements several interfaces and uses multiple traits to provide a complete feature set:
-
-```php
-use Shopper\Models\Product;
-
-// The model implements
-- Shopper\Core\Contracts\HasReviews
-- Shopper\Core\Contracts\Priceable
-- Shopper\Core\Models\Contracts\Product
-- Spatie\MediaLibrary\HasMedia
-```
+The product model uses `SoftDeletes`. Deleted products remain in the database and are excluded from queries automatically. The `publish()` scope filters by visibility and publication date, so storefront queries do not need to handle soft deletes manually.
 
 ### Extending the Model
 
-To customize the Product model, create your own model that extends the base class:
+To add custom behavior, extend the admin model and update your configuration:
 
 ```php
 namespace App\Models;
 
-use Shopper\Core\Models\Product as CoreProduct;
+use Shopper\Models\Product as ShopperProduct;
 
-class Product extends BaseProduct
+class Product extends ShopperProduct
 {
-    // Add your customizations here
 }
 ```
 
-Then update the configuration in `config/shopper/models.php`:
+Update `config/shopper/models.php`:
 
 ```php
 return [
@@ -52,77 +71,50 @@ return [
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
 | `name` | string | no | - | Product name |
-| `slug` | string | yes | auto | URL-friendly identifier (unique) |
+| `slug` | string | yes | auto | URL-friendly identifier (unique, auto-generated) |
 | `sku` | string | yes | null | Stock Keeping Unit (unique) |
 | `barcode` | string | yes | null | Product barcode (unique) |
-| `description` | longtext | yes | null | Full product description |
+| `description` | longtext | yes | null | Full product description (rich text) |
+| `summary` | text | yes | null | Short product summary |
 | `type` | string | yes | null | Product type enum value |
 | `is_visible` | boolean | no | false | Visibility on storefront |
 | `featured` | boolean | no | false | Featured product flag |
+| `allow_backorder` | boolean | no | false | Allow adding to cart when out of stock |
 | `security_stock` | integer | yes | 0 | Minimum stock alert threshold |
-| `allow_backorder` | boolean | no | false | Allow backorders |
-| `published_at` | datetime | no | now() | Publication date |
+| `published_at` | datetime | no | now() | Publication date (supports scheduling) |
 | `seo_title` | string(60) | yes | null | SEO meta title |
 | `seo_description` | string(160) | yes | null | SEO meta description |
-| `weight_unit` | string | yes | null | Weight unit enum |
-| `weight_value` | decimal(10,2) | yes | null | Weight value |
-| `height_unit` | string | yes | null | Height unit enum |
-| `height_value` | decimal(10,2) | yes | null | Height value |
-| `width_unit` | string | yes | null | Width unit enum |
-| `width_value` | decimal(10,2) | yes | null | Width value |
-| `depth_unit` | string | yes | null | Depth unit enum |
-| `depth_value` | decimal(10,2) | yes | null | Depth value |
-| `volume_unit` | string | yes | null | Volume unit enum |
-| `volume_value` | decimal(10,2) | yes | null | Volume value |
+| `weight_unit` | string | yes | kg | Weight unit (kg, g, lbs) |
+| `weight_value` | decimal(10,2) | yes | 0.00 | Weight value |
+| `height_unit` | string | yes | cm | Height unit (m, cm, mm, ft, in) |
+| `height_value` | decimal(10,2) | yes | 0.00 | Height value |
+| `width_unit` | string | yes | cm | Width unit |
+| `width_value` | decimal(10,2) | yes | 0.00 | Width value |
+| `depth_unit` | string | yes | cm | Depth unit |
+| `depth_value` | decimal(10,2) | yes | 0.00 | Depth value |
+| `volume_unit` | string | yes | l | Volume unit (l, ml, gal, floz) |
+| `volume_value` | decimal(10,2) | yes | 0.00 | Volume value |
 | `external_id` | string | yes | null | External system reference |
 | `metadata` | json | yes | null | Additional custom data |
 | `brand_id` | bigint | yes | null | Foreign key to brands |
-| `parent_id` | bigint | yes | null | Foreign key for parent product |
-
-## Product Types
-
-Products are categorized using the `ProductType` enum:
-
-```php
-use Shopper\Core\Enum\ProductType;
-
-ProductType::Standard  // Simple product without variants
-ProductType::Variant   // Product with variants (size, color, etc.)
-ProductType::Virtual   // Digital/downloadable product
-ProductType::External  // Product hosted externally (affiliate)
-```
-
-### Type Checking Methods
-
-```php
-$product->isStandard();
-$product->isVariant();
-$product->isVirtual();
-$product->isExternal();
-```
-
-### Type Capabilities
-
-```php
-// Check if product can use shipping
-$product->canUseShipping(); // true for Standard and Variant types
-
-// Check if product can have attributes
-$product->canUseAttributes(); // true for Standard and Variant types
-
-// Check if product can have variants
-$product->canUseVariants(); // true only for Variant type
-```
+| `supplier_id` | bigint | yes | null | Foreign key to suppliers |
+| `deleted_at` | timestamp | yes | null | Soft delete timestamp |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
 
 ## Relationships
 
 ### Brand
 
-```php
-// Get the product's brand
-$product->brand; // Returns Brand model or null
+Each product can belong to a brand. This is a standard `BelongsTo` relationship.
 
-// Query products by brand
+```php
+$product->brand;
+```
+
+To query products by brand:
+
+```php
 Product::query()
     ->whereHas('brand', fn ($q) => $q->where('slug', 'nike'))
     ->get();
@@ -130,162 +122,353 @@ Product::query()
 
 ### Categories
 
-Products have a many-to-many polymorphic relationship with categories:
+Products have a polymorphic many-to-many relationship with categories through the `product_has_relations` table.
 
 ```php
-// Get all categories
 $product->categories;
 
-// Attach categories
 $product->categories()->attach([$categoryId1, $categoryId2]);
-
-// Sync categories (replaces existing)
 $product->categories()->sync([$categoryId1, $categoryId2]);
-
-// Detach all categories
-$product->categories()->detach();
 ```
 
 ### Collections
 
+Products can belong to multiple collections. Collections can also be automatic (rule-based), in which case the `ProductObserver` dispatches a `SyncProductWithCollectionsJob` when a product is saved to evaluate collection rules.
+
 ```php
-// Get all collections containing this product
 $product->collections;
 
-// Add product to collection
 $product->collections()->attach($collectionId);
 ```
 
 ### Channels
 
-Products can be assigned to multiple sales channels:
+Products can be assigned to multiple sales channels for multi-channel publishing.
 
 ```php
-// Get product channels
 $product->channels;
 
-// Assign to channel
 $product->channels()->attach($channelId);
 ```
 
 ### Variants
 
-For products with `type = ProductType::Variant`:
+For products with `type = ProductType::Variant`, the `variants()` relationship returns all child variants. Each variant has its own SKU, price, stock, and dimensions.
 
 ```php
-// Get all variants
 $product->variants;
 
-// Get total stock across all variants
-$product->variants_stock;
-
-// Create a variant
 $product->variants()->create([
     'name' => 'Blue / Large',
     'sku' => 'TSHIRT-BLU-L',
-    'price_amount' => 2999,
 ]);
+```
+
+The `variants_stock` computed attribute returns the total stock across all variants.
+
+```php
+$product->variants_stock;
+```
+
+See the [Product Variants](/v2/product-variants) documentation for the full variant API.
+
+### Tags
+
+Products can have multiple tags for cross-cutting organization. Unlike categories (hierarchical) or collections (rule-based), tags are simple flat labels.
+
+```php
+$product->tags;
+
+$product->tags()->attach([$tagId1, $tagId2]);
+```
+
+See the [Product Tags](/v2/product-tags) documentation for details.
+
+### Supplier
+
+Each product can optionally be linked to a supplier.
+
+```php
+$product->supplier;
 ```
 
 ### Attributes (Options)
 
-Product attributes are accessed via the `options()` relationship to avoid collision with Eloquent's `$attributes` property:
+Product attributes are accessed via the `options()` relationship. The name `options` is used instead of `attributes` to avoid collision with Eloquent's `$attributes` property.
 
 ```php
-// Get product attributes
-$product->options; // Collection of Attribute models
+$product->options;
+```
 
-// Access pivot data
-foreach ($product->options as $attribute) {
-    $valueId = $attribute->pivot->attribute_value_id;
-    $customValue = $attribute->pivot->attribute_custom_value;
-}
+The pivot table stores the selected attribute value and an optional custom value for freeform input.
 
-// Attach attributes with values
+```php
 $product->options()->attach($attributeId, [
     'attribute_value_id' => $valueId,
-    'attribute_custom_value' => 'Custom text',
+    'attribute_custom_value' => 'Custom engraving text',
 ]);
 ```
 
 ### Related Products
 
+You can link products together as related items for cross-selling on the storefront.
+
 ```php
-// Get related products
 $product->relatedProducts;
 
-// Attach related products
 $product->relatedProducts()->attach([$productId1, $productId2]);
 ```
+
+### Discounts
+
+Products can be associated with discounts through a polymorphic relationship.
+
+```php
+$product->discounts;
+```
+
+See the [Discounts](/v2/discounts) documentation for details on discount rules and conditions.
 
 ## Query Scopes
 
 ### Published Products
 
+The `publish()` scope filters products that are visible and have a `published_at` date in the past or present. This is the primary scope for storefront queries.
+
 ```php
 use Shopper\Models\Product;
 
-// Get only published and visible products
 Product::query()->publish()->get();
-
-// The scope filters by:
-// - published_at <= now()
-// - is_visible = true
 ```
 
 ### Filter by Channel
 
+The `forChannel()` scope filters products assigned to one or more sales channels.
+
 ```php
-// Products available on a specific channel
 Product::query()->forChannel($channelId)->get();
 
-// Multiple channels
 Product::query()->forChannel([$channel1, $channel2])->get();
 ```
 
-## Publication Status
+### Publication Check
+
+The `isPublished()` method checks if a specific product is currently visible on the storefront.
 
 ```php
-// Check if product is currently published
 $product->isPublished();
-
-// This checks:
-// - is_visible is true
-// - published_at is set
-// - published_at is in the past or present
 ```
 
-## Media Management
+## Media
 
-Products use Spatie Media Library for image management:
+Products support three media collections through [Spatie MediaLibrary](https://spatie.be/docs/laravel-medialibrary). The collection names for the default gallery and thumbnail are defined in `config/shopper/media.php`.
+
+| Collection | Config key | Behavior | Description |
+|------------|-----------|----------|-------------|
+| Default gallery | `shopper.media.storage.collection_name` | Multiple files | Product gallery images |
+| Thumbnail | `shopper.media.storage.thumbnail_collection` | Single file | Main product image for listings |
+| `files` | - | Multiple files | Downloadable files for virtual products |
+
+To add a product thumbnail:
 
 ```php
-// Add an image
-$product->addMedia($file)->toMediaCollection('products');
+$collection = config('shopper.media.storage.thumbnail_collection');
 
-// Add thumbnail (single file collection)
-$product->addMedia($file)->toMediaCollection('thumbnail');
-
-// Add downloadable files
-$product->addMedia($file)->toMediaCollection('files');
-
-// Get all product images
-$product->getMedia('products');
-
-// Get thumbnail
-$product->getFirstMedia('thumbnail');
-$product->getFirstMediaUrl('thumbnail');
+$product->addMedia($file)->toMediaCollection($collection);
 ```
 
-### Media Collections Configuration
+To add gallery images:
 
-The product registers three media collections:
+```php
+$collection = config('shopper.media.storage.collection_name');
 
-| Collection | Disk | Single File | Description |
-|------------|------|-------------|-------------|
-| `products` | configured | no | Product gallery images |
-| `thumbnail` | configured | yes | Main product image |
-| `files` | configured | no | Downloadable files |
+$product->addMedia($file)->toMediaCollection($collection);
+```
+
+To retrieve the thumbnail URL with a specific conversion:
+
+```php
+$collection = config('shopper.media.storage.thumbnail_collection');
+
+$url = $product->getFirstMediaUrl($collection, 'medium');
+```
+
+### Downloadable Files
+
+For virtual products (ebooks, software, courses), the `files` collection stores the downloadable assets that customers receive after purchase. Unlike the thumbnail and gallery collections, the `files` collection name is not configurable.
+
+```php
+$product->addMedia($pdfPath)->toMediaCollection('files');
+
+$downloadUrl = $product->getFirstMediaUrl('files');
+```
+
+To get all downloadable files for a product:
+
+```php
+$product->getMedia('files');
+```
+
+## Pricing
+
+Products use the `HasPrices` trait for multi-currency pricing. Each product can have multiple prices, one per currency, stored in the `prices` table through a polymorphic relationship.
+
+To get the price for a specific currency:
+
+```php
+$price = $product->getPrice('USD');
+```
+
+To format the price for display, use the `shopper_money_format` helper. Prices are stored in cents.
+
+```php
+shopper_money_format($price->amount, 'USD');
+```
+
+See the [Pricing](/v2/pricing) documentation for details on creating and managing prices.
+
+## Stock Management
+
+Products use the `HasStock` trait for inventory management. Stock is not stored as a column on the product. Instead, every stock change creates a record in the `inventory_histories` table, and the current stock is computed as the sum of all mutations. This gives you a complete audit trail of every stock movement.
+
+Every stock mutation is tied to an **inventory location** (warehouse, store, fulfillment center), so you must always provide an `$inventoryId` when modifying stock.
+
+### Querying Stock
+
+To get the current total stock across all locations:
+
+```php
+$product->stock;
+```
+
+For variant products, use `variants_stock` to get the combined stock across all variants:
+
+```php
+$product->variants_stock;
+```
+
+To get stock at a specific point in time, useful for reporting:
+
+```php
+$product->getStock('2026-01-15');
+$product->getStock(now()->subDays(7));
+```
+
+To get stock for a specific inventory location:
+
+```php
+$product->stockInventory($warehouseId);
+```
+
+To check the stock alert threshold:
+
+```php
+if ($product->stock <= $product->security_stock) {
+    // low stock
+}
+```
+
+### Modifying Stock
+
+To increase stock (for example, when receiving a shipment from a supplier):
+
+```php
+$product->mutateStock(
+    inventoryId: $inventory->id,
+    quantity: 50,
+    event: 'Shipment received',
+    description: 'PO #12345 - Spring collection restock',
+);
+```
+
+To decrease stock (for example, when fulfilling an order):
+
+```php
+$product->decreaseStock(
+    inventoryId: $inventory->id,
+    quantity: 2,
+    event: 'Order fulfilled',
+    description: 'Order #1042',
+);
+```
+
+To set stock to an exact quantity (for example, after a physical inventory count). This calculates the delta from the current stock and creates a single mutation:
+
+```php
+$product->setStock(
+    newQuantity: 75,
+    inventoryId: $inventory->id,
+    event: 'Inventory count',
+    description: 'Q1 2026 physical count adjustment',
+);
+```
+
+To clear all stock history and optionally set a new starting quantity:
+
+```php
+$product->clearStock(
+    inventoryId: $inventory->id,
+    newQuantity: 100,
+    event: 'Stock reset',
+);
+```
+
+<Warning>
+  `clearStock()` deletes all inventory history records for the product. Use it only for resets or corrections, not for regular stock adjustments.
+</Warning>
+
+For variant products, stock is managed on each variant individually. See the [Product Variants stock management](/v2/product-variants#stock-management) section.
+
+### Avoiding N+1 Queries
+
+Accessing `$product->stock` triggers an individual `SUM(quantity)` query on the `inventory_histories` table for each product. When iterating over a collection, this results in N separate queries.
+
+Use `loadCurrentStock()` to batch-load stock for an entire collection in a single query:
+
+```php
+use Shopper\Models\Product;
+use Shopper\Models\ProductVariant;
+
+$products = Product::query()->with('variants')->get();
+
+Product::loadCurrentStock($products);
+
+$variants = $products
+    ->filter(fn ($p) => $p->canUseVariants())
+    ->flatMap->variants;
+
+ProductVariant::loadCurrentStock($variants);
+```
+
+You can also batch-load stock for a specific inventory location:
+
+```php
+Product::loadStockForInventory($products, $inventoryId);
+```
+
+### Preventing Lazy Stock Loading
+
+Following the same pattern as Laravel's `Model::preventLazyLoading()`, you can catch unoptimized stock access during development. When enabled, accessing `$product->stock` without prior batch-loading throws a `LazyStockLoadingException`.
+
+```php
+use Shopper\Models\Product;
+
+Product::preventLazyStockLoading(! app()->isProduction());
+```
+
+## Dimensions
+
+The `HasDimensions` trait provides computed attributes that return formatted dimension strings combining the value and unit.
+
+```php
+$product->weight;
+$product->height;
+$product->width;
+$product->depth;
+$product->volume;
+```
+
+For a product with `weight_value = 1.50` and `weight_unit = Weight::KG`, `$product->weight` returns `"1.50 kg"`.
 
 ## Events
 
@@ -297,95 +480,13 @@ use Shopper\Core\Events\Products\ProductUpdated;
 use Shopper\Core\Events\Products\ProductDeleted;
 ```
 
-For the full events reference including payload details and usage examples, see the [Events](/v2/events#product-events) page.
+The `ProductObserver` also dispatches a `SyncProductWithCollectionsJob` every time a product is saved, which evaluates automatic collection rules to add or remove the product from rule-based collections.
 
-## Stock Management
-
-Products use the `HasStock` trait for inventory management:
-
-```php
-// Get current stock
-$product->stock;
-
-// For variant products, get combined stock
-$product->variants_stock;
-
-// Check stock status
-if ($product->stock <= $product->security_stock) {
-    // Low stock alert
-}
-```
-
-### Avoiding N+1 Queries
-
-Accessing `$product->stock` triggers an individual `SUM(quantity)` query on the `inventory_histories` table for each product.
-When iterating over a collection (e.g. listing 50 products on a page), this results in 50 separate queries — a classic N+1 problem.
-
-Use `loadCurrentStock()` to batch-load stock for an entire collection in a **single query**:
-
-```php
-use Shopper\Models\Product;
-
-$products = Product::query()->with('variants')->get();
-
-// 1 query instead of N
-Product::loadCurrentStock($products);
-
-// For variant-type products, also batch-load variant stock
-$variants = $products
-    ->filter(fn ($p) => $p->canUseVariants())
-    ->flatMap->variants;
-
-ProductVariant::loadCurrentStock($variants);
-
-// Now $product->stock and $variant->stock use preloaded values — no extra queries
-foreach ($products as $product) {
-    echo $product->name . ': ' . $product->stock;
-}
-```
-
-You can also batch-load stock for a **specific inventory location**:
-
-```php
-Product::loadStockForInventory($products, $inventoryId);
-```
-
-### Preventing Lazy Stock Loading
-
-Following the same pattern as Laravel's `Model::preventLazyLoading()`, you can opt-in to catch
-unoptimized stock access during development. When enabled, accessing `$product->stock` without
-prior batch-loading throws a `LazyStockLoadingException`:
-
-```php
-use Shopper\Models\Product;
-
-// In a service provider boot() method
-Product::preventLazyStockLoading(! app()->isProduction());
-```
-
-This helps you catch N+1 stock queries early. The exception message tells you exactly which model
-and method to use:
-
-```
-Attempted to lazy load stock on model [Shopper\Core\Models\Product]
-but lazy stock loading is disabled.
-Use [Shopper\Core\Models\Product::loadCurrentStock($collection)]
-to batch-load stock before accessing $model->stock.
-```
-
-## Pricing
-
-Products use the `HasPrices` trait:
-
-Prices are managed through the polymorphic `prices` relationship. Each product can have multiple prices, one per currency. See the [Pricing documentation](/v2/pricing) for details.
-
-```php
-$price = $product->getPrice('USD');
-
-shopper_money_format($price->amount, 'USD');
-```
+For the full events reference including payload details, see the [Events](/v2/events#product-events) page.
 
 ## Creating Products
+
+To create a standard product with a price and category:
 
 ```php
 use Shopper\Models\Product;
@@ -395,6 +496,7 @@ $product = Product::query()->create([
     'name' => 'Classic T-Shirt',
     'sku' => 'TSHIRT-001',
     'type' => ProductType::Standard,
+    'description' => 'A comfortable cotton t-shirt available in multiple colors.',
     'is_visible' => true,
     'published_at' => now(),
     'brand_id' => $brandId,
@@ -406,71 +508,83 @@ $product->prices()->create([
 ]);
 
 $product->categories()->attach([$categoryId]);
+```
 
-// Add media
-$product->addMediaFromUrl('https://example.com/image.jpg')
-    ->toMediaCollection('thumbnail');
+To add a thumbnail image:
+
+```php
+$collection = config('shopper.media.storage.thumbnail_collection');
+
+$product->addMediaFromUrl('https://example.com/tshirt.jpg')
+    ->toMediaCollection($collection);
 ```
 
 ## Retrieving Products
 
+The `findBySlug` static method looks up a product by its slug and throws a `ModelNotFoundException` if not found:
+
 ```php
-// Get all published products
+$product = Product::findBySlug('classic-t-shirt');
+```
+
+To get all published products with their relationships:
+
+```php
 $products = Product::query()
     ->publish()
     ->with(['brand', 'categories', 'media'])
     ->get();
+```
 
-// Get featured products
+To get featured products:
+
+```php
 $featured = Product::query()
     ->publish()
     ->where('featured', true)
     ->take(8)
     ->get();
+```
 
-// Get products by category
+To get products by category:
+
+```php
 $products = Product::query()
     ->publish()
     ->whereHas('categories', fn ($q) => $q->where('slug', 'clothing'))
     ->get();
-
-// Get products with low stock
-$lowStock = Product::query()
-    ->whereColumn('stock', '<=', 'security_stock')
-    ->get();
 ```
+
+## Permissions
+
+The admin panel generates permissions for product management and its related features:
+
+### Products
+
+| Permission | Description |
+|------------|-------------|
+| `browse_products` | View the products list |
+| `read_products` | View a single product |
+| `add_products` | Create new products |
+| `edit_products` | Edit existing products |
+| `delete_products` | Delete products |
+
+### Product Variants
+
+| Permission | Description |
+|------------|-------------|
+| `browse_product_variants` | View variants on a product |
+| `read_product_variants` | View a single variant |
+| `add_product_variants` | Create new variants |
+| `edit_product_variants` | Edit existing variants |
+| `delete_product_variants` | Delete variants |
 
 ## Components
 
-Publish Livewire components to customize the admin interface:
+You can publish the Livewire components to customize the admin UI for products:
 
 ```bash
 php artisan shopper:component:publish product
 ```
 
-This publishes to `config/shopper/components/product.php`:
-
-```php
-use Shopper\Livewire;
-use Shopper\Livewire\Components;
-
-return [
-    'pages' => [
-        'product-index' => Livewire\Pages\Product\Index::class,
-        'product-edit' => Livewire\Pages\Product\Edit::class,
-        'variant-edit' => Livewire\Pages\Product\Variant::class,
-        'attribute-index' => Livewire\Pages\Attribute\Browse::class,
-    ],
-    'components' => [
-        'products.form.attributes' => Components\Products\Form\Attributes::class,
-        'products.form.edit' => Components\Products\Form\Edit::class,
-        'products.form.media' => Components\Products\Form\Media::class,
-        'products.form.inventory' => Components\Products\Form\Inventory::class,
-        'products.form.variants' => Components\Products\Form\Variants::class,
-        // ...
-        'slide-overs.add-product' => Livewire\SlideOvers\AddProduct::class,
-        'slide-overs.add-variant' => Livewire\SlideOvers\AddVariant::class,
-        // ...
-    ],
-];
-```
+This creates `config/shopper/components/product.php` where you can replace any page or form component with your own implementation.

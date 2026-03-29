@@ -9,13 +9,13 @@ Attributes define product characteristics like Color, Size, or Material. They en
 
 Shopper uses three models to manage attributes:
 
-```php
-Shopper\Core\Models\Attribute       // The attribute definition
-Shopper\Core\Models\AttributeValue  // Possible values for an attribute
-Shopper\Core\Models\AttributeProduct // Pivot linking attributes to products
-```
+| Model | Purpose |
+|-------|---------|
+| `Shopper\Core\Models\Attribute` | The attribute definition (Color, Size, Material) |
+| `Shopper\Core\Models\AttributeValue` | Possible values for an attribute (Red, Blue, Large) |
+| `Shopper\Core\Models\AttributeProduct` | Pivot linking attributes to products with a selected value |
 
-The model used is `Shopper\Core\Models\Attribute`, implementing `Shopper\Core\Models\Contracts\Attribute`.
+The Attribute model implements `Shopper\Core\Models\Contracts\Attribute` and uses the `HasSlug` trait for automatic slug generation. Unlike products or brands, the Attribute model is not configurable via `config/shopper/models.php` and has no admin model wrapper.
 
 ## Database Schema
 
@@ -151,7 +151,19 @@ $attributeValue->variants;
 $attributeValue->variants()->attach($variantId);
 ```
 
+## Slug & Lookup
+
+The `HasSlug` trait generates unique slugs automatically and provides a `findBySlug()` static method:
+
+```php
+use Shopper\Core\Models\Attribute;
+
+$attribute = Attribute::findBySlug('color');
+```
+
 ## Query Scopes
+
+Filter attributes by their visibility and behavior flags:
 
 ```php
 use Shopper\Core\Models\Attribute;
@@ -282,10 +294,8 @@ $filters = Attribute::query()
     ->get();
 
 // Get attribute by slug
-$size = Attribute::query()
-    ->where('slug', 'size')
-    ->with('values')
-    ->firstOrFail();
+$size = Attribute::findBySlug('size');
+$size->load('values');
 ```
 
 ## Observer Behavior
@@ -310,6 +320,18 @@ return [
     'attribute' => FeatureState::Disabled,
 ];
 ```
+
+## Permissions
+
+The admin panel generates five permissions for attribute management:
+
+| Permission | Description |
+|------------|-------------|
+| `browse_attributes` | View the attributes list |
+| `read_attributes` | View a single attribute |
+| `add_attributes` | Create new attributes |
+| `edit_attributes` | Edit existing attributes |
+| `delete_attributes` | Delete attributes |
 
 ## Components
 
@@ -364,11 +386,10 @@ class ProductFilterController extends Controller
     {
         $query = Product::query()->publish();
 
-        // Apply attribute filters
         foreach ($request->input('attributes', []) as $slug => $values) {
             $query->whereHas('options', function ($q) use ($slug, $values) {
-                $q->whereHas('attribute', fn ($a) => $a->where('slug', $slug))
-                    ->whereIn('attribute_value_id', $values);
+                $q->where('slug', $slug)
+                    ->wherePivotIn('attribute_value_id', $values);
             });
         }
 
