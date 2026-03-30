@@ -7,19 +7,23 @@ Orders represent customer purchases and are central to your e-commerce operation
 
 ## Models
 
-Shopper uses five models to manage orders:
+Shopper uses seven models to manage orders:
 
-```php
-Shopper\Core\Models\Order          // The main order
-Shopper\Core\Models\OrderItem      // Products in the order
-Shopper\Core\Models\OrderAddress   // Billing and shipping addresses
-Shopper\Core\Models\OrderShipping  // Shipping and tracking information
-Shopper\Core\Models\OrderRefund    // Refund requests
-```
+| Model | Purpose |
+|-------|---------|
+| `Shopper\Core\Models\Order` | The main order with statuses, totals, and foreign keys |
+| `Shopper\Core\Models\OrderItem` | Products in the order with quantity, price, and fulfillment status |
+| `Shopper\Core\Models\OrderAddress` | Billing and shipping addresses snapshot |
+| `Shopper\Core\Models\OrderShipping` | Shipments with carrier, tracking, and delivery dates |
+| `Shopper\Core\Models\OrderShippingEvent` | Tracking events for each shipment (location, status changes) |
+| `Shopper\Core\Models\OrderTaxLine` | Tax breakdown per item or shipment |
+| `Shopper\Core\Models\OrderRefund` | Refund requests with status tracking |
 
-The model used is `Shopper\Core\Models\Order`, implementing `Shopper\Core\Models\Contracts\Order`.
+The Order model implements `Shopper\Core\Models\Contracts\Order` and uses `SoftDeletes`. It is configurable via `config/shopper/models.php`.
 
 ### Extending the Model
+
+To add custom behavior, extend the model and update your configuration:
 
 ```php
 namespace App\Models;
@@ -28,7 +32,6 @@ use Shopper\Core\Models\Order as BaseOrder;
 
 class Order extends BaseOrder
 {
-    // Add your customizations here
 }
 ```
 
@@ -49,6 +52,7 @@ return [
 | `id` | bigint | no | auto | Primary key |
 | `number` | string(32) | no | - | Order number |
 | `price_amount` | integer | yes | null | Order total in cents |
+| `tax_amount` | integer | yes | null | Total tax in cents |
 | `status` | string(32) | no | new | Order status enum |
 | `payment_status` | string(32) | no | pending | Payment status enum |
 | `shipping_status` | string(32) | no | unfulfilled | Shipping status enum |
@@ -77,6 +81,8 @@ return [
 | `sku` | string | yes | Product SKU at time of purchase |
 | `quantity` | integer | no | Quantity ordered |
 | `unit_price_amount` | integer | no | Unit price in cents |
+| `tax_amount` | integer | no | Tax amount in cents |
+| `discount_amount` | integer | no | Discount amount in cents |
 | `product_id` | bigint | no | Polymorphic relation ID |
 | `product_type` | string | no | Polymorphic relation type |
 | `order_id` | bigint | no | FK to order |
@@ -130,7 +136,7 @@ return [
 
 ## Order Status
 
-Every order tracks three independent statuses: order status, payment status, and shipping status. This separation allows each aspect of the order to progress independently — for example, an order can be paid before it's shipped, or partially shipped while still processing.
+Every order tracks three independent statuses: order status, payment status, and shipping status. This separation allows each aspect of the order to progress independently. For example, an order can be paid before it's shipped, or partially shipped while still processing.
 
 ### Order Status
 
@@ -482,7 +488,18 @@ foreach ($cart->items as $cartItem) {
 }
 ```
 
+## Query Scopes
+
+The Order model provides two scopes for filtering by archive status:
+
+```php
+Order::query()->archived()->get();     // Only archived orders
+Order::query()->notArchived()->get();  // Exclude archived orders
+```
+
 ## Retrieving Orders
+
+To get all non-archived orders with their relationships:
 
 ```php
 use Shopper\Core\Models\Order;
@@ -526,7 +543,21 @@ $orderNumber = generate_number();
 
 This returns a formatted string like `ORD-20260327-001234`. The format is configurable in `config/shopper/orders.php`.
 
+## Permissions
+
+The admin panel generates five permissions for order management:
+
+| Permission | Description |
+|------------|-------------|
+| `browse_orders` | View the orders list |
+| `read_orders` | View a single order detail |
+| `add_orders` | Create new orders |
+| `edit_orders` | Edit existing orders |
+| `delete_orders` | Delete orders |
+
 ## Components
+
+To customize the admin UI for order management:
 
 ```bash
 php artisan shopper:component:publish order
@@ -541,66 +572,43 @@ return [
     'pages' => [
         'order-index' => Livewire\Pages\Order\Index::class,
         'order-detail' => Livewire\Pages\Order\Detail::class,
+        'order-shipments' => Livewire\Pages\Order\Shipments::class,
+        'order-abandoned-carts' => Livewire\Pages\Order\AbandonedCarts::class,
     ],
     'components' => [
-        //
+        'order-customer' => Livewire\Components\Orders\OrderCustomer::class,
+        'order-fulfillment' => Livewire\Components\Orders\Fulfillment::class,
+        'order-items' => Livewire\Components\Orders\OrderItems::class,
+        'order-notes' => Livewire\Components\Orders\OrderNotes::class,
+        'order-summary' => Livewire\Components\Orders\OrderSummary::class,
+
+        'slide-overs.create-shipping-label' => Livewire\SlideOvers\CreateShippingLabel::class,
+        'slide-overs.shipment-add-event' => Livewire\SlideOvers\ShipmentAddEvent::class,
+        'slide-overs.shipment-detail' => Livewire\SlideOvers\ShipmentDetail::class,
+        'slide-overs.abandoned-cart-detail' => Livewire\SlideOvers\AbandonedCartDetail::class,
     ],
 ];
 ```
 
 ## Storefront Example
 
+In most cases, orders are created automatically when a [cart is converted](/v2/cart#converting-to-order) via `CreateOrderFromCartAction`. You rarely need to create orders manually. Here is how the checkout flow and order display work:
+
 ```php
 namespace App\Http\Controllers;
 
+use Shopper\Cart\Actions\CreateOrderFromCartAction;
+use Shopper\Cart\Facades\Cart;
 use Shopper\Core\Models\Order;
-use Shopper\Core\Models\OrderAddress;
-use Shopper\Core\Enum\OrderStatus;
 
 class CheckoutController extends Controller
 {
-    public function store(Request $request)
+    public function store()
     {
-        $validated = $request->validate([
-            'shipping.first_name' => 'required|string',
-            'shipping.last_name' => 'required|string',
-            'shipping.street_address' => 'required|string',
-            'shipping.city' => 'required|string',
-            'shipping.postal_code' => 'required|string',
-            'shipping_option_id' => 'required|exists:carrier_options,id',
-        ]);
+        $order = resolve(CreateOrderFromCartAction::class)
+            ->execute(Cart::current());
 
-        // Create shipping address
-        $shippingAddress = OrderAddress::query()->create([
-            'customer_id' => auth()->id(),
-            ...$validated['shipping'],
-        ]);
-
-        // Create order
-        $order = Order::query()->create([
-            'number' => generate_number(),
-            'customer_id' => auth()->id(),
-            'currency_code' => current_currency(),
-            'shipping_address_id' => $shippingAddress->id,
-            'billing_address_id' => $shippingAddress->id,
-            'shipping_option_id' => $validated['shipping_option_id'],
-            'channel_id' => current_channel()->id,
-        ]);
-
-        foreach (Cart::items() as $item) {
-            $price = $item->product->getPrice($order->currency_code);
-
-            $order->items()->create([
-                'name' => $item->product->name,
-                'sku' => $item->product->sku,
-                'quantity' => $item->quantity,
-                'unit_price_amount' => $price->amount,
-                'product_id' => $item->product->id,
-                'product_type' => $item->product->getMorphClass(),
-            ]);
-        }
-
-        Cart::clear();
+        Cart::forget();
 
         return redirect()->route('orders.show', $order);
     }
@@ -610,11 +618,15 @@ class CheckoutController extends Controller
         abort_unless($order->customer_id === auth()->id(), 403);
 
         return view('orders.show', [
-            'order' => $order->load(['items.product', 'shippingAddress']),
+            'order' => $order->load(['items.product', 'shippingAddress', 'billingAddress']),
         ]);
     }
 }
 ```
+
+<Note>
+The `CreateOrderFromCartAction` handles everything in a single transaction: calculating totals, creating addresses, creating order items, applying discounts, computing taxes, and marking the cart as completed. See the [Cart](/v2/cart#order-conversion) page for details.
+</Note>
 
 ## Order Status Flow
 

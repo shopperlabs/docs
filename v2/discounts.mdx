@@ -9,17 +9,12 @@ Discounts allow you to create promotional offers for your customers. Shopper sup
 
 Shopper uses two models to manage discounts:
 
-```php
-Shopper\Core\Models\Discount       // The discount definition
-Shopper\Core\Models\DiscountDetail // Links discounts to products/customers
-```
+| Model | Purpose |
+|-------|---------|
+| `Shopper\Core\Models\Discount` | The discount definition (code, type, value, rules) |
+| `Shopper\Core\Models\DiscountDetail` | Polymorphic link connecting discounts to specific products or customers |
 
-```php
-use Shopper\Core\Models\Discount;
-
-// The model implements
-- Shopper\Core\Models\Contracts\Discount
-```
+The Discount model implements `Shopper\Core\Models\Contracts\Discount`. Neither model is configurable via `config/shopper/models.php`.
 
 ## Database Schema
 
@@ -123,6 +118,17 @@ DiscountRequirement::Quantity // quantity - Minimum items count
 | Price | `price` | Minimum amount in cents |
 | Quantity | `quantity` | Minimum item count |
 
+## Discount Condition
+
+The `DiscountCondition` enum is used on the `DiscountDetail` pivot model to distinguish whether a linked record represents a product (the discount applies to) or a customer (who is eligible):
+
+```php
+use Shopper\Core\Enum\DiscountCondition;
+
+DiscountCondition::ApplyTo      // apply_to - Links a product to the discount
+DiscountCondition::Eligibility  // eligibility - Links a customer to the discount
+```
+
 ## Relationships
 
 ### Items (DiscountDetail)
@@ -158,41 +164,23 @@ $discount->zone; // Zone model or null
 $discount->update(['zone_id' => $zoneId]);
 ```
 
-## HasDiscounts Trait
-
-Models can use the `HasDiscounts` trait to access their discounts:
-
-```php
-use Shopper\Core\Models\Traits\HasDiscounts;
-
-class User extends Authenticatable
-{
-    use HasDiscounts;
-}
-
-// Get user's available discounts
-$user->discounts; // Collection of Discount models
-```
-
 ## Value Handling
 
-Fixed amount values are stored in cents. Percentage values are stored as-is.
+Fixed amount values are stored in cents. Percentage values are stored as the percentage number.
+
+For a $10 fixed discount, store `1000` (cents). For a 15% percentage discount, store `15`:
 
 ```php
 Discount::query()->create([
     'code' => 'SAVE10',
     'type' => DiscountType::FixedAmount,
-    'value' => 1000,
-    ...
+    'value' => 1000, // 1000 cents = $10.00
 ]);
-```
 
-```php
 Discount::query()->create([
     'code' => 'SAVE15',
     'type' => DiscountType::Percentage,
-    'value' => 15,
-    ...
+    'value' => 15, // 15%
 ]);
 ```
 
@@ -238,12 +226,12 @@ $discount = Discount::query()->create([
 $discount = Discount::query()->create([
     'code' => 'SAVE10',
     'type' => DiscountType::FixedAmount,
-    'value' => 10, // $10 off
+    'value' => 1000, // 1000 cents = $10 off
     'is_active' => true,
     'apply_to' => DiscountApplyTo::Order,
     'eligibility' => DiscountEligibility::Everyone,
     'min_required' => DiscountRequirement::Price,
-    'min_required_value' => '5000', // Minimum $50 order
+    'min_required_value' => '5000', // Minimum 5000 cents = $50 order
     'start_at' => now(),
     'usage_limit' => 100, // Max 100 uses
 ]);
@@ -343,77 +331,54 @@ $discounts = Discount::query()
     ->get();
 ```
 
-## Validating Discounts
+## Discount Validation
+
+When a coupon is applied to a cart via `CartManager::applyCoupon()`, the [Cart package](/v2/cart#discount-validation) validates the discount automatically during the calculation pipeline. You do not need to build manual validation logic. The built-in `DiscountValidator` checks all rules (active status, date range, usage limits, eligibility, zone, minimum amounts) and produces clear error messages.
+
+For cases outside the cart pipeline where you need to check a discount programmatically:
 
 ```php
-class DiscountService
-{
-    public function validate(string $code, $user, $cart): ?Discount
-    {
-        $discount = Discount::query()
-            ->where('code', $code)
-            ->where('is_active', true)
-            ->first();
+use Shopper\Core\Models\Discount;
 
-        if (! $discount) {
-            return null;
-        }
+$discount = Discount::query()
+    ->where('code', $code)
+    ->where('is_active', true)
+    ->first();
 
-        // Check dates
-        if ($discount->start_at > now()) {
-            return null; // Not started yet
-        }
-
-        if ($discount->end_at && $discount->end_at < now()) {
-            return null; // Expired
-        }
-
-        // Check usage limit
-        if ($discount->hasReachedLimit()) {
-            return null;
-        }
-
-        // Check minimum requirements
-        if ($discount->min_required === DiscountRequirement::Price) {
-            if ($cart->total() < (int) $discount->min_required_value) {
-                return null;
-            }
-        }
-
-        if ($discount->min_required === DiscountRequirement::Quantity) {
-            if ($cart->itemCount() < (int) $discount->min_required_value) {
-                return null;
-            }
-        }
-
-        // Check eligibility
-        if ($discount->eligibility === DiscountEligibility::Customers) {
-            $isEligible = $discount->items()
-                ->where('condition', 'eligibility')
-                ->where('discountable_type', get_class($user))
-                ->where('discountable_id', $user->id)
-                ->exists();
-
-            if (! $isEligible) {
-                return null;
-            }
-        }
-
-        return $discount;
-    }
-
-    public function calculate(Discount $discount, int $amount): int
-    {
-        if ($discount->type === DiscountType::Percentage) {
-            return (int) ($amount * ($discount->value / 100));
-        }
-
-        return $discount->value;
-    }
+if ($discount && ! $discount->hasReachedLimit()) {
+    // Discount is valid and has remaining uses
 }
 ```
 
+## Configuration
+
+### Disabling Discounts
+
+If your store doesn't use discount codes, disable the feature in `config/shopper/features.php`:
+
+```php
+use Shopper\Enum\FeatureState;
+
+return [
+    'discount' => FeatureState::Disabled,
+];
+```
+
+### Permissions
+
+The admin panel generates five permissions for discount management:
+
+| Permission | Description |
+|------------|-------------|
+| `browse_discounts` | View the discounts list |
+| `read_discounts` | View a single discount |
+| `add_discounts` | Create new discounts |
+| `edit_discounts` | Edit existing discounts |
+| `delete_discounts` | Delete discounts |
+
 ## Components
+
+To customize the admin UI for discount management:
 
 ```bash
 php artisan shopper:component:publish discount
@@ -436,49 +401,38 @@ return [
 
 ## Storefront Example
 
+Applying a discount code on the storefront uses the [Cart package](/v2/cart) API. The `CartManager::applyCoupon()` method validates the code exists, and the calculation pipeline handles the rest (validation rules, discount calculation, and adjustment creation):
+
 ```php
 namespace App\Http\Controllers;
 
-use App\Services\DiscountService;
-use Shopper\Core\Models\Discount;
+use Illuminate\Http\Request;
+use Shopper\Cart\CartManager;
+use Shopper\Cart\Exceptions\InvalidDiscountException;
+use Shopper\Cart\Facades\Cart;
 
-class CartController extends Controller
+class CouponController extends Controller
 {
-    public function __construct(
-        private DiscountService $discountService
-    ) {}
-
-    public function applyDiscount(Request $request)
+    public function apply(Request $request)
     {
-        $validated = $request->validate([
-            'code' => 'required|string',
-        ]);
+        $request->validate(['code' => 'required|string']);
 
-        $cart = Cart::current();
-        $user = auth()->user();
+        $manager = resolve(CartManager::class);
 
-        $discount = $this->discountService->validate(
-            $validated['code'],
-            $user,
-            $cart
-        );
-
-        if (! $discount) {
-            return back()->with('error', 'Invalid or expired discount code');
+        try {
+            $manager->applyCoupon(Cart::current(), $request->code);
+        } catch (InvalidDiscountException $e) {
+            return back()->with('error', 'Invalid discount code.');
         }
 
-        // Apply discount to cart
-        $discountAmount = $this->discountService->calculate(
-            $discount,
-            $cart->subtotal()
-        );
+        return back()->with('success', 'Discount applied.');
+    }
 
-        $cart->applyDiscount($discount->id, $discountAmount);
+    public function remove()
+    {
+        resolve(CartManager::class)->removeCoupon(Cart::current());
 
-        // Increment usage counter
-        $discount->increment('total_use');
-
-        return back()->with('success', 'Discount applied!');
+        return back()->with('success', 'Discount removed.');
     }
 }
 ```

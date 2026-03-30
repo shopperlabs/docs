@@ -62,7 +62,7 @@ The `display_name` accessor produces a human-readable label by combining country
 | `parent_id` | `nullable unsignedBigInteger` | Parent zone for hierarchical configurations |
 | `metadata` | `nullable jsonb` | Arbitrary data for custom providers |
 
-The combination of `country_id` and `province_code` is unique, you cannot have two zones for the same country/province pair.
+The combination of `country_id` and `province_code` is unique, you cannot have two zones for the same country/province pair. The TaxZone model is configurable via `config/shopper/models.php`.
 
 ### Zone Relationships
 
@@ -113,6 +113,8 @@ TaxRate::query()->create([
 | `is_default` | `boolean` | Applied when no override rule matches the item |
 | `is_combinable` | `boolean` | Whether this rate stacks with rates from a parent zone |
 | `metadata` | `nullable jsonb` | Arbitrary data for external providers |
+
+The TaxRate model is configurable via `config/shopper/models.php`.
 
 ### Rate Relationships
 
@@ -167,7 +169,16 @@ TaxRateRule::query()->create([
 | `product` | A product primary key, as a string | The item's exact product ID matches |
 | `category` | A category primary key, as a string | The item belongs to that category |
 
-The combination of `tax_rate_id`, `reference_type`, and `reference_id` is unique you cannot attach the same rule twice to the same rate.
+### Rule Schema
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | bigint | Primary key |
+| `tax_rate_id` | bigint | FK to tax rate |
+| `reference_type` | string | Entity type to match (`product_type`, `product`, `category`) |
+| `reference_id` | string | Entity value or ID to match against |
+
+The combination of `tax_rate_id`, `reference_type`, and `reference_id` is unique. You cannot attach the same rule twice to the same rate.
 
 ## Inclusive vs Exclusive Taxes
 
@@ -266,7 +277,19 @@ foreach ($order->items as $item) {
 }
 ```
 
-## Custom Tax Providers
+## Tax Providers
+
+A `TaxProvider` record links a zone to a custom tax calculation service. When a zone has an enabled provider, the calculator uses that provider instead of the built-in system.
+
+### Provider Schema
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | bigint | Primary key |
+| `identifier` | string | Unique provider code (e.g., `avalara`, `taxjar`) |
+| `is_enabled` | boolean | Whether the provider is active |
+
+### Custom Tax Providers
 
 The built-in `SystemTaxProvider` handles most use cases. For regions that require an external API like Avalara, TaxJar, or a homegrown tax service, you can implement the `TaxCalculationProvider` contract and assign it to specific zones.
 

@@ -298,6 +298,8 @@ Shopper\Payment\Models\PaymentTransaction
 | `metadata` | json | Custom data |
 | `order_id` | bigint | FK to order |
 | `payment_method_id` | bigint | FK to payment method |
+| `created_at` | timestamp | Creation timestamp |
+| `updated_at` | timestamp | Last update timestamp |
 
 ### Enums
 
@@ -559,6 +561,33 @@ PaymentMethod::query()->create([
 
 The `driver` column connects this payment method to your registered driver. When a customer selects "PayPal" at checkout and the `PaymentProcessingService` processes the order, it resolves the `paypal` driver and calls `initiatePayment()`.
 
+## Payment Method Model
+
+The `Shopper\Core\Models\PaymentMethod` model represents a payment option available at checkout. Each method is linked to a driver (Stripe, manual, PayPal, etc.) and can be scoped to specific [zones](/v2/zones).
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | no | Primary key |
+| `title` | string | no | Display name |
+| `slug` | string | no | URL-friendly identifier (unique) |
+| `driver` | string | yes | Driver code linking to a registered payment driver |
+| `is_enabled` | boolean | no | Whether the method is active |
+| `description` | text | yes | Description shown at checkout |
+| `link_url` | string | yes | External payment URL |
+| `instructions` | text | yes | Post-purchase instructions |
+| `metadata` | json | yes | Additional custom data |
+
+The model uses the `HasSlug` trait and the `HasZones` trait for zone-based availability:
+
+```php
+use Shopper\Core\Models\PaymentMethod;
+
+PaymentMethod::query()->enabled()->get();
+
+$method->zones;
+$method->zones()->attach([$zoneId1, $zoneId2]);
+```
+
 ## Storefront Checkout Example
 
 Here is a complete checkout flow showing how the demo store creates an order and processes payment.
@@ -586,52 +615,20 @@ final class CheckoutSession
 
 ### Creating the Order
 
-After the customer selects a payment method, the order is created from the session data:
+After the customer completes the checkout steps, convert the [cart to an order](/v2/cart#converting-to-order) and set the payment method:
 
 ```php
-use Shopper\Core\Models\Order;
-use Shopper\Core\Models\OrderAddress;
-use Shopper\Core\Models\OrderItem;
+use Shopper\Cart\Actions\CreateOrderFromCartAction;
+use Shopper\Cart\Facades\Cart;
 
-$checkout = session()->get(CheckoutSession::KEY);
-
-$shippingAddress = OrderAddress::query()->create([
-    'customer_id' => $customer->id,
-    'first_name' => data_get($checkout, 'shipping_address.first_name'),
-    'last_name' => data_get($checkout, 'shipping_address.last_name'),
-    'street_address' => data_get($checkout, 'shipping_address.street_address'),
-    'city' => data_get($checkout, 'shipping_address.city'),
-    'postal_code' => data_get($checkout, 'shipping_address.postal_code'),
-    'country_name' => $country->name,
-]);
-
-$order = Order::query()->create([
-    'number' => generate_number(),
-    'customer_id' => $customer->id,
-    'channel_id' => $channelId,
-    'zone_id' => $zoneId,
-    'currency_code' => current_currency(),
-    'shipping_address_id' => $shippingAddress->id,
-    'billing_address_id' => $shippingAddress->id,
-    'shipping_option_id' => data_get($checkout, 'shipping_option.0.id'),
-    'payment_method_id' => data_get($checkout, 'payment.0.id'),
-]);
-
-foreach ($cartItems as $item) {
-    OrderItem::query()->create([
-        'order_id' => $order->id,
-        'quantity' => $item->quantity,
-        'unit_price_amount' => $item->price,
-        'name' => $item->name,
-        'sku' => $item->associatedModel->sku,
-        'product_id' => $item->id,
-        'product_type' => $item->associatedModel->getMorphClass(),
-    ]);
-}
+$order = resolve(CreateOrderFromCartAction::class)->execute(Cart::current());
 
 $order->update([
-    'price_amount' => $order->refresh()->total() + $shippingPrice,
+    'payment_method_id' => session('checkout.payment.0.id'),
+    'shipping_option_id' => session('checkout.shipping_option.0.id'),
 ]);
+
+Cart::forget();
 ```
 
 ### Processing the Payment

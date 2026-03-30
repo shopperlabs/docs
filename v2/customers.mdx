@@ -7,28 +7,25 @@ Customers are users who have the customer role and can place orders in your stor
 
 ## User Model Integration
 
-Shopper doesn't create a separate Customer model. Instead, it extends your existing `App\Models\User` model with the `ShopperUser` trait and contract.
+Shopper doesn't create a separate Customer model. Instead, it extends your existing `App\Models\User` model with the `InteractsWithShopper` trait and `ShopperUser` contract.
 
 ```php
 namespace App\Models;
 
 use Illuminate\Foundation\Auth\User as Authenticatable;
-use Shopper\Core\Models\Contracts\ShopperUser;
-use Shopper\Core\Traits\ShopperUser as ShopperUserTrait;
+use Shopper\Models\Contracts\ShopperUser;
+use Shopper\Traits\InteractsWithShopper;
 
 class User extends Authenticatable implements ShopperUser
 {
-    use ShopperUserTrait;
-
-    // Your customizations
+    use InteractsWithShopper;
 }
 ```
 
-The `ShopperUser` trait provides:
-- `HasRoles` (Spatie Permission)
-- `HasDiscounts`
-- `HasProfilePhoto`
-- `HasStoreAuthentication` and `HasStoreAuthenticationRecovery` (Two-Factor Authentication)
+The `InteractsWithShopper` trait provides:
+- `HasRoles` (Spatie Permission) for role-based access control
+- `HasDiscounts` for customer-specific discount eligibility
+- `HasProfilePhoto` for avatar management
 
 ## Database Schema
 
@@ -44,7 +41,7 @@ Shopper modifies the standard Laravel `users` table:
 | `email` | string | no | - | Email address (unique) |
 | `password` | string | yes | null | Password (nullable for social auth) |
 | `email_verified_at` | timestamp | yes | null | Email verification date |
-| `gender` | string | no | - | Gender enum value |
+| `gender` | string | yes | null | Gender enum value |
 | `phone_number` | string | yes | null | Phone number |
 | `birth_date` | date | yes | null | Birth date |
 | `avatar_type` | string | no | avatar_ui | Avatar source type |
@@ -171,12 +168,7 @@ $customer->picture; // Avatar URL (ui-avatars or uploaded)
 
 ## Address Model
 
-```php
-use Shopper\Core\Models\Address;
-
-// The model implements
-- Shopper\Core\Models\Contracts\Address
-```
+The model used is `Shopper\Core\Models\Address`. It implements `Shopper\Core\Models\Contracts\Address` and is configurable via `config/shopper/models.php`.
 
 ### Extending the Address Model
 
@@ -199,20 +191,23 @@ return [
 ];
 ```
 
-### Address Methods
+### Address Relationships
+
+Each address belongs to a user and optionally to a country:
 
 ```php
-// Check if default shipping address
-$address->isShippingDefault();
+$address->user;    // The customer who owns this address
+$address->country; // The Country model (nullable)
+```
 
-// Check if default billing address
-$address->isBillingDefault();
+### Address Methods
 
-// Get full name
-$address->full_name; // "John Doe"
+The Address model provides helpers for checking default status:
 
-// Get country
-$address->country;
+```php
+$address->isShippingDefault(); // true if this is the default shipping address
+$address->isBillingDefault();  // true if this is the default billing address
+$address->full_name;           // "John Doe" (computed from first_name + last_name)
 ```
 
 ## Creating Customers
@@ -234,7 +229,7 @@ $customer = User::query()->create([
 ]);
 
 // Assign customer role
-$customer->assignRole(config('shopper.core.roles.user'));
+$customer->assignRole(config('shopper.admin.roles.user'));
 ```
 
 ### Customer with Address
@@ -252,7 +247,7 @@ $customer = User::query()->create([
     'opt_in' => true,
 ]);
 
-$customer->assignRole(config('shopper.core.roles.user'));
+$customer->assignRole(config('shopper.admin.roles.user'));
 
 // Add shipping address
 $customer->addresses()->create([
@@ -336,7 +331,7 @@ $newDefault->update(['shipping_default' => true]);
 
 ## Observer Behavior
 
-When a user is deleted, the `ShopperUser` trait automatically:
+When a user is deleted, the `InteractsWithShopper` trait automatically:
 - Detaches all roles
 - Deletes all addresses
 
@@ -348,7 +343,7 @@ $customer->delete();
 
 ## Role Configuration
 
-Roles are defined in `config/shopper/core.php`:
+Roles are defined in `config/shopper/admin.php`:
 
 ```php
 return [
@@ -360,7 +355,21 @@ return [
 ];
 ```
 
+## Permissions
+
+The admin panel generates five permissions for customer management:
+
+| Permission | Description |
+|------------|-------------|
+| `browse_customers` | View the customers list |
+| `read_customers` | View a single customer profile |
+| `add_customers` | Create new customers |
+| `edit_customers` | Edit customer profiles |
+| `delete_customers` | Delete or anonymize customers |
+
 ## Components
+
+To customize the admin UI for customer management:
 
 ```bash
 php artisan shopper:component:publish customer
