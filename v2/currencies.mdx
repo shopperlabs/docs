@@ -3,31 +3,23 @@ title: Currencies
 description: Configure and manage multiple currencies for your global store
 ---
 
-Currencies play a crucial role in defining the prices of products, services, and other monetary details within your e-commerce system.
-Whether you're running a local store or a global marketplace.
-
-Shopper is designed to support **multi-currency functionality**, allowing you to define prices in different currencies and tailor them to
-specific [zones](/v2/zones). This flexibility ensures that you can cater to a global audience without any limitations related to pricing.
-With Shopper, you can effortlessly set up and manage multiple currencies, ensuring that your customers see prices in their preferred currency,
-no matter where they are located.
-
-In this documentation, you'll learn how to configure and utilize currencies within your Shopper project. Whether you're setting up
-your first currency or managing a complex multi-currency setup, this guide will provide you with the tools and knowledge you need to make the most
-of Shopper's currency features.
+Currencies define the monetary units used across your store. Each [zone](/v2/zones) is associated with a currency, and each [price](/v2/pricing) record is linked to a currency. Shopper supports multi-currency pricing out of the box, with over 150 currencies seeded during installation.
 
 ## Model
 
-The model used is `Shopper\Core\Models\Currency`.
+The model used is `Shopper\Core\Models\Currency`. It implements `Shopper\Core\Models\Contracts\Currency`. The model has a global `enabled` scope that automatically filters out disabled currencies (see [Pricing](/v2/pricing#currency-model) for details).
 
-| Name            | Type    | Required | Notes                                                                                                                  |
-|-----------------|---------|----------|------------------------------------------------------------------------------------------------------------------------|
-| `id`            | autoinc |          | auto                                                                                                                   |
-| `name`          | string  | yes      | Name of the currency                                                                                                   |
-| `code`          | string  | yes      | `Unique`, indicating the [3 character ISO code](https://en.wikipedia.org/wiki/ISO_4217#Active_codes) for the currency. |
-| `symbol`        | string  | yes      | string indicating the native symbol of the currency.                                                                   |
-| `format`        | string  | yes      | string indicating the preview format of the currency.                                                                  |
-| `exchange_rate` | float   | no       | The exchange rate relative to the default currency, default `0.0`                                                      |
-| `is_enabled`    | boolean | no       | Indicate if the currency is enabled on the store. By defauft `true`                                                    |
+### Database Schema
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `name` | string | no | - | Currency name (e.g., "US Dollar") |
+| `code` | string(10) | no | - | ISO 4217 code (e.g., "USD"), unique |
+| `symbol` | string(25) | no | - | Currency symbol (e.g., "$") |
+| `format` | string(50) | no | - | Display format pattern |
+| `exchange_rate` | decimal(10,2) | yes | null | Exchange rate relative to base currency |
+| `is_enabled` | boolean | no | true | Whether the currency is active |
 
 
 ## How Currencies are Created

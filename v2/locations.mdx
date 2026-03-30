@@ -22,28 +22,51 @@ You can change this value if you want to be able to manage many more inventories
 'inventory_limit' => 4,
 ```
 
-### Fields
+### Model
 
-The model used is `Shopper\Core\Models\Inventory`.
+The model used is `Shopper\Core\Models\Inventory`. It implements `Shopper\Core\Models\Contracts\Inventory` and is configurable via `config/shopper/models.php`.
 
-| Name                  | Type    | Required      | Notes                                                                                                     |
-|-----------------------|---------|---------------|-----------------------------------------------------------------------------------------------------------|
-| `id`                  | autoinc |               | auto                                                                                                      |
-| `name`                | string  | yes           | Name of the inventory                                                                                     |
-| `code`                | string  | yes           | Unique, the code is a unique element that allows to index an inventory in a unique way, a bit like a slug |
-| `description`         | text    | no            | nullable                                                                                                  |
-| `email`               | string  | yes           | Unique, the location email address                                                                        |
-| `street_address`      | string  | yes           | The address details (street, nr, building, etc)                                                           |
-| `street_address_plus` | string  | no            | The second address details (optional)                                                                     |
-| `postal_code`         | string  | yes           | National identification code. (optional)                                                                  |
-| `city`                | string  | yes           | The city/settlement                                                                                       |
-| `state`              | string  | no            | Nullable, the state/province/region                                                                       |
-| `phone_number`        | string  | no            | Nullable                                                                                                  |
-| `priority`            | integer | default (`0`) | N/A                                                                                                       |
-| `latitude`            | decimal | no            | Nullable, GPS latitude coordinates                                                                        |
-| `longitude`           | decimal | no            | Nullable, GPS longitude coordinates                                                                       |
-| `is_default`          | boolean | no            | Default `false`, define location as default for stock                                                     |
-| `country_id`          | string  | yes           | foreign key for country, each location must be linked to a Country                                        |
+### Database Schema
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `name` | string | no | - | Location name |
+| `code` | string | no | - | Unique identifier code |
+| `description` | text | yes | null | Location description |
+| `email` | string | no | - | Location email (unique) |
+| `street_address` | string | no | - | Street address |
+| `street_address_plus` | string | yes | null | Additional address line |
+| `postal_code` | string | no | - | Postal/ZIP code |
+| `city` | string | no | - | City |
+| `state` | string | yes | null | State/province/region |
+| `phone_number` | string | yes | null | Phone number |
+| `priority` | integer | no | 0 | Fulfillment priority order |
+| `latitude` | decimal(11,5) | yes | null | GPS latitude |
+| `longitude` | decimal(10,5) | yes | null | GPS longitude |
+| `is_default` | boolean | no | false | Default location for stock |
+| `country_id` | bigint | no | - | FK to countries table |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+### Query Scopes
+
+The `default` scope returns the location marked as the default inventory:
+
+```php
+use Shopper\Core\Models\Inventory;
+
+$defaultLocation = Inventory::query()->default()->first();
+```
+
+### Relationships
+
+Each location belongs to a country and has many inventory history records:
+
+```php
+$location->country;    // Country model
+$location->histories;  // Collection of InventoryHistory records
+```
 
 ### Components
 

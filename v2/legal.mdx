@@ -9,15 +9,19 @@ This section allows you to set up your pages for your privacy policy, return pol
 
 ## Model
 
-The model used is `Shopper\Core\Models\Legal`.
+The model used is `Shopper\Core\Models\Legal`. It uses the `HasSlug` trait for automatic slug generation.
 
-| Name         | Type     | Required | Notes                                                      |
-|--------------|----------|----------|------------------------------------------------------------|
-| `id`         | autoinc  |          | auto                                                       |
-| `title`      | string   | yes      | Unique, title of the legal page                            |
-| `slug`       | string   | yes      | Unique, this is dynamically generated based on the title   |
-| `content`    | longText | no       | nullable, the text of the legal page                       |
-| `is_enabled` | boolean  | no       | Default `false`, define if this legal page is ready to use |
+### Database Schema
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `title` | string | no | - | Legal page title (unique) |
+| `slug` | string | no | auto | URL-friendly identifier (unique) |
+| `content` | longtext | yes | null | Legal page content (rich text) |
+| `is_enabled` | boolean | no | false | Whether this legal page is published |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
 
 ## Components
 
@@ -102,7 +106,7 @@ class LegalController extends Controller
 }
 ```
 
-`Legal::enabled()` is a scope to retrieve the page only when it is available. This is a simple way to retrieve the pages but you can do it otherwise all the front-end code depends on you. To learn more about the scopes you can consult the [documentation](https://laravel.com/v2/10.x/eloquent#local-scopes).
+`Legal::enabled()` is a scope that filters legal pages where `is_enabled` is `true`. This ensures draft pages are not shown to customers.
 
 ### Routes
 

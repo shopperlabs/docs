@@ -1,54 +1,191 @@
 ---
 title: Zones
-description: Configure shipping zones and their associated currencies
+description: "Define geographic zones for shipping, taxes, currencies, and payment methods."
 ---
+
+Zones define geographic regions for your store. Each zone groups countries together and associates them with a [currency](/v2/currencies), [carriers](/v2/carriers), [payment methods](/v2/payment-methods), and [tax rules](/v2/taxes). When a customer checks out, Shopper resolves their zone from the shipping address and uses it to determine available shipping options, payment methods, and tax rates.
 
 ## Model
 
-The model used is `Shopper\Core\Models\Zone`.
+The model used is `Shopper\Core\Models\Zone`. It uses the `HasSlug` trait for automatic slug generation. The model is not configurable via `config/shopper/models.php`.
 
-| Name          | Type    | Required | Notes                                                   |
-|---------------|---------|----------|---------------------------------------------------------|
-| `id`          | autoinc |          | auto                                                    |
-| `name`        | string  | yes      |                                                         |
-| `slug`        | string  | no       | Unique, default value is auto generated using zone name |
-| `code`        | string  | no       | Unique, Nullable                                        |
-| `is_enabled`  | boolean | no       | Default `false`                                         |
-| `metadata`    | array   | no       | Nullable                                                |
-| `currency_id` | int     | yes      | Int (`Currency` object via the `currency` relation)     |
+## Database Schema
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `name` | string | no | - | Zone name (unique) |
+| `slug` | string | yes | auto | URL-friendly identifier (unique) |
+| `code` | string | yes | null | Short code identifier (unique) |
+| `is_enabled` | boolean | no | false | Zone visibility |
+| `currency_id` | bigint | yes | null | FK to currencies table |
+| `metadata` | jsonb | yes | null | Additional custom data |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+### Pivot Table
+
+The `zone_has_relations` pivot table connects zones to countries, carriers, payment methods, and collections through a polymorphic relationship.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `zone_id` | bigint | FK to zone |
+| `zonable_type` | string | Morph type (Country, Carrier, PaymentMethod, Collection) |
+| `zonable_id` | bigint | FK to the related model |
+
+## Relationships
+
+### Currency
+
+Each zone is associated with one currency. This determines which currency is used for pricing and checkout in that zone.
+
+```php
+$zone->currency;       // Currency model
+$zone->currency_code;  // "EUR" (computed accessor)
+```
+
+### Countries
+
+Zones group multiple countries together. When a customer enters a shipping address, Shopper resolves the zone by matching the country.
+
+```php
+$zone->countries;
+
+$zone->countries()->attach([$franceId, $germanyId, $belgiumId]);
+```
+
+### Carriers
+
+Carriers (shipping providers) are scoped to zones. A carrier available in Europe may not be available in North America.
+
+```php
+$zone->carriers;
+
+$zone->carriers()->attach([$colissimoId, $dhlId]);
+```
+
+### Payment Methods
+
+Payment methods are scoped to zones. For example, iDEAL is only available in the Netherlands zone.
+
+```php
+$zone->paymentMethods;
+
+$zone->paymentMethods()->attach([$stripeId, $idealId]);
+```
+
+### Shipping Options
+
+Each zone has shipping options (carrier options with rates) available at checkout:
+
+```php
+$zone->shippingOptions;
+```
+
+### Collections
+
+[Collections](/v2/collections) can be scoped to specific zones for region-specific merchandising:
+
+```php
+$zone->collections;
+```
+
+## Query Scopes
+
+The `enabled` scope filters zones that are active:
+
+```php
+use Shopper\Core\Models\Zone;
+
+Zone::query()->enabled()->get();
+```
+
+## Computed Attributes
+
+The Zone model provides computed attributes that return comma-separated names for related entities:
+
+```php
+$zone->countries_name;  // "France, Germany, Belgium"
+$zone->carriers_name;   // "Colissimo, DHL"
+$zone->payments_name;   // "Stripe, iDEAL"
+$zone->currency_code;   // "EUR"
+```
+
+## HasZones Trait
+
+Models that can be scoped to zones use the `HasZones` trait. This is already applied to `PaymentMethod`, `Carrier`, and `Collection` models.
+
+```php
+use Shopper\Core\Models\Traits\HasZones;
+
+$model->zones;
+$model->zones()->attach([$zoneId1, $zoneId2]);
+```
+
+## Creating Zones
+
+To create a zone for the European market:
+
+```php
+use Shopper\Core\Models\Zone;
+use Shopper\Core\Models\Country;
+
+$zone = Zone::query()->create([
+    'name' => 'Europe',
+    'code' => 'EU',
+    'is_enabled' => true,
+    'currency_id' => $eurCurrency->id,
+]);
+
+$countries = Country::query()
+    ->whereIn('cca2', ['FR', 'DE', 'BE', 'NL', 'ES', 'IT'])
+    ->pluck('id');
+
+$zone->countries()->attach($countries);
+$zone->carriers()->attach([$colissimoId, $dhlId]);
+$zone->paymentMethods()->attach([$stripeId]);
+```
+
+## Retrieving Zones
+
+To find the zone for a customer's shipping address:
+
+```php
+$zone = Zone::query()
+    ->enabled()
+    ->whereHas('countries', fn ($q) => $q->where('id', $countryId))
+    ->first();
+```
+
+To get all enabled zones with their currencies:
+
+```php
+$zones = Zone::query()
+    ->enabled()
+    ->with('currency')
+    ->get();
+```
 
 ## Components
 
-The components used to manage zones are found in the component configuration file `config/shopper/components/setting.php`. This configuration file is not available by default.
-
-But if you want to update or change the settings components, you can publish them with the command
+The zone management components are part of the settings configuration. To customize:
 
 ```bash
 php artisan shopper:component:publish setting
 ```
-This file contains all Livewire components for settings. Here is only the list of zone components
+
+Zone-related components in `config/shopper/components/setting.php`:
 
 ```php
-use Shopper\Livewire\Components;
-use Shopper\Livewire\Pages;
+use Shopper\Livewire;
 
 return [
-
     'pages' => [
-        // ...
-        'zones' => Pages\Settings\Zones::class,
-        // ...
-    ];
-
-    'components' => [
-        // ...
-        'settings.zones.detail' => Components\Settings\Zones\Detail::class,
-        'settings.zones.shipping-options' => Components\Settings\Zones\ZoneShippingOptions::class,
-        // ...
+        'zones' => Livewire\Pages\Settings\Zones::class,
     ],
-
+    'components' => [
+        'settings.zones.detail' => Livewire\Components\Settings\Zones\Detail::class,
+        'settings.zones.shipping-options' => Livewire\Components\Settings\Zones\ZoneShippingOptions::class,
+    ],
 ];
 ```
-You can expand each of its components to customize this section or replace the entire section if your system requires it.
-
-You can also change the views too and return your own views.
