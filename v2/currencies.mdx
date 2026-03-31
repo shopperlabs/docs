@@ -24,11 +24,9 @@ The model used is `Shopper\Core\Models\Currency`. It implements `Shopper\Core\Mo
 
 ## How Currencies are Created
 
-Currencies are defined in the core of your Shopper backend into the file located at `core/database/data/currencies.php`. When you run the migration or
-seed command the first time for your Shopper store, a migration uses this data to insert all its properties (the currencies) into the database.
+Currencies are defined in a JSON file at `core/database/data/currencies.json`. When you run `php artisan shopper:install`, a migration reads this file and inserts all currencies into the database.
 
-So, if you want to add other currencies, you can create a migration that inserts your currencies into the database, but Shopper basically installs
-a large number of currencies so you don't have to, over 150 currencies are created when Shopper is installed.
+Shopper ships with over 150 currencies out of the box, so you rarely need to add more. If you do need a custom currency, create a migration that inserts it into the `currencies` table directly.
 
 ## How Setup Store Currencies
 
