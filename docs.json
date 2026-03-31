@@ -220,15 +220,6 @@
                   ]
                 },
                 {
-                  "group": "Storefronts",
-                  "pages": [
-                    "v2/starter-kits",
-                    "v2/livewire-starter-kit",
-                    "v2/blade-starter-kit",
-                    "v2/inertia-starter-kit"
-                  ]
-                },
-                {
                   "group": "Releases",
                   "pages": [
                     {
