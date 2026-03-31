@@ -1,27 +1,39 @@
 ---
 title: Locations
-description: Manage multiple inventory locations and warehouses for your store
+description: "Manage inventory locations, warehouses, and fulfillment origins for multi-location stock tracking."
 ---
 
-By default, when you install Shopper for the first time, you configure and create your shop and this allows you to create a first location which will have the information you defined.
-This is the initial location in which all products are stored.
+Locations represent physical places where you store inventory and ship orders from: warehouses, retail stores, fulfillment centers, or even your apartment. Each location has its own address and can track stock independently, so a product can have 50 units in your Paris warehouse and 20 in your New York store.
 
-If you have already used [Shopify](https://shopify.com) it's a bit the same model, but a little simpler so that you can update it because the system is accessible for any type of business.
+When Shopper is first installed, the [setup wizard](/v2/setup-store) creates a default location using your store's address. All stock mutations target this location unless you specify another one. If your business ships from multiple places, you can add more locations and assign stock to each one.
 
-You can set up multiple locations in your store so that you can track inventory and have Excel documents of the products ordered in each of your locations.
-Your locations can be *retail stores*, *warehouses*, *popups*, or any other place where you manage or store inventory. With multiple locations, you have better visibility into your inventory in your business.
-
-A location is a physical place or space where you perform any or all of the following activities: Selling products, shipping or fulfillment orders, and inventory (this may even be your apartment).
-
-## Setup Locations
-
-You can create as many inventory locations as your business requires. There is no limit on the number of locations.
-
-### Model
+## Model
 
 The model used is `Shopper\Core\Models\Inventory`. It implements `Shopper\Core\Models\Contracts\Inventory` and is configurable via `config/shopper/models.php`.
 
-### Database Schema
+### Extending the Model
+
+To add custom behavior, extend the model and update your configuration:
+
+```php
+namespace App\Models;
+
+use Shopper\Core\Models\Inventory as BaseInventory;
+
+class Inventory extends BaseInventory
+{
+}
+```
+
+Update `config/shopper/models.php`:
+
+```php
+return [
+    'inventory' => \App\Models\Inventory::class,
+];
+```
+
+## Database Schema
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
@@ -29,7 +41,7 @@ The model used is `Shopper\Core\Models\Inventory`. It implements `Shopper\Core\M
 | `name` | string | no | - | Location name |
 | `code` | string | no | - | Unique identifier code |
 | `description` | text | yes | null | Location description |
-| `email` | string | no | - | Location email (unique) |
+| `email` | string | no | - | Location contact email (unique) |
 | `street_address` | string | no | - | Street address |
 | `street_address_plus` | string | yes | null | Additional address line |
 | `postal_code` | string | no | - | Postal/ZIP code |
@@ -44,9 +56,27 @@ The model used is `Shopper\Core\Models\Inventory`. It implements `Shopper\Core\M
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
 
-### Query Scopes
+## Relationships
 
-The `default` scope returns the location marked as the default inventory:
+### Country
+
+Each location belongs to a country:
+
+```php
+$location->country; // Country model
+```
+
+### Inventory Histories
+
+Every stock mutation (increase, decrease, set) on any product or variant creates an `InventoryHistory` record tied to a specific location. This is how Shopper tracks stock per location.
+
+```php
+$location->histories; // Collection of InventoryHistory records
+```
+
+## Query Scopes
+
+The `default` scope returns the location marked as the default inventory. This is the location used by `InitialQuantityInventory` when setting stock during product creation.
 
 ```php
 use Shopper\Core\Models\Inventory;
@@ -54,105 +84,121 @@ use Shopper\Core\Models\Inventory;
 $defaultLocation = Inventory::query()->default()->first();
 ```
 
-### Relationships
+## How Locations Connect to Stock
 
-Each location belongs to a country and has many inventory history records:
+When you call `mutateStock()`, `decreaseStock()`, or `setStock()` on a [product](/v2/products#modifying-stock) or [variant](/v2/product-variants#modifying-stock), you pass an `$inventoryId`. This ties the stock mutation to a specific location:
 
 ```php
-$location->country;    // Country model
-$location->histories;  // Collection of InventoryHistory records
+$product->mutateStock(
+    inventoryId: $warehouse->id,
+    quantity: 100,
+    event: 'Shipment received',
+);
 ```
 
-### Components
+To get stock for a product at a specific location:
 
-The components used to manage locations are found in the component configuration file `config/shopper/components/setting.php`.
-This configuration file is not available by default. But if you want to update or change the settings components, you can publish them with the command
+```php
+$product->stockInventory($warehouse->id);
+```
+
+To batch-load stock for a specific location across multiple products (avoiding N+1):
+
+```php
+use Shopper\Models\Product;
+
+$products = Product::query()->get();
+
+Product::loadStockForInventory($products, $warehouse->id);
+```
+
+## Creating Locations
+
+To create a new warehouse location:
+
+```php
+use Shopper\Core\Models\Inventory;
+use Shopper\Core\Models\Country;
+
+$france = Country::query()->where('cca2', 'FR')->first();
+
+$warehouse = Inventory::query()->create([
+    'name' => 'Paris Warehouse',
+    'code' => 'WH-PARIS',
+    'email' => 'paris@mystore.com',
+    'street_address' => '15 Rue du Commerce',
+    'city' => 'Paris',
+    'postal_code' => '75015',
+    'country_id' => $france->id,
+    'priority' => 1,
+    'latitude' => 48.8466,
+    'longitude' => 2.2958,
+]);
+```
+
+## Retrieving Locations
+
+To get the default location:
+
+```php
+$default = Inventory::query()->default()->first();
+```
+
+To get all locations ordered by priority:
+
+```php
+$locations = Inventory::query()
+    ->with('country')
+    ->orderBy('priority')
+    ->get();
+```
+
+To find the nearest location to a customer (if latitude/longitude are set):
+
+```php
+$locations = Inventory::query()
+    ->whereNotNull('latitude')
+    ->whereNotNull('longitude')
+    ->get()
+    ->sortBy(function ($location) use ($customerLat, $customerLng) {
+        return sqrt(
+            pow($location->latitude - $customerLat, 2)
+            + pow($location->longitude - $customerLng, 2)
+        );
+    });
+
+$nearest = $locations->first();
+```
+
+## Default Location
+
+The default location is used as the origin address for shipping calculations and as the fallback when stock operations do not specify a location. Only one location can be the default.
+
+<Warning>
+Deleting a location removes all inventory history records tied to it. This affects stock levels for every product that had stock in that location. Proceed with caution.
+</Warning>
+
+## Components
+
+To customize the admin UI for location management:
 
 ```bash
 php artisan shopper:component:publish setting
 ```
 
-This file contains all Livewire components for settings. Here is only the list of inventory components
+Location-related components in `config/shopper/components/setting.php`:
 
 ```php
-use Shopper\Livewire\Components;
-use Shopper\Livewire\Pages;
+use Shopper\Livewire;
 
 return [
-
     'pages' => [
-        // ...
-        'location-index' => Pages\Settings\Locations\Index::class,
-        'location-create' => Pages\Settings\Locations\Create::class,
-        'location-edit' => Pages\Settings\Locations\Edit::class,
-        // ...
+        'location-index' => Livewire\Pages\Settings\Locations\Index::class,
+        'location-create' => Livewire\Pages\Settings\Locations\Create::class,
+        'location-edit' => Livewire\Pages\Settings\Locations\Edit::class,
     ],
-
     'components' => [
-        'settings.locations.form' => Components\Settings\Locations\InventoryForm::class,
-        // ...
+        'settings.locations.form' => Livewire\Components\Settings\Locations\InventoryForm::class,
     ],
-
 ];
 ```
-
-You can expand each of its components to customize this section or replace the entire section if your system requires it.
-
-You can also change the views too and return your own views.
-
-## Manage locations
-
-In your administration area you must click on the "cog" icon to display the settings page of your store.
-
-From your admin panel, on the blue sidebar click on the cog icon, go to `Settings > Locations`.
-
-<Frame>
-  <img src="/images/v2/setting-locations.png" alt="Setting location" />
-</Frame>
-
-### Add location
-
-To create a new location, in your Locations page:
-
-- Click on "New inventory".
-- Enter a unique name and an address for the location.
-- Fill all the required fields
-- Click the "Save" button
-
-<Frame>
-  <img src="/images/v2/setting-location-create.png" alt="Add location" />
-</Frame>
-
-### Edit location
-
-To update a location you click on an available location.
-
-- Click on the "edit icon" of the location you want to update
-- Edit any of the location's details.
-- Click the "Save" button
-
-### Define a default location
-
-The default location is the one in which all products will be collected with each order. If this location is empty the
-products will be searched in another and if it is the only one the product will be out of stock on your store.
-
-To set a default location:
-- Go to the locations page
-- Click on the "_Edit_" icon for the location you want to set as default
-- Toggle the **Set as default inventory** and hit the save button
-
-<Frame>
-  <img src="/images/v2/setting-location-default.png" alt="Default location" />
-</Frame>
-
-### Delete location
-
-<Warning>
-Once the location removed, all inventories will be changed and this could complicate your inventory management.
-This is why you have a confirmation modal to be sure that this is indeed what you want to proceed.
-</Warning>
-
-To delete a location:
-- Go to the inventory page
-- Find the location you want to delete and click on the "_Delete_" icon at its right.
-- Confirm your action on the modal to delete the location
