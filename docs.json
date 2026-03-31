@@ -114,6 +114,8 @@
                     "v2/user-guide/catalog/categories",
                     "v2/user-guide/catalog/collections",
                     "v2/user-guide/catalog/attributes",
+                    "v2/user-guide/catalog/tags",
+                    "v2/user-guide/catalog/suppliers",
                     {
                       "group": "Products",
                       "pages": [
