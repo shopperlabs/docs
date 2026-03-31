@@ -83,46 +83,22 @@ You can change the zone's name, code, countries, currency, payment methods, and 
 Changing a zone's currency affects how prices are displayed to customers in that region. Make sure you have [prices](/v2/user-guide/marketing/pricing) configured in the new currency before switching.
 </Warning>
 
-## Delivery Methods
+## What's Configured Inside a Zone
 
-Each zone has its own set of delivery methods (shipping options) that define how products are shipped to customers in that region. Delivery methods link a [carrier](/v2/user-guide/store-setup/carriers) to a specific price and service name.
+Each zone connects three things together for a region:
 
-### Viewing Delivery Methods
+| What | Purpose | Where to manage |
+|------|---------|-----------------|
+| **Countries** | Which countries belong to this zone | Zone form |
+| **Currency** | What currency customers pay in | Zone form |
+| **Payment methods** | How customers can pay (Stripe, Cash on Delivery, etc.) | Zone form (select from available methods) |
+| **Carriers** | Which shipping providers serve this zone | Zone form (select from available carriers) |
+| **Shipping options** | Specific delivery options with pricing | Zone detail page (see [Carriers](/v2/user-guide/store-setup/carriers)) |
+| **Tax rules** | Tax rates applied at checkout | Managed separately in tax settings |
 
-When you open a zone, the **Shipping Options** section displays all configured delivery methods with their carrier, name, status, and price.
-
-<Frame>
-  <img src="/images/v2/zone-delivery-methods.png" alt="Zone delivery methods" />
-</Frame>
-
-### Adding a Delivery Method
-
-To add a new delivery option to a zone:
-
-1. In the zone's detail page, find the **Shipping Options** section
-2. Click the **Add** button
-3. Select a carrier and fill in the delivery details
-4. Click **Save**
-
-<Frame caption="Add a delivery method">
-  <img src="/images/v2/zone-delivery-method-form.png" alt="Delivery method form" />
-</Frame>
-
-| Field | Required | Description |
-|-------|----------|-------------|
-| **Carrier** | Yes | Which carrier provides this delivery option |
-| **Name** | Yes | The option name shown at checkout (e.g., "Standard Delivery", "Express 24h") |
-| **Description** | No | Details about delivery time or conditions |
-| **Price** | Yes | The shipping price in the zone's currency |
-| **Status** | No | Whether this option appears at checkout |
-
-### Deleting a Delivery Method
-
-To remove a delivery method, click the **Delete** icon next to the option and confirm.
-
-<Frame>
-  <img src="/images/v2/zone-delivery-method-delete.png" alt="Delete delivery method confirmation" />
-</Frame>
+<Tip>
+You need to create [carriers](/v2/user-guide/store-setup/carriers) and payment methods before you can assign them to a zone. Set those up first, then create your zones.
+</Tip>
 
 ## Zones in Orders
 

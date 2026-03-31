@@ -1,0 +1,118 @@
+---
+title: Payment Methods
+description: "Configure how customers can pay for their orders."
+---
+
+Payment methods define how customers can pay at checkout. You can offer credit card payments via Stripe, cash on delivery, bank transfers, or mobile money, and restrict each method to specific [zones](/v2/user-guide/store-setup/zones).
+
+## Accessing Payment Methods
+
+1. Click on **Settings** in the sidebar
+2. Select **Payment Methods** from the settings menu
+
+<Frame>
+  <img src="/images/v2/ug-payment-methods-list.png" alt="Payment methods list" />
+</Frame>
+
+{/* SCREENSHOT NEEDED: The Settings > Payment Methods page showing a table of payment methods.
+    Show 2-3 methods: "Credit Card" with driver badge "Stripe" in green, "Cash on Delivery"
+    with driver badge "Manual" in gray, "Bank Transfer" with driver badge "Manual" in gray.
+    Include columns: Logo, Title, Driver, Status toggle, Updated date. */}
+
+The payment methods list shows all configured methods with their driver, status, and last update date.
+
+## Adding a Payment Method
+
+To add a new payment method:
+
+1. Click the **Create** button
+2. Fill in the payment method details
+3. Click **Save**
+
+<Frame>
+  <img src="/images/v2/ug-payment-methods-create.png" alt="Add payment method form" />
+</Frame>
+
+{/* SCREENSHOT NEEDED: The "Create payment method" modal form with fields:
+    Title: "Credit Card", Slug: "credit-card" (auto-generated),
+    Driver dropdown showing options (Manual, Stripe, etc.),
+    Link URL: "https://stripe.com",
+    Description: "Pay securely with your credit or debit card.",
+    Instructions: "Your card will be charged upon order confirmation." */}
+
+### Payment Method Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Title** | Yes | The name shown to customers at checkout (e.g., "Credit Card", "PayPal") |
+| **Slug** | Yes | Auto-generated from the title |
+| **Driver** | No | The payment provider that processes this method. Choose **Manual** for offline payments or **Stripe** for card payments |
+| **Link URL** | No | External URL for the payment provider |
+| **Description** | No | Explanation shown to customers when selecting this method |
+| **Instructions** | No | Post-purchase instructions (e.g., bank transfer details) |
+
+### Understanding Drivers
+
+The driver connects a payment method to a payment provider:
+
+| Driver | How it works | Example |
+|--------|-------------|---------|
+| **Manual** | No online processing. You handle payment outside of Shopper | Cash on delivery, bank transfer, check |
+| **Stripe** | Payments processed via Stripe (requires API keys) | Credit cards, Apple Pay, Google Pay |
+
+<Note>
+Drivers like Stripe require API credentials configured by your developer. If a driver shows "Not Configured" in the dropdown, the API keys have not been set up yet. See the [Payments developer documentation](/v2/payments) for setup instructions.
+</Note>
+
+## Assigning to Zones
+
+Payment methods are assigned to [zones](/v2/user-guide/store-setup/zones) when creating or editing a zone. A payment method only appears at checkout if it belongs to the customer's zone.
+
+To make a payment method available in a zone:
+
+1. Go to **Settings > Zones**
+2. Edit the zone
+3. Select the payment method in the **Payment methods** field
+4. Click **Save**
+
+## Managing Payment Methods
+
+### Editing a Payment Method
+
+Click the **Edit** icon next to a method, update the fields, and click **Save**.
+
+### Enabling or Disabling
+
+Toggle the **Status** switch in the list to quickly enable or disable a payment method. Disabled methods are not shown at checkout.
+
+### Deleting a Payment Method
+
+Click the **Delete** icon and confirm. Active orders that used this method are not affected.
+
+## Common Setups
+
+| Payment Method | Driver | Best For |
+|----------------|--------|----------|
+| Credit Card | Stripe | Online stores accepting card payments |
+| Cash on Delivery | Manual | Local deliveries where customers pay on receipt |
+| Bank Transfer | Manual | B2B orders or high-value purchases |
+| Mobile Money | Manual | Markets where mobile payments are common (Africa, Asia) |
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Offer Multiple Options" icon="credit-card">
+    Customers are more likely to complete checkout when they see a payment method they trust.
+  </Card>
+  <Card title="Zone-Specific Methods" icon="map">
+    Some methods work only in certain regions. Assign them to the right zones.
+  </Card>
+  <Card title="Clear Instructions" icon="file-lines">
+    For manual methods like bank transfers, provide clear payment instructions so customers know what to do after ordering.
+  </Card>
+  <Card title="Test Payments" icon="vial">
+    Use your payment provider's test/sandbox mode to verify the checkout flow before going live.
+  </Card>
+</CardGroup>
+
+For developer details on payment drivers, custom providers, and transaction management, see the [Payments documentation](/v2/payments).

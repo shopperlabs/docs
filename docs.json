@@ -102,6 +102,8 @@
                     "v2/user-guide/store-setup/currencies",
                     "v2/user-guide/store-setup/zones",
                     "v2/user-guide/store-setup/carriers",
+                    "v2/user-guide/store-setup/payment-methods",
+                    "v2/user-guide/store-setup/taxes",
                     "v2/user-guide/store-setup/legal"
                   ]
                 },
