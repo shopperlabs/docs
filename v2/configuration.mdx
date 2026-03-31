@@ -41,16 +41,46 @@ To bind the admin panel to a specific domain, set the `SHOPPER_DOMAIN` environme
 'domain' => env('SHOPPER_DOMAIN'),
 ```
 
-You can also customize the admin panel branding (logo, favicon, Filament primary color) and add custom CSS or JS assets:
+You can also customize the admin panel branding (logo, favicon, and Filament primary color):
 
 ```php config/shopper/admin.php
 'brand' => null,
 'favicon' => null,
-'filament_color' => '#2563eb',
+'primary_color' => \Filament\Support\Colors\Color::Blue,
+```
 
-'resources' => [
-    'stylesheets' => [],
-    'scripts' => [],
+The `primary_color` key accepts any [Filament color](https://filamentphp.com/docs/support/colors) constant. After changing your primary color in your Tailwind config, update this value to keep Filament elements consistent.
+
+### Avatar Colors
+
+Default colors for auto-generated user avatars (UI Avatars). Values are hexadecimal without the `#` prefix:
+
+```php config/shopper/admin.php
+'avatar' => [
+    'color' => '1d4ed8',
+    'bg_color' => 'dbeafe',
+],
+```
+
+### Locales
+
+Available languages in the admin panel. Each entry maps a locale code to a display label and a flag code (ISO 3166-1 alpha-2, lowercase) used for the flag SVG:
+
+```php config/shopper/admin.php
+'locales' => [
+    'en' => ['label' => 'English', 'flag' => 'gb'],
+    'fr' => ['label' => 'Français', 'flag' => 'fr'],
+],
+```
+
+### Custom Pages
+
+If you create custom Livewire page components for the admin panel, configure the namespace and view path:
+
+```php config/shopper/admin.php
+'pages' => [
+    'namespace' => 'App\\Livewire\\Shopper',
+    'view_path' => resource_path('views/livewire/shopper'),
 ],
 ```
 
