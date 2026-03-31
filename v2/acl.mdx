@@ -1,89 +1,61 @@
 ---
 title: Roles & Permissions
-description: Manage user roles and permissions with Laravel Permission integration
+description: "Manage user access control programmatically with Spatie Laravel Permission."
 ---
 
-Manage access and permissions of your users and members in your store. The entire system of roles and permissions in Shopper is implemented by the package
-[spatie/laravel-permission](https://github.com/spatie/laravel-permission). Because all permissions will be registered on Laravel's gate, you can test if a user
-has a permission with Laravel's default [can()](https://laravel.com/docs/authorization#via-blade-templates) function.
+Shopper uses [spatie/laravel-permission](https://github.com/spatie/laravel-permission) to manage roles and permissions. Every admin user has one or more roles, and each role has a set of permissions that control access to admin panel sections and actions. Since all permissions are registered on Laravel's gate, you can use Laravel's built-in `can()` function and `@can` Blade directive.
 
-To access the dashboard, a user must have the `administrator` role. Role names are configured in `config/shopper/admin.php`:
+For a visual walkthrough of managing roles and permissions in the admin panel, see the User Guide pages: [Managing Staff](/v2/user-guide/administration/users) and [Roles & Permissions](/v2/user-guide/administration/roles).
+
+## Configuration
+
+Roles are configured in `config/shopper/admin.php`. These names are used throughout the system for authorization checks:
 
 ```php
 'roles' => [
-    'admin'   => 'administrator',
+    'admin' => 'administrator',
     'manager' => 'manager',
-    'user'    => 'user',
+    'user' => 'user',
 ],
 ```
 
-After creating a super admin we get the following result
+| Role | Purpose | Admin Access |
+|------|---------|-------------|
+| `administrator` | Full access to all admin panel features | Yes |
+| `manager` | Configurable access based on assigned permissions | Yes |
+| `user` | Customer role, assigned to storefront users | No |
 
-```bash
-php artisan shopper:user
-
-Create Admin User for Shopper administration panel
-
- Email Address [admin@admin.com]:
- > arthur@shopperlabs.io
-
- First Name [Shopper]:
- >
-
- Last Name [Admin]:
- >
-
- Password:
- >
-
- Confirm Password:
- >
-
-Creating admin account...
-User created successfully.
-```
-
-After logged as an admin, you can add members with permissions on your staff to log in to your store and complete tasks like **Adding products** or managing **Orders**
-and use roles to control what sections of your store they can access.
-
-Permissions help you manage what your store's staff can do in your admin. Roles let you delegate, and assign the level of access that your staff needs to do their jobs effectively.
-
-Permissions are associated with roles. Depending on the role that a member has, you can assign different types of permissions to it to limit or increase the actions they can do.
-
-All this management of roles and permissions is done using the [Laravel Permission](https://github.com/spatie/laravel-permission) package from [Spatie](https://spatie.be).
-
-At installation Shopper comes with 3 roles: **Administrator**, **Manager** and **User**, the user role cannot be modified from the administration interface
-because it is the role that will be assigned to any customer who will create his account on your shop.
-
-## RBAC ACL
-
-RBAC (Role Based Access Control) or ACL (Access Control Layer) is an approach to restricting system access for users using roles system, Shopper allow to define
-the level of access for each user. With roles a user can access menus, pages. It is important to know that one Administrator can have multiple roles assigned.
-
-To view the roles and permissions management page, you must go to the **Settings > Staff & Permissions**
-
-<Frame>
-  <img src="/images/v2/settings-staff.png" alt="Setting Staff & permissions" />
-</Frame>
+<Warning>
+Do not rename roles after they have been assigned to users. Role names are used in middleware and authorization checks throughout the system.
+</Warning>
 
 ## Models
 
 ### Role
 
-The model used for roles is `Shopper\Models\Role`, which extends Spatie's Role model with additional fields.
+The model used is `Shopper\Models\Role`, which extends Spatie's Role model with additional fields.
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
-| `name` | string | no | - | Role name in lowercase (e.g., `author`) |
+| `name` | string | no | - | Role name in lowercase (e.g., `administrator`) |
 | `guard_name` | string | no | auto | Filled automatically by Spatie |
-| `display_name` | string | yes | null | Human-readable name (e.g., "Blog Author") |
+| `display_name` | string | yes | null | Human-readable name |
 | `description` | text | yes | null | Role description |
 | `can_be_removed` | boolean | no | true | Whether the role can be deleted |
 
+The Role model provides an `isAdmin()` method:
+
+```php
+use Shopper\Models\Role;
+
+$role = Role::query()->where('name', 'administrator')->first();
+$role->isAdmin(); // true
+```
+
 ### Permission
 
-The model used for permissions is `Shopper\Models\Permission`, which extends Spatie's Permission model with grouping support.
+The model used is `Shopper\Models\Permission`, which extends Spatie's Permission model with grouping support.
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
@@ -95,7 +67,9 @@ The model used for permissions is `Shopper\Models\Permission`, which extends Spa
 | `description` | text | yes | null | Permission description |
 | `can_be_removed` | boolean | no | true | Whether the permission can be deleted |
 
-The **Permission** model has some groups as shown here
+### Permission Groups
+
+Permissions are organized into groups for display in the admin panel:
 
 ```php
 use Shopper\Models\Permission;
@@ -103,122 +77,170 @@ use Shopper\Models\Permission;
 Permission::groups();
 ```
 
-This returns the eight built-in groups: `system`, `brands`, `categories`, `collections`, `products`, `customers`, `orders`, `discounts`.
+This returns the built-in groups: `system`, `brands`, `categories`, `collections`, `products`, `customers`, `orders`, `discounts`.
+
+### Generating Permissions
+
+The `Permission::generate()` method creates five permissions for a given resource (browse, read, edit, add, delete):
+
+```php
+Permission::generate('brands');
+// Creates: browse_brands, read_brands, add_brands, edit_brands, delete_brands
+
+Permission::generate('tags', 'products');
+// Creates: browse_tags, read_tags, add_tags, edit_tags, delete_tags (in the "products" group)
+```
+
+## Working with Roles
+
+### Creating Roles
+
+To create a new role programmatically:
+
+```php
+use Shopper\Models\Role;
+
+$role = Role::query()->create([
+    'name' => 'warehouse-manager',
+    'display_name' => 'Warehouse Manager',
+    'description' => 'Manages inventory locations and stock levels.',
+]);
+
+$role->givePermissionTo([
+    'browse_inventories',
+    'read_inventories',
+    'edit_inventories',
+    'browse_products',
+    'read_products',
+]);
+```
+
+### Assigning Roles
+
+Assign a role to a user:
+
+```php
+$user->assignRole('warehouse-manager');
+
+$user->assignRole(config('shopper.admin.roles.admin'));
+```
+
+### Checking Roles
+
+The `InteractsWithShopper` trait on the User model provides role checking methods:
+
+```php
+$user->isAdmin();    // true if user has the administrator role
+$user->isManager();  // true if user has the manager role
+
+$user->hasRole('warehouse-manager');
+```
+
+## Working with Permissions
+
+### Checking Permissions
+
+Use Laravel's standard authorization:
+
+```php
+$user->hasPermissionTo('browse_products');
+
+$user->can('edit_products');
+```
+
+In Blade templates:
+
+```blade
+@can('add_products')
+    <a href="/admin/products/create">Add Product</a>
+@endcan
+```
+
+In Livewire components, Shopper uses the `authorize()` method:
+
+```php
+public function mount(): void
+{
+    $this->authorize('browse_products');
+}
+```
+
+### Creating Custom Permissions
+
+To add a custom permission and assign it to a role:
+
+```php
+use Shopper\Models\Permission;
+use Shopper\Models\Role;
+
+$permission = Permission::query()->create([
+    'name' => 'view_analytics',
+    'group_name' => 'system',
+    'display_name' => 'View Analytics',
+    'description' => 'Access the analytics dashboard.',
+]);
+
+$role = Role::query()->where('name', 'manager')->first();
+$role->givePermissionTo($permission);
+```
+
+Custom permissions without a recognized group appear in a "Custom permissions" section in the admin panel.
+
+### Revoking Permissions
+
+To remove a permission from a role:
+
+```php
+$role->revokePermissionTo('delete_products');
+```
+
+## Admin User Creation
+
+You can create an admin user from the command line:
+
+```bash
+php artisan shopper:user
+```
+
+Or programmatically:
+
+```php
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
+
+$admin = User::query()->create([
+    'first_name' => 'John',
+    'last_name' => 'Doe',
+    'email' => 'admin@example.com',
+    'password' => Hash::make('password'),
+    'email_verified_at' => now(),
+]);
+
+$admin->assignRole(config('shopper.admin.roles.admin'));
+```
 
 ## Components
 
-During the installation of Shopper, no component files are published by default to ensure a streamlined and hassle-free setup.
-However, if you need to customize or replace any components, you can easily publish them using the following Artisan command:
+To customize the roles and permissions admin UI:
 
 ```bash
 php artisan shopper:component:publish setting
 ```
 
-A new `setting.php` file will be created in the `config/shopper/components` folder.
+The relevant components in `config/shopper/components/setting.php`:
 
 ```php
 use Shopper\Livewire;
-use Shopper\Livewire\Components;
-use Shopper\Livewire\Pages;
 
 return [
-
     'pages' => [
-        'setting-index' => Pages\Settings\Index::class,
-        'general' => Pages\Settings\General::class,
-        'location-index' => Pages\Settings\Locations\Index::class,
-        'location-create' => Pages\Settings\Locations\Create::class,
-        'location-edit' => Pages\Settings\Locations\Edit::class,
-        'legal' => Pages\Settings\LegalPage::class,
-        'payment-methods' => Pages\Settings\PaymentMethod::class,
-        'team-index' => Pages\Settings\Team\Index::class,
-        'team-roles' => Pages\Settings\Team\RolePermission::class,
-        'zones' => Pages\Settings\Zones::class,
+        'team-index' => Livewire\Pages\Settings\Team\Index::class,
+        'team-roles' => Livewire\Pages\Settings\Team\RolePermission::class,
     ],
-
     'components' => [
-        'settings.locations.form' => Components\Settings\Locations\InventoryForm::class,
-        'settings.legal.privacy' => Components\Settings\Legal\Privacy::class,
-        'settings.legal.refund' => Components\Settings\Legal\Refund::class,
-        'settings.legal.shipping' => Components\Settings\Legal\Shipping::class,
-        'settings.legal.terms' => Components\Settings\Legal\Terms::class,
-        'settings.legal.form' => Components\Settings\Legal\PolicyForm::class,
-        'settings.team.permissions' => Components\Settings\Team\Permissions::class,
-        'settings.team.users' => Components\Settings\Team\UsersRole::class,
-        'settings.zones.detail' => Components\Settings\Zones\Detail::class,
-        'settings.zones.shipping-options' => Components\Settings\Zones\ZoneShippingOptions::class,
-
+        'settings.team.permissions' => Livewire\Components\Settings\Team\Permissions::class,
+        'settings.team.users' => Livewire\Components\Settings\Team\UsersRole::class,
         'slide-overs.create-team-member' => Livewire\SlideOvers\CreateTeamMember::class,
-        'slide-overs.shipping-option-form' => Livewire\SlideOvers\ShippingOptionForm::class,
-        'slide-overs.zone-form' => Livewire\SlideOvers\ZoneForm::class,
     ],
-
 ];
 ```
-
-## Manage Roles
-
-A Role is a set of permissions to perform certain operations within the system, which is assigned to a chosen Administrator. As said previously Shopper
-at installation comes with 3 roles but 2 are accessible in the administration panel.
-The user role does not appear, modifying it could lead to bugs on your store so it is not listed here.
-
-<Warning>
-It's **strongly** advised to not change the name of roles when they are already assigned to users. If the role verification is done manually you will be forced to change this name in all **middleware**, **helpers**, **blade directives** etc.
-</Warning>
-
-### Add role
-
-To add a new role, you must click on `Add a new role` button. Required fields are marked with asterisks
-
-<Frame>
-  <img src="/images/v2/add-role.png" alt="addd new role" />
-</Frame>
-
-The added roles can be used later in your code to assign functionality or access resources.
-
-### Update role
-
-To modify a role you must click on the role you want to modify to access the edit form.
-
-And as already mentioned, all Shopper features are livewire components. So you can change everything at any time to fit your store.
-
-<Frame>
-  <img src="/images/v2/update-role.png" alt="update role" />
-</Frame>
-
-### Create admin
-
-In addition to creating an administrator from the command line you can also do it from the Shopper interface, you just need to click on **Add Administrator** button.
-Then you fill in the information of your administrator with the role chosen for him
-
-<Frame>
-  <img src="/images/v2/add-admin.png" alt="add new admin" />
-</Frame>
-
-The actual role registration function looks like the code below. And the whole implementation class is `Shopper\Livewire\SlideOvers\CreateTeamMember`
-
-### Create permission
-
-Let's assume that you would like to add a new permission to ACL. You will need to choose the role because every single permissions are linked to a role.
-
-In the way that when an admin are granted of a specific role, he will granted all role's permissions.
-
-<Frame>
-  <img src="/images/v2/permissions.png" alt="Role's permissions example" />
-</Frame>
-
-As you may have noticed all permissions are grouped by type, and the available groups are: `system`, `brands`, `categories`, `collections`, `products`, `customers`, `orders`, `discounts`.
-
-To add a new permission you just need to click on the **Create permission** button.
-
-<Frame>
-  <img src="/images/v2/add-permission.png" alt="Add permission" />
-</Frame>
-
-After adding your permission it will be automatically associated with the role and therefore all administrators with this role will have this permission.
-
-If the permission has no group it will be in a `Custom permissions` section.
-
-<Frame>
-  <img src="/images/v2/custom-permissions.png" alt="new permission" />
-</Frame>
