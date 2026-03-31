@@ -65,42 +65,40 @@ you can create thumbnails or mobile-friendly images.
 ]
 ```
 
-## Media Variants
+## Image Conversions
 
-The Spatie Media library supports defining various image sizes, so-called [Conversions](https://spatie.be/v2/laravel-medialibrary/v10/converting-images/defining-conversions). The uploaded images will be then converted to the given sizes with the given parameters.
+Shopper registers image conversions from the `config/shopper/media.php` `conversions` array. By default, two conversions are available: `large` (800x800) and `medium` (500x500). All conversions use `Fit::Fill` and preserve the original image format.
 
-For the moment in Shopper for all the Model that's used Media Library the only conversion available is
+To add custom conversions, add entries to the `conversions` config:
 
 ```php
-public function registerMediaConversions(?Media $media = null): void
-{
-    $this->addMediaConversion('thumb200x200')
-        ->fit(Manipulations::FIT_CROP, 200, 200);
-}
+'conversions' => [
+    'large' => ['width' => 800, 'height' => 800],
+    'medium' => ['width' => 500, 'height' => 500],
+    'small' => ['width' => 200, 'height' => 200],
+],
 ```
-
-But you can extend the different models to add conversions according to your needs.
 
 ## Retrieving Images
 
-### Thumbnail
-The presence of thumbnails is a very common scenario, which is why Shopper use them.
+To get the thumbnail URL for a product, brand, or collection:
 
 ```php
-$product->getUrl('thumb200x200') // or
-$product->getUrl(config('shopper.media.storage.thumbnail_collection'))
+$collection = config('shopper.media.storage.thumbnail_collection');
+
+$product->getFirstMediaUrl($collection);
+$product->getFirstMediaUrl($collection, 'medium');
 ```
 
-For more information on what's available, see [Defining conversions](https://spatie.be/v2/laravel-medialibrary/v10/converting-images/defining-conversions#content-using-multiple-conversions)
-
-### Images
-To get an image with full url on a product, a brand or a collection
+To get gallery images:
 
 ```php
-$product->getFirstMediaUrl(config('shopper.media.storage.collection_name'))
+$collection = config('shopper.media.storage.collection_name');
+
+$product->getMedia($collection);
+$product->getFirstMediaUrl($collection);
 ```
 
 ## Advanced Customization
 
-If you need further customization, you can configure a custom disk in `config/filesystems.php` and update the `config/shopper/media.php` configuration.
-You can see everything about Storage on the [Laravel documentation](https://laravel.com/v2/11.x/filesystem)
+If you need further customization, configure a custom disk in `config/filesystems.php` and update the `disk_name` in `config/shopper/media.php`. See the [Laravel Filesystem documentation](https://laravel.com/docs/filesystem) for details.

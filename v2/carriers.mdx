@@ -11,23 +11,12 @@ Shopper provides a flexible shipping system that supports both manual rate confi
 
 Shopper uses two models to manage shipping:
 
-```php
-Shopper\Core\Models\Carrier       // The shipping provider
-Shopper\Core\Models\CarrierOption // Delivery options with pricing
-```
+| Model | Purpose |
+|-------|---------|
+| `Shopper\Core\Models\Carrier` | The shipping provider (UPS, FedEx, local delivery) |
+| `Shopper\Core\Models\CarrierOption` | Specific delivery methods with pricing per zone |
 
-```php
-use Shopper\Core\Models\Carrier;
-
-// The model implements
-- Shopper\Core\Models\Contracts\Carrier
-- Spatie\MediaLibrary\HasMedia
-
-// Uses traits
-- HasSlug
-- HasZones
-- HasMedia
-```
+The Carrier model implements `Shopper\Core\Models\Contracts\Carrier` and uses the `HasSlug` and `HasZones` traits. It is not configurable via `config/shopper/models.php`.
 
 ## Database Schema
 

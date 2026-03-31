@@ -66,30 +66,34 @@ To view the roles and permissions management page, you must go to the **Settings
   <img src="/images/v2/settings-staff.png" alt="Setting Staff & permissions" />
 </Frame>
 
-## Model
+## Models
 
-The model used for the **Role** is `Shopper\Models\Role` this model extend from the Spatie Role model.
+### Role
 
-| Name             | Type    | Required | Notes                                                       |
-|------------------|---------|----------|-------------------------------------------------------------|
-| `id`             | autoinc |          | auto                                                        |
-| `name`           | string  | yes      | Role name in lowercase such as an slug (Eg.: author)        |
-| `guard_name`     | string  | no       | This field is automatically filled in by Spatie             |
-| `display_name`   | string  | no       | Nullable, the readable name for the role (Eg.: Blog Author) |
-| `description`    | text    | no       | Nullable, the role description                              |
-| `can_be_removed` | boolean | no       | Default `true`, defines if a role can be deleted.           |
+The model used for roles is `Shopper\Models\Role`, which extends Spatie's Role model with additional fields.
 
-And the **Permission** model is `Shopper\Models\Permission`
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `name` | string | no | - | Role name in lowercase (e.g., `author`) |
+| `guard_name` | string | no | auto | Filled automatically by Spatie |
+| `display_name` | string | yes | null | Human-readable name (e.g., "Blog Author") |
+| `description` | text | yes | null | Role description |
+| `can_be_removed` | boolean | no | true | Whether the role can be deleted |
 
-| Name             | Type    | Required | Notes                                                             |
-|------------------|---------|----------|-------------------------------------------------------------------|
-| `id`             | autoinc |          | auto                                                              |
-| `name`           | string  | yes      | Permission name in lowercase such as an slug (Eg.: create_post)   |
-| `guard_name`     | string  | no       | This field is automatically filled in by Spatie                   |
-| `group_name`     | string  | no       | Permissions can be grouped into groups to better organize them.   |
-| `display_name`   | string  | no       | Nullable, the readable name for the permission (Eg.: Create Post) |
-| `description`    | text    | no       | Nullable, the permission description                              |
-| `can_be_removed` | boolean | no       | Default `true`, defines if a permission can be deleted.           |
+### Permission
+
+The model used for permissions is `Shopper\Models\Permission`, which extends Spatie's Permission model with grouping support.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `name` | string | no | - | Permission name (e.g., `browse_products`) |
+| `guard_name` | string | no | auto | Filled automatically by Spatie |
+| `group_name` | string | yes | null | Permission group for organization |
+| `display_name` | string | yes | null | Human-readable name |
+| `description` | text | yes | null | Permission description |
+| `can_be_removed` | boolean | no | true | Whether the permission can be deleted |
 
 The **Permission** model has some groups as shown here
 
@@ -203,7 +207,7 @@ In the way that when an admin are granted of a specific role, he will granted al
   <img src="/images/v2/permissions.png" alt="Role's permissions example" />
 </Frame>
 
-As you may have noticed all permissions are grouped by type, and the available types are mentioned above in this [section](/roles-permissions#fields).
+As you may have noticed all permissions are grouped by type, and the available groups are: `system`, `brands`, `categories`, `collections`, `products`, `customers`, `orders`, `discounts`.
 
 To add a new permission you just need to click on the **Create permission** button.
 

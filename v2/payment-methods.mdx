@@ -7,11 +7,7 @@ Payment methods represent the ways customers can pay for their orders. Shopper p
 
 ## Model
 
-```php
-Shopper\Core\Models\PaymentMethod
-```
-
-The model used is `Shopper\Core\Models\PaymentMethod`, implementing `Shopper\Core\Models\Contracts\PaymentMethod`. It uses the `HasSlug` and `HasZones` traits.
+The model used is `Shopper\Core\Models\PaymentMethod`. It implements `Shopper\Core\Models\Contracts\PaymentMethod` and uses the `HasSlug` and `HasZones` traits. The model is not configurable via `config/shopper/models.php`.
 
 ## Database Schema
 

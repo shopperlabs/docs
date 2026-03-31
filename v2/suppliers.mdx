@@ -11,23 +11,11 @@ The supplier feature is gated behind a feature flag. It must be enabled in your 
 
 ## Model
 
-```php
-Shopper\Core\Models\Supplier
-```
-
-```php
-use Shopper\Core\Models\Supplier;
-
-// The model implements
-- Shopper\Core\Models\Contracts\Supplier
-
-// Uses traits
-- HasFactory
-- HasModelContract
-- HasSlug
-```
+The model used is `Shopper\Core\Models\Supplier`. It implements `Shopper\Core\Models\Contracts\Supplier` and uses the `HasSlug` trait for automatic slug generation. The model is configurable via `config/shopper/models.php`.
 
 ### Extending the Model
+
+To add custom behavior, extend the model and update your configuration:
 
 ```php
 namespace App\Models;
@@ -36,7 +24,6 @@ use Shopper\Core\Models\Supplier as BaseSupplier;
 
 class Supplier extends BaseSupplier
 {
-    // Add your customizations here
 }
 ```
 
