@@ -1,13 +1,76 @@
 ---
 title: Controllers
-description: "Create custom controllers and Livewire pages for your Shopper admin panel."
+description: "Add custom pages to the admin panel using controllers or Livewire components."
 ---
 
-Shopper's admin panel is built with Livewire components, but you can also add traditional controllers for custom pages. Custom page components are configured in `config/shopper/admin.php` under the `pages` key.
+You can add custom pages to the Shopper admin panel using either traditional Laravel controllers or Livewire components. Both approaches share the same authentication middleware and can be integrated into the admin sidebar navigation.
 
-## Page Namespace
+## Custom Routes
 
-The `pages` configuration controls where Shopper looks for custom Livewire page components:
+To add custom routes inside the admin panel, set the `custom_file` key in `config/shopper/routes.php` to point to a dedicated route file:
+
+```php
+// config/shopper/routes.php
+
+'custom_file' => base_path('routes/shopper.php'),
+```
+
+Routes defined in this file are automatically loaded with the admin panel's middleware stack (authentication, authorization).
+
+## Using Controllers
+
+You can use standard Laravel controllers with Shopper. Create a controller in any namespace you prefer:
+
+```bash
+php artisan make:controller Shopper/PostController
+```
+
+This creates a controller in `app/Http/Controllers/Shopper/PostController.php`:
+
+```php
+namespace App\Http\Controllers\Shopper;
+
+use App\Http\Controllers\Controller;
+use Illuminate\Contracts\View\View;
+
+class PostController extends Controller
+{
+    public function index(): View
+    {
+        $posts = Post::query()->latest()->paginate(20);
+
+        return view('shopper.posts.index', compact('posts'));
+    }
+
+    public function create(): View
+    {
+        return view('shopper.posts.create');
+    }
+
+    public function store(Request $request)
+    {
+        // Handle form submission
+
+        return redirect()->route('shopper.posts.index');
+    }
+}
+```
+
+Register the routes in your custom route file:
+
+```php
+// routes/shopper.php
+
+use App\Http\Controllers\Shopper\PostController;
+
+Route::get('/posts', [PostController::class, 'index'])->name('shopper.posts.index');
+Route::get('/posts/create', [PostController::class, 'create'])->name('shopper.posts.create');
+Route::post('/posts', [PostController::class, 'store'])->name('shopper.posts.store');
+```
+
+## Using Livewire Components
+
+Livewire is the recommended approach since the entire Shopper admin is built with Livewire. The `pages` configuration in `config/shopper/admin.php` controls the namespace and view path for custom Livewire components:
 
 ```php
 // config/shopper/admin.php
@@ -18,41 +81,13 @@ The `pages` configuration controls where Shopper looks for custom Livewire page 
 ],
 ```
 
-This means custom Livewire components placed in `app/Livewire/Shopper/` will be available in the admin panel. You can change this namespace to match your project structure.
-
-## Custom Routes
-
-To add custom routes that share Shopper's authentication middleware, point to a dedicated route file in `config/shopper/routes.php`:
-
-```php
-// config/shopper/routes.php
-
-'custom_file' => base_path('routes/shopper.php'),
-```
-
-Routes defined in this file are automatically loaded with the admin panel's middleware stack. Create the route file and define your routes:
-
-```php
-// routes/shopper.php
-
-use App\Livewire\Shopper\PostIndex;
-use App\Livewire\Shopper\PostEdit;
-
-Route::get('/posts', PostIndex::class)->name('shopper.posts.index');
-Route::get('/posts/{post}', PostEdit::class)->name('shopper.posts.edit');
-```
-
-## Creating a Custom Page
-
-Create a Livewire component in the configured namespace:
+Create a Livewire component:
 
 ```bash
 php artisan make:livewire Shopper/PostIndex
 ```
 
-This creates `app/Livewire/Shopper/PostIndex.php` and `resources/views/livewire/shopper/post-index.blade.php`.
-
-Your component can use Shopper's layout to match the admin panel styling:
+Use Shopper's layout attribute to inherit the admin panel styling:
 
 ```php
 namespace App\Livewire\Shopper;
@@ -71,10 +106,20 @@ class PostIndex extends Component
 }
 ```
 
+Register Livewire routes in your custom route file:
+
+```php
+// routes/shopper.php
+
+use App\Livewire\Shopper\PostIndex;
+
+Route::get('/posts', PostIndex::class)->name('shopper.posts.index');
+```
+
 <Tip>
-Use `#[Layout('shopper::components.layouts.app')]` on your component to inherit the admin panel layout with sidebar, header, and notification system.
+Use `#[Layout('shopper::components.layouts.app')]` on your Livewire component to inherit the admin panel layout with sidebar, header, and notification system.
 </Tip>
 
 ## Adding Navigation
 
-To add your custom page to the admin sidebar, create a sidebar extension. See the [Navigation](/v2/extending/navigation) page for details on adding menu items.
+To add your custom page to the admin sidebar, create a sidebar extension. See the [Navigation](/v2/extending/navigation) page for details on adding menu items that link to your controller or Livewire routes.
