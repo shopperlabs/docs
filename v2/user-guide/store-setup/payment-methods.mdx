@@ -11,7 +11,7 @@ Payment methods define how customers can pay at checkout. You can offer credit c
 2. Select **Payment Methods** from the settings menu
 
 <Frame>
-  <img src="/images/v2/ug-payment-methods-list.png" alt="Payment methods list" />
+  <img src="/images/v2/payment-methods-list.png" alt="Payment methods list" />
 </Frame>
 
 {/* SCREENSHOT NEEDED: The Settings > Payment Methods page showing a table of payment methods.
@@ -30,7 +30,7 @@ To add a new payment method:
 3. Click **Save**
 
 <Frame>
-  <img src="/images/v2/ug-payment-methods-create.png" alt="Add payment method form" />
+  <img src="/images/v2/payment-methods-create.png" alt="Add payment method form" />
 </Frame>
 
 {/* SCREENSHOT NEEDED: The "Create payment method" modal form with fields:
@@ -59,6 +59,10 @@ The driver connects a payment method to a payment provider:
 |--------|-------------|---------|
 | **Manual** | No online processing. You handle payment outside of Shopper | Cash on delivery, bank transfer, check |
 | **Stripe** | Payments processed via Stripe (requires API keys) | Credit cards, Apple Pay, Google Pay |
+
+<Frame>
+  <img src="/images/v2/payment-methods-driver.png" alt="select payment method driver" />
+</Frame>
 
 <Note>
 Drivers like Stripe require API credentials configured by your developer. If a driver shows "Not Configured" in the dropdown, the API keys have not been set up yet. See the [Payments developer documentation](/v2/payments) for setup instructions.

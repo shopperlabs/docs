@@ -16,7 +16,7 @@ Shopper supports two types of carriers:
 2. Select **Carriers** from the settings menu
 
 <Frame>
-  <img src="/images/v2/ug-carriers-list.png" alt="Carriers list page" />
+  <img src="/images/v2/carriers-list.png" alt="Carriers list page" />
 </Frame>
 
 {/* SCREENSHOT NEEDED: The Settings > Carriers page showing a table of carriers.
@@ -35,13 +35,8 @@ To add a new shipping carrier:
 3. Click **Save**
 
 <Frame>
-  <img src="/images/v2/ug-carriers-create.png" alt="Add carrier form" />
+  <img src="/images/v2/carriers-create.png" alt="Add carrier form" />
 </Frame>
-
-{/* SCREENSHOT NEEDED: The "Add carrier" modal form with fields filled in:
-    Name: "Colissimo", Driver dropdown showing "Manual" selected with other options
-    visible (UPS, FedEx, USPS), Website: "https://www.colissimo.fr",
-    Description: "French postal service delivery". */}
 
 ### Carrier Fields
 
@@ -62,6 +57,10 @@ The driver determines how shipping rates are calculated:
 | **UPS** | Rates are fetched from the UPS API in real time | You have a UPS account and want dynamic pricing |
 | **FedEx** | Rates are fetched from the FedEx API in real time | You have a FedEx account and want dynamic pricing |
 | **USPS** | Rates are fetched from the USPS API in real time | You ship within the United States |
+
+<Frame>
+  <img src="/images/v2/carriers-driver.png" alt="select carrier driver" />
+</Frame>
 
 <Note>
 API-connected drivers (UPS, FedEx, USPS) require API credentials to be configured by your developer. If a driver shows a "Not Configured" badge in the dropdown, the credentials have not been set up yet. See the [Carriers developer documentation](/v2/carriers) for setup instructions.
@@ -104,7 +103,7 @@ To add a delivery option:
 4. Select the carrier and fill in the delivery details
 5. Click **Save**
 
-<Frame caption="Add a delivery option">
+<Frame>
   <img src="/images/v2/zone-delivery-method-form.png" alt="Add delivery option form" />
 </Frame>
 
