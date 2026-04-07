@@ -225,6 +225,14 @@
                   ]
                 },
                 {
+                  "group": "Storefront",
+                  "pages": [
+                    "v2/starter-kits",
+                    "v2/livewire-starter-kit",
+                    "v2/inertia-starter-kit"
+                  ]
+                },
+                {
                   "group": "Releases",
                   "pages": [
                     {
@@ -356,7 +364,7 @@
         },
         {
             "source": "/blade-starter-kit",
-            "destination": "/v2/blade-starter-kit"
+            "destination": "/v2/starter-kits"
         },
         {
             "source": "/currencies",
