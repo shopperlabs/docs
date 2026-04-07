@@ -1,93 +1,342 @@
 ---
 title: Livewire Starter Kit
-description: Build dynamic, reactive interfaces using PHP and Blade with the Livewire Starter Kit
+description: A production-ready storefront built with Livewire 3, Flux UI and Tailwind CSS v4.
 ---
 
+The Livewire Starter Kit is a complete storefront for Shopper, built entirely within the Laravel ecosystem. It uses [Livewire 3](https://livewire.laravel.com/) for reactive components, [Flux UI](https://fluxui.dev) for the design system, and [Tailwind CSS v4](https://tailwindcss.com/) for styling. Because Shopper's admin panel is also built with Livewire, you can reuse patterns and components across your admin and storefront.
+
 <Frame>
-  <img src="/images/v2/livewire-starterkit.png" alt="Livewire Starter kits" />
+  <img src="/images/v2/livewire-starterkit.png" alt="Livewire Starter Kit storefront" />
 </Frame>
 
 ## Prerequisites
 
-Before following along with this guide, make sure you have the following requirements:
-
-- PHP 8.2
-- MySQL 8.0+
+| Requirement | Version |
+|-------------|---------|
+| PHP | 8.4+ |
+| Laravel | 12.0+ |
+| Shopper | 2.7+ |
+| Node.js | 20+ |
 
 ## Installation
 
-In your Shopper app project, after installing the [Starter kit](/v2/starter-kits#installation), you need to run the command:
+The `shopper:kit:install` command is built into Shopper. No additional package is required.
 
-```shell
-php artisan shopper:starter-kit:install livewire
+```bash
+php artisan shopper:kit:install shopper/livewire-starter-kit
 ```
 
-This command publishes views, routes, controllers, and other resources to your application. The starter kits publishes all of its code to your 
-application so that you have full control and visibility over its features and implementation.
+The installer downloads the kit, reads its [manifest](/v2/starter-kits#the-manifest), copies all storefront files into your project, and installs the following dependencies.
 
-## Structure
+| Package | Version | Purpose |
+|---------|---------|---------|
+| `livewire/livewire` | ^3.7 | Reactive server-driven components |
+| `livewire/flux` | ^2.0 | UI component library (buttons, inputs, modals, cards) |
+| `livewire/volt` | ^1.7 | Single-file Livewire components |
+| `laravel/fortify` | ^1.25 | Authentication backend (login, register, 2FA) |
+| `shopper/stripe` | ^2.7 | Stripe payment integration |
 
-When you install the Shopper Livewire Starter Kit, the following directories and files are published to your application. 
-This structure provides simplest foundation for building your e-commerce storefront while giving you full control over customization.
+After installing dependencies, the kit runs its post-install commands: database migrations, storage symlink creation, and frontend asset build.
+
+Once complete, the kit package is removed from your `composer.json`. The code is yours.
+
+<Tip>
+On an existing project, create a new branch before installing so you can review every change.
+
+```bash
+git checkout -b storefront
+php artisan shopper:kit:install shopper/livewire-starter-kit
+```
+</Tip>
+
+## Project Structure
+
+The starter kit publishes files into standard Laravel directories. Here is the full structure.
+
+```
+app/
+├── Actions/
+│   ├── Cart/
+│   │   └── AddToCart.php
+│   ├── Checkout/
+│   │   ├── BuildShippingPackages.php
+│   │   ├── FetchDeliveryRates.php
+│   │   ├── FetchPaymentMethods.php
+│   │   └── ResolveZoneForCountry.php
+│   ├── Fortify/
+│   │   ├── CreateNewUser.php
+│   │   └── ResetUserPassword.php
+│   ├── Product/
+│   │   ├── AddProductReviewAction.php
+│   │   ├── BuildVariantOptions.php
+│   │   └── ResolveVariantAvailability.php
+│   ├── CreateOrder.php
+│   ├── GetCountriesByZone.php
+│   └── ZoneSessionManager.php
+├── Concerns/
+│   ├── PasswordValidationRules.php
+│   └── ProfileValidationRules.php
+├── DTO/
+│   ├── AddressData.php
+│   ├── CountryByZoneData.php
+│   ├── PriceData.php
+│   └── ProductReviewsData.php
+├── Http/Controllers/
+│   └── StripeWebhookController.php
+├── Livewire/
+│   ├── Account/
+│   │   ├── AddressForm.php
+│   │   └── Addresses.php
+│   ├── Actions/
+│   │   └── Logout.php
+│   ├── Home/
+│   │   ├── FeaturedCollections.php
+│   │   ├── FeaturedProducts.php
+│   │   └── ShopByCategory.php
+│   ├── Pages/
+│   │   ├── Cart.php
+│   │   ├── CategoryIndex.php
+│   │   ├── CategoryShow.php
+│   │   ├── Checkout.php
+│   │   ├── CollectionShow.php
+│   │   ├── Home.php
+│   │   ├── ProductIndex.php
+│   │   ├── ProductShow.php
+│   │   ├── SearchProducts.php
+│   │   └── StripePayment.php
+│   ├── CartCount.php
+│   ├── StoreFooter.php
+│   ├── StoreHeader.php
+│   └── ZoneSelector.php
+├── Models/
+│   ├── Category.php
+│   ├── Channel.php
+│   ├── Product.php
+│   ├── ProductVariant.php
+│   └── User.php
+├── Providers/
+│   ├── AppServiceProvider.php
+│   ├── FortifyServiceProvider.php
+│   └── VoltServiceProvider.php
+├── Traits/
+│   └── HasProductPricing.php
+├── CheckoutSession.php
+└── helpers.php
+
+resources/views/
+├── components/        # Blade components (product cards, price display, badges)
+├── layouts/           # Store, account, and auth layouts
+├── livewire/          # Livewire component views (header, footer, cart count)
+├── pages/
+│   ├── auth/          # Login, register, password reset, 2FA
+│   ├── home/          # Homepage sections (collections, products, categories)
+│   ├── settings/      # Profile, appearance, security
+│   ├── shop/          # Product listing, detail, cart, checkout
+│   └── account/       # Order history, order detail
+└── partials/          # Shared head, settings heading
+
+routes/
+├── web.php            # Storefront, checkout, account routes
+└── settings.php       # Profile and security routes
+
+tests/
+├── Feature/Auth/      # Authentication tests
+└── Feature/Settings/  # Profile and security tests
+```
+
+## Routing
+
+The starter kit defines all storefront routes in `routes/web.php`. Each page is a full-page Livewire component.
+
+### Public Routes
+
+| Route | Component | Description |
+|-------|-----------|-------------|
+| `/` | `Home` | Homepage with featured collections, products, and categories |
+| `/shop` | `ProductIndex` | Product catalog with search and filtering |
+| `/shop/{product:slug}` | `ProductShow` | Product detail with variant selection |
+| `/categories` | `CategoryIndex` | All categories |
+| `/categories/{category:slug}` | `CategoryShow` | Products in a category |
+| `/collections/{collection:slug}` | `CollectionShow` | Products in a collection |
+| `/search` | `SearchProducts` | Full-text search across products |
+| `/cart` | `Cart` | Shopping cart |
+
+### Authenticated Routes
+
+These routes require the user to be logged in and have a verified email.
+
+| Route | Component | Description |
+|-------|-----------|-------------|
+| `/checkout` | `Checkout` | Multi-step checkout flow |
+| `/checkout/payment/{number}` | `StripePayment` | Stripe Payment Element |
+| `/checkout/success/{order}` | Volt page | Order confirmation |
+| `/account/orders` | Volt page | Order history |
+| `/account/orders/{order}` | Volt page | Order detail |
+| `/account/addresses` | `Addresses` | Address management |
+| `/profile/edit` | Volt page | Profile settings |
+| `/profile/appearance` | Volt page | Dark mode / appearance |
+| `/profile/security` | Volt page | Password and two-factor authentication |
+
+The Stripe webhook endpoint is registered at `/webhooks/stripe` with rate limiting.
+
+## Architecture
+
+The starter kit follows a clear separation of concerns. Business logic lives in Action classes, data structures in DTOs, and UI in Livewire components. This makes it straightforward to modify any part of the storefront without affecting others.
 
 ### Actions
 
-This directory (`app/Actions`) contains action classes that handle specific business logic, such as cart management, or order processing. 
-These actions are designed to be reusable and modular. Here the published files :
+Actions are single-responsibility classes that encapsulate business logic. They are resolved from the container, so you can swap implementations or add dependencies as needed.
 
-- `CountriesWithZone.php`
-- `CreateOrder.php`
-- `GetCountriesByZone.php`
-- `ZoneSessionManager.php`
-- `Payment/PayWithCash.php`
+```php
+use App\Actions\Cart\AddToCart;
+use App\Actions\Checkout\FetchDeliveryRates;
+use App\Actions\CreateOrder;
 
-### Contracts
+resolve(AddToCart::class)->handle($product, $selectedVariant);
+resolve(FetchDeliveryRates::class)->handle($addressData, $packages);
+resolve(CreateOrder::class)->handle();
+```
 
-The `Contracts` directory defines interfaces for key functionalities, such as commands or services. These contracts allow you to implement your own logic while adhering to a consistent structure.
+The checkout flow is split into four focused actions.
 
-### DTO
+| Action | Responsibility |
+|--------|---------------|
+| `BuildShippingPackages` | Builds package dimensions from cart items for carrier rate requests |
+| `FetchDeliveryRates` | Queries available carriers and returns shipping rate options |
+| `FetchPaymentMethods` | Loads payment methods available for the customer's country |
+| `ResolveZoneForCountry` | Resolves the pricing zone for a given country with caching |
 
-The DTO (Data Transfer Objects) folder includes classes that encapsulate data structures used across the application. 
-These objects ensure clean and consistent data handling. Here the published files :
+### DTOs
 
-- `AddressData.php`
-- `CountryByZoneData.php`
-- `OptionData.php`
-- `PriceData.php`
+Data Transfer Objects provide type-safe structures for data passed between components.
 
-### Middleware
-
-The Middleware directory includes custom `ZoneDetector` middleware for handling selected zone for the customer.
+| DTO | Purpose |
+|-----|---------|
+| `AddressData` | Structured address data for forms and checkout |
+| `CountryByZoneData` | Zone session data (zone ID, country code, currency code) |
+| `PriceData` | Formatted price with amount, currency, and comparison price |
+| `ProductReviewsData` | Aggregated review data (average rating, count, distribution) |
 
 ### Models
 
-In your models folder, some models will be added (or replaced if you had models with the same name), such as : 
+The starter kit publishes model files that extend Shopper's base models. These are configured in `config/shopper/models.php` so that Shopper's internals use your extended versions.
 
-- `User.php`
-- `Brand.php`
-- `Category.php`
-- `Channel.php`
-- `Collection.php`
-- `Product.php`
-- `ProductVariant.php`
+```php
+// app/Models/Product.php
+class Product extends Shopper\Models\Product
+{
+    // Add your own methods, scopes, or relationships here
+}
+```
 
-The models copied are to match the configuration of the Shopper models (inside your `config/shopper/models.php` files) that were copied with this installation.
+You can add custom logic directly to these models. Any method you add is available throughout the storefront and in Shopper's admin panel.
 
-### Pages
+### CheckoutSession
 
-**Livewire Pages Components**
-- `Account/Orders.php`
-- `Account/Addresses.php`
-- `Home.php`
-- `SingleProduct.php`
-- `Checkout.php`
+The `CheckoutSession` class defines constants for session keys used throughout the checkout flow. This provides a single place to reference all checkout-related session data.
 
-**Volt Pages Components**
-- `pages.order.confirmed`
-- `pages.account.index`
-- `pages.account.profile`
-- `pages.account.orders.detail`
+```php
+use App\CheckoutSession;
 
-### Views and Components
+session()->get(CheckoutSession::KEY);              // 'checkout'
+session()->get(CheckoutSession::SHIPPING_ADDRESS);  // 'checkout.shipping_address'
+session()->get(CheckoutSession::SHIPPING_OPTION);   // 'checkout.shipping_option'
+session()->get(CheckoutSession::PAYMENT);           // 'checkout.payment'
+```
 
-...
+### Helpers
+
+The `app/helpers.php` file defines three global functions used across the storefront.
+
+| Function | Purpose |
+|----------|---------|
+| `cartSession()` | Returns the current cart or creates a new one with the active zone, currency, and channel |
+| `current_currency()` | Returns the currency code for the selected zone, or the store default |
+| `current_tax_label()` | Returns the tax label ("TTC" or "HT") based on the zone's tax configuration |
+
+## Checkout Flow
+
+The checkout is a multi-step process handled by the `Checkout` Livewire component. Each step validates its data before proceeding to the next.
+
+**Step 1 - Shipping Address.** The customer enters a new address or selects one of their saved addresses. The address is stored in the session and attached to the cart via `CartManager::addAddress()`.
+
+**Step 2 - Delivery Options.** The `BuildShippingPackages` action builds package data from the cart, then `FetchDeliveryRates` queries configured [carriers](/v2/carriers) for available shipping rates based on the address and packages. The customer selects a delivery option.
+
+**Step 3 - Payment.** `FetchPaymentMethods` loads available [payment methods](/v2/payments) for the customer's country. When the customer places the order, the `CreateOrder` action converts the cart into an order inside a database transaction, adds shipping costs, and initiates payment processing through Shopper's `PaymentProcessingService`.
+
+For Stripe payments, the customer is redirected to a dedicated payment page (`StripePayment`) that renders the Stripe Payment Element. The `StripeWebhookController` handles payment confirmation webhooks.
+
+## Zones and Currency
+
+The starter kit uses Shopper's [zone system](/v2/zones) for multi-currency and regional pricing. The `ZoneSelector` component in the footer lets customers pick their country. When a zone is selected, the `ZoneSessionManager` stores a `CountryByZoneData` DTO in the session with the zone ID, country code, and currency code. All prices across the storefront update to reflect the zone's currency.
+
+If no zone is selected, the storefront falls back to your store's default currency from `config('shopper.core.currency')`.
+
+The `current_tax_label()` helper checks the zone's tax configuration to display "TTC" (tax-inclusive) or "HT" (tax-exclusive) labels alongside prices.
+
+To enable zone selection, create at least one active zone in your Shopper admin panel. You can optionally set a default zone using the `SHOPPER_DEFAULT_ZONE` environment variable.
+
+## Customization
+
+Once installed, every file belongs to your project. Here are the most common customization paths.
+
+### Styling
+
+All views use Flux UI components and Tailwind CSS v4. Modify colors, spacing, and layouts by editing the Blade templates in `resources/views/`. The base layout is in `resources/views/layouts/store.blade.php`.
+
+### Homepage Sections
+
+The homepage is composed of three independent Livewire components, each with its own view.
+
+| Component | View | What it shows |
+|-----------|------|---------------|
+| `FeaturedCollections` | `pages/home/featured-collections.blade.php` | Manual collections |
+| `FeaturedProducts` | `pages/home/featured-products.blade.php` | Latest published products |
+| `ShopByCategory` | `pages/home/shop-by-category.blade.php` | Root categories |
+
+Remove or reorder these components in `resources/views/pages/home.blade.php` to change the homepage layout.
+
+### Checkout
+
+To modify the checkout flow, edit the action classes in `app/Actions/Checkout/`. Each action handles one concern, so you can change how shipping rates are calculated without touching payment logic.
+
+To add a new payment provider, implement the provider using Shopper's [payment system](/v2/payments) and register it in your admin panel. The checkout will automatically pick it up through `FetchPaymentMethods`.
+
+### Adding Pages
+
+Create a new Livewire component and register a route in `routes/web.php`. Follow the existing pattern of full-page components in `app/Livewire/Pages/`.
+
+```php
+use Illuminate\Contracts\View\View;
+use Livewire\Component;
+
+class About extends Component
+{
+    public function render(): View
+    {
+        return view('pages.about')
+            ->title('About Us');
+    }
+}
+```
+
+```php
+// routes/web.php
+Route::get('about', About::class)->name('about');
+```
+
+### Models
+
+Add methods, scopes, or relationships directly to the model files in `app/Models/`. These models extend Shopper's base models, so all existing functionality is preserved.
+
+```php
+use Illuminate\Database\Eloquent\Builder;
+
+class Product extends Shopper\Models\Product
+{
+    public function scopeFeatured(Builder $query): Builder
+    {
+        return $query->where('is_featured', true);
+    }
+}
+```
