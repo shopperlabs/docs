@@ -1,0 +1,332 @@
+---
+title: From v2.6 to v2.7
+description: How to upgrade your Shopper installation from v2.6 to v2.7.
+---
+
+<Info>
+**Estimated Upgrade Time:** 30 to 90 minutes depending on how much storefront code interacts with monetary values.
+
+v2.7 ships with an AI-assisted upgrade package. Install it before upgrading to get guided migration prompts.
+</Info>
+
+## AI-Assisted Upgrade (Recommended)
+
+Shopper v2.7 includes `shopper/upgrade`, a temporary package with [Laravel Boost](https://github.com/laravel/boost) skills that guide your AI assistant through each breaking change.
+
+```bash
+composer require shopper/upgrade:^2.7 --dev
+php artisan boost:install
+```
+
+This registers 4 upgrade skills in your AI assistant:
+
+| Skill | What it does |
+|---|---|
+| `shopper-upgrade-money-storage` | Migrates storefront code to smallest currency unit |
+| `shopper-upgrade-slide-overs` | Migrates custom slide-over components |
+| `shopper-upgrade-two-factor-auth` | Migrates 2FA traits to SOLID interfaces |
+| `shopper-upgrade-filament-schemas` | Migrates InteractsWithForms to InteractsWithSchemas |
+
+Each skill checks if the migration applies to your project before suggesting changes.
+
+After completing the upgrade, remove the package:
+
+```bash
+composer remove shopper/upgrade --dev
+```
+
+## Updating Dependencies
+
+Update the following dependencies in your application's `composer.json` file:
+
+`shopper/framework` to `^2.7`
+
+`shopper/stripe` to `^2.7` (If installed)
+
+Then run:
+
+```bash
+composer update -W
+```
+
+<Note>
+v2.7 requires **Laravel 11.28+** or **Laravel 12.x**. If you are on an earlier Laravel 11 version, update Laravel first.
+Filament minimum version is now **4.9**.
+</Note>
+
+---
+
+## High Impact Changes
+
+### Money Storage: Smallest Currency Unit
+
+**Likelihood of Impact: High**
+*Affects all applications that read or write monetary values (prices, orders, cart totals, payment gateway calls).*
+
+This is the most critical change in v2.7. All monetary values are now stored and returned in the **smallest currency unit** (cents for USD/EUR/GBP, raw value for zero-decimal currencies like XAF/JPY). This follows the Stripe/Shopify standard.
+
+**What changed:** All Eloquent price accessors (get/set) have been removed from `Order`, `OrderItem`, `Price`, `CarrierOption`, `CartLine`, `CartLineTaxLine`, `CartLineAdjustment`, and `Discount`.
+
+#### Reading prices
+
+Model properties now return the raw database value (smallest unit) instead of human-readable values:
+
+```php
+$order->price_amount;
+$price->amount;
+```
+
+These return `1200` and `16300` respectively, not `12.00` and `163.00`. For display, use `shopper_money_format()`:
+
+```php
+shopper_money_format($order->price_amount, $order->currency_code);
+```
+
+#### Writing prices
+
+Pass the smallest unit directly — the setter no longer multiplies by 100:
+
+```php
+Order::create(['price_amount' => 12.00]); // [!code --]
+Order::create(['price_amount' => 1200]); // [!code ++]
+
+Price::create(['amount' => 163]); // [!code --]
+Price::create(['amount' => 16300]); // [!code ++]
+```
+
+#### Cart pipeline
+
+`CartPipelineRunner` no longer divides results by 100. All values are in cents:
+
+```php
+$context = $cartManager->calculate($cart);
+$context->subtotal; // 25.00 // [!code --]
+$context->subtotal; // 2500 // [!code ++]
+```
+
+#### Payment gateways
+
+Values are already in cents — remove any manual multiplication:
+
+```php
+Stripe::charge($order->price_amount * 100); // [!code --]
+Stripe::charge($order->price_amount); // [!code ++]
+```
+
+#### Zero-decimal currencies
+
+If you use zero-decimal currencies (XAF, JPY, KRW, etc.), existing data was incorrectly multiplied by 100. Run the fix command:
+
+```bash
+# Preview what will change
+php artisan shopper:upgrade:fix-zero-decimal-currencies --dry-run
+
+# Apply the fix
+php artisan shopper:upgrade:fix-zero-decimal-currencies
+```
+
+<Warning>
+Put your site in maintenance mode before running this command. It modifies prices, orders, order items, carrier options, cart lines, and discounts.
+</Warning>
+
+#### New helpers
+
+Two new helpers are available:
+
+| Helper | Purpose |
+|---|---|
+| `zero_decimal_currencies()` | Returns the list of zero-decimal currency codes |
+| `is_no_division_currency($code)` | Checks if a currency code is zero-decimal |
+
+#### MoneyInput component
+
+A new Filament form component handles the conversion between human values (form display) and smallest unit (database) automatically:
+
+```php
+use Shopper\Components\Form\MoneyInput;
+
+MoneyInput::make('price')
+    ->currency('USD')
+    ->suffix('USD');
+```
+
+If no currency is specified, it defaults to the shop's configured currency. For zero-decimal currencies, the mask precision adjusts to 0 automatically.
+
+#### Filament table columns
+
+Replace `->money()` with the `->currency()` macro:
+
+```php
+TextColumn::make('amount')->money(fn ($record) => $record->currencyCode) // [!code --]
+TextColumn::make('amount')->currency(fn ($record) => $record->currencyCode) // [!code ++]
+```
+
+<Note>
+**Existing database data for standard currencies (USD, EUR, GBP) is already correct** — the old setters stored values in cents. No migration needed for these currencies.
+</Note>
+
+---
+
+### Slide-Over Components Replaced
+
+**Likelihood of Impact: High**
+*Affects applications with custom slide-over components extending Shopper's base class.*
+
+Shopper's internal `SlideOverComponent` and `SlideOverPanel` classes have been removed and replaced by the [`laravelcm/livewire-slide-overs`](https://github.com/laravelcm/livewire-slide-overs) package.
+
+If you created custom slide-over components that extend Shopper's base class, update the import:
+
+```php
+use Shopper\Livewire\Components\SlideOverComponent; // [!code --]
+use Laravelcm\LivewireSlideOvers\SlideOverComponent; // [!code ++]
+```
+
+The `closePanelWithEvents()` method no longer exists:
+
+```php
+$this->closePanelWithEvents(['eventName']); // [!code --]
+$this->dispatch('eventName'); // [!code ++]
+$this->closePanel(); // [!code ++]
+```
+
+---
+
+## Medium Impact Changes
+
+### Two-Factor Authentication: SOLID Interfaces
+
+**Likelihood of Impact: Medium**
+*Affects applications that override the User model and use two-factor authentication.*
+
+The monolithic `TwoFactorAuthenticatable` trait has been split into focused interfaces and traits:
+
+```php
+use Shopper\Traits\TwoFactorAuthenticatable; // [!code --]
+use Shopper\Contracts\HasStoreAuthentication; // [!code ++]
+use Shopper\Contracts\HasStoreAuthenticationRecovery; // [!code ++]
+use Shopper\Traits\InteractsWithStoreAuthentication; // [!code ++]
+use Shopper\Traits\InteractsWithStoreAuthenticationRecovery; // [!code ++]
+
+class User extends Authenticatable // [!code --]
+class User extends Authenticatable implements HasStoreAuthentication, HasStoreAuthenticationRecovery // [!code ++]
+{
+    use TwoFactorAuthenticatable; // [!code --]
+    use InteractsWithStoreAuthentication; // [!code ++]
+    use InteractsWithStoreAuthenticationRecovery; // [!code ++]
+}
+```
+
+The two-factor columns on the users table have been renamed to avoid conflicts with Laravel Fortify's own 2FA columns. Update the `$hidden` array on your User model:
+
+```php
+protected $hidden = [
+    'password',
+    'remember_token',
+    'two_factor_secret', // [!code --]
+    'two_factor_recovery_codes', // [!code --]
+    'store_two_factor_secret', // [!code ++]
+    'store_two_factor_recovery_codes', // [!code ++]
+];
+```
+
+### Filament HasForms to HasSchemas
+
+**Likelihood of Impact: Medium**
+*Affects applications with custom Filament components that use `InteractsWithForms`.*
+
+Shopper now uses `InteractsWithSchemas` instead of `InteractsWithForms`. If you have custom components in `app/Shopper/` or `app/Livewire/`:
+
+```php
+use Filament\Forms\Concerns\InteractsWithForms; // [!code --]
+use Filament\Forms\Contracts\HasForms; // [!code --]
+use Filament\Schemas\Concerns\InteractsWithSchemas; // [!code ++]
+use Filament\Schemas\Contracts\HasSchemas; // [!code ++]
+```
+
+<Note>
+`InteractsWithForms` still works in Filament 4.x — this migration is recommended but not urgent.
+</Note>
+
+### Dependency Version Bumps
+
+**Likelihood of Impact: Medium**
+*Affects all applications.*
+
+| Dependency | Before | After |
+|---|---|---|
+| `laravel/framework` | `^11.0\|^12.0` | `^11.28\|^12.0\|^13.0` |
+| `filament/filament` | `^4.7` | `^4.9` |
+| `spatie/laravel-permission` | `^6.24` | `^6.24\|^7.0` |
+
+---
+
+## Low Impact Changes
+
+### InteractsWithSlideOverForm Trait
+
+10 slide-over form components now use the shared `InteractsWithSlideOverForm` trait and a generic Blade view. Their dedicated Blade views have been removed:
+
+`add-collection-form.blade.php`, `attribute-form.blade.php`, `brand-form.blade.php`, `category-form.blade.php`, `create-team-member.blade.php`, `discount-form.blade.php`, `supplier-form.blade.php`, `update-variant.blade.php`
+
+If you published and customized any of these views, you'll need to adapt to the new generic view or override the component's `render()` method.
+
+### Shipment Event Date Validation
+
+Shipment events now enforce chronological ordering — you cannot create an event with a date earlier than the previous event. The `RecordShipmentEventAction` validates this server-side.
+
+### Nested Sortable Categories
+
+Categories can now be reordered with drag & drop in the admin panel. No code changes required.
+
+### Collection Price Rules
+
+Automatic collection price rules now filter by the shop's default currency when evaluating products.
+
+---
+
+## New Features
+
+### Upgrade Package
+
+`shopper/upgrade` is a new temporary package with Laravel Boost skills for AI-assisted upgrades and an artisan command for zero-decimal currency data fixes. Install it before upgrading, remove it after.
+
+### MoneyInput Component
+
+A new `MoneyInput` Filament form component that handles currency-aware conversion between human values and smallest unit storage.
+
+---
+
+## Migration Checklist
+
+<Steps>
+  <Step title="Install the upgrade package">
+    Run `composer require shopper/upgrade:^2.7 --dev` and `php artisan boost:install` to get AI-assisted migration prompts.
+  </Step>
+  <Step title="Update storefront price reads">
+    Replace direct price property access with `shopper_money_format()` for display. Use raw values for calculations.
+  </Step>
+  <Step title="Update storefront price writes">
+    Pass values in smallest currency unit to all `create()` / `update()` calls on monetary fields.
+  </Step>
+  <Step title="Update payment gateway code">
+    Remove any `* 100` multiplication before sending to Stripe or other providers.
+  </Step>
+  <Step title="Fix zero-decimal currency data">
+    Run `php artisan shopper:upgrade:fix-zero-decimal-currencies` if you use XAF, JPY, or other zero-decimal currencies.
+  </Step>
+  <Step title="Update slide-over imports">
+    Replace `Shopper\Livewire\Components\SlideOverComponent` with `Laravelcm\LivewireSlideOvers\SlideOverComponent` in any custom slide-overs.
+  </Step>
+  <Step title="Update 2FA traits and hidden fields">
+    Replace `TwoFactorAuthenticatable` with the new interfaces and traits if you override the User model. Update your `$hidden` array to use `store_two_factor_secret` and `store_two_factor_recovery_codes` instead of the old column names.
+  </Step>
+  <Step title="Update dependencies">
+    Run `composer update -W` after setting `shopper/framework` to `^2.7`.
+  </Step>
+  <Step title="Run tests">
+    Run `php artisan test` and fix assertions that expect human-readable price values instead of cents.
+  </Step>
+  <Step title="Remove upgrade package">
+    Run `composer remove shopper/upgrade --dev` when done.
+  </Step>
+</Steps>

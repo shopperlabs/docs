@@ -1,118 +1,170 @@
 ---
 title: Shipping Zones
-description: Configure shipping zones to define where and how you ship products.
+description: "Define where you ship, which currencies you accept, and which payment and delivery methods are available."
 ---
 
-Shipping zones allow you to define geographical areas where you ship products and set specific shipping rules for each zone. This helps you manage shipping costs and delivery options effectively.
+A shipping zone is a group of countries that share the same currency, payment methods, and delivery options. For example, you might have a "Europe" zone with EUR currency and Colissimo/DHL delivery, and a "North America" zone with USD currency and UPS/FedEx delivery.
 
-## What are Shipping Zones?
+Zones are central to how your store operates. When a customer checks out, Shopper matches their shipping address to a zone and uses it to determine:
 
-A shipping zone is a geographical area (country, region, or group of countries) where you offer delivery. Each zone can have:
+- Which **currency** to charge in
+- Which **payment methods** to show (Stripe, PayPal, Cash on Delivery)
+- Which **delivery options** are available and at what price
+- Which **tax rules** apply
 
-- Specific shipping methods
-- Different shipping rates
-- Custom delivery times
+<Note>
+You need at least one enabled zone before customers can complete checkout.
+</Note>
 
 ## Accessing Zones
 
-Zones can be managed through the Settings panel or when configuring your storefront.
-
-<Frame caption="Shipping Zones Settings">
-  <img src="/images/v2/starterkit-zones.png" alt="Shipping Zones" />
-</Frame>
-
-## Enabling Zones for Your Store
-
-Before customers can complete checkout, you need to enable at least one shipping zone.
-
-<Frame>
-  <img src="/images/v2/starterkit-enable-zone.png" alt="Enable Zone" />
-</Frame>
-
-## Creating a Shipping Zone
-
-To create a new shipping zone:
-
 1. Click on **Settings** in the sidebar
 2. Select **Zones** from the settings menu
-3. Click on the **plus icon**
-4. Define the zone details:
+
+<Frame caption="Zones settings page">
+  <img src="/images/v2/starterkit-zones.png" alt="Shipping Zones list" />
+</Frame>
+
+The zones page shows all your configured zones. Click on a zone to view its details, shipping options, and connected carriers.
+
+## Creating a Zone
+
+To create a new zone:
+
+1. Click the **plus icon** button
+2. Fill in the zone details
+3. Click **Save**
 
 <Frame>
-  <img src="/images/v2/add-zone.png" alt="Enable Zone" />
+  <img src="/images/v2/add-zone.png" alt="Create zone form" />
 </Frame>
 
-| Field | Description |
-|-------|-------------|
-| **Name** | A descriptive name (e.g., "Europe", "North America") |
-| **Code** | A short code (e.g., "EU", "NA") |
-| **Countries** | Select countries included in this zone |
-| **Currency** | Zone's currency. A zone can only have one currency. |
-| **Payment methods** | Zone's payment methods. |
-| **Delivery methods** | Zone's delivery methods. |
+### Zone Fields
 
-## Zone-Based Shipping
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Name** | Yes | A descriptive name (e.g., "Europe", "North America", "Africa") |
+| **Code** | No | A short identifier code (e.g., "EU", "NA", "AF") |
+| **Countries** | Yes | The countries included in this zone. A country can only belong to one zone. |
+| **Currency** | Yes | The currency used for pricing and checkout in this zone. Each zone has exactly one currency. |
+| **Visibility** | No | Whether this zone is active. Disabled zones are not matched during checkout. |
+| **Payment methods** | Yes | Which payment methods are available in this zone (e.g., Stripe, Cash on Delivery) |
+| **Carriers** | Yes | Which shipping carriers serve this zone (e.g., UPS, Colissimo, Local Delivery) |
+| **Metadata** | No | Optional key-value data for custom use |
 
-Once zones are configured, you can:
+<Tip>
+Countries already assigned to another zone are grayed out in the country selector. Each country can only belong to one zone.
+</Tip>
 
-- Set flat-rate shipping per zone
-- Configure weight-based shipping rates
-- Offer free shipping for specific zones
-- Set minimum order amounts for free shipping
+## Zone Detail Page
 
-## Delivery Methods
-
-Each zone can have its own delivery methods (shipping options) that define how products are shipped to customers in that zone.
-
-### Viewing Delivery Methods
-
-When you open a zone, the delivery methods section displays all configured shipping options with their carrier, name, status, and price.
+After creating a zone, click on it to view its detail page. The detail page shows the zone's configuration and its shipping options.
 
 <Frame>
-  <img src="/images/v2/zone-delivery-methods.png" alt="Zone delivery methods" />
+  <img src="/images/v2/starterkit-enable-zone.png" alt="Zone detail page" />
 </Frame>
 
-### Adding a Delivery Method
+{/* SCREENSHOT NEEDED: The zone detail page showing zone info (name, code, countries list,
+    currency, payment methods, carriers) and the shipping options section below.
+    Use a zone named "Europe" with EUR currency, France/Germany/Belgium as countries. */}
 
-Click the **Add** button in the delivery methods section to open the shipping option form. Fill in the required fields (name, carrier, price, etc.) and save.
+## Editing a Zone
 
-<Frame caption="Add a delivery method">
-  <img src="/images/v2/zone-delivery-method-form.png" alt="Delivery method form" />
-</Frame>
+To update a zone's settings:
 
-### Deleting a Delivery Method
+1. Click on the zone from the zones list
+2. Click the **Edit** button
+3. Modify the fields you want to change
+4. Click **Save**
 
-To remove a delivery method, click the delete action on the corresponding option. A confirmation modal will appear before the deletion is processed.
+You can change the zone's name, code, countries, currency, payment methods, and carriers at any time.
+
+<Warning>
+Changing a zone's currency affects how prices are displayed to customers in that region. Make sure you have [prices](/v2/user-guide/marketing/pricing) configured in the new currency before switching.
+</Warning>
+
+## What's Configured Inside a Zone
+
+Each zone connects three things together for a region:
+
+| What | Purpose | Where to manage |
+|------|---------|-----------------|
+| **Countries** | Which countries belong to this zone | Zone form |
+| **Currency** | What currency customers pay in | Zone form |
+| **Payment methods** | How customers can pay (Stripe, Cash on Delivery, etc.) | Zone form (select from available methods) |
+| **Carriers** | Which shipping providers serve this zone | Zone form (select from available carriers) |
+| **Shipping options** | Specific delivery options with pricing | Zone detail page (see [Carriers](/v2/user-guide/store-setup/carriers)) |
+| **Tax rules** | Tax rates applied at checkout | Managed separately in tax settings |
+
+<Tip>
+You need to create [carriers](/v2/user-guide/store-setup/carriers) and payment methods before you can assign them to a zone. Set those up first, then create your zones.
+</Tip>
+
+## Zones in Orders
+
+When viewing orders, you can see which zone applies to each order. This helps you understand which shipping and payment rules were used.
 
 <Frame>
-  <img src="/images/v2/zone-delivery-method-delete.png" alt="Delete delivery method confirmation" />
+  <img src="/images/v2/orders-with-zone.png" alt="Orders showing zone information" />
 </Frame>
 
-## Orders with Zones
+## Common Zone Setups
 
-When viewing orders, you can see which shipping zone applies to each order.
+### Single-Country Store
 
-<Frame>
-  <img src="/images/v2/orders-with-zone.png" alt="Orders with Zone" />
-</Frame>
+If you only sell domestically, create one zone:
+
+| Zone | Countries | Currency | Carriers |
+|------|-----------|----------|----------|
+| Domestic | Your country | Your currency | Local carriers |
+
+### Multi-Region Store
+
+For stores selling across regions:
+
+| Zone | Countries | Currency | Carriers |
+|------|-----------|----------|----------|
+| Domestic | France | EUR | Colissimo, Chronopost |
+| Europe | Germany, Belgium, Spain, Italy | EUR | DHL, UPS |
+| North America | United States, Canada | USD | FedEx, UPS |
+| Africa | Cameroon, Senegal, Ivory Coast | XAF | DHL Express |
+
+### Global Store with Few Zones
+
+Keep it simple with broad zones:
+
+| Zone | Countries | Currency |
+|------|-----------|----------|
+| Domestic | Your country | Your currency |
+| International | All others | USD |
 
 ## Best Practices
 
 <CardGroup cols={2}>
   <Card title="Start Simple" icon="rocket">
-    Begin with broad zones (e.g., "Domestic" and "International") and refine as your business grows.
+    Begin with a domestic zone and expand to international zones as your business grows.
   </Card>
-  <Card title="Consider Costs" icon="calculator">
-    Group countries with similar shipping costs into the same zone to simplify pricing.
+  <Card title="Group by Cost" icon="calculator">
+    Countries with similar shipping costs should share a zone to simplify pricing.
   </Card>
-  <Card title="Test Thoroughly" icon="vial">
-    Place test orders from different locations to ensure zones work correctly.
+  <Card title="One Currency per Zone" icon="coins">
+    Each zone uses one currency. If you sell in EUR and USD, you need separate zones.
   </Card>
-  <Card title="Update Regularly" icon="rotate">
-    Review your zones periodically as shipping costs and delivery options change.
+  <Card title="Test Checkout" icon="vial">
+    After configuring zones, place test orders from different countries to verify everything works.
   </Card>
 </CardGroup>
 
-<Tip>
-If you're just starting out, create a simple domestic zone first to enable checkout, then add international zones as needed.
-</Tip>
+## Related Pages
+
+<CardGroup cols={3}>
+  <Card title="Carriers" icon="truck" href="/v2/user-guide/store-setup/carriers">
+    Set up shipping carriers and configure delivery options.
+  </Card>
+  <Card title="Currencies" icon="coins" href="/v2/user-guide/store-setup/currencies">
+    Manage the currencies available in your store.
+  </Card>
+  <Card title="Zones Documentation" icon="code" href="/v2/zones">
+    Developer reference for zones, relationships, and configuration.
+  </Card>
+</CardGroup>

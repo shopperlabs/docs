@@ -59,7 +59,8 @@ use Shopper\Core\Enum\FulfillmentStatus;
 | `latitude` | decimal(10,7) | yes | GPS latitude |
 | `longitude` | decimal(10,7) | yes | GPS longitude |
 | `occurred_at` | datetime | yes | When the event occurred |
-| `metadata` | json | yes | Additional event data |
+| `metadata` | jsonb | yes | Additional event data |
+| `created_at` | timestamp | yes | Creation timestamp |
 
 ### OrderItem Fulfillment Columns
 
@@ -455,6 +456,90 @@ $shipment->update(['returned_at' => now()]);
 $shipment->items()->update([
     'fulfillment_status' => FulfillmentStatus::Cancelled,
 ]);
+```
+
+## Actions
+
+Shopper provides dedicated action classes for fulfillment operations. These handle side effects like syncing order statuses, updating item states, and dispatching events automatically.
+
+### RecordShipmentEventAction
+
+The recommended way to record shipment events. It validates the transition, updates the shipment status, logs the event, and handles side effects based on the new status:
+
+```php
+use Shopper\Core\Actions\RecordShipmentEventAction;
+use Shopper\Core\Enum\ShipmentStatus;
+
+$action = resolve(RecordShipmentEventAction::class);
+
+$action->execute($shipment, ShipmentStatus::PickedUp, [
+    'description' => 'Package collected by carrier',
+    'location' => 'Paris Distribution Center',
+    'occurred_at' => now(),
+]);
+```
+
+When a shipment transitions to **PickedUp**, the action automatically updates all items in the shipment to `FulfillmentStatus::Shipped` and changes the order status from `New` to `Processing`.
+
+When a shipment transitions to **Delivered**, the action updates all items to `FulfillmentStatus::Delivered` and completes the order if all items across all shipments are delivered.
+
+When a shipment transitions to **Returned**, the action updates all items to `FulfillmentStatus::Cancelled`.
+
+### MarkShipmentDeliveredAction
+
+A convenience action for marking a shipment as delivered. It validates that the shipment can transition to `Delivered` and dispatches the `OrderShipmentDelivered` event:
+
+```php
+use Shopper\Core\Actions\MarkShipmentDeliveredAction;
+
+$action = resolve(MarkShipmentDeliveredAction::class);
+
+$action->execute($shipment, [
+    'description' => 'Delivered to customer',
+    'location' => 'Customer address',
+]);
+```
+
+### SyncOrderShippingStatusAction
+
+This action computes the order-level `shipping_status` from the fulfillment statuses of all its items. It runs automatically after every shipment event, but you can call it manually if you update item statuses directly:
+
+```php
+use Shopper\Core\Actions\SyncOrderShippingStatusAction;
+
+$action = resolve(SyncOrderShippingStatusAction::class);
+
+$action->execute($order);
+```
+
+The algorithm counts items by fulfillment status and determines the order shipping status:
+
+| Condition | Order Shipping Status |
+|-----------|----------------------|
+| All items cancelled | `Returned` |
+| Some cancelled, rest shipped/delivered | `PartiallyReturned` |
+| No items shipped or delivered | `Unfulfilled` |
+| All items delivered | `Delivered` |
+| Some items delivered | `PartiallyDelivered` |
+| All items shipped or delivered | `Shipped` |
+| Otherwise | `PartiallyShipped` |
+
+When the status transitions to `Shipped`, the `OrderShipped` event is dispatched.
+
+## Events
+
+Fulfillment events are dispatched automatically by the actions above:
+
+| Event | Dispatched When | Properties |
+|-------|-----------------|------------|
+| `OrderShipmentCreated` | A new shipment is created for an order | `Order $order`, `OrderShipping $shipment` |
+| `OrderShipped` | Order `shipping_status` transitions to `Shipped` | `Order $order` |
+| `OrderShipmentDelivered` | A shipment is marked as delivered | `Order $order`, `OrderShipping $shipment` |
+
+```php
+use Shopper\Core\Events\Orders\OrderShipmentCreated;
+use Shopper\Core\Events\Orders\OrderShipped;
+use Shopper\Core\Events\Orders\OrderShipmentDelivered;
 ```
 
 ## Storefront Example

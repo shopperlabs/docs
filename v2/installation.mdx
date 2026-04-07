@@ -1,110 +1,98 @@
 ---
 title: "Installation"
-description: "Quick start guide for installing and configuring Shopper on your existing Laravel App"
+description: "Install Shopper into your existing Laravel application in a few steps."
 ---
 
-## Supported Versions of Laravel
+Shopper requires an existing Laravel 11.28+, 12.x, or 13.x application. If you do not have one yet, create a new Laravel project first by following the [Laravel installation guide](https://laravel.com/docs/installation).
 
-**Laravel 11+ are supported.** It feels like this section needs more than one sentence but it really doesn't. That first one said all that needs saying.
+## Install the Package
 
-## Install Shopper
+Install `shopper/framework` via Composer:
 
-Shopper is really easy to install. After creating your new app or in an existing Laravel app \(11+\). There are 2 steps to follow to install Shopper.
+```bash
+composer require shopper/framework
+```
 
-1. Clear to cached config by running the following command:
-    ```bash
-    php artisan config:clear
-    ```
-2. Install `shopper/framework` package with Composer from your project root.
-    ``` bash
-    composer require shopper/framework --with-dependencies
-    ```
-## Prepare your User Model
+<Note>
+  If you have a cached config from a previous setup, run `php artisan config:clear` before installing.
+</Note>
 
-Shopper relies on your `User` model having certain relationships and methods set up to handle authentication,
-permissions, and admin panel access. Rather than asking you to manually add all of these, we've bundled
-them into a trait and an interface for convenience.
+## Prepare Your User Model
 
-Add the `ShopperUser` trait and implement the `ShopperUser` interface to your User model (usually `app/Models/User.php`):
+Shopper relies on your `User` model having certain relationships and methods for authentication, permissions, and admin panel access. Add the `InteractsWithShopper` trait and implement the `ShopperUser` interface on your User model:
 
 ```php app/Models/User.php
-use Shopper\Core\Models\Contracts\ShopperUser as ShopperUserContract;
-use Shopper\Core\Traits\ShopperUser;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Shopper\Models\Contracts\ShopperUser;
+use Shopper\Traits\InteractsWithShopper;
 
-class User extends Authenticatable implements ShopperUserContract
+class User extends Authenticatable implements ShopperUser
 {
-    use ShopperUser;
+    use InteractsWithShopper;
 
     protected $hidden = [
         'password',
         'remember_token',
-        'last_login_at', // [!code ++:4]
-        'last_login_ip',
-        'two_factor_recovery_codes',
-        'two_factor_secret',
+        'store_two_factor_secret',
+        'store_two_factor_recovery_codes',
     ];
 }
 ```
 
-<Info>
-The trait provides essential relationships for roles, permissions, and two-factor authentication.
-The interface ensures your model adheres to the contract expected by Shopper's core features.
-</Info>
+The `InteractsWithShopper` trait provides relationships for roles, permissions, orders, addresses, and two-factor authentication. The `ShopperUser` interface ensures your model adheres to the contract expected by Shopper's admin panel.
 
-After installing all dependencies in your project via compose and setup the database, now we will automatically install by running the following commands in your Laravel project directory:
+## Run the Installer
+
+The install command publishes configuration files, creates the asset symlink, and optionally runs migrations and seeders:
+
 ```bash
-  php artisan shopper:install
+php artisan shopper:install
 ```
 
-This will install shopper, publish vendor files, create shopper and storage symlinks if they don't exist in the public folder, run migrations and seeders classes.
+The installer performs these steps:
 
-<Info>
-By default, all shopper tables are prefixed with `sh_` to avoid conflicts with existing tables in your database.
-But you can update this configuration according to your need
-</Info>
+1. Publishes Shopper config files to `config/shopper/`
+2. Publishes Spatie MediaLibrary migrations
+3. Publishes Filament assets
+4. Creates a symlink from `vendor/shopper/framework/public` to `public/cpanel` (or your configured prefix)
+5. Prompts you to run migrations and seed the database with roles, permissions, and default data
 
-And we're all good to go!
+<Note>
+  All Shopper database tables are prefixed with `sh_` by default to avoid conflicts with your existing tables. You can change this in `config/shopper/core.php`.
+</Note>
 
+## Create an Admin User
 
-### Create an Admin user
-
-Now we can create a new superuser and sign in into the Dashboard and start creating some content.
-Run the following command to create a user with supreme \(at the moment of creation\) rights:
+Create your first admin user to access the dashboard:
 
 ```bash
 php artisan shopper:user
 ```
 
-## New Shopper Directory
+The command prompts for an email, first name, last name, and password. The user is automatically assigned the administrator role.
 
-After Shopper is installed, you'll have 1 new directory in your project:
-- `config/shopper/`
+## Access the Admin Panel
 
-## Publish Vendor Files
+If you are using [Laravel Herd](https://herd.laravel.com) or [Laravel Valet](https://laravel.com/docs/valet), visit your application at:
 
-If you want to publish again Shopper's vendor files run these commands:
-
-```bash
-php artisan shopper:publish
+```
+http://your-project.test/cpanel/login
 ```
 
-## Running Your Application
+If you are using `php artisan serve`, the admin panel is available at `http://localhost:8000/cpanel/login`.
 
-To run your application locally, you can use Laravel's built-in development server:
+The `/cpanel` prefix is configurable. See the [Configuration](/v2/configuration) page for details.
 
-```bash
-php artisan serve
-```
+## Next Steps
 
-Then visit `http://localhost:8000/cpanel/login` to access the admin panel.
-
-<Tip>
-We highly recommend using [Laravel Herd](https://herd.laravel.com) for local development.
-It provides a blazing fast, native development environment for Laravel with zero configuration required.
-</Tip>
-
-If you're using Laravel Herd or Laravel Valet, you can access your application directly using the `.test` domain:
-
-```bash
-http://your-project-name.test/cpanel/login
-```
+<CardGroup cols={3}>
+  <Card title="Configuration" icon="gear" href="/v2/configuration">
+    Customize the admin prefix, models, middleware, and settings.
+  </Card>
+  <Card title="Dashboard" icon="chart-line" href="/v2/dashboard">
+    Learn about the dashboard components and how to customize them.
+  </Card>
+  <Card title="Products" icon="box" href="/v2/products">
+    Start building your product catalog.
+  </Card>
+</CardGroup>

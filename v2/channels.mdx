@@ -7,21 +7,11 @@ Channels represent different sales platforms where your products can be sold. Ex
 
 ## Model
 
-```php
-Shopper\Core\Models\Channel
-```
-
-```php
-use Shopper\Core\Models\Channel;
-
-// The model implements
-- Shopper\Core\Models\Contracts\Channel
-
-// Uses traits
-- HasSlug
-```
+The model used is `Shopper\Core\Models\Channel`. It implements `Shopper\Core\Models\Contracts\Channel` and uses the `HasSlug` trait for automatic slug generation. The model is configurable via `config/shopper/models.php`.
 
 ### Extending the Model
+
+To add custom behavior, extend the model and update your configuration:
 
 ```php
 namespace App\Models;
@@ -30,7 +20,6 @@ use Shopper\Core\Models\Channel as BaseChannel;
 
 class Channel extends BaseChannel
 {
-    // Add your customizations here
 }
 ```
 
@@ -209,7 +198,7 @@ $channels = Channel::query()
 ## Assigning Products to Channels
 
 ```php
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 
 $product = Product::query()->find($id);
 
@@ -235,7 +224,7 @@ $products = Product::query()
 namespace App\Http\Controllers;
 
 use Shopper\Core\Models\Channel;
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 
 class ProductController extends Controller
 {
@@ -261,7 +250,7 @@ class ProductController extends Controller
 namespace App\Http\Controllers\Api;
 
 use Shopper\Core\Models\Channel;
-use Shopper\Core\Models\Product;
+use Shopper\Models\Product;
 
 class ProductController extends Controller
 {

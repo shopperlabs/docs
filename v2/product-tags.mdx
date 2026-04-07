@@ -1,19 +1,17 @@
 ---
 title: Product Tags
-description: Complete reference for the ProductTag model, relationships, and usage in Shopper.
+description: "Organize products with flat, flexible labels for filtering and marketing campaigns."
 ---
 
-Tags are simple labels you attach to products for cross-cutting organization. Unlike categories (hierarchical) or collections (rule-based), tags are flat and flexible — ideal for seasonal labels, marketing campaigns, or storefront filtering.
+Tags are simple labels you attach to products for cross-cutting organization. Unlike [categories](/v2/categories) (hierarchical) or [collections](/v2/collections) (rule-based), tags are flat and flexible, ideal for seasonal labels ("Summer 2026"), marketing campaigns ("Flash Sale"), or storefront filtering ("New Arrival", "Best Seller").
 
 ## Model
 
-```php
-Shopper\Core\Models\ProductTag
-```
-
-The ProductTag model is a simple entity with no contract interface — it is not designed to be swappable.
+The model used is `Shopper\Core\Models\ProductTag`. Unlike products, categories, or brands, the tag model has no admin wrapper and is not configurable via `config/shopper/models.php`. It uses the `HasSlug` trait, which generates unique, URL-friendly slugs with collision handling.
 
 ## Database Schema
+
+### Tags Table
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
@@ -23,124 +21,161 @@ The ProductTag model is a simple entity with no contract interface — it is not
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
 
+### Pivot Table
+
+Tags use the shared polymorphic `product_has_relations` pivot table. This is the same table used by [categories](/v2/categories), [collections](/v2/collections), channels, and related products. The polymorphic pattern lets all these models share a single pivot table instead of requiring a dedicated join table for each relationship type.
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `product_id` | bigint | no | Foreign key to product |
+| `productable_type` | string | no | Morph type (e.g. `product_tag`) |
+| `productable_id` | bigint | no | Foreign key to the related model |
+
+## Slug Generation
+
+The `HasSlug` trait provides automatic slug generation with collision handling. When you set the `slug` attribute, the trait runs the value through `Str::slug()` and checks for uniqueness. If a slug already exists, it appends an incrementing suffix (`-1`, `-2`, etc.) until it finds a unique one.
+
+```php
+use Shopper\Core\Models\ProductTag;
+
+$tag1 = ProductTag::query()->create(['name' => 'New Arrival', 'slug' => 'new-arrival']);
+$tag2 = ProductTag::query()->create(['name' => 'New Arrival 2', 'slug' => 'new-arrival']);
+// $tag2->slug === 'new-arrival-1' (auto-incremented to avoid collision)
+```
+
+The trait also provides a `findBySlug()` static method that looks up a tag by its slug and throws a `ModelNotFoundException` if not found:
+
+```php
+$tag = ProductTag::findBySlug('summer-2026');
+```
+
 ## Relationships
 
 ### Products
 
-Tags use the shared polymorphic `product_has_relations` pivot table, the same mechanism used by categories, collections, and channels.
+Tags connect to products through a `morphToMany` / `morphedByMany` polymorphic relationship via the `product_has_relations` table.
+
+From the tag side:
 
 ```php
-// Get all products for a tag
 $tag->products;
 
-// Count products
 $tag->products()->count();
 
-// Attach products
 $tag->products()->attach([$productId1, $productId2]);
 
-// Detach products
 $tag->products()->detach($productId);
 
-// Sync products
 $tag->products()->sync($productIds);
 ```
 
-From the Product side:
+From the product side:
 
 ```php
-// Get all tags for a product
 $product->tags;
 
-// Attach tags
 $product->tags()->attach([$tagId1, $tagId2]);
 
-// Sync tags
 $product->tags()->sync($tagIds);
 ```
 
 ## Creating Tags
+
+To create a tag, provide a name and a slug. The `HasSlug` trait ensures slug uniqueness automatically:
 
 ```php
 use Shopper\Core\Models\ProductTag;
 
 $tag = ProductTag::query()->create([
     'name' => 'Summer 2026',
-    'slug' => 'summer-2026', // Auto-generated if not provided
+    'slug' => 'summer-2026',
 ]);
 
-// Attach to products
 $tag->products()->attach([$product1->id, $product2->id]);
 ```
 
+Tags can also be created inline from the product edit form in the admin panel. The tag selection field includes a "Create" option that opens a modal form, so administrators can add new tags without leaving the product page.
+
 ## Retrieving Tags
 
-```php
-// Get all tags
-$tags = ProductTag::query()->get();
+To get all tags ordered by name with their product count:
 
-// Get tags with product count
+```php
 $tags = ProductTag::query()
     ->withCount('products')
     ->orderBy('name')
     ->get();
-
-// Find by slug
-$tag = ProductTag::query()
-    ->where('slug', 'summer-2026')
-    ->with('products')
-    ->firstOrFail();
-
-// Get tags for a specific product
-$tags = $product->tags()->get();
 ```
 
-## Disabling Tag Feature
-
-If you don't need tags in your store, you can disable the feature entirely:
+To find a tag by slug with its products:
 
 ```php
-// config/shopper/features.php
+$tag = ProductTag::findBySlug('summer-2026');
+
+$products = $tag->products()->publish()->paginate(12);
+```
+
+To get all tags for a specific product:
+
+```php
+$tags = $product->tags;
+```
+
+## Configuration
+
+### Disabling Tags
+
+If you don't need tags in your store, disable the feature in `config/shopper/features.php`:
+
+```php
 use Shopper\Enum\FeatureState;
 
 return [
     'tag' => FeatureState::Disabled,
-    // ...
 ];
 ```
 
-When disabled:
-- Tag menu item is hidden from the sidebar
-- Tag-related routes are not registered
-- Tag selection is removed from product forms
+When disabled, the tag menu item is hidden from the sidebar, tag-related routes are not registered, and the tag selection field is removed from product forms.
+
+### Permissions
+
+The admin panel generates four permissions for tag management:
+
+| Permission | Description |
+|------------|-------------|
+| `browse_tags` | View the tags list |
+| `read_tags` | View a single tag |
+| `add_tags` | Create new tags |
+| `edit_tags` | Edit existing tags |
+| `delete_tags` | Delete tags |
 
 ## Components
 
-Tags are managed under the product components configuration. Publish to customize:
+Tags are managed under the product components configuration. To customize the admin UI:
 
 ```bash
 php artisan shopper:component:publish product
 ```
 
-This includes the tag page in `config/shopper/components/product.php`:
+The tag page is registered in `config/shopper/components/product.php`:
 
 ```php
 return [
     'pages' => [
         'tag-index' => \Shopper\Livewire\Pages\Tag\Index::class,
-        // ...
     ],
 ];
 ```
 
-## Using Tags in Storefront
+## Storefront Example
 
-### Controller Example
+This example shows a tag listing page and a tag detail page that displays all published products for a given tag.
 
 ```php
 namespace App\Http\Controllers;
 
 use Shopper\Core\Models\ProductTag;
+use Shopper\Models\Product;
 
 class TagController extends Controller
 {
@@ -156,12 +191,10 @@ class TagController extends Controller
 
     public function show(string $slug)
     {
-        $tag = ProductTag::query()
-            ->where('slug', $slug)
-            ->firstOrFail();
+        $tag = ProductTag::findBySlug($slug);
 
         $products = $tag->products()
-            ->where('is_visible', true)
+            ->publish()
             ->paginate(12);
 
         return view('tags.show', compact('tag', 'products'));
@@ -171,18 +204,20 @@ class TagController extends Controller
 
 ### Filtering Products by Tags
 
-```php
-use Shopper\Core\Models\Product;
+To get products that have a specific tag:
 
-// Get products that have a specific tag
+```php
 $products = Product::query()
     ->whereHas('tags', fn ($query) => $query->where('slug', 'summer-2026'))
     ->publish()
     ->get();
+```
 
-// Get products that have any of the given tags
+To get products that have any of the given tags:
+
+```php
 $products = Product::query()
-    ->whereHas('tags', fn ($query) => $query->whereIn('slug', ['new-arrival', 'featured']))
+    ->whereHas('tags', fn ($query) => $query->whereIn('slug', ['new-arrival', 'best-seller']))
     ->publish()
     ->paginate(12);
 ```

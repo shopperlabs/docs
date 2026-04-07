@@ -63,3 +63,17 @@ If your store serves international customers, you may want to enable additional 
 <Tip>
 If you're selling internationally, consider using a currency conversion service to keep exchange rates up to date automatically.
 </Tip>
+
+## How Currencies Work with Zones
+
+Each [zone](/v2/user-guide/store-setup/zones) is assigned one currency. When a customer checks out from a zone, they see prices and pay in that zone's currency. This means:
+
+- A product can have different prices in different currencies (e.g., $29.99 USD in the US zone, 27.99 EUR in the Europe zone)
+- You set prices per currency on each product from the [product edit page](/v2/user-guide/catalog/products/managing-products)
+- The zone determines which currency the customer sees at checkout
+
+<Note>
+Shopper does not automatically convert prices between currencies. You set each price manually per currency. This gives you full control over pricing strategy in each market.
+</Note>
+
+For developer details, see the [Currencies documentation](/v2/currencies).

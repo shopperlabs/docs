@@ -266,3 +266,59 @@ Here's how a standard order moves through the system:
     Mark the shipment as delivered. The order status automatically changes to **Completed**.
   </Step>
 </Steps>
+
+## Abandoned Carts
+
+Sometimes customers add items to their cart but leave without completing checkout. Shopper tracks these as abandoned carts, giving you visibility into potential lost sales.
+
+A cart is considered abandoned when it has items but no activity for a configurable period (default: 60 minutes).
+
+### Viewing Abandoned Carts
+
+To see abandoned carts:
+
+1. Go to **Orders** in the sidebar
+2. Click the **Abandoned Carts** tab
+
+<Frame>
+  <img src="/images/v2/ug-abandoned-carts.png" alt="Abandoned carts list" />
+</Frame>
+
+{/* SCREENSHOT NEEDED: The Abandoned Carts page showing a table with columns:
+    Cart ID, Customer name (or "Guest"), Item count, Currency badge, Channel,
+    Created date, Last activity date. Show 3-4 rows with a mix of guest and
+    logged-in customers. */}
+
+The abandoned carts list shows each cart with the customer name (or "Guest" for anonymous shoppers), the number of items, the channel, and when the cart was last active.
+
+### Cart Details
+
+Click on any abandoned cart to view its contents. The detail panel shows the items the customer had in their cart and their contact information (if they were logged in).
+
+<Frame>
+  <img src="/images/v2/ug-abandoned-cart-detail.png" alt="Abandoned cart detail" />
+</Frame>
+
+{/* SCREENSHOT NEEDED: The abandoned cart detail slide-over showing:
+    Customer info (name, email), cart items with product thumbnails,
+    quantities, and prices. Show 2-3 items in the cart. */}
+
+### What You Can Learn
+
+Abandoned carts help you understand:
+
+- **Which products are being abandoned** to identify pricing or UX issues
+- **At what stage customers leave** to improve your checkout flow
+- **Whether logged-in customers abandon more than guests** to target recovery efforts
+
+<Tip>
+Look for patterns in abandoned carts. If many customers abandon carts with the same product, the price may be too high or the shipping cost may be surprising at checkout.
+</Tip>
+
+### Automatic Cleanup
+
+Abandoned carts older than 30 days are automatically cleaned up to keep your database lean. This threshold is configurable by your developer in the [Cart configuration](/v2/cart#pruning).
+
+For developer details on querying abandoned carts and building recovery email flows, see the [Cart documentation](/v2/cart#abandoned-carts).
+
+For developer details, see the [Orders documentation](/v2/orders).

@@ -101,6 +101,9 @@
                     "v2/user-guide/store-setup/locations",
                     "v2/user-guide/store-setup/currencies",
                     "v2/user-guide/store-setup/zones",
+                    "v2/user-guide/store-setup/carriers",
+                    "v2/user-guide/store-setup/payment-methods",
+                    "v2/user-guide/store-setup/taxes",
                     "v2/user-guide/store-setup/legal"
                   ]
                 },
@@ -111,6 +114,8 @@
                     "v2/user-guide/catalog/categories",
                     "v2/user-guide/catalog/collections",
                     "v2/user-guide/catalog/attributes",
+                    "v2/user-guide/catalog/tags",
+                    "v2/user-guide/catalog/suppliers",
                     {
                       "group": "Products",
                       "pages": [
@@ -158,17 +163,6 @@
                   "pages": [
                     "v2/getting-started",
                     "v2/demo-store",
-                    {
-                      "group": "Upgrade Guide",
-                      "pages": [
-                        "v2/upgrade",
-                        "v2/upgrade/v2-5-to-v2-6",
-                        "v2/upgrade/v2-4-to-v2-5",
-                        "v2/upgrade/v2-2-to-v2-3",
-                        "v2/upgrade/v2-1-to-v2-2"
-                      ]
-                    },
-                    "v2/version-support-policy",
                     "v2/contributing"
                   ]
                 },
@@ -187,10 +181,12 @@
                     "v2/products",
                     "v2/product-variants",
                     "v2/product-tags",
+                    "v2/pricing",
                     "v2/brands",
                     "v2/categories",
                     "v2/collections",
-                    "v2/attributes"
+                    "v2/attributes",
+                    "v2/reviews"
                   ]
                 },
                 {
@@ -198,6 +194,7 @@
                   "pages": [
                     "v2/customers",
                     "v2/cart",
+                    "v2/discounts",
                     "v2/orders",
                     "v2/payments",
                     "v2/fulfillment",
@@ -205,37 +202,43 @@
                   ]
                 },
                 {
-                  "group": "Commerce",
-                  "pages": [
-                    "v2/discounts",
-                    "v2/reviews",
-                    "v2/suppliers",
-                    "v2/events"
-                  ]
-                },
-                {
-                  "group": "Configuration",
+                  "group": "Store Setup",
                   "pages": [
                     "v2/setup-store",
                     "v2/channels",
                     "v2/zones",
                     "v2/locations",
                     "v2/currencies",
-                    "v2/carriers",
-                    "v2/payment-methods",
-                    "v2/media",
-                    "v2/legal",
-                    "v2/acl",
-                    "v2/two-factor"
+                    "v2/legal"
                   ]
                 },
                 {
-                  "group": "Storefronts",
+                  "group": "System",
                   "pages": [
-                    "v2/starter-kits",
-                    "v2/livewire-starter-kit",
-                    "v2/blade-starter-kit",
-                    "v2/inertia-starter-kit"
+                    "v2/carriers",
+                    "v2/payment-methods",
+                    "v2/suppliers",
+                    "v2/media",
+                    "v2/acl",
+                    "v2/two-factor",
+                    "v2/events"
+                  ]
+                },
+                {
+                  "group": "Releases",
+                  "pages": [
+                    {
+                      "group": "Upgrade Guide",
+                      "pages": [
+                        "v2/upgrade",
+                        "v2/upgrade/v2-6-to-v2-7",
+                        "v2/upgrade/v2-5-to-v2-6",
+                        "v2/upgrade/v2-4-to-v2-5",
+                        "v2/upgrade/v2-2-to-v2-3",
+                        "v2/upgrade/v2-1-to-v2-2"
+                      ]
+                    },
+                    "v2/version-support-policy"
                   ]
                 }
               ]

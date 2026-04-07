@@ -3,40 +3,30 @@ title: Currencies
 description: Configure and manage multiple currencies for your global store
 ---
 
-Currencies play a crucial role in defining the prices of products, services, and other monetary details within your e-commerce system.
-Whether you're running a local store or a global marketplace.
-
-Shopper is designed to support **multi-currency functionality**, allowing you to define prices in different currencies and tailor them to
-specific [zones](/v2/zones). This flexibility ensures that you can cater to a global audience without any limitations related to pricing.
-With Shopper, you can effortlessly set up and manage multiple currencies, ensuring that your customers see prices in their preferred currency,
-no matter where they are located.
-
-In this documentation, you'll learn how to configure and utilize currencies within your Shopper project. Whether you're setting up
-your first currency or managing a complex multi-currency setup, this guide will provide you with the tools and knowledge you need to make the most
-of Shopper's currency features.
+Currencies define the monetary units used across your store. Each [zone](/v2/zones) is associated with a currency, and each [price](/v2/pricing) record is linked to a currency. Shopper supports multi-currency pricing out of the box, with over 150 currencies seeded during installation.
 
 ## Model
 
-The model used is `Shopper\Core\Models\Currency`.
+The model used is `Shopper\Core\Models\Currency`. It implements `Shopper\Core\Models\Contracts\Currency`. The model has a global `enabled` scope that automatically filters out disabled currencies (see [Pricing](/v2/pricing#currency-model) for details).
 
-| Name            | Type    | Required | Notes                                                                                                                  |
-|-----------------|---------|----------|------------------------------------------------------------------------------------------------------------------------|
-| `id`            | autoinc |          | auto                                                                                                                   |
-| `name`          | string  | yes      | Name of the currency                                                                                                   |
-| `code`          | string  | yes      | `Unique`, indicating the [3 character ISO code](https://en.wikipedia.org/wiki/ISO_4217#Active_codes) for the currency. |
-| `symbol`        | string  | yes      | string indicating the native symbol of the currency.                                                                   |
-| `format`        | string  | yes      | string indicating the preview format of the currency.                                                                  |
-| `exchange_rate` | float   | no       | The exchange rate relative to the default currency, default `0.0`                                                      |
-| `is_enabled`    | boolean | no       | Indicate if the currency is enabled on the store. By defauft `true`                                                    |
+### Database Schema
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `name` | string | no | - | Currency name (e.g., "US Dollar") |
+| `code` | string(10) | no | - | ISO 4217 code (e.g., "USD"), unique |
+| `symbol` | string(25) | no | - | Currency symbol (e.g., "$") |
+| `format` | string(50) | no | - | Display format pattern |
+| `exchange_rate` | decimal(10,2) | yes | null | Exchange rate relative to base currency |
+| `is_enabled` | boolean | no | true | Whether the currency is active |
 
 
 ## How Currencies are Created
 
-Currencies are defined in the core of your Shopper backend into the file located at `core/database/data/currencies.php`. When you run the migration or
-seed command the first time for your Shopper store, a migration uses this data to insert all its properties (the currencies) into the database.
+Currencies are defined in a JSON file at `core/database/data/currencies.json`. When you run `php artisan shopper:install`, a migration reads this file and inserts all currencies into the database.
 
-So, if you want to add other currencies, you can create a migration that inserts your currencies into the database, but Shopper basically installs
-a large number of currencies so you don't have to, over 150 currencies are created when Shopper is installed.
+Shopper ships with over 150 currencies out of the box, so you rarely need to add more. If you do need a custom currency, create a migration that inserts it into the `currencies` table directly.
 
 ## How Setup Store Currencies
 
@@ -46,6 +36,24 @@ store and set the one that will be used by default. But once you've done this, i
 <Frame caption="Store currency">
   <img src="/images/v2/store-currency.png" alt="Store currency" />
 </Frame>
+
+## Zero-Decimal Currencies
+
+Some currencies have no subdivision (no "cents"). For example, the Japanese Yen (JPY) and the Central African CFA Franc (XAF) are stored as whole numbers — 1000 JPY is 1000, not 10.00.
+
+Shopper handles this automatically. The `is_no_division_currency()` helper checks if a currency code is zero-decimal, and `zero_decimal_currencies()` returns the full list:
+
+```php
+is_no_division_currency('XAF'); // true
+is_no_division_currency('USD'); // false
+
+zero_decimal_currencies();
+// ['BIF', 'CLP', 'DJF', 'GNF', 'HTG', 'JPY', 'KMF', 'KRW',
+//  'MGA', 'PYG', 'RWF', 'VND', 'VUV', 'XAF', 'XAG', 'XAU',
+//  'XDR', 'XOF', 'XPF']
+```
+
+The `shopper_money_format()` helper and the `MoneyInput` form component both use this to determine whether to divide/multiply by 100. See the [Pricing documentation](/v2/pricing) for details.
 
 ## Relation to Other Entities
 

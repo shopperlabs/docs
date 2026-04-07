@@ -30,10 +30,9 @@ php artisan vendor:publish --provider="Shopper\Sidebar\SidebarServiceProvider" -
 Add the sidebar resolver middleware to your route group or in `bootstrap/app.php`:
 
 ```php
-// In a route group
 Route::middleware(['web', \Shopper\Sidebar\Middleware\ResolveSidebars::class])
     ->group(function () {
-        // Your routes
+        ...
     });
 ```
 
@@ -193,13 +192,9 @@ The sidebar uses an Alpine.js store for state management. Add the store to your 
 import Alpine from 'alpinejs'
 import sidebarStore from './vendor/sidebar/stores/sidebar'
 
-// Register the store
 Alpine.store('sidebar', sidebarStore())
-
-// Start Alpine
 Alpine.start()
 
-// Initialize the sidebar store after Alpine starts
 document.addEventListener('alpine:init', () => {
     Alpine.store('sidebar').init()
 })
@@ -217,31 +212,44 @@ This will publish the files to `resources/js/vendor/sidebar/`.
 
 The sidebar store provides these properties and methods:
 
+**State properties:**
+
+| Property | Description |
+|---|---|
+| `$store.sidebar.isOpen` | Mobile: sidebar visibility |
+| `$store.sidebar.isCollapsed` | Desktop: collapsed state |
+| `$store.sidebar.collapsible` | Whether collapse is enabled |
+| `$store.sidebar.currentPath` | Current URL path |
+
+**Sidebar visibility (mobile):**
+
 ```javascript
-// State properties
-$store.sidebar.isOpen        // Mobile: sidebar visibility
-$store.sidebar.isCollapsed   // Desktop: collapsed state
-$store.sidebar.collapsible   // Whether collapse is enabled
-$store.sidebar.currentPath   // Current URL path
+$store.sidebar.open()
+$store.sidebar.close()
+```
 
-// Sidebar visibility (mobile)
-$store.sidebar.open()        // Open sidebar
-$store.sidebar.close()       // Close sidebar
+**Sidebar collapse (desktop):**
 
-// Sidebar collapse (desktop)
-$store.sidebar.toggle()      // Smart toggle based on screen size
-$store.sidebar.collapse()    // Collapse sidebar
-$store.sidebar.expand()      // Expand sidebar
+```javascript
+$store.sidebar.toggle()
+$store.sidebar.collapse()
+$store.sidebar.expand()
 $store.sidebar.toggleCollapse()
+```
 
-// Group management
+**Group management:**
+
+```javascript
 $store.sidebar.toggleGroup(label)
 $store.sidebar.isGroupCollapsed(label)
 $store.sidebar.collapseGroup(label)
 $store.sidebar.expandGroup(label)
+```
 
-// Navigation tracking (for SPA)
-$store.sidebar.isActive(url) // Check if URL is active
+**Navigation tracking (for SPA):**
+
+```javascript
+$store.sidebar.isActive(url)
 ```
 
 ## CSS Variables
@@ -305,7 +313,8 @@ $item->badge('New');                  // Simple text badge
 $item->badge(5);                      // Number badge
 $item->badge('3', 'bg-red-500 text-white'); // Styled badge
 
-// Or using callback
+
+
 $item->badge(function (Badge $badge): void {
     $badge->setValue($this->getNotificationCount());
     $badge->setClass('bg-primary-500 text-white');
@@ -320,7 +329,8 @@ Append elements are additional action buttons displayed next to the item:
 ```php
 $item->append('/users/create', 'heroicon-o-plus', 'Add User');
 
-// Or using callback
+
+
 $item->append(function (Append $append): void {
     $append->route('users.create');
     $append->setIcon('heroicon-o-plus', 'blade', 'size-4');
@@ -373,14 +383,11 @@ use function Shopper\Sidebar\sidebar_collapsed_width;
 use function Shopper\Sidebar\sidebar_breakpoint;
 use function Shopper\Sidebar\sidebar_is_collapsible;
 
-// Get any config value
 $value = sidebar_config('cache.method', 'default');
 
-// Get dimensions
-$width = sidebar_width();               // e.g., '17.5rem'
-$collapsed = sidebar_collapsed_width(); // e.g., '4.5rem'
+$width = sidebar_width();
+$collapsed = sidebar_collapsed_width();
 
-// Get responsive settings
-$breakpoint = sidebar_breakpoint();     // e.g., 1024
+$breakpoint = sidebar_breakpoint();
 $collapsible = sidebar_is_collapsible(); // true/false
 ```

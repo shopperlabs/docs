@@ -3,12 +3,12 @@ title: Events
 description: Reference for all events dispatched by Shopper during order, product, and cart lifecycle operations.
 ---
 
-Shopper dispatches events at key moments in the order, product, and cart lifecycle. These events allow you to hook into the system and add custom behavior — sending notifications, syncing with external services, updating analytics, or triggering workflows — without modifying any Shopper code.
+Shopper dispatches events at key moments in the order, product, and cart lifecycle. These events allow you to hook into the system and add custom behavior like sending notifications, syncing with external services, updating analytics, or triggering workflows without modifying any Shopper code.
 
 Events are organized by domain across two namespaces:
 
-- `Shopper\Core\Events` — order and product events
-- `Shopper\Cart\Events` — cart events
+- `Shopper\Core\Events` order and product events
+- `Shopper\Cart\Events` cart events
 
 ```php
 use Shopper\Core\Events\Orders\OrderCompleted;

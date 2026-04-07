@@ -3,37 +3,25 @@ title: Categories
 description: Complete reference for the Category model, hierarchical relationships, and usage in Shopper.
 ---
 
-Categories provide a hierarchical organization structure for your products. Shopper uses nested categories with parent-child relationships, allowing unlimited depth.
+Categories provide a hierarchical organization structure for your products. Shopper uses nested categories with parent-child relationships, allowing unlimited depth. You can model complex product taxonomies like Electronics > Computers > Laptops without artificial limits.
 
 ## Model
 
-```php
-Shopper\Core\Models\Category
-```
+The model used is `Shopper\Models\Category`, which extends `Shopper\Core\Models\Category`. It implements the `Shopper\Core\Models\Contracts\Category` contract and `Spatie\MediaLibrary\HasMedia` for media support.
 
-The Category model uses the `staudenmeir/laravel-adjacency-list` package for recursive relationships:
-
-```php
-use Shopper\Core\Models\Category;
-
-// The model implements
-- Shopper\Core\Models\Contracts\Category
-- Spatie\MediaLibrary\HasMedia
-
-// Uses traits
-- HasRecursiveRelationships // (from laravel-adjacency-list)
-```
+The core model provides the business logic (relationships, scopes, slug generation, hierarchical structure via [laravel-adjacency-list](https://github.com/staudenmeir/laravel-adjacency-list)), while the admin model adds media collections and conversions through `HasMedia` and `RegistersMediaCollections` traits. This separation means the core model has no dependency on Spatie MediaLibrary. Media support is added at the admin layer.
 
 ### Extending the Model
+
+To add custom behavior, extend the admin model and update your configuration:
 
 ```php
 namespace App\Models;
 
-use Shopper\Core\Models\Category as BaseCategory;
+use Shopper\Models\Category as ShopperCategory;
 
-class Category extends BaseCategory
+class Category extends ShopperCategory
 {
-    // Add your customizations here
 }
 ```
 
@@ -51,21 +39,24 @@ return [
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
 | `name` | string | no | - | Category name |
-| `slug` | string | no | auto | URL-friendly identifier (unique) |
+| `slug` | string | yes | auto | URL-friendly identifier (unique, auto-generated) |
 | `description` | longtext | yes | null | Category description |
-| `position` | integer | no | 0 | Display order position |
+| `position` | smallint | no | 0 | Display order position |
 | `is_enabled` | boolean | no | false | Category visibility status |
-| `icon` | string | yes | null | Icon identifier |
 | `seo_title` | string(60) | yes | null | SEO meta title |
 | `seo_description` | string(160) | yes | null | SEO meta description |
-| `metadata` | json | yes | null | Additional custom data |
+| `metadata` | jsonb | yes | null | Additional custom data |
 | `parent_id` | bigint | yes | null | Foreign key to parent category |
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
 
+<Note>
+  The `slug` column is nullable at the database level, but is always auto-generated from the `name` when you set it. You never need to set it manually.
+</Note>
+
 ## Hierarchical Structure
 
-Categories support unlimited nesting levels:
+Categories support unlimited nesting levels, so you can organize products into deeply nested taxonomies:
 
 ```
 Electronics (parent_id: null)
@@ -78,68 +69,91 @@ Electronics (parent_id: null)
 └── Audio (parent_id: 1)
 ```
 
+## Media
+
+Categories support two media collections through [Spatie MediaLibrary](https://spatie.be/docs/laravel-medialibrary), using the same config-driven collection names as [products](/v2/products#media).
+
+| Collection | Config key | Behavior | Description |
+|------------|-----------|----------|-------------|
+| Default gallery | `shopper.media.storage.collection_name` | Multiple files | Category images |
+| Thumbnail | `shopper.media.storage.thumbnail_collection` | Single file | Primary image for listings and navigation |
+
+Both collections accept JPEG, PNG, WebP, AVIF, and SVG files by default (configurable in `config/shopper/media.php`).
+
+To display a category's thumbnail on your storefront:
+
+The collection names are defined in `config/shopper/media.php` under the `storage` key. The `getFirstMediaUrl` method returns the URL for the first media in a collection. If no media has been uploaded, a fallback URL is returned instead. You can also request a specific conversion size like `medium` (500x500) or `large` (800x800).
+
+```php
+use Shopper\Models\Category;
+
+$category = Category::query()->find($id);
+$collection = config('shopper.media.storage.thumbnail_collection');
+
+$thumbnailUrl = $category->getFirstMediaUrl($collection);
+$mediumUrl = $category->getFirstMediaUrl($collection, 'medium');
+```
+
+To add a thumbnail to a category programmatically:
+
+```php
+$collection = config('shopper.media.storage.thumbnail_collection');
+
+$category->addMedia($pathToImage)
+    ->toMediaCollection($collection);
+```
+
 ## Relationships
 
 ### Parent Category
 
-```php
-// Get parent category
-$category->parent; // Returns Category model or null
+Every category can optionally belong to a parent category. Use this to build breadcrumbs or display the parent context:
 
-// Check if has parent
-if ($category->parent_id) {
-    // This is a subcategory
+```php
+$category->parent;
+
+if ($category->parent) {
+    $breadcrumb = $category->ancestors;
 }
 ```
 
-### Children Categories
+### Child Categories
 
-Using `laravel-adjacency-list` package:
+Using the `laravel-adjacency-list` package, categories expose a full set of hierarchical relationships:
+
+The `children` relationship returns direct children only. Use `descendants` for all recursive children (children of children, etc.) and `ancestors` for all recursive parents up to the root.
 
 ```php
-// Get direct children
 $category->children;
-
-// Get all descendants (recursive)
 $category->descendants;
-
-// Get all ancestors
 $category->ancestors;
-
-// Get descendants with depth info
 $category->descendantsAndSelf;
 ```
 
 ### Descendant Categories
 
-```php
-// Get all descendant categories
-$category->descendantCategories;
+The `descendantCategories()` relationship returns a `HasManyOfDescendants` Eloquent relation, which means you can use it in `whereHas()`, `withCount()`, and other query builder contexts. This differs from `descendants()` which is a recursive scope and cannot be used the same way.
 
-// Useful for getting all subcategories at any depth
+```php
+$categoriesWithDescendants = Category::query()
+    ->withCount('descendantCategories')
+    ->get();
 ```
 
 ### Products
 
-Categories have a polymorphic many-to-many relationship with products:
+Categories have a polymorphic many-to-many relationship with products through the `product_has_relations` table:
 
 ```php
-// Get all products in this category
 $category->products;
-
-// Get products count
 $category->products()->count();
 
-// Get published products only
-$category->products()
-    ->where('is_visible', true)
-    ->whereDate('published_at', '<=', now())
-    ->get();
+$category->products()->publish()->get();
 ```
 
 ## Available Tree Methods
 
-The `laravel-adjacency-list` package provides these methods:
+The `laravel-adjacency-list` package provides these methods for traversing the hierarchy:
 
 | Method | Description |
 |--------|-------------|
@@ -167,29 +181,31 @@ Category::query()->find($id)->descendants()->update(['is_enabled' => false]);
 
 ### Enabled Categories
 
-```php
-use Shopper\Core\Models\Category;
+Filter categories that are visible to customers:
 
-// Get only enabled categories
+```php
 Category::query()->enabled()->get();
 ```
 
 ### Root Categories
 
-```php
-// Get only top-level categories (no parent)
-Category::query()->whereNull('parent_id')->get();
+Get only top-level categories (those without a parent):
 
-// Using the tree structure
+```php
+Category::query()->whereNull('parent_id')->get();
+```
+
+Using the tree structure to get the full hierarchy:
+
+```php
 Category::tree()->get();
 ```
 
-## Custom Paths
+## Custom Paths & Slug Behavior
 
-Categories automatically generate slug paths for nested URLs:
+Categories automatically generate slug paths for nested URLs. For a category "Laptops" under "Computers" under "Electronics", `$category->slug_path` returns `electronics/computers/laptops`:
 
 ```php
-// The model defines custom paths
 public function getCustomPaths(): array
 {
     return [
@@ -200,90 +216,104 @@ public function getCustomPaths(): array
         ],
     ];
 }
-
-// Example: electronics/computers/laptops
-$category->slug_path;
 ```
 
-## Status Management
+<Note>
+  When a category has a parent, the `CategoryObserver` automatically combines the parent's slug with the category name on creation and update. For example, creating a "Laptops" category under a parent with slug `computers` produces the slug `computers-laptops`. This ensures slug uniqueness across the hierarchy.
+</Note>
+
+## Methods & Helpers
+
+### Find by Slug
+
+The `findBySlug` static method looks up a category by its slug and throws a `ModelNotFoundException` if not found:
 
 ```php
-// Enable a category
-$category->updateStatus(true);
+use Shopper\Models\Category;
 
-// Disable a category
-$category->updateStatus(false);
+$category = Category::findBySlug('electronics');
 ```
-
-## Display Helpers
 
 ### Label with Path
 
-```php
-// Get full path name for select options
-$category->getLabelOptionName();
+The `getLabelOptionName()` method returns the full hierarchical path as a formatted string, useful for select dropdowns and admin interfaces:
 
-// Returns: "Electronics / Computers / Laptops"
+For a category "Laptops" nested under "Computers" under "Electronics", the method returns `Electronics / Computers / Laptops`.
+
+```php
+$category->getLabelOptionName();
+```
+
+### Status Management
+
+Toggle a category's visibility with `updateStatus()`:
+
+Pass `true` to enable a category or `false` to disable it.
+
+```php
+$category->updateStatus(true);
+$category->updateStatus(false);
 ```
 
 ## Creating Categories
 
-```php
-use Shopper\Core\Models\Category;
+Create a root category by omitting the `parent_id`:
 
-// Create a root category
+```php
 $electronics = Category::query()->create([
     'name' => 'Electronics',
-    'slug' => 'electronics',
     'is_enabled' => true,
     'position' => 1,
 ]);
+```
 
-// Create a subcategory
+Create a subcategory by setting `parent_id`:
+
+```php
 $computers = Category::query()->create([
     'name' => 'Computers',
-    'slug' => 'computers',
     'parent_id' => $electronics->id,
-    'is_enabled' => true,
-]);
-
-// Slug auto-generation with parent prefix
-$laptops = Category::query()->create([
-    'name' => 'Laptops',
-    'slug' => $computers->slug . '-laptops', // computers-laptops
-    'parent_id' => $computers->id,
     'is_enabled' => true,
 ]);
 ```
 
 ## Retrieving Categories
 
+Root categories with their children:
+
 ```php
-// Get all root categories with children
 $categories = Category::query()
     ->whereNull('parent_id')
     ->enabled()
     ->with('children')
     ->orderBy('position')
     ->get();
+```
 
-// Get category tree (all levels)
+Full category tree:
+
+```php
 $tree = Category::query()
     ->enabled()
     ->tree()
     ->get()
     ->toTree();
+```
 
-// Get category with all descendants
+A category with all its descendants:
+
+```php
 $category = Category::query()
     ->where('slug', 'electronics')
     ->with('descendants')
     ->first();
 
-// Get category breadcrumb (ancestors)
 $breadcrumb = $category->ancestors;
+```
 
-// Get categories for navigation
+For navigation menus with nested enabled children:
+
+```php
 $navCategories = Category::query()
     ->whereNull('parent_id')
     ->enabled()
@@ -294,14 +324,16 @@ $navCategories = Category::query()
 
 ## Working with Products
 
+Products in this category only:
+
 ```php
-// Get products in category and all subcategories
 $category = Category::query()->find($id);
-
-// Products in this category only
 $products = $category->products;
+```
 
-// Products in category and all descendants
+Products in category and all descendants:
+
+```php
 $categoryIds = $category->descendants->pluck('id')->push($category->id);
 
 $products = Product::query()
@@ -310,10 +342,31 @@ $products = Product::query()
     ->get();
 ```
 
-## Disabling Category Feature
+## Metadata
+
+The `metadata` JSON column lets you store arbitrary key-value data on a category without modifying the schema. This is useful for storing custom attributes like banner colors, display preferences, or integration identifiers:
 
 ```php
-// config/shopper/features.php
+$category = Category::query()->create([
+    'name' => 'Summer Sale',
+    'is_enabled' => true,
+    'metadata' => [
+        'banner_color' => '#FF6B35',
+        'featured_on_homepage' => true,
+        'external_id' => 'cat_abc123',
+    ],
+]);
+
+$color = $category->metadata['banner_color'];
+```
+
+## Disabling Category Feature
+
+If your store doesn't use categories, you can disable the feature entirely. This removes the category section from the admin panel:
+
+In your `config/shopper/features.php` file, set the category feature to disabled:
+
+```php
 use Shopper\Enum\FeatureState;
 
 return [
@@ -321,7 +374,21 @@ return [
 ];
 ```
 
+### Permissions
+
+The admin panel generates four permissions for category management:
+
+| Permission | Description |
+|------------|-------------|
+| `browse_categories` | View the categories list |
+| `read_categories` | View a single category |
+| `add_categories` | Create new categories |
+| `edit_categories` | Edit existing categories |
+| `delete_categories` | Delete categories |
+
 ## Components
+
+You can publish the Livewire components to customize the admin UI for categories:
 
 ```bash
 php artisan shopper:component:publish category
@@ -345,11 +412,13 @@ return [
 
 ## Storefront Example
 
+Here is a complete controller for displaying categories and their products on your storefront. The `show` method collects products from the category and all its descendants, so browsing "Electronics" also returns products from "Computers", "Laptops", etc.
+
 ```php
 namespace App\Http\Controllers;
 
-use Shopper\Core\Models\Category;
-use Shopper\Core\Models\Product;
+use Shopper\Models\Category;
+use Shopper\Models\Product;
 
 class CategoryController extends Controller
 {
@@ -368,13 +437,12 @@ class CategoryController extends Controller
 
     public function show(string $slug)
     {
-        $category = Category::query()
-            ->where('slug', $slug)
-            ->enabled()
-            ->with('ancestors')
-            ->firstOrFail();
+        $category = Category::findBySlug($slug);
 
-        // Get products from category and descendants
+        abort_unless($category->is_enabled, 404);
+
+        $category->load('ancestors');
+
         $categoryIds = $category->descendants
             ->pluck('id')
             ->push($category->id);

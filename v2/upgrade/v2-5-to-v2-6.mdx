@@ -4,7 +4,7 @@ description: How to upgrade your Shopper installation from v2.5 to v2.6.
 ---
 
 <Info>
-**Estimated Upgrade Time:** 15–45 minutes depending on how much you customized auth models and event listeners.
+**Estimated Upgrade Time:** 15 to 45 minutes depending on how much you customized auth models and event listeners.
 </Info>
 
 ## Updating Dependencies
@@ -40,6 +40,7 @@ v2.6 ships one new package: `shopper/cart`. The tax system is built into `shoppe
 ### Auth Models and Traits Moved from Core to Admin
 
 **Likelihood of Impact: High**
+*Affects applications that import Role, Permission, ShopperUser, or HasProfilePhoto directly.*
 
 The `Role` and `Permission` models, the `ShopperUser` and `HasProfilePhoto` traits, and the `spatie/laravel-permission` dependency have all moved from `shopper/core` to `shopper/admin`.
 
@@ -109,6 +110,7 @@ v2.6 adds 15 new migrations across two packages. Run `php artisan migrate` after
 ### Order and Product Event Renaming
 
 **Likelihood of Impact: Medium**
+*Affects applications with listeners registered for `OrderCancel` or `AddNoteToOrder` events.*
 
 Two events have been renamed for consistency. If you registered listeners for either of these events, update your `EventServiceProvider`:
 
@@ -141,9 +143,10 @@ protected $listen = [
 ];
 ```
 
-### Render Hooks — Enum Replaced by Scoped Classes
+### Render Hooks: Enum Replaced by Scoped Classes
 
 **Likelihood of Impact: Medium**
+*Affects applications that registered render hooks using the `RenderHook` enum in v2.5.*
 
 The `RenderHook` enum (`Shopper\Enum\RenderHook`) from v2.5 had 6 layout-level hooks. It has been replaced by seven scoped classes organized by business domain. If you used any of these hooks, update to `LayoutRenderHook`:
 
@@ -208,7 +211,8 @@ Permission::query()->whereIn('name', ['manage_mail', 'impersonate', 'setting_ana
 
 ### Server-Side Authorization Enforced Across Admin Components
 
-**Likelihood of Impact: Medium for custom roles**
+**Likelihood of Impact: Medium**
+*Affects applications with custom roles beyond the default administrator role.*
 
 All admin Livewire pages and slide-overs now enforce permissions server-side via `$this->authorize()`. Previously, many components relied only on sidebar visibility to restrict access — a direct URL or Livewire call was enough to bypass the check.
 

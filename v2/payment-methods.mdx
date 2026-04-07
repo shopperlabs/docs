@@ -7,20 +7,7 @@ Payment methods represent the ways customers can pay for their orders. Shopper p
 
 ## Model
 
-```php
-Shopper\Core\Models\PaymentMethod
-```
-
-```php
-use Shopper\Core\Models\PaymentMethod;
-
-// The model implements
-- Shopper\Core\Models\Contracts\PaymentMethod
-
-// Uses traits
-- HasSlug
-- HasZones
-```
+The model used is `Shopper\Core\Models\PaymentMethod`. It implements `Shopper\Core\Models\Contracts\PaymentMethod` and uses the `HasSlug` and `HasZones` traits. The model is not configurable via `config/shopper/models.php`.
 
 ## Database Schema
 
@@ -68,13 +55,8 @@ The `driver` column connects a payment method to a registered payment driver (`s
 Payment methods can be scoped to specific geographic zones using the `HasZones` trait:
 
 ```php
-// Get zones where this payment method is available
 $paymentMethod->zones;
-
-// Attach payment method to zones
 $paymentMethod->zones()->attach([$zoneId1, $zoneId2]);
-
-// Detach from zones
 $paymentMethod->zones()->detach($zoneId);
 ```
 
@@ -83,12 +65,10 @@ $paymentMethod->zones()->detach($zoneId);
 Orders reference payment methods via the `payment_method_id` foreign key:
 
 ```php
-use Shopper\Core\Models\Order;
-
-// Get the payment method used for an order
 $order->paymentMethod;
+```
 
-// Get all orders using a specific payment method
+```php
 Order::query()
     ->where('payment_method_id', $paymentMethod->id)
     ->get();
@@ -97,9 +77,6 @@ Order::query()
 ## Query Scopes
 
 ```php
-use Shopper\Core\Models\PaymentMethod;
-
-// Get only enabled payment methods
 PaymentMethod::query()->enabled()->get();
 ```
 
@@ -171,32 +148,35 @@ $mobileMoney = PaymentMethod::query()->create([
     'is_enabled' => true,
 ]);
 
-// Make available only in specific zones
 $mobileMoney->zones()->attach([$africaZoneId]);
 ```
 
 ## Retrieving Payment Methods
 
 ```php
-use Shopper\Core\Models\PaymentMethod;
+$methods = PaymentMethod::query()->enabled()->get();
+```
 
-// All enabled payment methods
-$methods = PaymentMethod::query()
-    ->enabled()
-    ->get();
+Find by slug:
 
-// Find by slug
+```php
 $method = PaymentMethod::query()
     ->where('slug', 'credit-card')
     ->first();
+```
 
-// Payment methods available in a specific zone
+Payment methods available in a specific zone:
+
+```php
 $methods = PaymentMethod::query()
     ->enabled()
     ->whereHas('zones', fn ($q) => $q->where('zone_id', $zoneId))
     ->get();
+```
 
-// Payment methods with no zone restriction (available everywhere)
+Payment methods with no zone restriction (available everywhere):
+
+```php
 $globalMethods = PaymentMethod::query()
     ->enabled()
     ->whereDoesntHave('zones')
@@ -217,9 +197,8 @@ $order = Order::query()->create([
     // ... other order fields
 ]);
 
-// Access the payment method from an order
-$order->paymentMethod->title;        // "Credit Card"
-$order->paymentMethod->instructions; // Post-order instructions
+$order->paymentMethod->title;
+$order->paymentMethod->instructions;
 ```
 
 ## Storefront Example

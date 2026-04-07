@@ -250,10 +250,12 @@ The driver supports full and partial refunds through the `PaymentProcessingServi
 $service = resolve(PaymentProcessingService::class);
 $reference = $service->getLatestReference($order);
 
-// Full refund
 $result = $service->refund($order, $reference, $order->price_amount);
+```
 
-// Partial refund
+For a partial refund, pass a specific amount in cents:
+
+```php
 $result = $service->refund(
     order: $order,
     reference: $reference,

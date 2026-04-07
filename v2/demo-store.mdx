@@ -1,20 +1,19 @@
 ---
 title: "Demo Store"
-description: "A fully functional e-commerce demo built with Shopper to showcase real-world usage."
+description: "A fully functional e-commerce store built with Shopper to showcase real-world usage patterns."
 ---
 
-We've built a complete demo store to showcase what's possible with Shopper. It's a fully functional e-commerce application
-with a storefront and admin panel, so you can explore how Shopper works in a real-world scenario.
+The official Shopper demo is a complete e-commerce application with a storefront and admin panel. It covers product browsing, variant selection, multi-step checkout, customer accounts, a blog, and multi-zone support with country-based currency switching. The full source code is [available on GitHub](https://github.com/shopperlabs/demo.laravelshopper.dev).
+
+<Card title="Visit the live demo" icon="globe" href="https://demo.laravelshopper.dev">
+  Browse the storefront and explore the admin panel at demo.laravelshopper.dev
+</Card>
 
 <Frame>
-  <img src="/images/demo-store.jpg" alt="Shopper Demo Store" />
+  <img src="/images/demo-store.jpg" alt="Shopper demo store homepage" />
 </Frame>
 
-<a href="https://demo.laravelshopper.dev" target="_blank">
-  Visit the live demo &rarr;
-</a>
-
-## What's included
+## What's Included
 
 The demo store covers the full e-commerce experience:
 
@@ -26,7 +25,25 @@ The demo store covers the full e-commerce experience:
 - **Multi-zone support** with country-based currency switching and shipping options
 - **Admin panel** at `/cpanel` powered by Shopper with Filament
 
-## Admin panel access
+## Key Patterns
+
+The demo is designed as a reference implementation. Here are the main patterns you can study in the codebase.
+
+**Extending Shopper models** with custom logic. The demo's `Product` model adds a `HasProductPricing` trait for multi-currency price formatting, and all catalog models (Category, Brand, Collection) are extended in `app/Models/` to show how model swapping works in practice.
+
+**Multi-step checkout** built with Livewire. The `CheckoutWizard` component orchestrates three steps (Shipping, Delivery, Payment), each as its own Livewire component under `app/Livewire/Checkout/`. Session state is managed through a dedicated `CheckoutSession` class.
+
+**Domain actions** for business logic. Instead of putting logic in controllers, the demo uses Action classes in `app/Actions/` for operations like `CreateOrder`, `AddToCart`, and `ResolveVariantAvailability`. Each action has a single responsibility and is easy to test.
+
+**Extending the admin sidebar.** The demo adds a Blog section to Shopper's admin panel through `app/Sidebar/BlogSidebar.php`, with custom Livewire pages for managing posts and categories under `app/Livewire/Shopper/Blog/`.
+
+**Multi-currency pricing** via shipping zones. The `ZoneSessionManager` action and `ZoneSelector` slide-over component handle country-based currency switching. The `HasProductPricing` trait on the Product model formats prices based on the active zone's currency.
+
+**Payment gateway integration** with multiple providers. The checkout supports Stripe (with webhooks via `StripeWebhookController`), NotchPay, and Cash on Delivery, configured through `config/shopper/payment.php`.
+
+**Feature toggling.** The demo disables the Suppliers feature in `config/shopper/features.php` to show that you can turn off any part of Shopper you don't need.
+
+## Admin Panel Access
 
 You can log in to the admin panel at [`/cpanel`](https://demo.laravelshopper.dev/cpanel):
 
@@ -37,16 +54,15 @@ You can log in to the admin panel at [`/cpanel`](https://demo.laravelshopper.dev
   The demo database is reset periodically. Please be respectful when editing data.
 </Warning>
 
-## Source code
+## Source Code
 
-The full source code is available on GitHub. You can clone it and run it locally to explore the codebase, modify it,
-or use it as a starting point for your own store.
+The full source code is available on GitHub. You can clone it and run it locally to explore the codebase, modify it, or use it as a starting point for your own store.
 
 <Card title="GitHub Repository" icon="github" href="https://github.com/shopperlabs/demo.laravelshopper.dev">
   Browse the source code on GitHub
 </Card>
 
-### Running locally
+To run the demo locally, clone the repository and run the setup command. This handles environment configuration, database migrations, and seeding with demo data.
 
 ```bash
 git clone https://github.com/shopperlabs/demo.laravelshopper.dev.git shopper-demo && cd shopper-demo
@@ -57,13 +73,4 @@ composer setup
 
 Then access the storefront at the URL provided by your local server.
 
-## Tech stack
-
-| Layer | Technology |
-|---|---|
-| Framework | Laravel 12 |
-| Admin panel | Shopper + Filament 4 |
-| Reactivity | Livewire 3 + Volt |
-| UI components | Flux UI |
-| Styling | Tailwind CSS 4 |
-| Deployment | Docker + FrankenPHP (Octane) |
+The storefront is built with Livewire 3, Volt, and Flux UI, styled with Tailwind CSS 4. The production deployment uses Docker with FrankenPHP (Octane).

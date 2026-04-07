@@ -1,39 +1,48 @@
 ---
 title: "Requirements"
-description: "Server requirements for running Shopper"
+description: "Server and package requirements for running Shopper."
 ---
 
-Shopper is a modern PHP application, built as a [Laravel](https://laravel.com) package, and has the same server requirements as &mdash; you guessed it &mdash; Laravel itself. To manipulate images (resize, crop, etc), you will also need the GD Library or ImageMagick.
+Shopper is a Laravel package and shares the same server requirements as Laravel itself. To manipulate images (resize, crop, etc), you will also need the GD Library or ImageMagick.
 
-## Requirements
-
-To run Shopper you'll need a server meeting the following requirements:
+## Server Requirements
 
 - PHP 8.3+
-- Laravel 11.x
-- Filament v4.5+
-- Tailwind CSS v4.1+
-- Mysql 8+ / MariaDB 10.2+ / PostgreSQL 15+
+- MySQL 8+ / MariaDB 10.2+ / PostgreSQL 15+
 
-## Recommended Hosts
+### PHP Extensions
 
-We recommend using [Digital Ocean][do] to host most Laravel sites. Their servers are fast, inexpensive, and we use them ourselves. _**Full disclosure:** that's an affiliate link but we wouldn't recommend them if it wasn't an excellent option._
+The following PHP extensions are required:
+
+| Extension | Purpose |
+|-----------|---------|
+| `intl` | Currency formatting, locale support, and internationalization |
+| `gd` or `imagick` | Image manipulation for product, category, and brand media |
+| `soap` | Carrier API calls (UPS, FedEx, USPS) for shipping rate calculation |
+
+<Note>
+  Most PHP installations include `intl` and `gd` by default. The `soap` extension may need to be installed separately depending on your hosting environment.
+</Note>
+
+## Package Requirements
+
+| Package | Version |
+|---------|---------|
+| Laravel | 11.28+ / 12.x / 13.x |
+| Filament | 4.9+ |
+
+Shopper's Laravel version support follows Filament's compatibility. If Filament supports a Laravel version, Shopper supports it too.
 
 ## Development Environments
 
-All of these requirements are satisfied by the [Laravel Homestead][homestead] virtual machine, which makes it a great local Laravel development environment. Virtual machines aren't for everybody though, so here are a couple of other options.
+### Laravel Herd
 
-### Laravel Valet (MacOS & Linux)
+[Laravel Herd](https://herd.laravel.com/) is the recommended development environment for both macOS and Windows. It provides PHP, Nginx, and database services with zero configuration. Herd includes all required PHP extensions out of the box.
 
-[Laravel Valet][valet] is a development environment for Mac minimalists If you are on Linux you must use this [version][valet_linux] of Valet for Linux. No Vagrant, No Apache, No Nginx, No need to manually edit hosts file. It simply maps all the subdirectories in a "web" directory (such as `~/Sites`) to `.test` or `.localhost` domains.
-You can even share your sites publicly using local tunnels. We use it ourselves and it's brilliant.
+### Laravel Valet
 
-### Laravel Herd (MacOS & Windows)
+[Laravel Valet](https://laravel.com/docs/valet) is a lightweight development environment for macOS. It maps all subdirectories in a directory (such as `~/Sites`) to `.test` domains. You can share your sites publicly using local tunnels.
 
-[Laravel Herd][herd] is a good choice for those of the Windows persuasion. Developed by the Laravel team, Herd is a bit like Laravel Valet, but allows you to quickly setup your environment faster with many more features available
+### Docker
 
-[do]: https://m.do.co/c/d6dca1691fb4
-[homestead]: https://laravel.com/docs/homestead
-[valet]: https://laravel.com/docs/valet
-[herd]: https://herd.laravel.com/
-[valet_linux]: https://cpriego.github.io/valet-linux
+Any Docker setup that satisfies the PHP and database requirements will work. The [Shopper demo store](https://github.com/shopperlabs/demo.laravelshopper.dev) uses Docker with FrankenPHP (Laravel Octane) as a reference.

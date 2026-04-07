@@ -3,7 +3,7 @@ title: Cart
 description: Manage shopping carts with pipeline-based calculation, discount validation, tax integration, and order conversion.
 ---
 
-The `shopper/cart` package handles everything between "Add to cart" and "Place order". It manages cart lines, validates stock, applies discounts, calculates taxes, and converts completed carts into orders — all through a clean, testable API.
+The `shopper/cart` package handles everything between "Add to cart" and "Place order". It manages cart lines, validates stock, applies discounts, calculates taxes, and converts completed carts into orders. All through a clean, testable API.
 
 Every monetary value is stored in **cents** as an unsigned integer. A product priced at $25.00 is stored as `2500`.
 
@@ -29,7 +29,7 @@ $manager = resolve(CartManager::class);
 
 ### Adding Items
 
-Pass any model that implements `Priceable` — typically a `Product` or `ProductVariant`. The manager looks up the unit price from the purchasable's price list using the cart's currency.
+Pass any model that implements `Priceable`, typically a `Product` or `ProductVariant`. The manager looks up the unit price from the purchasable's price list using the cart's currency.
 
 ```php
 $line = $manager->add($cart, $product);
@@ -488,16 +488,51 @@ The `Cart` and `CartLine` models implement core contracts (`CartContract`, `Cart
 
 Your custom models must implement the corresponding contracts from `Shopper\Core\Models\Contracts`.
 
-## Pruning Abandoned Carts
+## Abandoned Carts
 
-Abandoned carts (never completed) are cleaned up with a scheduled command:
+A cart is considered "abandoned" when it has items but no activity for a configurable period. Shopper tracks this automatically and provides both an admin interface and programmatic tools to manage abandoned carts.
+
+### Admin Panel
+
+The admin panel includes an Abandoned Carts page under the Orders section. It lists all carts that are not completed, have at least one line item, and have been inactive for longer than the configured threshold. Administrators can view cart contents, the customer (if authenticated), and the associated channel.
+
+### Configuration
+
+Two config keys in `config/shopper/cart.php` control abandoned cart behavior:
+
+```php
+'abandoned_after_minutes' => 60,  // Cart is "abandoned" after 60 minutes of inactivity
+'prune_after_days' => 30,         // Abandoned carts are deleted after 30 days
+```
+
+### Querying Abandoned Carts
+
+To find abandoned carts programmatically, for example to send recovery emails:
+
+```php
+use Shopper\Cart\Models\Cart;
+
+$abandonedCarts = Cart::query()
+    ->whereNull('completed_at')
+    ->whereHas('lines')
+    ->whereNotNull('customer_id')
+    ->where('updated_at', '<', now()->subMinutes(
+        config('shopper.cart.abandoned_after_minutes', 60)
+    ))
+    ->with(['customer', 'lines.purchasable'])
+    ->get();
+```
+
+### Pruning
+
+Abandoned carts that are too old are cleaned up with a scheduled command:
 
 ```bash
 php artisan shopper:prune-carts
 php artisan shopper:prune-carts --days=7
 ```
 
-By default, carts that haven't been updated in the last 30 days (configurable via `prune_after_days`) are deleted. Only carts where `completed_at` is `null` are pruned — completed carts are kept as historical records.
+By default, carts that haven't been updated in the last 30 days (configurable via `prune_after_days`) are deleted. Only carts where `completed_at` is `null` are pruned. Completed carts are kept as historical records tied to their orders.
 
 Schedule the command in your `routes/console.php`:
 
@@ -507,73 +542,281 @@ use Illuminate\Support\Facades\Schedule;
 Schedule::command('shopper:prune-carts')->daily();
 ```
 
-## Storefront Example
+## Storefront Implementation
 
-Here is a complete cart-to-checkout flow for a storefront application.
+This section shows how to build a complete cart experience in your storefront. The examples are based on the patterns used in the [Shopper demo store](https://demo.laravelshopper.dev).
 
-### Initializing the Cart
+### Cart Session Helper
+
+A common pattern is to create a `cartSession()` helper that handles cart creation with the correct zone and channel. This avoids repeating the creation logic across your controllers and components:
 
 ```php
-use Shopper\Cart\Facades\Cart;
+// app/helpers.php
 
-// In middleware or controller — get or create the cart
-$cart = Cart::current() ?? Cart::create([
-    'channel_id' => $channel->id,
-    'zone_id' => $zone->id,
-]);
+use Shopper\Cart\CartSessionManager;
+use Shopper\Cart\Models\Cart;
+use Shopper\Core\Models\Channel;
 
-// After login — associate the customer
-Cart::associate(auth()->user());
+function cartSession(): Cart
+{
+    $session = resolve(CartSessionManager::class);
+    $cart = $session->current();
+
+    if (! $cart) {
+        $defaultChannel = Channel::query()->scopes('default')->first();
+
+        $cart = $session->create([
+            'currency_code' => shopper_currency(),
+            'channel_id' => $defaultChannel?->id,
+            'zone_id' => session('zone_id'),
+            'customer_id' => auth()->id(),
+        ]);
+    }
+
+    return $cart;
+}
 ```
 
-### Adding Products
+Register the helper in your `composer.json`:
+
+```json
+{
+    "autoload": {
+        "files": ["app/helpers.php"]
+    }
+}
+```
+
+### Associating Cart on Login
+
+When a guest adds items to their cart and then logs in, the cart should be associated with their account. Register a listener for the `Login` event in your `AppServiceProvider`:
 
 ```php
+use Illuminate\Auth\Events\Login;
+use Illuminate\Support\Facades\Event;
+use Shopper\Cart\CartSessionManager;
+
+public function boot(): void
+{
+    Event::listen(Login::class, function (Login $event): void {
+        resolve(CartSessionManager::class)->associate($event->user);
+    });
+}
+```
+
+### Add to Cart Action
+
+Create a dedicated action class that handles adding both products and variants to the cart:
+
+```php
+namespace App\Actions\Cart;
+
+use App\Models\Product;
+use App\Models\ProductVariant;
 use Shopper\Cart\CartManager;
-use Shopper\Cart\Exceptions\InsufficientStockException;
-use Shopper\Cart\Facades\Cart;
+use Shopper\Cart\Models\CartLine;
 
-$cart = Cart::current();
-$manager = resolve(CartManager::class);
+final readonly class AddToCart
+{
+    public function __construct(
+        private CartManager $cartManager,
+    ) {}
 
-try {
-    $manager->add($cart, $product, quantity: 2);
-} catch (InsufficientStockException $e) {
-    return back()->with('error', "Only {$e->available} items available.");
+    public function handle(Product $product, ?ProductVariant $variant = null): CartLine
+    {
+        $purchasable = $variant ?? $product;
+
+        return $this->cartManager->add(cartSession(), $purchasable);
+    }
+}
+```
+
+### Livewire Cart Component
+
+Here is a complete Livewire component for displaying and managing the cart as a slide-over panel:
+
+```php
+namespace App\Livewire;
+
+use App\Models\ProductVariant;
+use Illuminate\Contracts\View\View;
+use Illuminate\Support\Collection;
+use Livewire\Attributes\On;
+use Livewire\Component;
+use Shopper\Cart\CartManager;
+use Shopper\Cart\CartSessionManager;
+use Shopper\Cart\Models\CartLine;
+
+final class ShoppingCart extends Component
+{
+    public int|float $subtotal = 0;
+
+    /** @var Collection<int, CartLine> */
+    public Collection $items;
+
+    public function mount(): void
+    {
+        $this->loadCart();
+    }
+
+    #[On('cartUpdated')]
+    public function loadCart(): void
+    {
+        $cart = resolve(CartSessionManager::class)->current();
+
+        if (! $cart) {
+            $this->items = collect();
+            $this->subtotal = 0;
+
+            return;
+        }
+
+        $cart->load('lines.purchasable');
+        $cart->lines->loadMorph('purchasable', [
+            ProductVariant::class => ['product'],
+        ]);
+
+        $this->items = $cart->lines;
+
+        $context = resolve(CartManager::class)->calculate($cart);
+        $this->subtotal = $context->subtotal;
+    }
+
+    public function removeFromCart(int $lineId): void
+    {
+        resolve(CartManager::class)->remove(cartSession(), $lineId);
+
+        $this->loadCart();
+        $this->dispatch('cartUpdated');
+    }
+
+    public function render(): View
+    {
+        return view('livewire.shopping-cart');
+    }
+}
+```
+
+The corresponding Blade view displays each cart line with its product details and a remove button:
+
+```blade
+<div>
+    @if ($items->isEmpty())
+        <p>Your cart is empty.</p>
+    @else
+        <ul>
+            @foreach ($items as $line)
+                <li class="flex items-center justify-between py-4">
+                    <div>
+                        <p class="font-medium">
+                            @if ($line->purchasable instanceof \App\Models\ProductVariant)
+                                {{ $line->purchasable->product->name }} - {{ $line->purchasable->name }}
+                            @else
+                                {{ $line->purchasable->name }}
+                            @endif
+                        </p>
+                        <p class="text-sm text-gray-500">
+                            Qty: {{ $line->quantity }}
+                            &middot;
+                            {{ shopper_money_format($line->unit_price_amount, cartSession()->currency_code) }}
+                        </p>
+                    </div>
+                    <button wire:click="removeFromCart({{ $line->id }})">Remove</button>
+                </li>
+            @endforeach
+        </ul>
+
+        <div class="border-t pt-4">
+            <p class="font-medium">
+                Subtotal: {{ shopper_money_format($subtotal, cartSession()->currency_code) }}
+            </p>
+        </div>
+    @endif
+</div>
+```
+
+### Cart Header Button
+
+A small component that displays the cart item count in the navigation. It listens for the `cartUpdated` event to refresh automatically:
+
+```php
+namespace App\Livewire;
+
+use Illuminate\Contracts\View\View;
+use Livewire\Attributes\On;
+use Livewire\Component;
+use Shopper\Cart\CartSessionManager;
+
+final class ShoppingCartButton extends Component
+{
+    public int $count = 0;
+
+    public function mount(): void
+    {
+        $this->updateCount();
+    }
+
+    #[On('cartUpdated')]
+    public function updateCount(): void
+    {
+        $cart = resolve(CartSessionManager::class)->current();
+
+        $this->count = $cart ? $cart->lines->sum('quantity') : 0;
+    }
+
+    public function render(): View
+    {
+        return view('livewire.shopping-cart-button');
+    }
 }
 ```
 
 ### Displaying Cart Totals
 
-```php
-$context = $manager->calculate($cart);
+Use the `CartManager::calculate()` method to get the full breakdown. The returned `CartPipelineContext` contains all computed values:
 
-// In your Blade template
-Subtotal: {{ format_money($context->subtotal, $cart->currency_code) }}
-Discount: -{{ format_money($context->discountTotal, $cart->currency_code) }}
-Tax: {{ format_money($context->taxTotal, $cart->currency_code) }}
-Total: {{ format_money($context->total, $cart->currency_code) }}
+```php
+$context = resolve(CartManager::class)->calculate($cart);
+```
+
+```blade
+<div>
+    <p>Subtotal: {{ shopper_money_format($context->subtotal, $cart->currency_code) }}</p>
+
+    @if ($context->discountTotal > 0)
+        <p>Discount: -{{ shopper_money_format($context->discountTotal, $cart->currency_code) }}</p>
+    @endif
+
+    @if ($context->taxTotal > 0)
+        <p>Tax: {{ shopper_money_format($context->taxTotal, $cart->currency_code) }}</p>
+    @endif
+
+    <p class="font-bold">Total: {{ shopper_money_format($context->total, $cart->currency_code) }}</p>
+</div>
 ```
 
 ### Applying a Coupon
+
+Validate and apply a discount code to the cart. The actual discount calculation happens during the pipeline when `calculate()` is called:
 
 ```php
 use Shopper\Cart\Exceptions\InvalidDiscountException;
 
 try {
-    $manager->applyCoupon($cart, $couponCode);
+    resolve(CartManager::class)->applyCoupon($cart, $couponCode);
 } catch (InvalidDiscountException $e) {
     return back()->with('error', $e->getMessage());
 }
-
-// Recalculate to see the discount
-$context = $manager->calculate($cart);
 ```
 
-### Setting Addresses
+### Setting Checkout Addresses
+
+Add shipping and billing addresses to the cart before converting to an order:
 
 ```php
 use Shopper\Core\Enum\AddressType;
+
+$manager = resolve(CartManager::class);
 
 $manager->addAddress($cart, AddressType::Shipping, [
     'first_name' => $request->first_name,
@@ -583,22 +826,21 @@ $manager->addAddress($cart, AddressType::Shipping, [
     'postal_code' => $request->postal_code,
     'country_id' => $request->country_id,
 ]);
+
+$manager->addAddress($cart, AddressType::Billing, $billingData);
 ```
 
 ### Converting to Order
+
+When the customer completes checkout, convert the cart into an order. The action runs inside a database transaction, calculates final totals, creates order records, and marks the cart as completed:
 
 ```php
 use Shopper\Cart\Actions\CreateOrderFromCartAction;
 use Shopper\Cart\Facades\Cart;
 
-$action = resolve(CreateOrderFromCartAction::class);
-$order = $action->execute(Cart::current());
+$order = resolve(CreateOrderFromCartAction::class)->execute(Cart::current());
 
 Cart::forget();
-
-// Continue to payment processing
-$service = resolve(PaymentProcessingService::class);
-$result = $service->initiate($order);
 ```
 
 <Note>
