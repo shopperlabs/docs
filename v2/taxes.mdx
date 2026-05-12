@@ -48,7 +48,7 @@ TaxZone::query()->create([
 
 When the calculator resolves a zone for a shipping address, it first tries to find a zone matching both the country and province. If none exists, it falls back to a country-level zone with no `province_code`.
 
-The `display_name` accessor produces a human-readable label by combining country and zone name: `France — Standard VAT`.
+The `display_name` accessor produces a human-readable label by combining country and zone name (for example, `France — Standard VAT`).
 
 ### Zone Schema
 
@@ -151,7 +151,7 @@ TaxRateRule::query()->create([
 ]);
 ```
 
-Or an entire product type — useful for applying different rules to virtual goods versus physical ones:
+Or an entire product type, which is useful for applying different rules to virtual goods versus physical ones:
 
 ```php
 TaxRateRule::query()->create([

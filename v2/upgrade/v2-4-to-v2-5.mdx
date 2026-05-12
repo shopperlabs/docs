@@ -129,16 +129,16 @@ The `logo` column has been removed from both the `payment_methods` and `carriers
 
 ```php
 // Accessing logos
-$paymentMethod->logo; // string|null — file path
-$carrier->logo;       // string|null — file path
+$paymentMethod->logo; // string|null, file path
+$carrier->logo;       // string|null, file path
 ```
 
 #### After (v2.5)
 
 ```php
 // Accessing logos via Media Library
-$paymentMethod->logoUrl(); // ?string — full URL or null
-$carrier->logoUrl();       // ?string — full URL or null
+$paymentMethod->logoUrl(); // ?string, full URL or null
+$carrier->logoUrl();       // ?string, full URL or null
 ```
 
 Both models now implement `Spatie\MediaLibrary\HasMedia` and use the `HasMedia` trait.
@@ -155,10 +155,10 @@ Shopper 2.5 introduces a complete payment driver system through the new `shopper
 
 Key components:
 
-- **`PaymentProcessingService`** — orchestrates payment operations (initiate, authorize, capture, refund, cancel) through drivers
-- **`PaymentTransaction`** model — records every payment operation with driver, type, status, amount, and provider reference
-- **`PaymentDriver`** contract — interface for implementing payment providers
-- **`PaymentManager`** — resolves and manages payment drivers (a manual driver is included by default)
+- **`PaymentProcessingService`**. Orchestrates payment operations (initiate, authorize, capture, refund, cancel) through drivers
+- **`PaymentTransaction`** model. Records every payment operation with driver, type, status, amount, and provider reference
+- **`PaymentDriver`** contract. Interface for implementing payment providers
+- **`PaymentManager`**. Resolves and manages payment drivers (a manual driver is included by default)
 
 New enums in `Shopper\Payment\Enum`:
 
@@ -227,8 +227,8 @@ Update any code, queries, or Blade templates that reference the old column name.
 
 Two new columns have been added to the `order_items` table:
 
-- `fulfillment_status` — tracks per-item fulfillment using the new `FulfillmentStatus` enum (`Pending`, `ForwardedToSupplier`, `Processing`, `Shipped`, `Delivered`, `Cancelled`)
-- `order_shipping_id` — links each item to a specific shipment
+- `fulfillment_status`. Tracks per-item fulfillment using the new `FulfillmentStatus` enum (`Pending`, `ForwardedToSupplier`, `Processing`, `Shipped`, `Delivered`, `Cancelled`)
+- `order_shipping_id`. Links each item to a specific shipment
 
 This enables partial fulfillment: different items in the same order can be at different fulfillment stages and shipped in different packages.
 

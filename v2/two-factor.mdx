@@ -94,14 +94,14 @@ In the Two-factor authentication section, use the Disable button for the authent
 
 Two-factor authentication is implemented through two focused interfaces (following the Interface Segregation Principle):
 
-**`Shopper\Contracts\HasStoreAuthentication`** — manages the TOTP secret and QR code:
+**`Shopper\Contracts\HasStoreAuthentication`** manages the TOTP secret and QR code:
 - `getStoreAuthenticationSecret(): ?string`
 - `saveStoreAuthenticationSecret(?string $secret): void`
 - `getStoreAuthenticationHolderName(): string`
 - `getStoreAuthenticationQrCodeSvg(): string`
 - `getStoreAuthenticationQrCodeUrl(): string`
 
-**`Shopper\Contracts\HasStoreAuthenticationRecovery`** — manages recovery codes:
+**`Shopper\Contracts\HasStoreAuthenticationRecovery`** manages recovery codes:
 - `getStoreAuthenticationRecoveryCodes(): ?array`
 - `saveStoreAuthenticationRecoveryCodes(?array $codes): void`
 - `replaceStoreAuthenticationRecoveryCode(string $code): void`

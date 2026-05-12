@@ -1,6 +1,6 @@
 ---
 title: Variant Product
-description: Products with multiple options like size, color, or material — each combination becomes a unique variant.
+description: Products with multiple options like size, color, or material, where each combination becomes a unique variant.
 ---
 
 A variant product is a **physical item that comes in multiple options**. Instead of creating separate products for each size or color, you create one parent product and generate variants for every combination. Each variant has its own SKU, price, stock level, and image.
@@ -26,7 +26,7 @@ Use the Variant product type when:
 
 ## How Variants Work
 
-Variants are built from **attributes** — structured properties you define for your products. Here's the flow:
+Variants are built from **attributes**, structured properties you define for your products. Here's the flow:
 
 1. Create a **Variant** product
 2. Attach **attributes** to the product (e.g., Size, Color)
@@ -65,9 +65,9 @@ Before generating variants, you need to attach attributes to your product.
 
 Make sure you have created the necessary attributes in the [Attributes](/v2/user-guide/catalog/attributes) section. Variant-compatible attributes typically use these field types:
 
-- **Select** — A dropdown list of values (most common for variants)
-- **Color picker** — Visual color selection
-- **Checkbox** — Multiple selectable values
+- **Select**. A dropdown list of values (most common for variants)
+- **Color picker**. Visual color selection
+- **Checkbox**. Multiple selectable values
 
 ### Adding Attributes to Your Product
 
@@ -89,7 +89,7 @@ Once attributes are attached, you can generate all variant combinations automati
 1. Go to the **Variants** tab on your product
 2. Click **Generate variants**
 3. Shopper calculates all possible combinations from your attribute values
-4. Review the generated list — each combination is shown with a default SKU
+4. Review the generated list. Each combination is shown with a default SKU
 5. You can edit the SKU and set an initial price before confirming
 6. Click **Save** to create all variants at once
 
@@ -98,7 +98,7 @@ Once attributes are attached, you can generate all variant combinations automati
 </Frame>
 
 <Note>
-  The number of variants equals the product of all attribute value counts. For example: 4 sizes x 3 colors = 12 variants. Keep this manageable — too many combinations can be hard to maintain.
+  The number of variants equals the product of all attribute value counts. For example: 4 sizes x 3 colors = 12 variants. Keep this manageable, too many combinations can be hard to maintain.
 </Note>
 
 ### Adding Individual Variants
@@ -278,6 +278,6 @@ After creation:
 - A product can use up to **3 variant attributes** (e.g., Size + Color + Material)
 - The total number of variants is the product of all attribute values
 - Consider splitting into separate products if you exceed 50+ variants
-- Product type cannot be changed after creation — plan ahead
+- Product type cannot be changed after creation, so plan ahead
 
 For developer details, see the [Product Variants documentation](/v2/product-variants).

@@ -1,0 +1,194 @@
+---
+title: From v2.7 to v2.8
+description: How to upgrade your Shopper installation from v2.7 to v2.8 (security release).
+---
+
+<Info>
+**Estimated Upgrade Time:** 5 to 15 minutes. v2.8 is a pure security release with no breaking API changes.
+</Info>
+
+<Warning>
+v2.8.0 patches two security advisories disclosed responsibly by [@baradika](https://github.com/baradika):
+
+- Authorization bypass in admin Livewire components (CWE-862 / CWE-285)
+- Race condition on `Discount.usage_limit` allows silent over-redemption (CWE-362 / CWE-840)
+
+Upgrade as soon as possible. Both advisories are public on the [Shopper GitHub Security Advisories](https://github.com/shopperlabs/shopper/security/advisories) page.
+</Warning>
+
+## Updating Dependencies
+
+Update the following dependency in your application's `composer.json` file:
+
+`shopper/framework` to `^2.8`
+
+Then run:
+
+```bash
+composer update -W
+php artisan migrate
+```
+
+## Database Migration
+
+v2.8 ships one additive migration. It adds five nullable columns to the `orders` table to snapshot the discount that was redeemed at order placement time:
+
+| Column | Type | Purpose |
+|---|---|---|
+| `discount_id` | bigint FK (nullOnDelete) | Link to the discount that was redeemed |
+| `discount_code` | string | Snapshot of the code used (kept even if the discount is later edited or deleted) |
+| `discount_type` | string(32) | Snapshot of the discount type (`percentage` / `fixed_amount`) |
+| `discount_value_at_apply` | unsigned int | Snapshot of the discount value at apply time |
+| `discount_currency_code` | char(3) | Currency the discount was applied in |
+
+Existing rows are left untouched. The snapshot follows the Shopify pattern: an order keeps the discount it was placed with, even after the originating discount is edited or deleted.
+
+## High Impact Changes
+
+### Discount Limit Enforcement
+
+**Likelihood of Impact: High if you call `CreateOrderFromCartAction` directly.**
+*Affects any storefront code that converts carts to orders outside the default checkout flow.*
+
+Two production bugs around `Discount.usage_limit` are fixed in v2.8. Both can now throw a new exception from `CreateOrderFromCartAction::execute()`.
+
+The global usage counter (`total_use`) is now incremented atomically inside the order-creation transaction. The discount row is locked with `lockForUpdate`, then a conditional `UPDATE` increments `total_use` **only if** it is still below `usage_limit`. If zero rows are affected, the limit was reached between cart validation and commit and `DiscountLimitReachedException::global()` is thrown. The order is **not** created and the transaction rolls back.
+
+The per-user limit (`usage_limit_per_user`) previously read from `DiscountDetail.total_use`, a counter that was never incremented. It now counts prior orders on the new `orders.discount_id` column. The check runs in two places: `DiscountValidator` rejects the code at cart-apply time (so the customer is not surprised at checkout), and `CreateOrderFromCartAction` re-checks at commit and throws `DiscountLimitReachedException::perUser()` if the customer redeemed it between cart apply and commit.
+
+Update your checkout controller to catch the new exception:
+
+```php
+use Shopper\Cart\Actions\CreateOrderFromCartAction;
+use Shopper\Cart\Exceptions\DiscountLimitReachedException;
+use Shopper\Cart\Facades\Cart;
+
+try {
+    $order = resolve(CreateOrderFromCartAction::class)->execute(Cart::current());
+} catch (DiscountLimitReachedException $e) {
+    return back()->with('error', 'This discount can no longer be used. Please remove the code and try again.');
+}
+```
+
+For full details on both limits, see the [Discounts page](/v2/discounts#usage-limit-enforcement).
+
+## Medium Impact Changes
+
+### Custom Livewire Admin Components
+
+**Likelihood of Impact: Medium**
+*Affects applications with custom Livewire components extending Shopper's admin surfaces.*
+
+v2.8 tightens authorization across every Shopper admin Livewire component. If you have custom components that extend or mimic Shopper's order, product, customer, or settings surfaces, audit them against the new patterns. Skipping this audit leaves the same bypass surface that v2.8 closed in Shopper itself.
+
+#### Chain `authorize()` on Filament actions
+
+Filament `Action` handlers should declare their ability on the action itself, not inside the closure. This hides the button when the user lacks the ability, instead of throwing a 403 on click:
+
+```php
+Action::make('cancel') // [!code --]
+    ->action(function () { // [!code --]
+        $this->authorize('edit_orders'); // [!code --]
+        // ... // [!code --]
+    }); // [!code --]
+
+Action::make('cancel') // [!code ++]
+    ->authorize('edit_orders') // [!code ++]
+    ->action(function () { // [!code ++]
+        // ... // [!code ++]
+    }); // [!code ++]
+```
+
+#### Authorize Livewire methods on the first line
+
+Every public method that mutates state must call `$this->authorize()` first:
+
+```php
+public function leaveNotes(): void
+{
+    $this->authorize('edit_orders');
+
+    // ...
+}
+```
+
+#### Lock public Eloquent properties
+
+Any `public Model $x` property on a Livewire component must be marked `#[Locked]` so it cannot be rebound from the browser. This is the pattern Shopper now applies to `Order`, `OrderShipping`, `Discount`, `Review`, `ShopperUser`, `Role`, `Inventory`, `Legal`, and `Product`:
+
+```php
+use Livewire\Attributes\Locked;
+use Shopper\Models\Order;
+
+#[Locked]
+public Order $order;
+```
+
+#### Allow-list input on `store()` methods
+
+When persisting user input from the browser, use an explicit `Arr::only(...)` allow-list instead of `Arr::except(...)`. The latter is what allowed the `_password` hidden-field leak that v2.8 closed in `Customers/Create::store()`:
+
+```php
+$data = Arr::except($payload, ['_token']); // [!code --]
+$data = Arr::only($payload, ['first_name', 'last_name', 'email']); // [!code ++]
+```
+
+### Settings Permissions Tightened
+
+**Likelihood of Impact: Medium**
+*Affects custom roles that previously relied on the loose permission scope.*
+
+Five settings surfaces moved from `view_users` to `access_setting`. If you have custom roles, audit them to make sure the right people retain access:
+
+| Surface | Before | After |
+|---|---|---|
+| `Settings/Team/Index::createRole` | `view_users` | `access_setting` |
+| `Settings/Team/Index` DeleteAction | `view_users` | `access_setting` |
+| `Settings/Team/RolePermission` save/generate/create | `view_users` | `access_setting` |
+| `PaymentMethods` / `Currencies` / `Carriers` `ToggleColumn`, record actions, bulk actions | `view_users` | `access_setting` |
+| `Settings/Team/Permissions::togglePermission` / `removePermission` | `view_users` | `access_setting` (and guards against null lookups) |
+
+Roles that managed payment methods, currencies, carriers, team, or permissions must now have `access_setting` granted.
+
+## Low Impact Changes
+
+### Product Barcode Validation
+
+Product barcodes are now validated against `^[A-Za-z0-9\-]*$` server-side. This closes a stored XSS surface on the admin barcode renderer. If you have existing products with non-alphanumeric barcodes, they will fail re-validation on next save, so clean them up before upgrading.
+
+### Discount Snapshot on Orders
+
+Orders now snapshot the discount at placement time. If you have storefront pages or admin extensions that read the discount tied to an order, prefer the new snapshot columns over `Order::discount` for historical accuracy. The relationship is still there but will return `null` if the originating discount has been deleted.
+
+```php
+$order->discount_code;
+$order->discount_type;
+$order->discount_value_at_apply;
+$order->discount_currency_code;
+```
+
+## Migration Checklist
+
+<Steps>
+  <Step title="Update composer">
+    Set `shopper/framework` to `^2.8` and run `composer update -W`.
+  </Step>
+  <Step title="Run the migration">
+    Run `php artisan migrate` to add the five `orders.discount_*` columns.
+  </Step>
+  <Step title="Catch DiscountLimitReachedException">
+    Wrap `CreateOrderFromCartAction::execute()` calls in your checkout controller to surface a friendly message to the customer when a discount limit is hit at commit time.
+  </Step>
+  <Step title="Audit custom Livewire components">
+    For every custom Livewire admin component, chain `->authorize()` on Filament actions, call `$this->authorize()` on Livewire method handlers, and mark `public Model $x` properties with `#[Locked]`.
+  </Step>
+  <Step title="Audit custom roles">
+    Grant `access_setting` to roles that need to manage payment methods, currencies, carriers, team members, or permissions.
+  </Step>
+  <Step title="Sanitize existing barcodes">
+    Find products with non-alphanumeric barcodes and clean them up before saving.
+  </Step>
+  <Step title="Run tests">
+    Run `php artisan test`. The new authorization guards may reveal tests that were using under-privileged users.
+  </Step>
+</Steps>

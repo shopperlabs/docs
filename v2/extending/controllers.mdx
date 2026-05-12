@@ -123,3 +123,75 @@ Use `#[Layout('shopper::components.layouts.app')]` on your Livewire component to
 ## Adding Navigation
 
 To add your custom page to the admin sidebar, create a sidebar extension. See the [Navigation](/v2/extending/navigation) page for details on adding menu items that link to your controller or Livewire routes.
+
+## Authorization Pattern for Custom Admin Components
+
+Custom Livewire components that extend or mimic Shopper's admin surfaces (orders, products, customers, settings) must follow the authorization pattern that Shopper enforces internally. Skipping any of these steps reintroduces the bypass surface that v2.8 closed across the shipped components.
+
+### Chain `authorize()` on Filament Actions
+
+Declare the required ability on the Filament `Action` itself, not inside the closure. This hides the button when the user lacks the ability instead of throwing a 403 on click:
+
+```php
+use Filament\Actions\Action;
+
+Action::make('cancel')
+    ->authorize('edit_orders')
+    ->action(function (): void {
+        // ...
+    });
+```
+
+### Authorize Livewire Method Handlers
+
+Every public Livewire method that mutates state must call `$this->authorize()` on its first line. Livewire methods are reachable from the browser regardless of UI state, so the check belongs in the method body, not in the view that rendered the trigger:
+
+```php
+public function leaveNotes(): void
+{
+    $this->authorize('edit_orders');
+
+    // ...
+}
+```
+
+### Lock Public Model Properties
+
+Any `public Model $x` property on a Livewire component must be marked `#[Locked]`. Without it, the browser can rebind the property to a different model ID and bypass authorization that was performed on the original target:
+
+```php
+use Livewire\Attributes\Locked;
+use Shopper\Models\Order;
+
+#[Locked]
+public Order $order;
+```
+
+### Allow-List User Input
+
+When persisting user input from the browser, use an explicit `Arr::only(...)` allow-list. `Arr::except(...)` is fragile: any new field that lands in the payload (including private state added by the framework) silently flows into the database:
+
+```php
+use Illuminate\Support\Arr;
+
+$data = Arr::only($payload, ['first_name', 'last_name', 'email']);
+```
+
+### Guard Lookups Against Null
+
+Livewire components that resolve a model from user input must handle the lookup failure path. Returning early on null avoids the cascade of bypasses that follow when a misbound ID is treated as authoritative:
+
+```php
+public function togglePermission(int $permissionId): void
+{
+    $this->authorize('access_setting');
+
+    $permission = Permission::query()->find($permissionId);
+
+    if ($permission === null) {
+        return;
+    }
+
+    // ...
+}
+```

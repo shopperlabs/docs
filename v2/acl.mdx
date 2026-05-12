@@ -79,6 +79,19 @@ Permission::groups();
 
 This returns the built-in groups: `system`, `brands`, `categories`, `collections`, `products`, `customers`, `orders`, `discounts`.
 
+### System Permissions
+
+The `system` group contains the global capabilities that gate everything outside the resource permissions:
+
+| Permission | Description |
+|---|---|
+| `access_setting` | Required for any write action on settings surfaces (PaymentMethods, Currencies, Carriers, Locations, Legal, Team, Roles, Permissions) |
+| `view_users` | Required to view the customers list and customer detail pages |
+
+<Note>
+Since v2.8, `access_setting` is the only permission that grants write access to PaymentMethods, Currencies, Carriers, Team management, and Role/Permission management. Roles that previously relied on `view_users` to mutate these surfaces must be granted `access_setting` to keep working.
+</Note>
+
 ### Generating Permissions
 
 The `Permission::generate()` method creates five permissions for a given resource (browse, read, edit, add, delete):

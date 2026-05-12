@@ -58,7 +58,7 @@ The `capture_method` setting controls when funds are collected from the customer
 
 | Value | Behavior | Use case |
 |-------|----------|----------|
-| `manual` | Authorize first, capture later from the admin panel | Physical goods — verify stock before charging |
+| `manual` | Authorize first, capture later from the admin panel | Physical goods, verify stock before charging |
 | `automatic` | Capture immediately when the customer confirms | Digital products, subscriptions, instant fulfillment |
 
 Manual capture is the default. When using manual capture, the payment status goes through `Pending → Authorized → Paid`. The merchant captures from the order detail page when ready.
@@ -297,7 +297,7 @@ Use the Stripe CLI to forward events to your local environment:
 stripe listen --forward-to localhost:8000/webhooks/stripe
 ```
 
-The CLI prints a webhook signing secret — use it as `STRIPE_WEBHOOK_SECRET` during development.
+The CLI prints a webhook signing secret. Use it as `STRIPE_WEBHOOK_SECRET` during development.
 
 ### Test Mode
 
