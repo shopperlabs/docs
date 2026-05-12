@@ -55,7 +55,7 @@ class GenerateInvoice
 
 ## Order Events
 
-Order events cover the full lifecycle of a purchase — from creation to completion, cancellation, or archival.
+Order events cover the full lifecycle of a purchase, from creation to completion, cancellation, or archival.
 
 ### Available Events
 
@@ -102,7 +102,7 @@ $order = Order::query()->create([...]);
 
 Status-related events (`OrderPaid`, `OrderCompleted`, `OrderCancelled`, `OrderArchived`) are dispatched from the admin panel when an administrator changes the order status.
 
-`OrderShipped` is dispatched by `SyncOrderShippingStatusAction` when the aggregated shipping status of all items transitions to `Shipped`. This happens automatically after shipment events are recorded — you don't dispatch it manually.
+`OrderShipped` is dispatched by `SyncOrderShippingStatusAction` when the aggregated shipping status of all items transitions to `Shipped`. This happens automatically after shipment events are recorded, so you don't dispatch it manually.
 
 ### Queueing
 
@@ -130,7 +130,7 @@ Shipment events track the creation and delivery of individual packages within an
 | `OrderShipmentCreated` | `Order $order`, `OrderShipping $shipment` | A new shipment is created with a shipping label |
 | `OrderShipmentDelivered` | `Order $order`, `OrderShipping $shipment` | A shipment is marked as delivered |
 
-Both shipment events carry two properties — the order and the specific shipment. This is useful when an order has multiple packages and you need to know which one was created or delivered.
+Both shipment events carry two properties: the order and the specific shipment. This is useful when an order has multiple packages and you need to know which one was created or delivered.
 
 ```php
 use Shopper\Core\Events\Orders\OrderShipmentDelivered;
@@ -186,7 +186,7 @@ class SyncProductToCatalog
 ```
 
 <Note>
-All product events implement `ShouldDispatchAfterCommit` — listeners run on the queue after the database transaction commits.
+All product events implement `ShouldDispatchAfterCommit`, so listeners run on the queue after the database transaction commits.
 </Note>
 
 ## Example: Order Notification System

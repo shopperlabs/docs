@@ -81,7 +81,7 @@ $collection->isAutomatic(); // true for automatic collections
 
 ### Products
 
-A collection groups products together for merchandising — think "Summer Essentials", "New Arrivals", or "Black Friday Deals". For manual collections, you explicitly attach and detach products. For automatic collections, products are matched by rules (see [Collection Rules](#collection-rules)).
+A collection groups products together for merchandising, such as "Summer Essentials", "New Arrivals", or "Black Friday Deals". For manual collections, you explicitly attach and detach products. For automatic collections, products are matched by rules (see [Collection Rules](#collection-rules)).
 
 ```php
 $collection->products;
@@ -345,7 +345,7 @@ Shopper provides built-in methods to retrieve products from collections, handlin
 
 ### Basic Usage
 
-The `getProducts()` method works for both collection types — for manual collections it returns attached products, for automatic collections it evaluates the rules and returns matching products.
+The `getProducts()` method works for both collection types. For manual collections it returns attached products. For automatic collections it evaluates the rules and returns matching products.
 
 ```php
 $collection = Collection::query()->find($id);

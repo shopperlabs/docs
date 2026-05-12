@@ -3,7 +3,7 @@ title: Payments
 description: Process payments through Stripe, PayPal, or any provider using the driver-based payment system.
 ---
 
-The `shopper/payment` package handles payment processing through a driver-based architecture. It sits between your storefront and payment providers, giving you a single API to initiate, authorize, capture, and refund payments — regardless of which provider you use.
+The `shopper/payment` package handles payment processing through a driver-based architecture. It sits between your storefront and payment providers, giving you a single API to initiate, authorize, capture, and refund payments, regardless of which provider you use.
 
 Every payment operation is recorded as a transaction, giving you a complete audit trail. The package automatically keeps your order's payment status in sync as transactions succeed or fail.
 
@@ -16,7 +16,7 @@ The payment system has four main pieces:
 3. **PaymentProcessingService** wraps driver calls with transaction recording and status sync
 4. **PaymentTransaction** stores every operation for audit and debugging
 
-![Payment architecture — How a payment flows from the Storefront through Shopper to the Payment Provider and back](/images/shared/payment-architecture.png)
+![Payment architecture showing how a payment flows from the Storefront through Shopper to the Payment Provider and back](/images/shared/payment-architecture.png)
 
 ## Payment Drivers
 
@@ -117,9 +117,9 @@ return redirect()->route('order-confirmed', $order->number);
 ```
 
 The `PaymentResult` tells you what to do next:
-- **`clientSecret`** is set — redirect the customer to a page with the Stripe.js Payment Element
-- **`redirectUrl`** is set — redirect the customer to the provider (PayPal, 3D Secure, etc.)
-- **Neither** — the payment completed immediately (manual driver, for example)
+- **`clientSecret`** is set. Redirect the customer to a page with the Stripe.js Payment Element
+- **`redirectUrl`** is set. Redirect the customer to the provider (PayPal, 3D Secure, etc.)
+- **Neither**. The payment completed immediately (manual driver, for example)
 
 ### Authorizing a Payment
 
@@ -345,7 +345,7 @@ Shopper supports two capture strategies. This determines _when_ the customer's f
 
 Recommended for physical goods. Funds are held on the customer's card at checkout but only collected when you decide to capture.
 
-![Checkout Authorize — Customer places order, Shopper initiates payment with capture_method manual, provider holds funds, transaction recorded as authorized](/images/shared/checkout-autorize.png)
+![Checkout Authorize flow: customer places order, Shopper initiates payment with capture_method manual, provider holds funds, transaction recorded as authorized](/images/shared/checkout-autorize.png)
 
 This gives you the flexibility to:
 - Verify stock availability before collecting payment
@@ -354,7 +354,7 @@ This gives you the flexibility to:
 
 When the order is ready to ship, the merchant captures the payment from the admin panel:
 
-![Capture — Merchant clicks Capture on order detail, Shopper calls capturePayment on the provider, funds are transferred, transaction recorded as captured and order marked as Paid](/images/shared/capture.png)
+![Capture flow: merchant clicks Capture on order detail, Shopper calls capturePayment on the provider, funds are transferred, transaction recorded as captured and order marked as Paid](/images/shared/capture.png)
 
 ### Automatic Capture
 
@@ -495,7 +495,7 @@ final class PayPalDriver extends Driver
 
 ### Step 2: Register the Driver
 
-In a service provider, use `Payment::extend()` to register your driver. The closure is called lazily — only when the driver is first accessed.
+In a service provider, use `Payment::extend()` to register your driver. The closure is called lazily, only when the driver is first accessed.
 
 ```php
 namespace App\Providers;

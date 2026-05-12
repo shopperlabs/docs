@@ -183,7 +183,7 @@ Shopper::renderHook(LayoutRenderHook::HEAD_END, fn () => '...');
 
 ### `allow_backorder` Column Added to Products
 
-A new boolean column `allow_backorder` has been added to the products table. It defaults to `false`. No action is required — the migration handles it automatically.
+A new boolean column `allow_backorder` has been added to the products table. It defaults to `false`. No action is required, the migration handles it automatically.
 
 When `allow_backorder` is `true` on a product or variant, the cart's `add()` and `update()` methods skip the stock availability check entirely, allowing the item to be added regardless of inventory level.
 
@@ -214,7 +214,7 @@ Permission::query()->whereIn('name', ['manage_mail', 'impersonate', 'setting_ana
 **Likelihood of Impact: Medium**
 *Affects applications with custom roles beyond the default administrator role.*
 
-All admin Livewire pages and slide-overs now enforce permissions server-side via `$this->authorize()`. Previously, many components relied only on sidebar visibility to restrict access — a direct URL or Livewire call was enough to bypass the check.
+All admin Livewire pages and slide-overs now enforce permissions server-side via `$this->authorize()`. Previously, many components relied only on sidebar visibility to restrict access, so a direct URL or Livewire call was enough to bypass the check.
 
 The following table lists every area that is now protected and the permission required:
 
@@ -265,7 +265,7 @@ Review all custom roles in your installation and assign the permissions appropri
 
 Shopper's internal enums (`OrderStatus`, `ProductType`, etc.) now implement `HasLabel`, `HasIcon`, `HasColor`, and `HasDescription` from `Shopper\Core\Contracts` instead of `Filament\Support\Contracts`. This removes the Filament dependency from `shopper/core` and keeps the core package framework-agnostic.
 
-This has no impact on your application. Since Shopper runs on top of Filament, your own custom enums can continue to implement either `Filament\Support\Contracts` or `Shopper\Core\Contracts` — the method signatures are identical.
+This has no impact on your application. Since Shopper runs on top of Filament, your own custom enums can continue to implement either `Filament\Support\Contracts` or `Shopper\Core\Contracts`. The method signatures are identical.
 
 ---
 

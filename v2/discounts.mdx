@@ -184,17 +184,66 @@ Discount::query()->create([
 ]);
 ```
 
-## Usage Limit Checking
+## Usage Limit Enforcement
+
+Discounts can cap the total number of redemptions with `usage_limit` and restrict each customer to one redemption with `usage_limit_per_user`. Both limits are enforced with strong consistency guarantees so that a coupon can never be silently over-redeemed under concurrent checkout.
+
+### Global Usage Limit
+
+The `usage_limit` column caps the total number of redemptions across all customers. The `total_use` counter is incremented atomically inside the `CreateOrderFromCartAction` transaction:
+
+1. The discount row is locked with `lockForUpdate` to serialize concurrent checkouts.
+2. A conditional `UPDATE` increments `total_use` **only if** it is still below `usage_limit`.
+3. If the conditional update affects zero rows, the limit was exhausted between cart validation and commit. `DiscountLimitReachedException::global()` is thrown and the order transaction rolls back, so no order is created.
+
+This compare-and-swap pattern is what fixes the silent over-redemption issue that was patched in v2.8.
+
+### Per-User Limit
+
+When `usage_limit_per_user` is `true`, each customer can redeem the discount at most once. The check counts prior orders on the `orders.discount_id` column (introduced in v2.8), not the legacy `DiscountDetail.total_use` counter:
 
 ```php
-// Check if discount has reached its usage limit
-$discount->hasReachedLimit(); // true if total_use === usage_limit
+use Shopper\Models\Order;
 
-// Check remaining uses
+Order::query()
+    ->where('discount_id', $discount->id)
+    ->where('customer_id', $cart->customer_id)
+    ->exists();
+```
+
+The same query runs in two places. `DiscountValidator` rejects the code at cart-apply time so the customer is not surprised at checkout. `CreateOrderFromCartAction` re-checks at commit and throws `DiscountLimitReachedException::perUser()` if the customer redeemed it between cart apply and commit.
+
+### Helpers
+
+```php
+$discount->hasReachedLimit();
+
 if ($discount->usage_limit !== null) {
     $remaining = $discount->usage_limit - $discount->total_use;
 }
 ```
+
+### Handling DiscountLimitReachedException
+
+Wrap your checkout flow to surface a friendly message to the customer when either limit is hit at commit time:
+
+```php
+use Shopper\Cart\Actions\CreateOrderFromCartAction;
+use Shopper\Cart\Exceptions\DiscountLimitReachedException;
+
+try {
+    $order = resolve(CreateOrderFromCartAction::class)->execute($cart);
+} catch (DiscountLimitReachedException $e) {
+    return back()->with('error', 'This discount can no longer be used.');
+}
+```
+
+The exception has two static constructors that match the two limit types:
+
+| Constructor | Thrown When |
+|---|---|
+| `DiscountLimitReachedException::global($code)` | Global `usage_limit` was reached between cart validation and order commit |
+| `DiscountLimitReachedException::perUser($code)` | Customer already redeemed a discount with `usage_limit_per_user` set |
 
 ## Creating Discounts
 

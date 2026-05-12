@@ -177,7 +177,7 @@ Cart::forget();
 - `current()` returns `null` if no cart exists in the session and `auto_create` is `false`
 - `current()` returns `null` if the session cart has been completed (it won't return stale carts)
 - `create()` stores the new cart's ID in the session and sets the `currency_code` from `shopper_currency()`
-- `associate()` sets the `customer_id` on the current cart — call this after login
+- `associate()` sets the `customer_id` on the current cart. Call this after login
 - `forget()` removes the cart ID from the session without deleting the cart itself
 
 ## Models
@@ -214,9 +214,9 @@ $cart->zone;             // BelongsTo<Zone>
 #### Methods
 
 ```php
-$cart->isCompleted();       // bool — checks if completed_at is set
-$cart->shippingAddress();   // ?CartAddress — address with type Shipping
-$cart->billingAddress();    // ?CartAddress — address with type Billing
+$cart->isCompleted();       // bool, checks if completed_at is set
+$cart->shippingAddress();   // ?CartAddress, address with type Shipping
+$cart->billingAddress();    // ?CartAddress, address with type Billing
 ```
 
 ### CartLine
@@ -239,7 +239,7 @@ Shopper\Cart\Models\CartLine
 
 ```php
 $line->cart;           // BelongsTo<Cart>
-$line->purchasable;    // MorphTo — Product, ProductVariant, etc.
+$line->purchasable;    // MorphTo, Product, ProductVariant, etc.
 $line->adjustments;    // HasMany<CartLineAdjustment>
 $line->taxLines;       // HasMany<CartLineTaxLine>
 ```
@@ -323,13 +323,13 @@ use Shopper\Cart\Pipelines\Calculate;
 
 ### Pipeline Steps
 
-**1. CalculateLines** — Computes the subtotal for each line (`unit_price_amount × quantity`) and sums them into `$context->subtotal`.
+**1. CalculateLines**. Computes the subtotal for each line (`unit_price_amount × quantity`) and sums them into `$context->subtotal`.
 
-**2. ApplyDiscounts** — If the cart has a `coupon_code`, validates the discount through `DiscountValidator` and calculates the discount amount. For percentage discounts, each line gets `(lineSubtotal × rate / 100)`. For fixed amount discounts, the amount is distributed proportionally across lines. Creates `CartLineAdjustment` records.
+**2. ApplyDiscounts**. If the cart has a `coupon_code`, validates the discount through `DiscountValidator` and calculates the discount amount. For percentage discounts, each line gets `(lineSubtotal × rate / 100)`. For fixed amount discounts, the amount is distributed proportionally across lines. Creates `CartLineAdjustment` records.
 
-**3. CalculateTax** — Resolves the shipping address country and calculates tax for each line using the core `TaxCalculator`. The taxable amount per line is `(lineSubtotal - discountAmount)`. Creates `CartLineTaxLine` records.
+**3. CalculateTax**. Resolves the shipping address country and calculates tax for each line using the core `TaxCalculator`. The taxable amount per line is `(lineSubtotal - discountAmount)`. Creates `CartLineTaxLine` records.
 
-**4. Calculate** — Computes the final total. If tax is inclusive: `total = subtotal - discountTotal`. If tax is exclusive: `total = subtotal - discountTotal + taxTotal`. The minimum total is always `0`.
+**4. Calculate**. Computes the final total. If tax is inclusive: `total = subtotal - discountTotal`. If tax is exclusive: `total = subtotal - discountTotal + taxTotal`. The minimum total is always `0`.
 
 ### Custom Pipeline
 
@@ -389,13 +389,13 @@ When a coupon is applied during the pipeline, the `DiscountValidator` runs a ser
 
 Discounts support two application scopes via `discount->apply_to`:
 
-- **Order** (`DiscountApplyTo::Order`) — applies to all cart lines
-- **Specific products** — applies only to lines matching the products/variants configured on the discount
+- **Order** (`DiscountApplyTo::Order`). Applies to all cart lines
+- **Specific products**. Applies only to lines matching the products/variants configured on the discount
 
 And two discount types:
 
-- **Percentage** — each applicable line gets `(lineSubtotal × value / 100)`
-- **Fixed amount** — the fixed amount is distributed proportionally across applicable lines based on their share of the total subtotal
+- **Percentage**. Each applicable line gets `(lineSubtotal × value / 100)`
+- **Fixed amount**. The fixed amount is distributed proportionally across applicable lines based on their share of the total subtotal
 
 ## Order Conversion
 
@@ -412,18 +412,35 @@ $order = $action->execute($cart);
 
 The entire operation runs inside a database transaction with a `FOR UPDATE` lock on the cart:
 
-1. **Calculates totals** — runs the full pipeline to get final amounts
-2. **Creates order addresses** — copies cart shipping/billing addresses to `OrderAddress` records
-3. **Creates the order** — with `price_amount`, `tax_amount`, `currency_code`, and all foreign keys
-4. **Creates order items** — one per cart line, including the discount amount from adjustments
-5. **Creates order tax lines** — via `CreateOrderTaxLinesAction`
-6. **Increments discount usage** — if a coupon was applied, increments `total_use` on the discount
-7. **Marks cart as completed** — sets `completed_at` to prevent further modifications
-8. **Dispatches `CartCompleted` event** — with the cart and the created order
+1. **Reserves the discount**. If a coupon is applied, locks the discount row with `lockForUpdate`, validates the per-user limit against `orders.discount_id`, and increments `total_use` atomically only if the global `usage_limit` has not been reached
+2. **Calculates totals**. Runs the full pipeline to get final amounts
+3. **Creates order addresses**. Copies cart shipping/billing addresses to `OrderAddress` records
+4. **Creates the order**. With `price_amount`, `tax_amount`, `currency_code`, all foreign keys, and the discount snapshot (`discount_id`, `discount_code`, `discount_type`, `discount_value_at_apply`, `discount_currency_code`)
+5. **Creates order items**. One per cart line, including the discount amount from adjustments
+6. **Creates order tax lines**. Via `CreateOrderTaxLinesAction`
+7. **Marks cart as completed**. Sets `completed_at` to prevent further modifications
+8. **Dispatches `CartCompleted` event**. With the cart and the created order
 
 <Note>
 If the cart has already been completed, `CartCompletedException` is thrown before any work begins. The `FOR UPDATE` lock prevents race conditions from concurrent checkout attempts.
 </Note>
+
+### Discount Limit Exceptions
+
+Two failure paths around discount limits can short-circuit the transaction. `DiscountLimitReachedException::global($code)` is thrown when the global `usage_limit` was exhausted between cart validation and order commit. `DiscountLimitReachedException::perUser($code)` is thrown when the customer has already redeemed a discount with `usage_limit_per_user` set. In both cases the transaction rolls back and no order is created.
+
+```php
+use Shopper\Cart\Actions\CreateOrderFromCartAction;
+use Shopper\Cart\Exceptions\DiscountLimitReachedException;
+
+try {
+    $order = resolve(CreateOrderFromCartAction::class)->execute($cart);
+} catch (DiscountLimitReachedException $e) {
+    return back()->with('error', 'This discount can no longer be used.');
+}
+```
+
+For the full enforcement model, see [Usage Limit Enforcement](/v2/discounts#usage-limit-enforcement) on the Discounts page.
 
 ## Events
 
@@ -832,13 +849,18 @@ $manager->addAddress($cart, AddressType::Billing, $billingData);
 
 ### Converting to Order
 
-When the customer completes checkout, convert the cart into an order. The action runs inside a database transaction, calculates final totals, creates order records, and marks the cart as completed:
+When the customer completes checkout, convert the cart into an order. The action runs inside a database transaction, calculates final totals, creates order records, and marks the cart as completed. If a discount limit is hit at commit time, catch `DiscountLimitReachedException` and surface a friendly message:
 
 ```php
 use Shopper\Cart\Actions\CreateOrderFromCartAction;
+use Shopper\Cart\Exceptions\DiscountLimitReachedException;
 use Shopper\Cart\Facades\Cart;
 
-$order = resolve(CreateOrderFromCartAction::class)->execute(Cart::current());
+try {
+    $order = resolve(CreateOrderFromCartAction::class)->execute(Cart::current());
+} catch (DiscountLimitReachedException $e) {
+    return back()->with('error', 'This discount can no longer be used.');
+}
 
 Cart::forget();
 ```

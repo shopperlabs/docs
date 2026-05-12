@@ -39,7 +39,7 @@ store and set the one that will be used by default. But once you've done this, i
 
 ## Zero-Decimal Currencies
 
-Some currencies have no subdivision (no "cents"). For example, the Japanese Yen (JPY) and the Central African CFA Franc (XAF) are stored as whole numbers — 1000 JPY is 1000, not 10.00.
+Some currencies have no subdivision (no "cents"). For example, the Japanese Yen (JPY) and the Central African CFA Franc (XAF) are stored as whole numbers, so 1000 JPY is 1000, not 10.00.
 
 Shopper handles this automatically. The `is_no_division_currency()` helper checks if a currency code is zero-decimal, and `zero_decimal_currencies()` returns the full list:
 

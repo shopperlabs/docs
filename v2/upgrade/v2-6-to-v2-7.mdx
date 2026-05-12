@@ -84,7 +84,7 @@ shopper_money_format($order->price_amount, $order->currency_code);
 
 #### Writing prices
 
-Pass the smallest unit directly — the setter no longer multiplies by 100:
+Pass the value in cents directly. The setter no longer multiplies by 100:
 
 ```php
 Order::create(['price_amount' => 12.00]); // [!code --]
@@ -106,7 +106,7 @@ $context->subtotal; // 2500 // [!code ++]
 
 #### Payment gateways
 
-Values are already in cents — remove any manual multiplication:
+Values are already in cents. Remove any manual multiplication:
 
 ```php
 Stripe::charge($order->price_amount * 100); // [!code --]
@@ -162,7 +162,7 @@ TextColumn::make('amount')->currency(fn ($record) => $record->currencyCode) // [
 ```
 
 <Note>
-**Existing database data for standard currencies (USD, EUR, GBP) is already correct** — the old setters stored values in cents. No migration needed for these currencies.
+**Existing database data for standard currencies (USD, EUR, GBP) is already correct**. The old setters stored values in cents. No migration needed for these currencies.
 </Note>
 
 ---
@@ -244,7 +244,7 @@ use Filament\Schemas\Contracts\HasSchemas; // [!code ++]
 ```
 
 <Note>
-`InteractsWithForms` still works in Filament 4.x — this migration is recommended but not urgent.
+`InteractsWithForms` still works in Filament 4.x. This migration is recommended but not urgent.
 </Note>
 
 ### Dependency Version Bumps
@@ -254,7 +254,7 @@ use Filament\Schemas\Contracts\HasSchemas; // [!code ++]
 
 | Dependency | Before | After |
 |---|---|---|
-| `laravel/framework` | `^11.0\|^12.0` | `^11.28\|^12.0\|^13.0` |
+| `laravel/framework` | `^11.0\|^12.0` | `^11.28\|^12.0` |
 | `filament/filament` | `^4.7` | `^4.9` |
 | `spatie/laravel-permission` | `^6.24` | `^6.24\|^7.0` |
 
@@ -272,7 +272,7 @@ If you published and customized any of these views, you'll need to adapt to the 
 
 ### Shipment Event Date Validation
 
-Shipment events now enforce chronological ordering — you cannot create an event with a date earlier than the previous event. The `RecordShipmentEventAction` validates this server-side.
+Shipment events now enforce chronological ordering. You cannot create an event with a date earlier than the previous event. The `RecordShipmentEventAction` validates this server-side.
 
 ### Nested Sortable Categories
 

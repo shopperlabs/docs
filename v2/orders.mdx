@@ -66,6 +66,11 @@ return [
 | `billing_address_id` | bigint | yes | null | FK to order address |
 | `shipping_address_id` | bigint | yes | null | FK to order address |
 | `shipping_option_id` | bigint | yes | null | FK to carrier option |
+| `discount_id` | bigint | yes | null | FK to the discount that was redeemed (nullOnDelete) |
+| `discount_code` | string | yes | null | Snapshot of the discount code at placement |
+| `discount_type` | string(32) | yes | null | Snapshot of the discount type (`percentage`/`fixed_amount`) |
+| `discount_value_at_apply` | unsigned int | yes | null | Snapshot of the discount value (cents for fixed amount, raw for percentage) |
+| `discount_currency_code` | char(3) | yes | null | Currency the discount was applied in |
 | `cancelled_at` | timestamp | yes | null | Cancellation date |
 | `archived_at` | timestamp | yes | null | Archive date |
 | `deleted_at` | timestamp | yes | null | Soft delete timestamp |
@@ -382,6 +387,33 @@ $order->refund()->create([
 $order->channel;
 $order->zone;
 ```
+
+### Discount
+
+Orders snapshot the discount that was redeemed at placement time. The `discount_id` foreign key still resolves the original `Discount` model while it exists, but the four snapshot columns (`discount_code`, `discount_type`, `discount_value_at_apply`, `discount_currency_code`) preserve the data even after the originating discount is edited or deleted. This follows the Shopify pattern of immutable order records.
+
+```php
+$order->discount;
+$order->discount_code;
+$order->discount_type;
+$order->discount_value_at_apply;
+$order->discount_currency_code;
+```
+
+To find every order that redeemed a given discount, use the same query Shopper uses internally to enforce the per-user usage limit:
+
+```php
+use Shopper\Models\Order;
+
+Order::query()
+    ->where('discount_id', $discount->id)
+    ->where('customer_id', $customerId)
+    ->exists();
+```
+
+<Note>
+For the full validation and atomic reservation rules, see [Usage Limit Enforcement](/v2/discounts#usage-limit-enforcement) on the Discounts page.
+</Note>
 
 ### Parent/Child Orders
 

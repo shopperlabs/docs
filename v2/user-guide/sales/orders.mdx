@@ -43,7 +43,7 @@ Click on any order to open its detail page. The page is split into two areas: th
 The header stays visible as you scroll. It shows:
 
 - The **order number**
-- Three **status badges** — order status, payment status, and shipping status
+- Three **status badges** for order status, payment status, and shipping status
 - **Action buttons** for processing the order (see [Actions](#actions) below)
 - **Previous / Next** arrows to navigate between orders
 - The **order date**, **customer name** (linked to their profile), and **sales channel**
@@ -52,21 +52,21 @@ The header stays visible as you scroll. It shows:
 
 The left side of the page contains three sections:
 
-**Fulfillment** — A visual progress bar showing where the order is in the fulfillment process (New → Processing → Shipped → Completed). If there are items that haven't been assigned to a shipment yet, a **Create Shipping Label** button appears here.
+**Fulfillment**. A visual progress bar showing where the order is in the fulfillment process (New → Processing → Shipped → Completed). If there are items that haven't been assigned to a shipment yet, a **Create Shipping Label** button appears here.
 
-**Products** — The list of items in the order with their thumbnail, name, quantity, fulfillment status badge, and price.
+**Products**. The list of items in the order with their thumbnail, name, quantity, fulfillment status badge, and price.
 
-**Summary** — Payment status, payment method, subtotal, shipping carrier and fee, and the order total.
+**Summary**. Payment status, payment method, subtotal, shipping carrier and fee, and the order total.
 
 ### Sidebar
 
 The right side shows:
 
-- **Customer profile** — Name, avatar, and a link to their full profile. Below that, how long they've been a customer and how many orders they've placed.
-- **Contact information** — Email and phone number.
-- **Shipping address** — The delivery address for this order.
-- **Billing address** — Displayed separately, or "Same address" if it matches the shipping address.
-- **Private notes** — A text field where you can leave internal comments. Only your team can see these.
+- **Customer profile**. Name, avatar, and a link to their full profile. Below that, how long they've been a customer and how many orders they've placed.
+- **Contact information**. Email and phone number.
+- **Shipping address**. The delivery address for this order.
+- **Billing address**. Displayed separately, or "Same address" if it matches the shipping address.
+- **Private notes**. A text field where you can leave internal comments. Only your team can see these.
 
 ## Order Status
 
@@ -80,7 +80,7 @@ The overall state of the order.
 |--------|-------|---------|
 | **New** | Blue | Order just came in, hasn't been looked at yet |
 | **Processing** | Purple | You're actively working on this order |
-| **Completed** | Teal | Everything is done — paid and delivered |
+| **Completed** | Teal | Everything is done, paid and delivered |
 | **Cancelled** | Red | Order was cancelled |
 | **Archived** | Gray | Order removed from active list |
 
@@ -117,7 +117,7 @@ Tracks where the physical goods are.
 
 ## Actions
 
-The actions available depend on the current state of the order. They appear in the header — some as standalone buttons, others in the **More actions** dropdown.
+The actions available depend on the current state of the order. They appear in the header, some as standalone buttons, others in the **More actions** dropdown.
 
 ### Capture Payment
 
@@ -162,9 +162,9 @@ When an order has items that haven't been shipped yet, the **Create Shipping Lab
 
 Clicking it opens a panel where you:
 
-1. **Select a carrier** — Choose from your configured shipping carriers
-2. **Add tracking info** (optional) — Enter a tracking number and tracking URL
-3. **Select items** — Pick which items to include in this shipment
+1. **Select a carrier**. Choose from your configured shipping carriers
+2. **Add tracking info** (optional). Enter a tracking number and tracking URL
+3. **Select items**. Pick which items to include in this shipment
 
 <Frame>
   <img src="/images/v2/order-create-shipping-label.png" alt="Create shipping label panel" />
@@ -208,7 +208,7 @@ Click the eye icon on any shipment to open its detail panel. This panel shows:
   <img src="/images/v2/shipment-detail.png" alt="Shipment detail panel" />
 </Frame>
 
-**Tracking progress** — A 5-step visual tracker:
+**Tracking progress**. A 5-step visual tracker:
 
 <Steps>
   <Step title="Label created">
@@ -228,11 +228,11 @@ Click the eye icon on any shipment to open its detail panel. This panel shows:
   </Step>
 </Steps>
 
-**Shipment details** — Shipped date, received date, and tracking number (linked to tracking URL if provided).
+**Shipment details**. Shipped date, received date, and tracking number (linked to tracking URL if provided).
 
-**Products** — The items included in this shipment with their fulfillment status.
+**Products**. The items included in this shipment with their fulfillment status.
 
-**Timeline** — A chronological log of every event for this shipment. Each event records the status, date, location, and an optional description.
+**Timeline**. A chronological log of every event for this shipment. Each event records the status, date, location, and an optional description.
 
 ### Adding Tracking Events
 
