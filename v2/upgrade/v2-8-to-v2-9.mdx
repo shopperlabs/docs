@@ -1,0 +1,159 @@
+---
+title: From v2.8 to v2.9
+description: How to upgrade your Shopper installation from v2.8 to v2.9, with Laravel 13 support and the rebuilt onboarding wizard.
+---
+
+<Info>
+**Estimated Upgrade Time:** 5 to 20 minutes. Most applications only need to update dependencies and clear the cache. The longer end applies if you customized the onboarding wizard or run custom Stripe SDK code.
+</Info>
+
+v2.9 adds Laravel 13 support, rebuilds the store onboarding wizard on Filament's native Schema, and hardens how settings and dashboard data are cached. It contains no database migrations. The breaking changes below only affect applications that extended internal admin surfaces or pinned the Stripe SDK.
+
+## Updating Dependencies
+
+Update the following dependency in your application's `composer.json` file:
+
+`shopper/framework` to `^2.9`
+
+Then run:
+
+```bash
+composer update -W
+php artisan cache:clear
+```
+
+The `cache:clear` step matters during this upgrade. v2.9 changes what Shopper stores in the cache for settings, the default currency, and two dashboard widgets. A cache warmed by v2.8 holds serialized Eloquent models; if those entries survive the upgrade, the v2.9 code that expects scalar values can surface a `__PHP_Incomplete_Class` error until the keys expire. Clearing the cache once after deploying removes that window.
+
+## Laravel 13 Support
+
+v2.9 adds `laravel/framework ^13.0` to the supported range. The supported matrix is now Laravel 11.28+, 12.x, and 13.x on PHP 8.3 and 8.4.
+
+The only blocker for Laravel 13 was `spatie/laravel-livewire-wizard`, which capped `illuminate/support` at `^12`. That package powered the onboarding wizard and has been removed (see below). Several supporting dependencies were also bumped: `filament/filament` to `^4.11`, `stripe/stripe-php` to `^19.0`, and a handful of smaller packages.
+
+If you want to move to Laravel 13, follow the [official Laravel upgrade guide](https://laravel.com/docs/upgrade) for your application code. Shopper itself requires no changes on your part beyond the dependency update.
+
+## High Impact Changes
+
+### Stripe SDK Upgraded to v19
+
+**Likelihood of Impact: High if you use the Stripe SDK directly.**
+*Affects applications with custom Stripe code built on `stripe/stripe-php`.*
+
+The root `stripe/stripe-php` constraint moved from `^16.0` to `^19.0`, a three-major-version jump that aligns the framework with the `shopper/stripe` package. Shopper's own `StripeDriver` only received PHPStan annotations and behaves identically, but the SDK upgrade applies to your entire application.
+
+If you call the Stripe SDK directly anywhere, review the changelogs for [v17](https://github.com/stripe/stripe-php/releases), [v18](https://github.com/stripe/stripe-php/releases), and [v19](https://github.com/stripe/stripe-php/releases) before deploying. Major versions of the SDK track Stripe API changes and can alter resource constructors and pagination behavior. Test every Stripe integration point after upgrading.
+
+If you only use the `shopper/stripe` package through Shopper's payment system, no action is required.
+
+## Medium Impact Changes
+
+### Onboarding Wizard Rebuilt on Filament Schema
+
+**Likelihood of Impact: Medium**
+*Affects applications that customized or embedded the store initialization wizard.*
+
+The store initialization wizard was rewritten. It previously used `spatie/laravel-livewire-wizard` with one wizard component and three step components. It is now a single Livewire component, `InitializationWizard`, backed by Filament's native `Wizard` schema, with a new `Shopper\Components\OnboardingWizard` class that preserves the horizontal stepper layout.
+
+As a result, `spatie/laravel-livewire-wizard` is no longer a dependency of Shopper. If your application relied on it being pulled in transitively, require it explicitly:
+
+```bash
+composer require spatie/laravel-livewire-wizard
+```
+
+The three step components and their registered Livewire aliases were removed:
+
+```blade
+<livewire:shopper::initialize-store-information />
+<livewire:shopper::initialize-store-address />
+<livewire:shopper::initialize-store-social-link />
+```
+
+If you embedded any of these aliases in your own views, remove them. The onboarding flow is now driven entirely by the single `initialize-wizard` component, and the merchant-facing experience is unchanged.
+
+### Settings Trait Method Is Now Protected
+
+**Likelihood of Impact: Medium**
+*Affects custom Livewire components that use the `SaveSettings` trait.*
+
+`SaveSettings::saveSettings()` changed from `public` to `protected` and gained a second parameter:
+
+```php
+public function saveSettings(array $keys): void // [!code --]
+protected function saveSettings(array $keys, bool $locked = true): void // [!code ++]
+```
+
+Making the method `protected` prevents Livewire from exposing it as a directly callable wire action, which was the bypass surface this release closes. If you used the trait in a custom component and called `saveSettings()` from outside the class (for example from a test, or via `wire:click="saveSettings"`), wrap it in a public action you control:
+
+```php
+public function save(): void
+{
+    $this->saveSettings($this->form->getState());
+}
+```
+
+The method now also wraps all writes in a database transaction and batches the locked-attribute check, so a single call performs fewer queries than before. Pass `false` as the second argument when you need to store unlocked settings.
+
+## Low Impact Changes
+
+### Cache Stores Scalars, Not Models
+
+Three helpers and two dashboard widgets now cache primitive values and rehydrate on read, instead of serializing Eloquent models into the cache.
+
+| Location | Before | After |
+|---|---|---|
+| `shopper_setting()` | cached the `Setting` model | caches the resolved value |
+| `shopper_currency()` | cached the `Currency` model | caches the currency `code` string |
+| `RecentOrders` widget | cached an Eloquent collection | caches order IDs, re-queries with eager loads |
+| `TopSellingProducts` widget | cached an Eloquent collection | caches scalar stats, re-queries products |
+
+The return value of `shopper_setting()` and `shopper_currency()` is unchanged, so application code that calls these helpers needs no edits. The only thing to do is the one-time `php artisan cache:clear` from the dependency step. If you read these cache keys directly (for example `Cache::get('shopper-setting.name')`), note that they now hold the scalar value rather than a model instance.
+
+### Extended `TextInputSelect` Component
+
+If you extended `Shopper\Components\Form\TextInputSelect` and overrode `hydrateState()`, update the override to match the new Filament signature:
+
+```php
+public function hydrateState(?array &$hydratedDefaultState, bool $andCallHydrationHooks = true): void // [!code --]
+public function hydrateState(?array &$hydratedDefaultState, bool $shouldCallHydrationHooks = true, bool $shouldApplyStateCasts = true, array &$appliedStateCastPaths = []): void // [!code ++]
+```
+
+This is a required sync with the parent Filament `TextInput` and only affects you if you subclassed the component.
+
+### TypeScript Types Are Now ESM
+
+The `@shopperlabs/shopper-types` package migrated from CommonJS to ECMAScript Modules. The `package.json` now declares `"type": "module"` and ships an `exports` map. ESM-first projects are unaffected. If you consumed the package through CommonJS `require()`, switch to `import`:
+
+```typescript
+import type { Product, Order } from '@shopperlabs/shopper-types'
+```
+
+Two type definitions were also corrected: `Discount.min_required` narrowed from `string` to the `DiscountRequirement` enum, and `TaxRateRule.reference_id` widened from `string` to `string | number`. See the [TypeScript types reference](/v2/reference/typescript-types) for the full list.
+
+## Migration Checklist
+
+<Steps>
+  <Step title="Update composer">
+    Set `shopper/framework` to `^2.9` and run `composer update -W`.
+  </Step>
+  <Step title="Clear the cache">
+    Run `php artisan cache:clear` to drop v2.8 cache entries that held serialized models.
+  </Step>
+  <Step title="Review custom Stripe code">
+    If you call `stripe/stripe-php` directly, review the v17, v18, and v19 changelogs and test every Stripe integration point.
+  </Step>
+  <Step title="Audit onboarding customizations">
+    Remove any usage of the `initialize-store-information`, `initialize-store-address`, or `initialize-store-social-link` aliases. Require `spatie/laravel-livewire-wizard` directly if you still depend on it.
+  </Step>
+  <Step title="Update SaveSettings callers">
+    If you used the `SaveSettings` trait and called `saveSettings()` externally, wrap it in a public action since the method is now protected.
+  </Step>
+  <Step title="Update extended components">
+    If you extended `TextInputSelect` and overrode `hydrateState()`, update the signature to match Filament.
+  </Step>
+  <Step title="Update TypeScript imports">
+    If you consumed `@shopperlabs/shopper-types` via CommonJS, switch to ESM imports.
+  </Step>
+  <Step title="Run tests">
+    Run `php artisan test` to confirm the upgrade is clean.
+  </Step>
+</Steps>
