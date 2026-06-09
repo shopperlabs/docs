@@ -229,7 +229,8 @@
                   "pages": [
                     "v2/starter-kits",
                     "v2/livewire-starter-kit",
-                    "v2/inertia-starter-kit"
+                    "v2/react-starter-kit",
+                    "v2/vue-starter-kit"
                   ]
                 },
                 {
@@ -454,7 +455,19 @@
         },
         {
             "source": "/inertia-starter-kit",
-            "destination": "/v2/inertia-starter-kit"
+            "destination": "/v2/starter-kits"
+        },
+        {
+            "source": "/v2/inertia-starter-kit",
+            "destination": "/v2/starter-kits"
+        },
+        {
+            "source": "/react-starter-kit",
+            "destination": "/v2/react-starter-kit"
+        },
+        {
+            "source": "/vue-starter-kit",
+            "destination": "/v2/vue-starter-kit"
         },
         {
             "source": "/livewire-starter-kit",
