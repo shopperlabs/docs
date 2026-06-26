@@ -380,7 +380,7 @@ When a coupon is applied during the pipeline, the `DiscountValidator` runs a ser
 | Usage limit | Total uses must be under the global limit | `discount.usage_limit_reached` |
 | Per-user limit | Customer must not have exceeded their per-user limit | `discount.already_used` |
 | Eligibility | If restricted to specific customers, the cart customer must be in the list | `discount.customer_not_eligible` |
-| Requires login | If eligibility is set, the cart must have a `customer_id` | `discount.requires_login` |
+| Requires login | If eligibility is set, or the discount has a per-user limit, the cart must have a `customer_id` | `discount.requires_login` |
 | Zone | If the discount has a `zone_id`, it must match `cart->zone_id` | `discount.not_available_in_zone` |
 | Minimum amount | Cart subtotal must meet the minimum purchase requirement | `discount.min_amount_not_reached` |
 | Minimum quantity | Total line quantity must meet the minimum quantity requirement | `discount.min_quantity_not_reached` |
@@ -416,7 +416,7 @@ The entire operation runs inside a database transaction with a `FOR UPDATE` lock
 2. **Calculates totals**. Runs the full pipeline to get final amounts
 3. **Creates order addresses**. Copies cart shipping/billing addresses to `OrderAddress` records
 4. **Creates the order**. With `price_amount`, `tax_amount`, `currency_code`, all foreign keys, and the discount snapshot (`discount_id`, `discount_code`, `discount_type`, `discount_value_at_apply`, `discount_currency_code`)
-5. **Creates order items**. One per cart line, including the discount amount from adjustments
+5. **Creates order items and reserves stock**. One order item per cart line, including the discount amount from adjustments. For every line whose purchasable tracks inventory, stock is reserved through the `StockReserver` contract under a `lockForUpdate` row lock on the stockable. If the reservable quantity is less than the line quantity, `InsufficientStockException` is thrown and the whole transaction rolls back
 6. **Creates order tax lines**. Via `CreateOrderTaxLinesAction`
 7. **Marks cart as completed**. Sets `completed_at` to prevent further modifications
 8. **Dispatches `CartCompleted` event**. With the cart and the created order
@@ -441,6 +441,32 @@ try {
 ```
 
 For the full enforcement model, see [Usage Limit Enforcement](/v2/discounts#usage-limit-enforcement) on the Discounts page.
+
+### Stock Reservation
+
+Stock is reserved during checkout, inside the same transaction that creates the order, rather than asynchronously after the order commits. This closes the oversell window where two concurrent checkouts could each read the same last unit and both succeed. Reservation is delegated to the `Shopper\Core\Contracts\StockReserver` contract:
+
+```php
+namespace Shopper\Core\Contracts;
+
+use Illuminate\Database\Eloquent\Model;
+use Shopper\Core\Models\Contracts\Stockable;
+
+interface StockReserver
+{
+    public function reserve(Stockable $product, int $quantity, ?Model $reference = null, ?int $userId = null): int;
+}
+```
+
+The default implementation, `LockingStockReserver`, takes a `lockForUpdate` row lock on the stockable, decrements the available quantity, and returns the amount actually reserved. The action throws `InsufficientStockException` when that amount is short of the requested quantity. Only purchasables that return `true` from `tracksInventory()` are reserved, so virtual and external products are skipped.
+
+To plug in a custom strategy, such as reserving against an external warehouse system, bind your own implementation in a service provider:
+
+```php
+use Shopper\Core\Contracts\StockReserver;
+
+$this->app->bind(StockReserver::class, WarehouseStockReserver::class);
+```
 
 ## Events
 

@@ -17,6 +17,7 @@ Before upgrading, take these precautions:
 
 | From | To | Summary |
 |------|-----|---------|
+| [v2.9](/v2/upgrade/v2-9-to-v2-10) | v2.10 | Security release: admin authorization audit, slide-over IDOR fix, exact tax on discounted totals (`TaxableItem` contract change), atomic stock reservation (`StockReserver` contract, `Stockable::tracksInventory()`), guest per-user discount block. No database migrations |
 | [v2.8](/v2/upgrade/v2-8-to-v2-9) | v2.9 | Laravel 13 support, onboarding wizard rebuilt on Filament Schema, cache stores scalars instead of models, Stripe SDK upgraded to v19. No database migrations |
 | [v2.7](/v2/upgrade/v2-7-to-v2-8) | v2.8 | Security release: authorization guards across admin Livewire components, atomic discount reservation, `orders` discount snapshot columns |
 | [v2.6](/v2/upgrade/v2-6-to-v2-7) | v2.7 | Money values stored in smallest currency unit (cents), slide-over components replaced, 2FA split into SOLID interfaces |

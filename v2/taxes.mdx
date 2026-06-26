@@ -332,7 +332,7 @@ final class AvalaraTaxProvider implements TaxCalculationProvider
     public function getTaxLines(TaxableItem $item, TaxCalculationContext $context): array
     {
         $response = $this->client->calculate(
-            amount: $item->getTaxableAmount() * $item->getQuantity(),
+            amount: $item->getTaxableTotal(),
             countryCode: $context->countryCode,
             provinceCode: $context->provinceCode,
         );
@@ -390,15 +390,16 @@ Any object you pass to `TaxCalculator::calculate()` must implement `Shopper\Core
 
 | Method | Return | Description |
 |--------|--------|-------------|
-| `getTaxableAmount()` | `int` | Unit price in cents, after any item-level adjustments |
-| `getQuantity()` | `int` | Item quantity |
+| `getTaxableTotal()` | `int` | The full taxable line total in cents, after any item-level adjustments (unit price times quantity) |
 | `getProductType()` | `?string` | Product type value (`standard`, `virtual`, `external`) |
 | `getProductId()` | `?int` | The product's primary key |
 | `getCategoryIds()` | `array<int, int>` | Primary keys of all categories the product belongs to |
 
+The contract exposes a single `getTaxableTotal()` rather than a separate unit amount and quantity. The provider taxes that total in one pass, so a line whose total is not evenly divisible by its quantity is never rounded per unit. This keeps exclusive zones from overcharging by a cent and keeps inclusive VAT breakdowns balanced (net plus tax always equals gross).
+
 Shopper ships two ready-made adapters:
 
-- `CartLineTaxAdapter` wraps a `CartLine` for use during cart calculation; taxable amount is the post-discount line total divided by quantity
-- `OrderItemTaxAdapter` wraps an `OrderItem` for use in `CreateOrderTaxLinesAction`; taxable amount is the raw `unit_price_amount` in cents
+- `CartLineTaxAdapter` wraps a `CartLine` for use during cart calculation; the taxable total is the post-discount line total in cents
+- `OrderItemTaxAdapter` wraps an `OrderItem` for use in `CreateOrderTaxLinesAction`; the taxable total is `unit_price_amount` times `quantity` in cents
 
 If you are building a custom checkout flow or need to calculate taxes outside of a cart, you can implement `TaxableItem` directly on any of your objects and call `TaxCalculator::calculate()` with a manually constructed `TaxCalculationContext`.

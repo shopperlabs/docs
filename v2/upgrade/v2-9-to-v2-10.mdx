@@ -1,0 +1,142 @@
+---
+title: From v2.9 to v2.10
+description: How to upgrade your Shopper installation from v2.9 to v2.10, a security and cart correctness release that changes three contracts.
+---
+
+<Info>
+**Estimated Upgrade Time:** 5 to 15 minutes. Most applications only need to update the dependency and clear the cache. The longer end applies if you implemented the `TaxableItem` contract, built a custom product model against `Stockable`, or registered the stock reservation listener yourself.
+</Info>
+
+v2.10 is a security and correctness release. It closes authorization gaps across the admin panel, fixes an IDOR on the pricing and variant slide-overs, taxes the discounted line total exactly, and reserves stock atomically during checkout. The breaking changes below only affect applications that extended the tax, stock, or checkout internals. Storefronts that consume Shopper through its public models and actions need no code changes. It contains no database migrations.
+
+## Updating Dependencies
+
+Update the following dependency in your application's `composer.json` file:
+
+`shopper/framework` to `^2.10`
+
+Then run:
+
+```bash
+composer update -W
+php artisan optimize:clear
+```
+
+## High Impact Changes
+
+### TaxableItem Contract Replaces Two Methods With One
+
+**Likelihood of Impact: High if you implemented `TaxableItem` directly.**
+*Affects applications with a custom tax adapter or a custom tax calculation provider that builds its own taxable items.*
+
+The `Shopper\Core\Contracts\TaxableItem` contract previously exposed the taxable amount as a unit price plus a quantity. Tax was then calculated per unit and multiplied back, which overcharged exclusive zones by a cent and unbalanced inclusive VAT breakdowns whenever a line total was not evenly divisible by its quantity. The contract now exposes a single line total and the provider taxes it in one pass.
+
+The `getTaxableAmount()` and `getQuantity()` methods are removed and replaced by `getTaxableTotal()`:
+
+```php
+// Before
+public function getTaxableAmount(): int { ... }
+public function getQuantity(): int { ... }
+
+// After
+public function getTaxableTotal(): int
+{
+    return $this->amount * $this->quantity;
+}
+```
+
+If you wrote a custom `TaxCalculationProvider` that read `$item->getTaxableAmount() * $item->getQuantity()`, replace that expression with `$item->getTaxableTotal()`. The built-in `CartLineTaxAdapter` and `OrderItemTaxAdapter` are already updated.
+
+### Stockable Contract Adds tracksInventory()
+
+**Likelihood of Impact: High if you swapped the product or variant model.**
+*Affects applications that bound a custom model against the `Product`, `ProductVariant`, or `Stockable` contract.*
+
+Stock reservation now skips products that do not track inventory, such as virtual and external products. To decide this, the `Shopper\Core\Models\Contracts\Stockable` contract gained a `tracksInventory(): bool` method. Because `Stockable` is the base of both the product and variant contracts, any custom model that implements one of them must add the method, or it will fail to satisfy the interface at runtime.
+
+Mirror the logic from the built-in `Product` model:
+
+```php
+public function tracksInventory(): bool
+{
+    return $this->isStandard() || $this->isVariant();
+}
+```
+
+If your model always carries inventory, return `true` unconditionally.
+
+## Medium Impact Changes
+
+### Stock Reservation Moved Into the Checkout Transaction
+
+**Likelihood of Impact: Medium**
+*Affects applications that registered the old reservation listener or instantiate `CreateOrderFromCartAction` manually.*
+
+Stock was previously reserved by a queued `ReserveOrderItemStockListener` that fired after the order transaction committed, with no row lock. Two concurrent checkouts reading the same last unit could both succeed and oversell. Reservation now happens synchronously inside `CreateOrderFromCartAction`, under a `lockForUpdate` row lock, through the new `Shopper\Core\Contracts\StockReserver` contract. If the available quantity falls short, `InsufficientStockException` is thrown and the whole order rolls back.
+
+The `Shopper\Core\Listeners\Orders\ReserveOrderItemStockListener` class is removed. If you registered it in your application's `EventServiceProvider`, drop that entry:
+
+```php
+// Remove any mapping like this from your $listen array:
+OrderItemCreated::class => [
+    ReserveOrderItemStockListener::class, // class no longer exists
+],
+```
+
+`CreateOrderFromCartAction` also gained a `StockReserver` constructor dependency. Always resolve it from the container so the dependency is injected for you, and never instantiate it with `new`:
+
+```php
+$order = resolve(CreateOrderFromCartAction::class)->execute($cart);
+```
+
+To customize reservation, for example against an external warehouse, bind your own implementation:
+
+```php
+use Shopper\Core\Contracts\StockReserver;
+
+$this->app->bind(StockReserver::class, WarehouseStockReserver::class);
+```
+
+### Guest Carts Cannot Apply Per-User Discounts
+
+**Likelihood of Impact: Medium**
+*Affects storefronts that let anonymous visitors apply coupons.*
+
+A coupon with `usage_limit_per_user` set was only checked when the cart had a `customer_id`, so a guest could redeem a once-per-customer code on every anonymous checkout. Both `DiscountValidator` and `CreateOrderFromCartAction` now reject these coupons for guest carts with the `discount.requires_login` error.
+
+If your storefront surfaces validation messages, handle this case by prompting the visitor to sign in before applying the coupon. Carts that already have an authenticated `customer_id` are unaffected.
+
+## Low Impact Changes
+
+### Admin Authorization Tightened
+
+**Likelihood of Impact: Low**
+*Affects applications with custom roles that granted coarse permissions.*
+
+A full audit added explicit `authorize()` calls to every mutating Filament action and Livewire method across the admin panel, and locked previously public model properties on the pricing and variant slide-overs. Standard role setups are unaffected. If you built custom roles that relied on a coarse permission to reach a finer operation, for example granting `add_products` to manage variants, grant the specific permission instead, such as `add_product_variants`.
+
+## Migration Checklist
+
+<Steps>
+  <Step title="Update composer">
+    Set `shopper/framework` to `^2.10` and run `composer update -W`.
+  </Step>
+  <Step title="Update TaxableItem implementers">
+    Replace `getTaxableAmount()` and `getQuantity()` with `getTaxableTotal()` on any class that implements `TaxableItem`.
+  </Step>
+  <Step title="Add tracksInventory() to custom models">
+    If you swapped the product or variant model, add `tracksInventory(): bool` to satisfy the `Stockable` contract.
+  </Step>
+  <Step title="Remove the old reservation listener">
+    Drop any reference to `ReserveOrderItemStockListener` from your `EventServiceProvider`.
+  </Step>
+  <Step title="Resolve checkout action from the container">
+    Replace any `new CreateOrderFromCartAction(...)` with `resolve(CreateOrderFromCartAction::class)`.
+  </Step>
+  <Step title="Review guest coupon flows">
+    If anonymous visitors can apply coupons, handle the `discount.requires_login` error for per-user discounts.
+  </Step>
+  <Step title="Run tests">
+    Run `php artisan test` to confirm the upgrade is clean.
+  </Step>
+</Steps>
