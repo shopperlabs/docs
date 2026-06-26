@@ -213,6 +213,8 @@ Order::query()
 
 The same query runs in two places. `DiscountValidator` rejects the code at cart-apply time so the customer is not surprised at checkout. `CreateOrderFromCartAction` re-checks at commit and throws `DiscountLimitReachedException::perUser()` if the customer redeemed it between cart apply and commit.
 
+A per-user limit is meaningless without an identified customer, so a guest cart (no `customer_id`) can never apply a discount that sets `usage_limit_per_user`. Both `DiscountValidator` and `CreateOrderFromCartAction` reject it with the `discount.requires_login` error rather than letting a guest redeem a once-per-customer code on every anonymous checkout.
+
 ### Helpers
 
 ```php
