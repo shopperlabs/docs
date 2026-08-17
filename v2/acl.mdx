@@ -92,6 +92,18 @@ The `system` group contains the global capabilities that gate everything outside
 Since v2.8, `access_setting` is the only permission that grants write access to PaymentMethods, Currencies, Carriers, Team management, and Role/Permission management. Roles that previously relied on `view_users` to mutate these surfaces must be granted `access_setting` to keep working.
 </Note>
 
+### Team Management Safeguards
+
+Holding `access_setting` grants access to the team settings surfaces, but since v2.11.2 it no longer grants unrestricted control over the access control system itself. Without these safeguards, granting `access_setting` to a staff member so they could configure shipping or taxes also handed them a path to full administrator capability. Non administrator users are now subject to three rules:
+
+| Rule | Effect |
+|------|--------|
+| The administrator role cannot be targeted | A non administrator cannot open, update, delete the administrator role, or assign it to a new team member |
+| A permission can only be granted if the acting user holds it | A staff member cannot give a role a capability they do not have themselves |
+| Permission definitions are administrator only | Creating or deleting a permission requires the administrator role |
+
+Administrators are unaffected: they hold every permission, so every rule short circuits for them. Permissions and roles flagged with `can_be_removed` set to `false` are also protected on the server, not only hidden in the UI.
+
 ### Generating Permissions
 
 The `Permission::generate()` method creates five permissions for a given resource (browse, read, edit, add, delete):
