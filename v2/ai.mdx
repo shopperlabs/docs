@@ -1,0 +1,100 @@
+---
+title: "AI Assistants"
+description: "Connect your AI coding assistant to the Shopper documentation with MCP, llms.txt, and Laravel Boost skills."
+---
+
+AI coding assistants work best when they read the current documentation instead of relying on what they learned during training. Shopper gives them three ways to do that: a hosted MCP server for the documentation, `llms.txt` files, and [Laravel Boost](https://github.com/laravel/boost) skills shipped with the framework.
+
+## Documentation MCP Server
+
+The Shopper documentation is available as a [Model Context Protocol](https://modelcontextprotocol.io) server. Once connected, your assistant can search the docs and read full pages while it works on your code, so its answers follow the version of Shopper you actually use.
+
+```
+https://docs.laravelshopper.dev/mcp
+```
+
+The server is public, read-only, and requires no API key. It exposes three tools:
+
+- **Search** finds the pages and sections that match a question, with links to the documentation.
+- **Query docs filesystem** reads full pages, or greps across them, when a search result is not enough.
+- **Submit feedback** reports an incorrect or outdated page to the documentation team.
+
+<Tip>
+  The documentation covers both Shopper 1.x and 2.x. If your assistant returns 1.x content, ask it to look at the 2.x pages (paths starting with `/v2/`).
+</Tip>
+
+### Claude Code
+
+Run the following command in your project:
+
+```bash
+claude mcp add --transport http shopper-docs https://docs.laravelshopper.dev/mcp
+```
+
+### Cursor
+
+Add the server to `.cursor/mcp.json` in your project, or to `~/.cursor/mcp.json` to enable it everywhere:
+
+```json
+{
+  "mcpServers": {
+    "shopper-docs": {
+      "url": "https://docs.laravelshopper.dev/mcp"
+    }
+  }
+}
+```
+
+### VS Code
+
+Add the server to `.vscode/mcp.json` in your project:
+
+```json
+{
+  "servers": {
+    "shopper-docs": {
+      "type": "http",
+      "url": "https://docs.laravelshopper.dev/mcp"
+    }
+  }
+}
+```
+
+### Other Clients
+
+Any client that supports remote MCP servers over HTTP can connect with the URL above. You can also use the contextual menu at the top of every documentation page to copy the MCP URL or install the server in Cursor and VS Code in one click.
+
+## llms.txt
+
+For tools that do not support MCP, the documentation is also published in the [llms.txt](https://llmstxt.org) format:
+
+- [`/llms.txt`](https://docs.laravelshopper.dev/llms.txt) lists every page with a short description.
+- [`/llms-full.txt`](https://docs.laravelshopper.dev/llms-full.txt) contains the full content of the documentation in a single file.
+
+Every page is also available as Markdown by adding `.md` to its URL, for example [`/v2/installation.md`](https://docs.laravelshopper.dev/v2/installation.md).
+
+## Laravel Boost
+
+If your project uses [Laravel Boost](https://github.com/laravel/boost), Shopper ships guidelines and skills that Boost discovers automatically from the installed packages. Run the Boost installer after installing Shopper:
+
+```bash
+php artisan boost:install
+```
+
+Boost then adds the Shopper guidelines to your assistant's context: installation commands, configuration files, and how to create custom admin pages. It also makes the following skills available:
+
+- **shopper-customization** covers extending Shopper in your application: sidebar navigation, component overrides, event listeners, stock, pricing, and media.
+- **shopper-development** covers the coding standards used in the Shopper codebase: models, actions, enums, Livewire components, migrations, tests, and Filament schemas.
+
+### Upgrade Skills
+
+When upgrading between versions, the temporary `shopper/upgrade` package adds skills that guide your assistant through each breaking change. See the [upgrade guide](/v2/upgrade) for details.
+
+```bash
+composer require shopper/upgrade --dev
+php artisan boost:install
+```
+
+<Note>
+  Boost and the documentation MCP server work well together. Boost gives your assistant the conventions to follow in your codebase, and the MCP server gives it the reference documentation to look up APIs and features.
+</Note>
