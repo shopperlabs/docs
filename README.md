@@ -1,19 +1,20 @@
 ## Development
 
-Install the [Mintlify CLI](https://www.npmjs.com/package/mint) to preview your documentation changes locally. To install, use the following command:
+The documentation is a [Fumadocs](https://fumadocs.dev) site built on Next.js.
 
-```
-npm i -g mint
-```
-
-Run the following command at the root of your documentation, where your `docs.json` is located:
-
-```
-mint dev
+```bash
+npm install
+npm run dev
 ```
 
-View your local preview at `http://localhost:3000`.
+The local preview runs at `http://localhost:3000`.
 
-### Resources
+Pages live in `content/docs/<version>` (`3.x`, `2.x`, `1.x`). Each folder's `meta.json` sets the sidebar order.
+Legacy Mintlify URLs are redirected in `redirects.json`.
 
-- [Mintlify documentation](https://mintlify.com/docs)
+Before opening a pull request, run:
+
+```bash
+npm run types:check
+npm run build
+```

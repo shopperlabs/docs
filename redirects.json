@@ -1,0 +1,457 @@
+[
+  {
+    "source": "/",
+    "destination": "/3.x",
+    "permanent": false
+  },
+  {
+    "source": "/2.x",
+    "destination": "/2.x/user-guide/getting-started/introduction",
+    "permanent": false
+  },
+  {
+    "source": "/1.x",
+    "destination": "/1.x/installation",
+    "permanent": false
+  },
+  {
+    "source": "/v2/:path*",
+    "destination": "/2.x/:path*",
+    "permanent": true
+  },
+  {
+    "source": "/v1/:path*",
+    "destination": "/1.x/:path*",
+    "permanent": true
+  },
+  {
+    "source": "/acl",
+    "destination": "/2.x/acl",
+    "permanent": true
+  },
+  {
+    "source": "/blade-starter-kit",
+    "destination": "/2.x/starter-kits",
+    "permanent": true
+  },
+  {
+    "source": "/currencies",
+    "destination": "/2.x/currencies",
+    "permanent": true
+  },
+  {
+    "source": "/carriers",
+    "destination": "/2.x/carriers",
+    "permanent": true
+  },
+  {
+    "source": "/channels",
+    "destination": "/2.x/channels",
+    "permanent": true
+  },
+  {
+    "source": "/extending/components/overview",
+    "destination": "/2.x/extending/components/overview",
+    "permanent": true
+  },
+  {
+    "source": "/extending/components/card",
+    "destination": "/2.x/extending/components/card",
+    "permanent": true
+  },
+  {
+    "source": "/extending/components/alert",
+    "destination": "/2.x/extending/components/alert",
+    "permanent": true
+  },
+  {
+    "source": "/extending/components/heading",
+    "destination": "/2.x/extending/components/heading",
+    "permanent": true
+  },
+  {
+    "source": "/extending/components/section-heading",
+    "destination": "/2.x/extending/components/section-heading",
+    "permanent": true
+  },
+  {
+    "source": "/extending/components/empty-state",
+    "destination": "/2.x/extending/components/empty-state",
+    "permanent": true
+  },
+  {
+    "source": "/extending/components/empty-card",
+    "destination": "/2.x/extending/components/empty-card",
+    "permanent": true
+  },
+  {
+    "source": "/extending/components/stock-badge",
+    "destination": "/2.x/extending/components/stock-badge",
+    "permanent": true
+  },
+  {
+    "source": "/extending/components/loader",
+    "destination": "/2.x/extending/components/loader",
+    "permanent": true
+  },
+  {
+    "source": "/extending/components/label",
+    "destination": "/2.x/extending/components/label",
+    "permanent": true
+  },
+  {
+    "source": "/extending/components/user-avatar",
+    "destination": "/2.x/extending/components/user-avatar",
+    "permanent": true
+  },
+  {
+    "source": "/extending/components/utilities",
+    "destination": "/2.x/extending/components/utilities",
+    "permanent": true
+  },
+  {
+    "source": "/extending/empty-state",
+    "destination": "/2.x/extending/empty-state",
+    "permanent": true
+  },
+  {
+    "source": "/extending/forms",
+    "destination": "/2.x/extending/forms",
+    "permanent": true
+  },
+  {
+    "source": "/extending/modals",
+    "destination": "/2.x/extending/modals",
+    "permanent": true
+  },
+  {
+    "source": "/extending/overview",
+    "destination": "/2.x/extending/overview",
+    "permanent": true
+  },
+  {
+    "source": "/extending/slideover",
+    "destination": "/2.x/extending/slideover",
+    "permanent": true
+  },
+  {
+    "source": "/getting-started",
+    "destination": "/2.x/getting-started",
+    "permanent": true
+  },
+  {
+    "source": "/inertia-starter-kit",
+    "destination": "/2.x/starter-kits",
+    "permanent": true
+  },
+  {
+    "source": "/2.x/inertia-starter-kit",
+    "destination": "/2.x/starter-kits",
+    "permanent": true
+  },
+  {
+    "source": "/react-starter-kit",
+    "destination": "/2.x/react-starter-kit",
+    "permanent": true
+  },
+  {
+    "source": "/vue-starter-kit",
+    "destination": "/2.x/vue-starter-kit",
+    "permanent": true
+  },
+  {
+    "source": "/livewire-starter-kit",
+    "destination": "/2.x/livewire-starter-kit",
+    "permanent": true
+  },
+  {
+    "source": "/pricing",
+    "destination": "/2.x/pricing",
+    "permanent": true
+  },
+  {
+    "source": "/product-variants",
+    "destination": "/2.x/product-variants",
+    "permanent": true
+  },
+  {
+    "source": "/setup-store",
+    "destination": "/2.x/setup-store",
+    "permanent": true
+  },
+  {
+    "source": "/starter-kits",
+    "destination": "/2.x/starter-kits",
+    "permanent": true
+  },
+  {
+    "source": "/upgrade",
+    "destination": "/2.x/upgrade",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/getting-started/introduction",
+    "destination": "/2.x/user-guide/getting-started/introduction",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/getting-started/login",
+    "destination": "/2.x/user-guide/getting-started/login",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/getting-started/dashboard",
+    "destination": "/2.x/user-guide/getting-started/dashboard",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/store-setup/general-settings",
+    "destination": "/2.x/user-guide/store-setup/general-settings",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/store-setup/locations",
+    "destination": "/2.x/user-guide/store-setup/locations",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/store-setup/currencies",
+    "destination": "/2.x/user-guide/store-setup/currencies",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/store-setup/zones",
+    "destination": "/2.x/user-guide/store-setup/zones",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/store-setup/legal",
+    "destination": "/2.x/user-guide/store-setup/legal",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/catalog/brands",
+    "destination": "/2.x/user-guide/catalog/brands",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/catalog/categories",
+    "destination": "/2.x/user-guide/catalog/categories",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/catalog/collections",
+    "destination": "/2.x/user-guide/catalog/collections",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/catalog/attributes",
+    "destination": "/2.x/user-guide/catalog/attributes",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/catalog/products",
+    "destination": "/2.x/user-guide/catalog/products/overview",
+    "permanent": true
+  },
+  {
+    "source": "/2.x/user-guide/catalog/products",
+    "destination": "/2.x/user-guide/catalog/products/overview",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/catalog/variants",
+    "destination": "/2.x/user-guide/catalog/products/variant-product",
+    "permanent": true
+  },
+  {
+    "source": "/2.x/user-guide/catalog/variants",
+    "destination": "/2.x/user-guide/catalog/products/variant-product",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/sales/orders",
+    "destination": "/2.x/user-guide/sales/orders",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/sales/customers",
+    "destination": "/2.x/user-guide/sales/customers",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/sales/reviews",
+    "destination": "/2.x/user-guide/sales/reviews",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/marketing/discounts",
+    "destination": "/2.x/user-guide/marketing/discounts",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/marketing/pricing",
+    "destination": "/2.x/user-guide/marketing/pricing",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/administration/users",
+    "destination": "/2.x/user-guide/administration/users",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/administration/roles",
+    "destination": "/2.x/user-guide/administration/roles",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/administration/two-factor",
+    "destination": "/2.x/user-guide/administration/two-factor",
+    "permanent": true
+  },
+  {
+    "source": "/sidebar/overview",
+    "destination": "/2.x/sidebar/overview",
+    "permanent": true
+  },
+  {
+    "source": "/sidebar/shopper-extension",
+    "destination": "/2.x/sidebar/shopper-extension",
+    "permanent": true
+  },
+  {
+    "source": "/sidebar/standalone",
+    "destination": "/2.x/sidebar/standalone",
+    "permanent": true
+  },
+  {
+    "source": "/sidebar/configuration",
+    "destination": "/2.x/sidebar/configuration",
+    "permanent": true
+  },
+  {
+    "source": "/zones",
+    "destination": "/2.x/zones",
+    "permanent": true
+  },
+  {
+    "source": "/addons/stripe",
+    "destination": "/2.x/addons/stripe",
+    "permanent": true
+  },
+  {
+    "source": "/cart",
+    "destination": "/2.x/cart",
+    "permanent": true
+  },
+  {
+    "source": "/demo-store",
+    "destination": "/2.x/demo-store",
+    "permanent": true
+  },
+  {
+    "source": "/events",
+    "destination": "/2.x/events",
+    "permanent": true
+  },
+  {
+    "source": "/fulfillment",
+    "destination": "/2.x/fulfillment",
+    "permanent": true
+  },
+  {
+    "source": "/payment-methods",
+    "destination": "/2.x/payment-methods",
+    "permanent": true
+  },
+  {
+    "source": "/payments",
+    "destination": "/2.x/payments",
+    "permanent": true
+  },
+  {
+    "source": "/product-tags",
+    "destination": "/2.x/product-tags",
+    "permanent": true
+  },
+  {
+    "source": "/reference/typescript-types",
+    "destination": "/2.x/reference/typescript-types",
+    "permanent": true
+  },
+  {
+    "source": "/reference/types/catalog",
+    "destination": "/2.x/reference/types/catalog",
+    "permanent": true
+  },
+  {
+    "source": "/reference/types/customer",
+    "destination": "/2.x/reference/types/customer",
+    "permanent": true
+  },
+  {
+    "source": "/reference/types/order",
+    "destination": "/2.x/reference/types/order",
+    "permanent": true
+  },
+  {
+    "source": "/reference/types/product",
+    "destination": "/2.x/reference/types/product",
+    "permanent": true
+  },
+  {
+    "source": "/suppliers",
+    "destination": "/2.x/suppliers",
+    "permanent": true
+  },
+  {
+    "source": "/upgrade/v2-1-to-v2-2",
+    "destination": "/2.x/upgrade/v2-1-to-v2-2",
+    "permanent": true
+  },
+  {
+    "source": "/upgrade/v2-2-to-v2-3",
+    "destination": "/2.x/upgrade/v2-2-to-v2-3",
+    "permanent": true
+  },
+  {
+    "source": "/upgrade/v2-4-to-v2-5",
+    "destination": "/2.x/upgrade/v2-4-to-v2-5",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/catalog/products/creating-product",
+    "destination": "/2.x/user-guide/catalog/products/creating-product",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/catalog/products/external-product",
+    "destination": "/2.x/user-guide/catalog/products/external-product",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/catalog/products/managing-products",
+    "destination": "/2.x/user-guide/catalog/products/managing-products",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/catalog/products/overview",
+    "destination": "/2.x/user-guide/catalog/products/overview",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/catalog/products/standard-product",
+    "destination": "/2.x/user-guide/catalog/products/standard-product",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/catalog/products/variant-product",
+    "destination": "/2.x/user-guide/catalog/products/variant-product",
+    "permanent": true
+  },
+  {
+    "source": "/user-guide/catalog/products/virtual-product",
+    "destination": "/2.x/user-guide/catalog/products/virtual-product",
+    "permanent": true
+  }
+]

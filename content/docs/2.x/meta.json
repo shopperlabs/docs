@@ -1,0 +1,13 @@
+{
+  "title": "2.x",
+  "description": "Stable",
+  "root": "version",
+  "pagesIndex": "[2.x](/2.x)",
+  "pages": [
+    "user-guide",
+    "(documentation)",
+    "(extending)",
+    "(addons)",
+    "reference"
+  ]
+}

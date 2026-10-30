@@ -1,0 +1,111 @@
+---
+title: Media
+description: Manage product images and media files with Spatie Media Library
+---
+
+Shopper supports assigning images to products, variants, brands, collections and categories. It is an additional layer provided
+by the framework with the help of the [Spatie Media Library](https://spatie.be/v2/laravel-medialibrary)
+
+## Configuration
+
+The `config/shopper/media.php` file allows you to customize how media files are handled. Below are the available configuration options:
+
+### Storage Disk
+
+Specifies the storage disk used to save media files. By default, Shopper uses the `public` disk, but you can change
+it to use services like S3, Cloudinary, or other storage systems. Since the file system is based on the Spatie Laravel Media Library,
+you also need to define the name of the collection of images and thumbnails for your Models.
+
+```php title="config/shopper/media.php"
+'storage' => [
+    'collection_name' => 'uploads',
+    'thumbnail_collection' => 'thumbnail',
+    'disk_name' => 'public',
+]
+```
+
+### Accepts Mime Types
+
+Lists the MIME types allowed for media files. This ensures that only specified file formats can be uploaded. For your need you can add more types.
+
+```php title="config/shopper/media.php"
+'accepts_mime_types' => [
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/avif',
+]
+```
+
+Since v2.11.2, this allowlist governs every image upload in the admin panel: media collections on products, variants, brands, collections and categories, and also the account avatar and the store logo and cover in the settings. Before v2.11.2, those three settings fields accepted any `image/*` type regardless of this configuration.
+
+<Warning>
+SVG is deliberately excluded from the default list. An SVG file can embed scripts that execute when the file is opened from your storage URL, which allows a staff account to attack an administrator session. Only add `image/svg+xml` back if you understand and accept that risk.
+</Warning>
+
+### Media Filesize
+
+Sets the maximum allowed file size for media uploads (in kilobytes). This helps control file sizes to avoid performance issues.
+
+```php title="config/shopper/media.php"
+'max_size' => [
+    'thumbnail' => 1024, // Default size for thumbnail image (1MB).
+    'images' => 2048, // Default size for individual collection image for product (2MB)
+]
+```
+
+### Image Conversions
+
+Configures image conversions to generate resized or optimized versions of uploaded images. For example,
+you can create thumbnails or mobile-friendly images.
+
+```php title="config/shopper/media.php"
+'conversions' => [
+    'large' => [
+        'width' => 800,
+        'height' => 800,
+    ],
+    'medium' => [
+        'width' => 500,
+        'height' => 500,
+    ],
+]
+```
+
+## Image Conversions
+
+Shopper registers image conversions from the `config/shopper/media.php` `conversions` array. By default, two conversions are available: `large` (800x800) and `medium` (500x500). All conversions use `Fit::Fill` and preserve the original image format.
+
+To add custom conversions, add entries to the `conversions` config:
+
+```php
+'conversions' => [
+    'large' => ['width' => 800, 'height' => 800],
+    'medium' => ['width' => 500, 'height' => 500],
+    'small' => ['width' => 200, 'height' => 200],
+],
+```
+
+## Retrieving Images
+
+To get the thumbnail URL for a product, brand, or collection:
+
+```php
+$collection = config('shopper.media.storage.thumbnail_collection');
+
+$product->getFirstMediaUrl($collection);
+$product->getFirstMediaUrl($collection, 'medium');
+```
+
+To get gallery images:
+
+```php
+$collection = config('shopper.media.storage.collection_name');
+
+$product->getMedia($collection);
+$product->getFirstMediaUrl($collection);
+```
+
+## Advanced Customization
+
+If you need further customization, configure a custom disk in `config/filesystems.php` and update the `disk_name` in `config/shopper/media.php`. See the [Laravel Filesystem documentation](https://laravel.com/docs/filesystem) for details.

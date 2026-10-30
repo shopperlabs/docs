@@ -1,0 +1,591 @@
+---
+title: Collections
+description: Complete reference for the Collection model, automatic rules, and usage in Shopper.
+---
+
+Collections are curated groups of products for marketing and merchandising. Unlike categories, collections can be manually curated or automatically populated based on rules.
+
+## Model
+
+The model used is `Shopper\Models\Collection`, which extends `Shopper\Core\Models\Collection`. The core model provides the business logic, relationships, scopes, rule evaluation, and slug generation. The admin model adds media collections and conversions through Spatie MediaLibrary.
+
+The core model implements `Shopper\Core\Models\Contracts\Collection` and uses the `HasSlug` trait for automatic slug generation with collision handling.
+
+### Extending the Model
+
+To add custom behavior, extend the admin model and update your configuration:
+
+```php
+namespace App\Models;
+
+use Shopper\Models\Collection as ShopperCollection;
+
+class Collection extends ShopperCollection
+{
+}
+```
+
+Update `config/shopper/models.php`:
+
+```php
+return [
+    'collection' => \App\Models\Collection::class,
+];
+```
+
+## Database Schema
+
+### Collection Table
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `name` | string | no | - | Collection name |
+| `slug` | string | no | auto | URL-friendly identifier (unique) |
+| `description` | longtext | yes | null | Collection description |
+| `type` | string | no | - | Collection type (manual/auto) |
+| `sort` | string | yes | null | Product sorting method |
+| `match_conditions` | string | yes | null | Rule matching logic (all/any) |
+| `published_at` | datetime | yes | null | Publication date |
+| `seo_title` | string(60) | yes | null | SEO meta title |
+| `seo_description` | string(160) | yes | null | SEO meta description |
+| `metadata` | json | yes | null | Additional custom data |
+
+### CollectionRule Table
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | no | Primary key |
+| `rule` | string | no | Rule type identifier |
+| `operator` | string | no | Comparison operator |
+| `value` | string | no | Value to compare against |
+| `collection_id` | bigint | no | Foreign key to collection |
+
+## Collection Types
+
+```php
+use Shopper\Core\Enum\CollectionType;
+
+CollectionType::Manual  // Products are manually selected
+CollectionType::Auto    // Products are added based on rules
+```
+
+### Type Checking
+
+```php
+$collection->isManual();    // true for manual collections
+$collection->isAutomatic(); // true for automatic collections
+```
+
+## Relationships
+
+### Products
+
+A collection groups products together for merchandising, such as "Summer Essentials", "New Arrivals", or "Black Friday Deals". For manual collections, you explicitly attach and detach products. For automatic collections, products are matched by rules (see [Collection Rules](#collection-rules)).
+
+```php
+$collection->products;
+```
+
+For manual collections, manage products with the standard Eloquent relationship methods:
+
+```php
+$collection->products()->attach([$productId1, $productId2]);
+$collection->products()->detach($productId);
+$collection->products()->sync($productIds);
+```
+
+### Zones
+
+Collections can be scoped to specific geographic zones. This is useful when a promotion or product group only applies to certain markets.
+
+```php
+$collection->zones;
+$collection->zones()->attach([$zoneId1, $zoneId2]);
+$collection->zones()->detach($zoneId);
+$collection->zones()->sync($zoneIds);
+```
+
+From the zone side, you can retrieve all associated collections:
+
+```php
+$zone = Zone::query()->find($id);
+$zone->collections;
+```
+
+### Rules (Automatic Collections)
+
+Automatic collections use rules to determine which products belong to them. Each rule defines a condition that products must match.
+
+```php
+$collection->rules;
+```
+
+Add a rule that matches products whose title contains "summer":
+
+```php
+use Shopper\Core\Enum\Operator;
+use Shopper\Core\Enum\Rule;
+
+$collection->rules()->create([
+    'rule' => Rule::ProductTitle,
+    'operator' => Operator::Contains,
+    'value' => 'summer',
+]);
+```
+
+## Slug & Lookup
+
+The `HasSlug` trait generates unique slugs automatically and provides a `findBySlug()` static method:
+
+```php
+use Shopper\Models\Collection;
+
+$collection = Collection::findBySlug('summer-essentials');
+```
+
+## Query Scopes
+
+Filter collections by type:
+
+```php
+Collection::query()->manual()->get();
+Collection::query()->automatic()->get();
+```
+
+The `published` scope filters collections that have a `published_at` date in the past or present:
+
+```php
+Collection::query()->published()->get();
+```
+
+## Collection Rules
+
+### Rule Types
+
+```php
+use Shopper\Core\Enum\Rule;
+
+Rule::ProductTitle      // Match product title
+Rule::ProductPrice      // Match product price
+Rule::CompareAtPrice    // Match compare at price
+Rule::InventoryStock    // Match stock level
+Rule::ProductBrand      // Match product brand
+Rule::ProductCategory   // Match product category
+Rule::ProductCreatedAt  // Match product creation date
+Rule::ProductFeatured   // Match featured status
+Rule::ProductRating     // Match average rating
+Rule::ProductSalesCount // Match total units sold
+```
+
+| Rule | Database Value | Description |
+|------|---------------|-------------|
+| Product Title | `product_title` | Match against product name |
+| Product Price | `product_price` | Match against `amount` on prices table (stored in cents) |
+| Compare Price | `compare_at_price` | Match against `compare_amount` on prices table (stored in cents) |
+| Inventory Stock | `inventory_stock` | Match against stock level |
+| Product Brand | `product_brand` | Match against brand name |
+| Product Category | `product_category` | Match against category name |
+| Product Created Date | `product_created_at` | Match against creation date |
+| Product Featured | `product_featured` | Match featured status (1 or 0) |
+| Product Rating | `product_rating` | Match average approved rating |
+| Product Sales Count | `product_sales_count` | Match total units sold (paid/shipped/delivered/completed orders only) |
+
+<Note>
+  **Price rules** (`ProductPrice`, `CompareAtPrice`) store values in cents. Pass the value in cents directly (e.g., `'5000'` for $50.00). Price rules are evaluated against the shop's default currency.
+
+  **Sales count** (`ProductSalesCount`) only counts units from orders with a valid status: `paid`, `shipped`, `delivered`, or `completed`.
+</Note>
+
+### Operators
+
+```php
+use Shopper\Core\Enum\Operator;
+
+Operator::EqualsTo      // equals_to
+Operator::NotEqualTo    // not_equal_to
+Operator::GreaterThan   // greater_than
+Operator::LessThan      // less_than
+Operator::StartsWith    // starts_with
+Operator::EndsWith      // ends_with
+Operator::Contains      // contains
+Operator::NotContains   // not_contains
+```
+
+### Match Conditions
+
+When a collection has multiple rules, `match_conditions` determines how they combine. With `all`, every rule must match. With `any`, a single matching rule is enough.
+
+```php
+$collection->match_conditions = 'all';
+$collection->match_conditions = 'any';
+```
+
+## Display Helpers
+
+The `firstRule()` method returns a human-readable summary of the collection's rules, like "Product title contains Summer + 2 other":
+
+```php
+$collection->firstRule();
+```
+
+## Creating Collections
+
+### Manual Collection
+
+```php
+use Shopper\Models\Collection;
+use Shopper\Core\Enum\CollectionType;
+
+$collection = Collection::query()->create([
+    'name' => 'Summer Essentials',
+    'type' => CollectionType::Manual,
+    'published_at' => now(),
+]);
+
+$collection->products()->attach([$product1->id, $product2->id]);
+```
+
+### Automatic Collection
+
+Automatic collections populate themselves based on rules. Here's a "Sale Items" collection that matches products under $50 with "sale" in the title:
+
+```php
+use Shopper\Core\Enum\CollectionType;
+use Shopper\Core\Enum\Operator;
+use Shopper\Core\Enum\Rule;
+
+$collection = Collection::query()->create([
+    'name' => 'Sale Items',
+    'type' => CollectionType::Auto,
+    'match_conditions' => 'all',
+    'published_at' => now(),
+]);
+
+$collection->rules()->createMany([
+    [
+        'rule' => Rule::ProductPrice,
+        'operator' => Operator::LessThan,
+        'value' => '5000',
+    ],
+    [
+        'rule' => Rule::ProductTitle,
+        'operator' => Operator::Contains,
+        'value' => 'sale',
+    ],
+]);
+```
+
+### Best Sellers Collection
+
+A collection that automatically includes products with more than 10 units sold:
+
+```php
+$collection = Collection::query()->create([
+    'name' => 'Best Sellers',
+    'type' => CollectionType::Auto,
+    'match_conditions' => 'all',
+    'published_at' => now(),
+]);
+
+$collection->rules()->create([
+    'rule' => Rule::ProductSalesCount,
+    'operator' => Operator::GreaterThan,
+    'value' => '10',
+]);
+```
+
+### Top Rated Collection
+
+```php
+$collection = Collection::query()->create([
+    'name' => 'Top Rated',
+    'type' => CollectionType::Auto,
+    'match_conditions' => 'all',
+    'published_at' => now(),
+]);
+
+$collection->rules()->create([
+    'rule' => Rule::ProductRating,
+    'operator' => Operator::GreaterThan,
+    'value' => '3', // Average rating > 3 (4-5 stars)
+]);
+```
+
+## Retrieving Collections
+
+All published collections:
+
+```php
+$collections = Collection::query()->published()->get();
+```
+
+A collection with its published products:
+
+```php
+$collection = Collection::findBySlug('summer-essentials');
+
+$products = $collection->productsQuery()->publish()->get();
+```
+
+Filter by type:
+
+```php
+$manualCollections = Collection::query()->manual()->get();
+
+$autoCollections = Collection::query()
+    ->automatic()
+    ->with('rules')
+    ->get();
+```
+
+## Retrieving Products
+
+Shopper provides built-in methods to retrieve products from collections, handling both manual and automatic collections transparently.
+
+### Basic Usage
+
+The `getProducts()` method works for both collection types. For manual collections it returns attached products. For automatic collections it evaluates the rules and returns matching products.
+
+```php
+$collection = Collection::query()->find($id);
+
+$products = $collection->getProducts();
+```
+
+For pagination or additional filtering, use `productsQuery()` which returns an Eloquent builder:
+
+```php
+$products = $collection->productsQuery()->paginate(12);
+
+$products = $collection->productsQuery()
+    ->where('featured', true)
+    ->orderBy('name')
+    ->get();
+```
+
+### How It Works
+
+For **manual collections**, `getProducts()` returns the attached products via the `products()` relationship.
+
+For **automatic collections**, `getProducts()` evaluates all defined rules and returns matching products:
+
+- **Match All**: All rules must be satisfied (AND logic)
+- **Match Any**: At least one rule must be satisfied (OR logic)
+
+```php
+$collection = Collection::query()
+    ->where('slug', 'sale-items')
+    ->with('rules')
+    ->first();
+
+$products = $collection->getProducts();
+```
+
+### Rule Evaluation
+
+The `CollectionProductsQuery` class handles rule evaluation for all supported rules:
+
+| Rule | Column/Relation | Supported Operators |
+|------|-----------------|---------------------|
+| `ProductTitle` | `name` | All string operators |
+| `ProductPrice` | `amount` (prices table) | Numeric operators |
+| `CompareAtPrice` | `compare_amount` (prices table) | Numeric operators |
+| `InventoryStock` | `inventoryHistories` | Numeric operators |
+| `ProductBrand` | `brand` relation | All string operators |
+| `ProductCategory` | `categories` relation | All string operators |
+| `ProductCreatedAt` | `created_at` | `equals_to`, `less_than`, `greater_than` |
+| `ProductFeatured` | `featured` | `equals_to` |
+| `ProductRating` | `ratings` relation (AVG) | Numeric operators |
+| `ProductSalesCount` | `order_items` (SUM quantity) | Numeric operators |
+
+```php
+use Shopper\Core\Queries\CollectionProductsQuery;
+
+$query = new CollectionProductsQuery();
+$products = $query->get($collection);
+```
+
+For further customization, use the query builder:
+
+```php
+$builder = $query->query($collection);
+$products = $builder->with('brand')->paginate(10);
+```
+
+## Automatic Synchronization
+
+For automatic collections, Shopper keeps the product associations in sync with the collection rules. Products are stored in the pivot table for optimal query performance.
+
+### How Sync Works
+
+Synchronization happens automatically via observers:
+
+| Event | Action |
+|-------|--------|
+| Product created/updated | Product is added/removed from matching collections |
+| Collection saved | All matching products are synced |
+| Collection rule added/updated/deleted | Collection products are re-synced |
+
+### Manual Sync Command
+
+You can manually sync automatic collections using the artisan command:
+
+```bash
+# Sync all automatic collections
+php artisan shopper:collections:sync
+
+# Sync a specific collection
+php artisan shopper:collections:sync --collection=1
+```
+
+### Sync Action
+
+For programmatic sync, use the `SyncCollectionProductsAction`:
+
+```php
+use Shopper\Core\Actions\SyncCollectionProductsAction;
+use Shopper\Models\Collection;
+
+$collection = Collection::query()->find($id);
+
+$action = new SyncCollectionProductsAction();
+$syncedCount = $action->execute($collection);
+```
+
+### Background Jobs
+
+Sync operations run in queued jobs to avoid blocking requests:
+
+- `SyncCollectionProductsJob` - Syncs a single collection
+- `SyncProductWithCollectionsJob` - Syncs a product with all automatic collections
+
+Configure your queue worker to process these jobs:
+
+```bash
+php artisan queue:work
+```
+
+## Media
+
+Collections support two media collections through [Spatie MediaLibrary](https://spatie.be/docs/laravel-medialibrary), using the same config-driven collection names as [products](/2.x/products#media).
+
+| Collection | Config key | Behavior | Description |
+|------------|-----------|----------|-------------|
+| Default gallery | `shopper.media.storage.collection_name` | Multiple files | Collection images |
+| Thumbnail | `shopper.media.storage.thumbnail_collection` | Single file | Collection cover image |
+
+To add a collection cover image:
+
+```php
+$mediaCollection = config('shopper.media.storage.thumbnail_collection');
+
+$collection->addMedia($file)->toMediaCollection($mediaCollection);
+```
+
+To retrieve the cover URL:
+
+```php
+$mediaCollection = config('shopper.media.storage.thumbnail_collection');
+
+$url = $collection->getFirstMediaUrl($mediaCollection, 'medium');
+```
+
+## Configuration
+
+### Disabling Collections
+
+```php
+// config/shopper/features.php
+use Shopper\Enum\FeatureState;
+
+return [
+    'collection' => FeatureState::Disabled,
+];
+```
+
+### Permissions
+
+The admin panel generates five permissions for collection management:
+
+| Permission | Description |
+|------------|-------------|
+| `browse_collections` | View the collections list |
+| `read_collections` | View a single collection |
+| `add_collections` | Create new collections |
+| `edit_collections` | Edit existing collections |
+| `delete_collections` | Delete collections |
+
+## Components
+
+To customize the admin UI for collection management:
+
+```bash
+php artisan shopper:component:publish collection
+```
+
+Creates `config/shopper/components/collection.php`:
+
+```php
+use Shopper\Livewire;
+
+return [
+    'pages' => [
+        'collection-index' => Livewire\Pages\Collection\Index::class,
+        'collection-edit' => Livewire\Pages\Collection\Edit::class,
+    ],
+    'components' => [
+        'collections.products' => Livewire\Components\Collection\CollectionProducts::class,
+
+        'slide-overs.collection-rules' => Livewire\SlideOvers\CollectionRules::class,
+        'slide-overs.add-collection-form' => Livewire\SlideOvers\AddCollectionForm::class,
+        'slide-overs.collection-products-list' => Livewire\SlideOvers\CollectionProductsList::class,
+    ],
+];
+```
+
+## Storefront Example
+
+```php
+namespace App\Http\Controllers;
+
+use Shopper\Models\Collection;
+
+class CollectionController extends Controller
+{
+    public function index()
+    {
+        $collections = Collection::query()
+            ->published()
+            ->withCount('products')
+            ->get();
+
+        return view('collections.index', compact('collections'));
+    }
+
+    public function show(string $slug)
+    {
+        $collection = Collection::findBySlug($slug);
+
+        // Works for both manual and automatic collections
+        $products = $collection->productsQuery()
+            ->with(['brand', 'media'])
+            ->paginate(12);
+
+        return view('collections.show', compact('collection', 'products'));
+    }
+}
+```
+
+## Use Cases
+
+| Type | Example | Description |
+|------|---------|-------------|
+| Manual | Gift Guides | Curated selection of gift ideas |
+| Manual | Editor's Picks | Hand-picked featured products |
+| Auto | New Arrivals | `ProductCreatedAt` greater than 30 days ago |
+| Auto | Sale Items | `CompareAtPrice` greater than 0 |
+| Auto | Low Stock | `InventoryStock` less than 5 |
+| Auto | Featured | `ProductFeatured` equals 1 |
+| Auto | Best Sellers | `ProductSalesCount` greater than 10 |
+| Auto | Top Rated | `ProductRating` greater than 3 |

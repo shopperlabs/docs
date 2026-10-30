@@ -1,0 +1,98 @@
+---
+title: "Installation"
+description: "Install Shopper into your existing Laravel application in a few steps."
+---
+
+Shopper requires an existing Laravel 11.28+ or 12.x application. If you do not have one yet, create a new Laravel project first by following the [Laravel installation guide](https://laravel.com/docs/installation).
+
+## Install the Package
+
+Install `shopper/framework` via Composer:
+
+```bash
+composer require shopper/framework
+```
+
+<Note>
+  If you have a cached config from a previous setup, run `php artisan config:clear` before installing.
+</Note>
+
+## Prepare Your User Model
+
+Shopper relies on your `User` model having certain relationships and methods for authentication, permissions, and admin panel access. Add the `InteractsWithShopper` trait and implement the `ShopperUser` interface on your User model:
+
+```php title="app/Models/User.php"
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Shopper\Models\Contracts\ShopperUser;
+use Shopper\Traits\InteractsWithShopper;
+
+class User extends Authenticatable implements ShopperUser
+{
+    use InteractsWithShopper;
+
+    protected $hidden = [
+        'password',
+        'remember_token',
+        'store_two_factor_secret',
+        'store_two_factor_recovery_codes',
+    ];
+}
+```
+
+The `InteractsWithShopper` trait provides relationships for roles, permissions, orders, addresses, and two-factor authentication. The `ShopperUser` interface ensures your model adheres to the contract expected by Shopper's admin panel.
+
+## Run the Installer
+
+The install command publishes configuration files, creates the asset symlink, and optionally runs migrations and seeders:
+
+```bash
+php artisan shopper:install
+```
+
+The installer performs these steps:
+
+1. Publishes Shopper config files to `config/shopper/`
+2. Publishes Spatie MediaLibrary migrations
+3. Publishes Filament assets
+4. Creates a symlink from `vendor/shopper/framework/public` to `public/cpanel` (or your configured prefix)
+5. Prompts you to run migrations and seed the database with roles, permissions, and default data
+
+<Note>
+  All Shopper database tables are prefixed with `sh_` by default to avoid conflicts with your existing tables. You can change this in `config/shopper/core.php`.
+</Note>
+
+## Create an Admin User
+
+Create your first admin user to access the dashboard:
+
+```bash
+php artisan shopper:user
+```
+
+The command prompts for an email, first name, last name, and password. The user is automatically assigned the administrator role.
+
+## Access the Admin Panel
+
+If you are using [Laravel Herd](https://herd.laravel.com) or [Laravel Valet](https://laravel.com/docs/valet), visit your application at:
+
+```
+http://your-project.test/cpanel/login
+```
+
+If you are using `php artisan serve`, the admin panel is available at `http://localhost:8000/cpanel/login`.
+
+The `/cpanel` prefix is configurable. See the [Configuration](/2.x/configuration) page for details.
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Configuration" icon="gear" href="/2.x/configuration">
+    Customize the admin prefix, models, middleware, and settings.
+  </Card>
+  <Card title="Dashboard" icon="chart-line" href="/2.x/dashboard">
+    Learn about the dashboard components and how to customize them.
+  </Card>
+  <Card title="Products" icon="box" href="/2.x/products">
+    Start building your product catalog.
+  </Card>
+</CardGroup>

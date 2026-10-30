@@ -1,0 +1,12 @@
+{
+  "title": "Reference",
+  "root": true,
+  "pages": [
+    "---TypeScript---",
+    "typescript-types",
+    "types/product",
+    "types/order",
+    "types/customer",
+    "types/catalog"
+  ]
+}
