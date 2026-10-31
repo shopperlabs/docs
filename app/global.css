@@ -1,17 +1,298 @@
 @import 'tailwindcss';
-@import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 @theme {
+  --color-brand-50: #eff6ff;
+  --color-brand-100: #dbeafe;
+  --color-brand-200: #bfdbfe;
+  --color-brand-300: #93c5fd;
+  --color-brand-400: #60a5fa;
+  --color-brand-500: #3b82f6;
+  --color-brand-600: #2563eb;
+  --color-brand-700: #1d4ed8;
+  --color-brand-800: #1e40af;
+  --color-brand-900: #1e3a8a;
+  --color-brand-950: #172554;
+  --color-brand: #2563eb;
+
   --font-sans: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --color-fd-primary: #2563eb;
-  --color-fd-primary-foreground: #ffffff;
+
+  --text-2xs: 0.625rem;
+  --text-2xs--line-height: 1rem;
+  --text-2xs--letter-spacing: 0.02em;
+  --text-xs: 0.75rem;
+  --text-xs--line-height: 1.125rem;
+  --text-sm: 0.875rem;
+  --text-sm--line-height: 1.375rem;
+  --text-base: 1rem;
+  --text-base--line-height: 1.75;
+  --text-lg: 1.125rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl: 1.25rem;
+  --text-xl--line-height: 1.875rem;
+  --text-2xl: 1.5rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl: 1.875rem;
+  --text-3xl--line-height: 2.375rem;
+  --text-4xl: 2rem;
+  --text-4xl--line-height: 2.5rem;
+  --text-4xl--letter-spacing: -0.02em;
+  --text-5xl: 2.5rem;
+  --text-5xl--line-height: 3rem;
+  --text-5xl--letter-spacing: -0.03em;
+  --text-6xl: 3rem;
+  --text-6xl--line-height: 3.5rem;
+  --text-6xl--letter-spacing: -0.04em;
+
+  --spacing-header: 64px;
+  /* The sticky band, for rails stuck under it: the header, plus the sections bar where `[data-sections]` adds it. */
+  --spacing-subheader: 64px;
+  --spacing-sidebar: 288px;
+  --spacing-toc: 224px;
+
+  --ease-spring: cubic-bezier(0.16, 1, 0.3, 1);
+
+  --animate-fade-in: fade-in 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-fade-out: fade-out 0.15s ease-in;
+  --animate-slide-in-left: slide-in-left 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-slide-out-left: slide-out-left 0.2s ease-in;
+  --animate-page-enter: page-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-scale-in: scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+
+  @keyframes fade-in {
+    from { opacity: 0; transform: translateY(3px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes fade-out {
+    from { opacity: 1; transform: translateY(0); }
+    to { opacity: 0; transform: translateY(-3px); }
+  }
+  @keyframes slide-in-left {
+    from { transform: translateX(-100%); }
+    to { transform: translateX(0); }
+  }
+  @keyframes slide-out-left {
+    from { transform: translateX(0); }
+    to { transform: translateX(-100%); }
+  }
+  @keyframes page-enter {
+    from { opacity: 0; transform: translateY(2px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes scale-in {
+    from { opacity: 0; transform: scale(0.5); }
+    to { opacity: 1; transform: scale(1); }
+  }
 }
 
-.dark {
-  --color-fd-primary: #3b82f6;
-  --color-fd-primary-foreground: #ffffff;
+/* `inline` resolves the reference at definition time, so utilities read whichever value :root or .dark holds. */
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+
+  --color-fd-background: hsl(var(--fd-background));
+  --color-fd-foreground: hsl(var(--fd-foreground));
+  --color-fd-muted: hsl(var(--fd-muted));
+  --color-fd-muted-foreground: hsl(var(--fd-muted-foreground));
+  --color-fd-popover: hsl(var(--fd-popover));
+  --color-fd-popover-foreground: hsl(var(--fd-popover-foreground));
+  --color-fd-card: hsl(var(--fd-card));
+  --color-fd-card-foreground: hsl(var(--fd-card-foreground));
+  --color-fd-border: hsl(var(--fd-border));
+  --color-fd-primary: hsl(var(--fd-primary));
+  --color-fd-primary-foreground: hsl(var(--fd-primary-foreground));
+  --color-fd-secondary: hsl(var(--fd-secondary));
+  --color-fd-secondary-foreground: hsl(var(--fd-secondary-foreground));
+  --color-fd-accent: hsl(var(--fd-accent));
+  --color-fd-accent-foreground: hsl(var(--fd-accent-foreground));
+  --color-fd-ring: hsl(var(--fd-ring));
+  --color-fd-info: hsl(var(--fd-info));
+  --color-fd-warning: hsl(var(--fd-warning));
+  --color-fd-error: hsl(var(--fd-error));
+  --color-fd-success: hsl(var(--fd-success));
+  --color-fd-idea: hsl(var(--fd-idea));
+  --color-fd-overlay: var(--fd-overlay);
+  --color-fd-diff-remove: var(--fd-diff-remove);
+  --color-fd-diff-remove-symbol: var(--fd-diff-remove-symbol);
+  --color-fd-diff-add: var(--fd-diff-add);
+  --color-fd-diff-add-symbol: var(--fd-diff-add-symbol);
+}
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 240 10% 8%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 8%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 8%;
+    --muted: 240 8% 94%;
+    --muted-foreground: 240 6% 42%;
+    --border: 240 8% 88%;
+    --input: 240 8% 88%;
+    --ring: 221 83% 53%;
+    --primary: 221 83% 53%;
+    --primary-foreground: 0 0% 98%;
+    --radius: 0.5rem;
+
+    /* The sticky band's height plus 8px. */
+    --nav-offset: 72px;
+
+    --fd-background: 240 10% 98%;
+    --fd-foreground: 240 10% 8%;
+    --fd-muted: 240 8% 94%;
+    --fd-muted-foreground: 240 6% 42%;
+    --fd-popover: 0 0% 100%;
+    --fd-popover-foreground: 240 10% 8%;
+    --fd-card: 0 0% 100%;
+    --fd-card-foreground: 240 10% 8%;
+    --fd-border: 240 8% 88%;
+    --fd-primary: 221 83% 53%;
+    --fd-primary-foreground: 0 0% 98%;
+    --fd-secondary: 240 8% 92%;
+    --fd-secondary-foreground: 240 10% 8%;
+    --fd-accent: 240 6% 82%;
+    --fd-accent-foreground: 240 10% 8%;
+    --fd-ring: 221 83% 53%;
+    --fd-info: 205 85% 45%;
+    --fd-warning: 38 92% 50%;
+    --fd-error: 0 72% 51%;
+    --fd-success: 142 71% 35%;
+    --fd-idea: 271 81% 56%;
+    --fd-overlay: hsla(0, 0%, 0%, 0.35);
+    --fd-diff-remove: rgba(200, 10, 100, 0.12);
+    --fd-diff-remove-symbol: rgb(230, 10, 100);
+    --fd-diff-add: rgba(14, 180, 100, 0.1);
+    --fd-diff-add-symbol: rgb(10, 200, 100);
+
+    color-scheme: light;
+  }
+
+  .dark {
+    --background: 240 12% 6%;
+    --foreground: 210 16% 90%;
+    --card: 240 10% 10%;
+    --card-foreground: 210 16% 90%;
+    --popover: 240 10% 11%;
+    --popover-foreground: 210 16% 90%;
+    --muted: 240 8% 15%;
+    --muted-foreground: 218 11% 60%;
+    --border: 240 8% 18%;
+    --input: 240 8% 19%;
+    --ring: 217 91% 60%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 0 0% 98%;
+
+    --fd-background: 240 12% 6%;
+    --fd-foreground: 210 16% 90%;
+    --fd-muted: 240 8% 15%;
+    --fd-muted-foreground: 218 11% 60%;
+    --fd-popover: 240 10% 11%;
+    --fd-popover-foreground: 210 16% 90%;
+    --fd-card: 240 10% 10%;
+    --fd-card-foreground: 210 16% 90%;
+    --fd-border: 240 8% 22%;
+    --fd-primary: 217 91% 60%;
+    --fd-primary-foreground: 0 0% 98%;
+    --fd-secondary: 240 8% 15%;
+    --fd-secondary-foreground: 210 16% 90%;
+    --fd-accent: 240 8% 30%;
+    --fd-accent-foreground: 210 16% 90%;
+    --fd-ring: 217 91% 60%;
+    --fd-info: 205 85% 60%;
+    --fd-warning: 38 92% 50%;
+    --fd-error: 0 72% 62%;
+    --fd-success: 142 65% 48%;
+    --fd-idea: 271 91% 70%;
+    --fd-overlay: hsla(0, 0%, 0%, 0.65);
+    --fd-diff-remove: rgba(230, 30, 100, 0.18);
+    --fd-diff-remove-symbol: rgb(255, 80, 130);
+    --fd-diff-add: rgba(20, 210, 120, 0.15);
+    --fd-diff-add-symbol: rgb(60, 220, 130);
+
+    color-scheme: dark;
+  }
+
+  /* From md, versions split into sections show the 48px sections bar under the header. */
+  @media (width >= 48rem) {
+    [data-sections] {
+      --spacing-subheader: 112px;
+      --nav-offset: 120px;
+    }
+  }
+
+  * {
+    @apply border-border;
+  }
+
+  html {
+    @apply scroll-smooth;
+    -webkit-text-size-adjust: 100%;
+    text-rendering: optimizeLegibility;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+  }
+
+  ::selection {
+    @apply bg-brand/25 text-brand-900;
+  }
+  .dark ::selection {
+    @apply bg-brand/30 text-brand-100;
+  }
+}
+
+/* Unlayered so it beats the `scroll-m-28` fumadocs puts on headings. */
+:target,
+[id] {
+  scroll-margin-top: var(--nav-offset);
+}
+
+@utility z-overlay {
+  z-index: 50;
+}
+@utility z-modal {
+  z-index: 60;
+}
+
+@utility no-scrollbar {
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* Zinc scale read by the component preview classes below */
@@ -29,8 +310,19 @@
   --gray-950: 9 9 11;
 }
 
-html {
-  scrollbar-gutter: stable;
+.prose :where(h1, h2, h3, h4),
+h1 {
+  font-weight: 500;
+  letter-spacing: -0.025rem;
+}
+
+.prose :where(b, strong) {
+  font-weight: 500;
+}
+
+.prose :where(a):not(:where([data-card], .not-prose, .not-prose *)) {
+  font-weight: 500;
+  color: var(--color-fd-primary);
 }
 
 html > body[data-scroll-locked] {
