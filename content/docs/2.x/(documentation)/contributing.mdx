@@ -3,7 +3,7 @@ title: "Contribution Guide"
 description: "Guidelines for contributing to Shopper"
 ---
 
-Contributions are accepted via Pull Requests on [Github](https://github.com/shopperlabs/shopper).
+Contributions are accepted via Pull Requests on [GitHub](https://github.com/shopperlabs/shopper).
 
 ## Bug Reports
 
@@ -11,8 +11,9 @@ To encourage active collaboration, Shopper strongly encourages pull requests, no
 
 ## Pull Requests
 
+- **Add tests** - A pull request that changes behaviour comes with tests that cover it.
 - **Document any change in behaviour** - Make sure the `readme.md` and any other relevant documentation are kept up-to-date.
-- **Consider our release cycle** - We try to follow [SemVer v2.0.0](http://semver.org/).
+- **Consider our release cycle** - Shopper follows [SemVer v2.0.0](https://semver.org/): minor and patch releases never contain breaking changes.
 - **One pull request per feature** - If you want to do more than one thing, send multiple pull requests.
 - **Send coherent history** - Make sure each individual commit in your pull request is meaningful. If you had to make multiple intermediate commits while developing, please [squash them](http://www.git-scm.com/book/en/v2/Git-Tools-Rewriting-History#Changing-Multiple-Commit-Messages) before submitting.
 
@@ -20,11 +21,11 @@ To encourage active collaboration, Shopper strongly encourages pull requests, no
 
 ## Security Vulnerabilities
 
-If you discover a security vulnerability within Shopper, please email us at [arthur@shopperlabs.co](mailto:arthur@shopperlabs.co). All security vulnerabilities will be promptly addressed.
+If you discover a security vulnerability within Shopper, report it privately through [GitHub](https://github.com/shopperlabs/shopper/security/advisories/new) or by email at [arthur@shopperlabs.co](mailto:arthur@shopperlabs.co). Do not open a public issue. All security vulnerabilities will be promptly addressed.
 
 ## Coding Style
 
-Laravel follows the [PSR-2](https://github.com/php-fig/fig-standards/blob/master/accepted/PSR-2-coding-style-guide.md) coding standard and the [PSR-4](https://github.com/php-fig/fig-standards/blob/master/accepted/PSR-4-autoloader.md) autoloading standard.
+Shopper follows the Laravel coding style, checked by [Laravel Pint](https://laravel.com/docs/pint) with the rules in `pint.json`, and the [PSR-4](https://www.php-fig.org/psr/psr-4/) autoloading standard. Run `composer lint` to format your changes before you push them.
 
 ## Code of Conduct
 

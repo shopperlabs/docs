@@ -3,7 +3,7 @@ title: "Installation"
 description: "Install Shopper into your existing Laravel application in a few steps."
 ---
 
-Shopper requires an existing Laravel 11.28+ or 12.x application. If you do not have one yet, create a new Laravel project first by following the [Laravel installation guide](https://laravel.com/docs/installation).
+Shopper requires an existing Laravel 11.28+, 12 or 13 application. If you do not have one yet, create a new Laravel project first by following the [Laravel installation guide](https://laravel.com/docs/installation).
 
 ## Install the Package
 
@@ -39,7 +39,7 @@ class User extends Authenticatable implements ShopperUser
 }
 ```
 
-The `InteractsWithShopper` trait provides relationships for roles, permissions, orders, addresses, and two-factor authentication. The `ShopperUser` interface ensures your model adheres to the contract expected by Shopper's admin panel.
+The `InteractsWithShopper` trait provides roles and permissions, orders, addresses, discounts and the profile photo. Two-factor authentication needs two more contracts and traits, described on the [Two-Factor Authentication](/2.x/two-factor) page. The `ShopperUser` interface ensures your model adheres to the contract expected by Shopper's admin panel.
 
 ## Run the Installer
 
@@ -57,9 +57,21 @@ The installer performs these steps:
 4. Creates a symlink from `vendor/shopper/framework/public` to `public/cpanel` (or your configured prefix)
 5. Prompts you to run migrations and seed the database with roles, permissions, and default data
 
+If `config/shopper/admin.php` already exists, the installer stops and prints the commands to publish the configuration and run the migrations by hand.
+
+<Warning>
+  The migrations change your `users` table: the `name` column is renamed to `last_name`, and columns such as `first_name`, `gender`, `phone_number` and `birth_date` are added. Update any code, factory or form of your application that reads or writes `name` before you migrate.
+</Warning>
+
 <Note>
-  All Shopper database tables are prefixed with `sh_` by default to avoid conflicts with your existing tables. You can change this in `config/shopper/core.php`.
+  All Shopper database tables are prefixed with `sh_` by default to avoid conflicts with your existing tables. To use another prefix, answer no when the installer asks to run the migrations, change `table_prefix` in `config/shopper/core.php`, then run `php artisan migrate` and the two seeders listed on the [Configuration](/2.x/configuration#database-table-prefix) page.
 </Note>
+
+Product, category and brand images are stored on the `public` disk. If your application has never run it, create the storage link so that they are served:
+
+```bash
+php artisan storage:link
+```
 
 ## Create an Admin User
 
@@ -69,7 +81,7 @@ Create your first admin user to access the dashboard:
 php artisan shopper:user
 ```
 
-The command prompts for an email, first name, last name, and password. The user is automatically assigned the administrator role.
+The command prompts for an email, first name, last name, and password (at least 6 characters). The user is assigned the administrator role, which exists only once the seeders have run: if you skipped them in the installer, run them first.
 
 ## Access the Admin Panel
 
@@ -80,6 +92,8 @@ http://your-project.test/cpanel/login
 ```
 
 If you are using `php artisan serve`, the admin panel is available at `http://localhost:8000/cpanel/login`.
+
+On the first login, Shopper redirects you to a setup wizard that asks for the store name, email, address and currencies. The admin panel opens once these are saved. See [Setup Store](/2.x/setup-store) for what the wizard creates.
 
 The `/cpanel` prefix is configurable. See the [Configuration](/2.x/configuration) page for details.
 

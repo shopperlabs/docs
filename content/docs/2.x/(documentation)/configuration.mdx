@@ -11,6 +11,7 @@ The following files are published by `php artisan shopper:install`:
 
 | File | Package | Purpose |
 |------|---------|---------|
+| `addons.php` | admin | Disables an installed add-on by its ID |
 | `admin.php` | admin | Admin panel prefix, domain, roles, branding, locales |
 | `auth.php` | admin | Authentication guard, 2FA toggle, password reset |
 | `core.php` | core | Database table prefix, barcode type |
@@ -21,7 +22,7 @@ The following files are published by `php artisan shopper:install`:
 | `routes.php` | admin | Additional middleware and custom route files |
 | `settings.php` | admin | Settings page registry |
 
-Additional config files are published when you install optional packages like `shopper/cart` (`cart.php`), `shopper/payment` (`payment.php`), `shopper/shipping` (`shipping.php`), and `shopper/stripe` (`stripe.php`).
+The installer also publishes `cart.php`, `payment.php` and `shipping.php`, because `shopper/cart`, `shopper/payment` and `shopper/shipping` are installed with the admin panel. The Stripe driver publishes its own file on demand with `php artisan vendor:publish --tag=shopper-stripe-config`.
 
 ## Admin Panel
 
@@ -93,8 +94,20 @@ All Shopper tables are prefixed with `sh_` by default so they do not conflict wi
 ```
 
 <Warning>
-  Set the table prefix before running `php artisan shopper:install`. Changing it after installation requires writing a custom migration to rename all existing Shopper tables.
+  Set the table prefix before the Shopper migrations run. Changing it afterwards requires a custom migration that renames every Shopper table.
 </Warning>
+
+The file only exists once the installer has published it, so change the prefix in this order:
+
+1. Run `php artisan shopper:install` and answer no when it asks to run the migrations and seeders.
+2. Change `table_prefix` in `config/shopper/core.php`.
+3. Run the migrations and the two seeders the installer would have run:
+
+```bash
+php artisan migrate
+php artisan db:seed --class="Shopper\Core\Database\Seeders\ShopperSeeder"
+php artisan db:seed --class="Shopper\Database\Seeders\AuthTableSeeder"
+```
 
 ## Feature Flags
 
@@ -115,7 +128,7 @@ return [
 ];
 ```
 
-For example, if your store does not use product reviews, set `'review' => FeatureState::Disabled` and the reviews page, sidebar link, and product form tab disappear from the admin panel.
+For example, if your store does not use product reviews, set `'review' => FeatureState::Disabled` and the reviews page and its sidebar link disappear from the admin panel.
 
 ## Models
 
@@ -151,12 +164,12 @@ The `auth.php` config controls the authentication guard, two-factor authenticati
 ```php title="config/shopper/auth.php"
 return [
     'guard' => 'web',
-    '2fa_enabled' => false,
+    '2fa_enabled' => env('SHOPPER_ENABLED_TWO_FACTOR', false),
     'password_reset' => true,
 ];
 ```
 
-Set `2fa_enabled` to `true` to require two-factor authentication for admin users. See the [Two-Factor Authentication](/2.x/two-factor) page for setup details.
+Set `SHOPPER_ENABLED_TWO_FACTOR=true` in your `.env` file to make two-factor authentication available to admin users. Each user then turns it on from their profile; it is not forced on anyone. See the [Two-Factor Authentication](/2.x/two-factor) page for setup details.
 
 ## Middleware
 
@@ -202,7 +215,7 @@ This creates `config/shopper/components/category.php` where you can point any co
 | `review` | `components/review.php` |
 | `setting` | `components/setting.php` |
 
-You can publish all component configs at once with `php artisan shopper:component:publish` (no argument).
+To publish every component config at once, pass `--all`. Without an argument or `--all`, the command asks which feature to publish. Add `--force` to overwrite files you already published.
 
 ## Settings
 

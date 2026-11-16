@@ -19,7 +19,7 @@ Shopper takes a different path. It is a Laravel package, not a platform. You ins
 
 Most e-commerce systems assume one-size-fits-all. But selling cars is not the same as selling sneakers, and a subscription box service has nothing in common with a marketplace. Shopper recognizes this by giving you composable building blocks instead of a rigid platform.
 
-Every Eloquent model is swappable via configuration. Every Livewire component can be overridden. Every feature can be toggled on or off. You start with a solid, production-ready foundation and shape it to match your business.
+The main Eloquent models (products, categories, orders and more) can be swapped for your own classes through configuration. The admin pages can be replaced with your own Livewire components. Optional sections such as brands, discounts or reviews can be turned off. You start with a production-ready foundation and shape it to match your business.
 
 ### Headless from Day One
 
@@ -33,7 +33,7 @@ Your User model gains Shopper capabilities through a trait. The admin panel is a
 
 ## Tech Stack
 
-Shopper is built on top of [Laravel](https://laravel.com), [Filament](https://filamentphp.com), and [Tailwind CSS](https://tailwindcss.com). The admin panel uses [Livewire](https://livewire.laravel.com) for its interactive components.
+Shopper is built on top of [Laravel](https://laravel.com), [Filament](https://filamentphp.com), and [Tailwind CSS](https://tailwindcss.com). The admin panel is made of [Livewire](https://livewire.laravel.com) pages that use Filament's tables, forms and actions. It is not a Filament panel plugin: it registers its own routes and layout.
 
 <Note>
   Although the admin panel uses Laravel Livewire, there is no requirement for the storefront to use Livewire. You can build your storefront with any stack.
@@ -41,21 +41,25 @@ Shopper is built on top of [Laravel](https://laravel.com), [Filament](https://fi
 
 ## Packages
 
-Shopper is made up of several Composer packages that work together:
+Shopper is made up of several Composer packages that work together. Installing `shopper/framework` pulls in `core`, `cart`, `payment`, `shipping` and `sidebar`:
 
-- `shopper/core` is the e-commerce engine: models, contracts, migrations, enums, observers, and all business logic. It has no dependency on any UI layer.
+- `shopper/core` is the e-commerce engine: models, contracts, migrations, enums and observers. It has no dependency on any UI layer.
 
-- `shopper/admin` is the admin panel, built on [Filament](https://filamentphp.com), for managing products, orders, customers, and more. It extends core models with media support and provides all Livewire pages and components.
+- `shopper/framework` is the admin panel, for managing products, orders, customers, and more. It provides all Livewire pages and components, and adds media library support (through [Spatie Media Library](https://spatie.be/docs/laravel-medialibrary)) to products, variants, categories, brands and collections.
 
-- `shopper/cart` handles shopping cart management.
+- `shopper/cart` handles shopping carts and calculates their totals through a pipeline (lines, discounts, taxes).
 
-- `shopper/payment` provides a driver-based payment processing architecture with an official [Stripe](https://stripe.com) addon (`shopper/stripe`).
+- `shopper/payment` provides a driver-based payment architecture. The official [Stripe](https://stripe.com) driver is a separate package, `shopper/stripe`, that you install with Composer.
 
-- `shopper/shipping` manages carriers, zones, and shipping rate calculation.
+- `shopper/shipping` calculates shipping rates through drivers, with FedEx, UPS and USPS drivers included. Carriers and zones themselves are core models.
 
-- `shopper/types` is an npm package (`@shopperlabs/shopper-types`) with TypeScript type definitions for storefront development.
+- `shopper/sidebar` builds the admin panel navigation. You use it when you add your own entries to the [sidebar](/2.x/sidebar/overview).
 
-The `core` package defines contracts (interfaces) for every model. The `admin` package extends core models with media support. When you swap a model via configuration, the entire system (admin panel, relationships, route bindings) uses your custom class automatically.
+- `shopper/upgrade` is a temporary package for upgrades: an Artisan command for data fixes and [Laravel Boost](https://github.com/laravel/boost) skills that guide an AI assistant through breaking changes. You install it as a dev dependency when an [upgrade guide](/2.x/upgrade) asks for it, and remove it after.
+
+For storefront development, the npm package `@shopperlabs/shopper-types` provides TypeScript type definitions for Shopper's models.
+
+The `core` package defines contracts (interfaces) for its models. When you swap a model via configuration, the entire system (admin panel, relationships, route bindings) uses your custom class automatically.
 
 ## Key Features
 
@@ -87,7 +91,7 @@ Shopper ships with everything you need to run an online store:
     Carriers, zones, rates, and shipment tracking.
   </Card>
   <Card title="Payments" icon="credit-card">
-    Driver-based payment processing with Stripe support out of the box.
+    Driver-based payment processing, with an official Stripe driver.
   </Card>
   <Card title="Brands" icon="store">
     Organize products by brand with media and SEO.
@@ -96,7 +100,7 @@ Shopper ships with everything you need to run an online store:
     Customer product reviews and ratings.
   </Card>
   <Card title="Channels" icon="globe">
-    Multi-channel publishing for different storefronts.
+    Assign products to the sales channels they are sold on, such as a web store or a mobile app.
   </Card>
 </CardGroup>
 
@@ -104,11 +108,11 @@ Shopper ships with everything you need to run an online store:
 
 Shopper is designed to be extended, not forked. Three mechanisms make this possible.
 
-**Model swapping** lets you replace any Eloquent model with your own. Define your custom class in `config/shopper/models.php` and the entire system uses it, including the admin panel, relationships, and route model binding.
+**Model swapping** lets you replace a model with your own class that extends it. The twelve swappable models (products, variants, categories, brands, collections, orders, channels, inventories, suppliers, addresses, tax zones and tax rates) are listed in `config/shopper/models.php`. Point an entry to your class and the entire system uses it, including the admin panel, relationships, and route model binding.
 
-**Component overriding** lets you replace any admin panel page or form. Run `php artisan shopper:component:publish {feature}` to get a configuration file where you can point any component to your own Livewire class.
+**Component overriding** lets you replace an admin panel page or form with your own Livewire component. Run `php artisan shopper:component:publish product` to get `config/shopper/components/product.php`, where each page and form of that section points to a class you can change. Pass `--all` to publish every section at once.
 
-**Feature toggling** lets you disable entire sections of the admin panel. Set any feature to `FeatureState::Disabled` in `config/shopper/features.php` and it disappears from the UI.
+**Feature toggling** lets you remove optional sections of the admin panel: attributes, brands, categories, collections, discounts, reviews, suppliers and tags. Set a feature to `FeatureState::Disabled` in `config/shopper/features.php` and its pages and menu entries disappear.
 
 ## Stability and Versioning
 
@@ -120,7 +124,7 @@ For details on supported versions and maintenance windows, see the [Version Supp
 
 Shopper is the right choice when you already have a Laravel application (or want to build one) and need to add e-commerce capabilities without adopting an opinionated platform. It works well when your storefront is non-standard: a product configurator, a subscription service, an auction site, or anything that does not fit the typical "browse and checkout" template.
 
-If you need a store running in an hour, Shopify is a better fit. If you need dynamic product attributes managed entirely through the admin UI, Lunar handles that well. If you are not in the Laravel ecosystem, MedusaJS is worth considering.
+If you need a store running in an hour, Shopify is a better fit. If you are not in the Laravel ecosystem, MedusaJS is worth considering.
 
 ## Next Steps
 

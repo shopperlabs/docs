@@ -19,7 +19,7 @@ The demo store covers the full e-commerce experience:
 
 - **Product catalog** with categories, collections, attribute filtering, and search
 - **Product pages** with variant selection, image gallery, multi-currency pricing, and reviews
-- **Multi-step checkout** with address selection, shipping method, and payment (Stripe, NotchPay, Cash)
+- **Multi-step checkout** with address selection, shipping method, and payment (Stripe or cash on delivery)
 - **Customer accounts** with profile management, address book, and order history
 - **Blog** with articles, categories, featured images, and rich content
 - **Multi-zone support** with country-based currency switching and shipping options
@@ -39,7 +39,7 @@ The demo is designed as a reference implementation. Here are the main patterns y
 
 **Multi-currency pricing** via shipping zones. The `ZoneSessionManager` action and `ZoneSelector` slide-over component handle country-based currency switching. The `HasProductPricing` trait on the Product model formats prices based on the active zone's currency.
 
-**Payment gateway integration** with multiple providers. The checkout supports Stripe (with webhooks via `StripeWebhookController`), NotchPay, and Cash on Delivery, configured through `config/shopper/payment.php`.
+**Payment gateway integration** with Shopper's payment drivers. The checkout offers Stripe (with webhooks via `StripeWebhookController`) and cash on delivery. Each zone lists the payment methods its customers can choose, and the Stripe keys live in `config/shopper/payment.php`.
 
 **Feature toggling.** The demo disables the Suppliers feature in `config/shopper/features.php` to show that you can turn off any part of Shopper you don't need.
 
