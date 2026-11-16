@@ -12,6 +12,7 @@ import { notFound } from 'next/navigation';
 import { MobileTOC } from '@/components/layout/mobile-toc';
 import { PageSiblings } from '@/components/layout/page-siblings';
 import { TableOfContents } from '@/components/layout/table-of-contents';
+import { GithubIcon } from '@/components/ui/brand-icons';
 import { scopeFor, versionHome } from '@/components/layout/tree';
 import { getMDXComponents } from '@/components/mdx';
 import { getPageImageUrl, getPageMarkdownUrl, gitConfig } from '@/lib/shared';
@@ -90,7 +91,10 @@ export default async function Page(props: PageProps<'/[...slug]'>) {
 
         <div className="mt-12 flex flex-wrap items-center justify-between gap-4">
           {page.data.lastModified ? <PageLastUpdate date={page.data.lastModified} /> : <span />}
-          <EditOnGitHub href={githubUrl} className={pageAction} />
+          <EditOnGitHub href={githubUrl} className={pageAction}>
+            <GithubIcon className="size-3.5" />
+            Edit on GitHub
+          </EditOnGitHub>
         </div>
 
         <PageSiblings prev={prev} next={next} />

@@ -8,7 +8,8 @@ export const docsContentRoute = '/llms.mdx';
 export const gitConfig = {
   user: 'shopperlabs',
   repo: 'docs',
-  branch: '3.x',
+  // GitHub resolves HEAD to the default branch, so page links follow whichever branch the site ships from.
+  branch: 'HEAD',
 };
 
 export const shopperRepo = {

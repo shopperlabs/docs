@@ -426,6 +426,10 @@ figure.shiki > div > figcaption + * {
   font-weight: 500;
 }
 
+.prose :where(ul):not(:where(.not-prose, .not-prose *)) {
+  list-style-type: square;
+}
+
 .prose :where(a):not(:where([data-card], .not-prose, .not-prose *)) {
   font-weight: 500;
   color: var(--color-fd-primary);
