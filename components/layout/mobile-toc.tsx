@@ -24,7 +24,7 @@ export function MobileTOC({ toc }: { toc: TOCItemType[] }) {
         onClick={() => setOpen(!open)}
         className={clsx(
           'flex w-full items-center justify-between px-4 py-3.5',
-          'min-h-[44px] text-sm font-medium text-foreground',
+          'min-h-[44px] font-mono text-xs font-medium tracking-wide text-foreground uppercase',
           'transition-colors duration-200 hover:bg-muted/30',
           'focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 focus-visible:outline-hidden',
         )}

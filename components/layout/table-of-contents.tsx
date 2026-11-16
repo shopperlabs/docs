@@ -24,7 +24,7 @@ export function TableOfContents({ toc }: { toc: TOCItemType[] }) {
           maxHeight: 'calc(100dvh - var(--nav-offset, 72px))',
         }}
       >
-        <p className="mb-3 text-[11px] font-semibold tracking-widest text-muted-foreground/70 uppercase">
+        <p className="mb-3 font-mono text-xs/5 tracking-wide text-zinc-500 uppercase dark:text-zinc-400">
           On this page
         </p>
         <AnchorProvider toc={items}>

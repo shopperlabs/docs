@@ -40,7 +40,7 @@ export function RailShell({
         </main>
       </div>
 
-      <Footer tree={tree} />
+      <Footer tree={tree} stars={stars} />
     </>
   );
 }

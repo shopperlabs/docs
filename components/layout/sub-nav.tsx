@@ -24,20 +24,14 @@ export function SubNav({ scope }: { scope: Scope }) {
                 href={tab.href}
                 aria-current={active ? (pathname === tab.href ? 'page' : 'true') : undefined}
                 className={clsx(
-                  'group relative flex h-full items-center font-medium whitespace-nowrap focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:outline-hidden focus-visible:ring-inset',
+                  'relative flex h-full items-center font-mono text-xs font-medium tracking-wide whitespace-nowrap uppercase focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:outline-hidden focus-visible:ring-inset',
+                  'after:absolute after:inset-x-0 after:bottom-0 after:h-0.5 after:origin-right after:bg-primary after:transition-transform after:duration-300 after:ease-out motion-reduce:after:transition-none',
                   active
-                    ? 'text-zinc-800 [text-shadow:-0.2px_0_0_currentColor,0.2px_0_0_currentColor] dark:text-zinc-200'
-                    : 'text-zinc-600 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-300',
+                    ? 'text-zinc-950 after:scale-x-100 dark:text-white'
+                    : 'text-zinc-600 after:scale-x-0 hover:text-zinc-950 hover:after:origin-left hover:after:scale-x-100 dark:text-zinc-400 dark:hover:text-white',
                 )}
               >
                 {tab.name}
-                <span
-                  aria-hidden
-                  className={clsx(
-                    'absolute bottom-0 left-0 h-[1.5px] w-full',
-                    active ? 'bg-primary' : 'group-hover:bg-zinc-200 dark:group-hover:bg-zinc-700',
-                  )}
-                />
               </Link>
             </li>
           );

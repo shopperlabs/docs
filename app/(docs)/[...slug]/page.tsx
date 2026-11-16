@@ -21,6 +21,17 @@ import { getDocsTree, source } from '@/lib/source';
 const crumbLink =
   'transition-colors duration-200 hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 focus-visible:outline-hidden';
 
+// The marketing site's outline button, over Fumadocs' secondary one: its fill sweeps in from the left.
+// `data-[popup-open]:` stays in Fumadocs' spelling, not the canonical `data-popup-open:`: `cn` drops their
+// `data-[popup-open]:bg-fd-accent` only when the variant is written the same way.
+const pageAction = [
+  'relative isolate border-zinc-950/10 bg-transparent px-3 font-mono text-xs/5 tracking-wide text-zinc-950 uppercase',
+  'hover:border-zinc-950/20 hover:bg-transparent hover:text-zinc-950 data-[popup-open]:bg-transparent',
+  'after:absolute after:inset-0 after:-z-10 after:origin-right after:scale-x-0 after:bg-zinc-950/4 after:transition-transform after:duration-300 after:ease-out motion-reduce:after:transition-none',
+  'hover:after:origin-left hover:after:scale-x-100 data-popup-open:after:origin-left data-popup-open:after:scale-x-100',
+  'dark:border-white/15 dark:text-white dark:after:bg-white/5 dark:hover:border-white/25 dark:hover:text-white',
+].join(' ');
+
 export default async function Page(props: PageProps<'/[...slug]'>) {
   const params = await props.params;
   const page = source.getPage(params.slug);
@@ -59,15 +70,15 @@ export default async function Page(props: PageProps<'/[...slug]'>) {
         </nav>
 
         <header className="mb-9">
-          <h1 className="text-3xl/tight font-bold tracking-tight text-balance text-foreground sm:text-4xl">
+          <h1 className="text-3xl/tight font-medium tracking-tight text-balance text-foreground sm:text-4xl">
             {page.data.title}
           </h1>
           {page.data.description ? (
             <p className="mt-3 text-lg/7 text-pretty text-muted-foreground sm:text-base/7">{page.data.description}</p>
           ) : null}
           <div className="mt-6 flex items-center gap-2">
-            <MarkdownCopyButton markdownUrl={markdownUrl} />
-            <ViewOptionsPopover markdownUrl={markdownUrl} githubUrl={githubUrl} />
+            <MarkdownCopyButton markdownUrl={markdownUrl} className={pageAction} />
+            <ViewOptionsPopover markdownUrl={markdownUrl} githubUrl={githubUrl} className={pageAction} />
           </div>
         </header>
 
@@ -79,7 +90,7 @@ export default async function Page(props: PageProps<'/[...slug]'>) {
 
         <div className="mt-12 flex flex-wrap items-center justify-between gap-4">
           {page.data.lastModified ? <PageLastUpdate date={page.data.lastModified} /> : <span />}
-          <EditOnGitHub href={githubUrl} />
+          <EditOnGitHub href={githubUrl} className={pageAction} />
         </div>
 
         <PageSiblings prev={prev} next={next} />

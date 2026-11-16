@@ -16,12 +16,15 @@ export const shopperRepo = {
   repo: 'shopper',
 };
 
+export const siteUrl = 'https://shopperphp.com';
+
 export const links = {
   github: 'https://github.com/shopperlabs/shopper',
   releases: 'https://github.com/shopperlabs/shopper/releases',
   discussions: 'https://github.com/shopperlabs/shopper/discussions',
-  demo: 'https://demo.laravelshopper.dev',
-  blog: 'https://laravelshopper.dev/blog',
+  contributing: 'https://github.com/shopperlabs/shopper/blob/3.x/CONTRIBUTING.md',
+  demo: 'https://demo.shopperphp.com',
+  blog: `${siteUrl}/blog`,
   discord: 'https://discord.gg/r4VUvHm34',
   x: 'https://x.com/laravelshopper',
 };

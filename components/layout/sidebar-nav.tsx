@@ -165,7 +165,7 @@ function NodeItems({ nodes, depth, onNavigate }: { nodes: TreeNode[]; depth: num
           key={node.$id ?? `sep-${i}`}
           role="separator"
           aria-label={typeof node.name === 'string' ? node.name : undefined}
-          className="mt-4 mb-1 text-[11px] font-semibold tracking-widest text-muted-foreground/70 uppercase first:mt-1"
+          className="mt-4 mb-1 font-mono text-xs/5 tracking-wide text-zinc-500 uppercase first:mt-1 dark:text-zinc-400"
           style={{ paddingLeft: indentFor(depth) }}
         >
           <span aria-hidden="true">{node.name}</span>
@@ -249,7 +249,7 @@ function NavigationGroup({ group, onNavigate }: { group: NavGroup; onNavigate?: 
       <li
         role="separator"
         aria-label={group.title}
-        className="relative mt-8 text-[11px] font-semibold tracking-widest text-muted-foreground/70 uppercase first:mt-0"
+        className="relative mt-8 font-mono text-xs/5 tracking-wide text-zinc-500 uppercase first:mt-0 dark:text-zinc-400"
       >
         <span aria-hidden="true">{group.title}</span>
       </li>

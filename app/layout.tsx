@@ -1,11 +1,17 @@
 import { RootProvider } from 'fumadocs-ui/provider/next';
 import type { Metadata } from 'next';
-import { Geist_Mono, Instrument_Sans } from 'next/font/google';
+import { Geist_Mono, Instrument_Sans, Inter } from 'next/font/google';
 import './global.css';
 
 const sans = Instrument_Sans({
   subsets: ['latin'],
   variable: '--font-instrument-sans',
+});
+
+const display = Inter({
+  subsets: ['latin'],
+  axes: ['opsz'],
+  variable: '--font-inter',
 });
 
 const mono = Geist_Mono({
@@ -25,7 +31,7 @@ export const metadata: Metadata = {
 
 export default function Layout({ children }: LayoutProps<'/'>) {
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable}`} suppressHydrationWarning>
+    <html lang="en" className={`${sans.variable} ${display.variable} ${mono.variable}`} suppressHydrationWarning>
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
         <a
           href="#content"
