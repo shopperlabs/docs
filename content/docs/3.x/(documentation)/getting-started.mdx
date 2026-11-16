@@ -1,0 +1,145 @@
+---
+title: Introduction
+description: Shopper is an open-source headless e-commerce package for Laravel, with an admin panel, a Store API and the commerce logic your store needs.
+---
+
+Shopper is an open-source headless e-commerce package for Laravel. It adds an admin panel, a Store API for your storefront, and the commerce logic a store needs (catalog, carts, orders, payments, shipping, taxes) to the Laravel application you already have, without taking over your codebase.
+
+## Why Shopper?
+
+There are several ways to add e-commerce to a Laravel application. You could integrate an external platform like Shopify, adopt a full e-commerce system like Lunar or Bagisto, or build everything from scratch. Each approach has trade-offs.
+
+Shopper takes a different path. It is a Laravel package, not a platform. You install it into your existing application the same way you would install `spatie/laravel-permission` or `laravel/cashier`. Your routes, your middleware, your authentication, your deploy pipeline stay unchanged. You add e-commerce to your app, not the other way around.
+
+### Building Blocks, Not a Monolith
+
+Most e-commerce systems assume one-size-fits-all. But selling cars is not the same as selling sneakers, and a subscription box service has nothing in common with a marketplace. Shopper recognizes this by giving you composable building blocks instead of a rigid platform.
+
+The main Eloquent models (products, categories, orders and more) can be swapped for your own classes through configuration. The admin pages can be replaced with your own Livewire components. Optional sections such as brands, campaigns or reviews can be turned off. You start with a production-ready foundation and shape it to match your business.
+
+### Headless from Day One
+
+Shopper handles the commerce logic and the admin panel. You build the storefront with whatever stack your team already ships with: Blade, Livewire, Inertia, Next.js, Nuxt, React Native, or anything else.
+
+A storefront rendered by Laravel reads the Eloquent models directly. A storefront that runs elsewhere talks to the Store API, a [JSON:API](https://jsonapi.org) that exposes the catalog, carts, checkout, customer accounts and orders. Customers sign in with Laravel Sanctum tokens, and the official JavaScript SDK, `@shopperlabs/shopper-sdk`, calls the API from browsers, Node.js 18+, React Native and edge runtimes.
+
+### A Package, Not a Platform
+
+This distinction matters. A platform owns your application. You build on top of it, adapt to its conventions, and work within its constraints. A package is a tool you control. Shopper adds e-commerce capabilities to your Laravel application without replacing your User model, your authentication system, or your application structure.
+
+Your User model gains Shopper capabilities through a trait. The admin panel is a feature of your app, not the other way around. Your database is extended, not replaced.
+
+## Tech Stack
+
+Shopper 3 runs on [Laravel](https://laravel.com) 12 or 13 and PHP 8.3 or higher. The admin panel is made of [Livewire](https://livewire.laravel.com) 4 pages that use [Filament](https://filamentphp.com) 5 tables, forms and actions, styled with [Tailwind CSS](https://tailwindcss.com). It is not a Filament panel plugin: it registers its own routes and layout.
+
+<Callout>
+  Although the admin panel uses Livewire, there is no requirement for the storefront to use Livewire. You can build your storefront with any stack.
+</Callout>
+
+## Packages
+
+Shopper is made up of several Composer packages that work together. Installing `shopper/framework` pulls in `core`, `cart`, `payment`, `shipping` and `sidebar`; the others are installed when you need them.
+
+| Package | What it does |
+|---|---|
+| `shopper/core` | The e-commerce engine: models, contracts, migrations, enums and observers. It has no dependency on any UI layer. |
+| `shopper/framework` | The admin panel, for managing products, orders, customers, and more. It provides all Livewire pages and components, and adds [Spatie Media Library](https://spatie.be/docs/laravel-medialibrary) support to the catalog models. |
+| `shopper/cart` | Shopping carts, with totals calculated through a pipeline: lines, automatic promotions, discount codes, taxes. |
+| `shopper/payment` | A driver-based payment architecture, with webhook handling and reconciliation of pending payments. |
+| `shopper/stripe` | The official Stripe payment driver. |
+| `shopper/shipping` | Shipping rates and shipment tracking through drivers. Carriers and zones themselves are core models. |
+| `shopper/fedex`, `shopper/ups`, `shopper/usps` | Carrier drivers for live rates. FedEx and UPS also sync tracking. |
+| `shopper/api` | The Store API, served under `/store`. |
+| `shopper/http` | The Store API's HTTP layer: route group, rate limits, CORS, and middleware that resolves the channel, zone, locale and customer of each request. |
+| `shopper/sidebar` | The admin panel navigation, which you extend to add your own entries. |
+| `shopper/upgrade` | A temporary package that moves a 2.x store to 3.x with `php artisan shopper:upgrade`. |
+
+For storefronts written in JavaScript or TypeScript, two npm packages complete the set: `@shopperlabs/shopper-sdk`, the Store API client, and `@shopperlabs/shopper-types`, the type definitions of the objects it returns.
+
+The `core` package defines contracts (interfaces) for its models. When you swap a model via configuration, the entire system (admin panel, relationships, route bindings) uses your custom class automatically.
+
+## Key Features
+
+Shopper ships with everything you need to run an online store:
+
+<Cards className="@lg:grid-cols-3">
+  <Card title="Products" icon="box">
+    Variants, attributes, media, CSV import, and four product types (standard, virtual, external, variant).
+  </Card>
+  <Card title="Orders" icon="cart-shopping">
+    Full order lifecycle with independent payment, shipping, and order statuses.
+  </Card>
+  <Card title="Categories" icon="folder-tree">
+    Unlimited hierarchical nesting with SEO fields and media.
+  </Card>
+  <Card title="Collections" icon="layer-group">
+    Manual or rule-based product grouping.
+  </Card>
+  <Card title="Customers" icon="users">
+    Customer profiles, addresses, and order history.
+  </Card>
+  <Card title="Promotions" icon="tags">
+    Discount codes and automatic promotions, with stacking rules, priorities, and campaigns with a budget.
+  </Card>
+  <Card title="Inventory" icon="warehouse">
+    Multi-warehouse stock with allocation, reservations at checkout, and an audit trail.
+  </Card>
+  <Card title="Shipping" icon="truck">
+    Carriers, zones, rates, and shipment tracking, with FedEx, UPS and USPS drivers.
+  </Card>
+  <Card title="Payments" icon="credit-card">
+    Driver-based payment processing, with an official Stripe driver.
+  </Card>
+  <Card title="Taxes" icon="percent">
+    Tax zones, rates and rules, calculated in the cart and stored on each order.
+  </Card>
+  <Card title="Store API" icon="braces">
+    JSON:API endpoints for the catalog, carts, checkout, accounts and orders, with a JavaScript SDK.
+  </Card>
+  <Card title="Webhooks" icon="webhook">
+    Signed outgoing webhooks for order, shipment, product and customer events.
+  </Card>
+  <Card title="Brands" icon="store">
+    Organize products by brand with media and SEO.
+  </Card>
+  <Card title="Reviews" icon="star">
+    Customer product reviews and ratings, published after approval.
+  </Card>
+  <Card title="Channels" icon="globe">
+    Sales channels, with the Store API showing each channel only its own products.
+  </Card>
+</Cards>
+
+## Extensibility
+
+Shopper is designed to be extended, not forked. Three mechanisms make this possible.
+
+**Model swapping** lets you replace a model with your own class that extends it. The thirteen swappable models (products, variants, product attribute values, categories, brands, collections, orders, channels, inventories, suppliers, addresses, tax zones and tax rates) are listed in `config/shopper/models.php`. Point an entry to your class and the entire system uses it, including the admin panel, relationships, and route model binding.
+
+**Component overriding** lets you replace an admin panel page or form with your own Livewire component. Run `php artisan shopper:component:publish product` to get `config/shopper/components/product.php`, where each page and form of that section points to a class you can change. Pass `--all` to publish every section at once.
+
+**Feature toggling** lets you remove optional sections of the admin panel: attributes, brands, campaigns, categories, collections, discounts, reviews, suppliers and tags. Set a feature to `FeatureState::Disabled` in `config/shopper/features.php` and its pages and menu entries disappear.
+
+## Stability and Versioning
+
+Shopper follows [Semantic Versioning](https://semver.org/). Minor and patch releases never contain breaking changes. Every component is tested, and upgrade guides are published for every major version bump.
+
+For details on supported versions and maintenance windows, see the [Version Support Policy](/3.x/version-support-policy). If your store runs Shopper 2, the [upgrade guide](/3.x/upgrade) walks you through the move to 3.x.
+
+## When Shopper Fits
+
+Shopper is the right choice when you already have a Laravel application (or want to build one) and need to add e-commerce capabilities without adopting an opinionated platform. It works well when your storefront is non-standard: a product configurator, a subscription service, an auction site, or anything that does not fit the typical "browse and checkout" template. With the Store API, the same store can also serve a JavaScript storefront or a mobile app.
+
+If you need a store running in an hour, Shopify is a better fit. If you are not in the Laravel ecosystem, MedusaJS is worth considering.
+
+## Next Steps
+
+<Cards>
+  <Card title="Requirements" icon="server" href="/3.x/requirements">
+    Check server requirements before installing.
+  </Card>
+  <Card title="Installation" icon="download" href="/3.x/installation">
+    Install Shopper in your Laravel application.
+  </Card>
+</Cards>

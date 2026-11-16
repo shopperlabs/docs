@@ -2,5 +2,5 @@
   "title": "3.x",
   "description": "Release candidate",
   "root": "version",
-  "pages": ["index"]
+  "pages": ["(documentation)", "(storefront)", "user-guide", "(extending)", "(addons)", "reference", "(upgrade)"]
 }

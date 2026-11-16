@@ -1,0 +1,8 @@
+{
+  "title": "Storefront",
+  "description": "Starter kits, the Store API and the JavaScript SDK for the customer side.",
+  "root": true,
+  "pages": [
+    "storefront"
+  ]
+}

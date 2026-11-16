@@ -1,0 +1,57 @@
+---
+title: Requirements
+description: The PHP version, PHP extensions, databases and Laravel versions Shopper 3 needs, and the local environments that provide them.
+---
+
+Shopper is a Laravel package: a server that runs Laravel 12 or 13 runs Shopper once a few more PHP extensions are installed. Composer checks every requirement on this page when you install Shopper, and stops with the name of anything that is missing.
+
+## Server Requirements
+
+- PHP 8.3 or higher. The continuous integration runs on PHP 8.3, 8.4 and 8.5.
+- MySQL 8+, PostgreSQL 15+ or SQLite.
+
+The test suite runs on these three databases. MariaDB is not part of it.
+
+### PHP Extensions
+
+Shopper needs the extensions listed in Laravel's [server requirements](https://laravel.com/docs/deployment#server-requirements), plus these:
+
+| Extension | Why Shopper needs it |
+|-----------|----------------------|
+| `intl` | Currency, number and locale formatting in `shopper/core` and Filament |
+| `gd` | Required by `milon/barcode`, which draws the barcode on the variant page. GD is also the default image driver of Spatie Media Library, which builds the thumbnails of product, category and brand images |
+| `exif` | Required by Spatie Media Library, which reads the metadata of uploaded images |
+| `zip`, `xmlreader` | Required by OpenSpout, the spreadsheet library of Filament's actions package |
+| `iconv` | Required by `bacon/bacon-qr-code`, which draws the QR code a user scans to set up two-factor authentication |
+
+The `soap` extension that Shopper 2 needed is no longer required.
+
+GD stays required even if you prefer ImageMagick for your images. To build the thumbnails with ImageMagick, install the `imagick` extension and set the image driver of Spatie Media Library in your `.env` file:
+
+```bash title=".env"
+IMAGE_DRIVER=imagick
+```
+
+## Laravel and Package Versions
+
+| Package | Version |
+|---------|---------|
+| Laravel | 12.68+ or 13.27+ |
+| Filament | 5.11+ |
+| Livewire | 4.1+ |
+
+Composer installs Filament and Livewire as dependencies of Shopper, so you do not require them in your application. Shopper 3 does not run on Laravel 11: upgrade your application to Laravel 12 or 13 first. If your store runs Shopper 2, follow the [upgrade guide](/3.x/upgrade).
+
+## Development Environments
+
+### Laravel Herd
+
+[Laravel Herd](https://herd.laravel.com/) is the recommended development environment for macOS and Windows. It provides PHP, Nginx and database services with no configuration, and its PHP builds include every extension listed on this page.
+
+### Laravel Valet
+
+[Laravel Valet](https://laravel.com/docs/valet) is a lightweight development environment for macOS. It maps every subdirectory of a directory (such as `~/Sites`) to a `.test` domain, and can share your sites publicly through local tunnels.
+
+### Docker
+
+Any Docker setup that provides the PHP version, the extensions and one of the databases above works with Shopper.

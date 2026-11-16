@@ -1,0 +1,18 @@
+{
+  "title": "Documentation",
+  "description": "Install Shopper, configure it and work with its models, from the catalog to orders.",
+  "root": true,
+  "pages": [
+    "---Prologue---",
+    "getting-started",
+    "whats-new",
+    "contributing",
+    "version-support-policy",
+    "---Getting Started---",
+    "requirements",
+    "installation",
+    "configuration",
+    "dashboard",
+    "ai-tools"
+  ]
+}

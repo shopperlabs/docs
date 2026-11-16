@@ -1,0 +1,72 @@
+---
+title: What's New in 3.0
+sidebarTitle: What's New
+description: Shopper 3.0 adds a Store API with a JavaScript SDK, promotions, carrier tracking, outbound webhooks, a CSV import and a new admin shell, on Filament 5 and Livewire 4.
+---
+
+Shopper 3.0 turns the admin panel into a full commerce backend: a storefront can now run on any stack through the Store API, and the cart, payment and shipping flows handle the cases a live store meets (prices that change during checkout, payments confirmed after a timeout, parcels tracked by the carrier). This page lists what is new by area. To move an existing store, follow the [upgrade guide](/3.x/upgrade).
+
+## Store API and JavaScript SDK
+
+A JSON:API under `/store` serves the catalog, customer accounts, carts and their discount codes, shipping options, checkout, payment and orders. Listings support filters and cursor pagination, and reviews, store settings and legal pages have their own endpoints. The `X-Shopper-Channel` and `X-Shopper-Zone` headers set the sales channel of a request and the zone that sets its currency and prices, and every error carries a stable `code` that a storefront can test.
+
+The `@shopperlabs/shopper-sdk` package wraps the API in typed methods for JavaScript and TypeScript storefronts, with the types from `@shopperlabs/shopper-types`. See [Storefront](/3.x/storefront).
+
+## Cart and Checkout
+
+A guest cart merges into the customer's cart at login. Cart totals are stored and recomputed after `shopper.cart.totals_ttl_minutes` (15 by default), so a cart page does not recompute every line on each request. When a price changes after the customer opened the cart, checkout stops with a `price_changed` error instead of charging the old price. Once a payment session starts, a change that moves the total first releases that session at the provider. The cart answers `409` only when the payment is already collected, or while another request is creating the session.
+
+The cart pipeline accepts steps inserted before or after an existing one, to add a calculation without copying the whole pipeline.
+
+## Promotions
+
+Campaigns group discounts under a name, a period and a budget, behind the `campaign` feature flag. Discounts can apply automatically without a code, and priority and combination rules decide which discounts stack on the same cart, up to `shopper.cart.max_promotions` (5 by default). A custom eligibility rule implements `DiscountEligibilityRule`.
+
+## Pricing
+
+Product prices come from a `PriceResolver`, swappable in a service provider. The default `CatalogPriceResolver` reads the catalog prices; a resolver for customer group prices, B2B price lists or quantity tiers replaces it without changing the cart.
+
+## Payments
+
+Payment providers post to an inbox at `POST /store/webhooks/{driver}`, which stores each event once: a provider retry is applied once, and an event that arrives before its order exists is applied later by `php artisan shopper:payments:reconcile`. With `--pull`, the command also asks the provider for the status of payments still pending. A payment collected without an order after 30 minutes completes its cart when it can; otherwise it raises `PaymentOrphaned`, and it is refunded when the `reconciliation.orphans` option of the payment config is `refund`. Payment status changes follow allowed transitions only, and a refund sent twice is applied once.
+
+## Shipping
+
+Shipment status now follows the carrier, through the carrier's webhooks at `POST /store/webhooks/shipping/{driver}` or with `php artisan shopper:shipments:sync-tracking` (every 30 minutes while `shopper.shipping.tracking.sync` is on), and each change dispatches the shipment events. The customer can follow a parcel through a public tracking endpoint. UPS, FedEx and USPS are separate packages that you install only for the carriers you use: see [Add-ons](/3.x/addons).
+
+## Orders
+
+Order statuses follow a state machine: an order moves only to the statuses allowed from its current one, and completes once it is delivered and paid. `php artisan shopper:orders:reclaim` runs every hour and cancels orders left unpaid for 24 hours (`shopper.orders.reclaim_pending_after_hours`): it releases their payment at the provider and returns their stock. Orders paid offline are skipped.
+
+## Catalog
+
+- A CSV import wizard creates and updates products from a file, with a progress view and a notification at the end. Custom import sources register with `resolve(ImportManager::class)->extend()`.
+- Product search runs on Laravel Scout, so a store can move from the database driver to Meilisearch, Typesense or Algolia.
+- Sales channels have drivers and a settings page.
+- A product's attribute values can carry a swatch image, uploaded from the product's Attributes page and exposed in the Store API as `swatch_url`.
+- Stock levels are stored per inventory location, and `php artisan shopper:stock:reconcile` checks them against the stock movements.
+- Store API resources use a public ULID (`public_id`) as their id instead of the numeric key.
+
+## Admin Panel
+
+The panel ships three themes, Default, Midnight and Evergreen, and its colors come from CSS tokens a store can override (see [Themes](/3.x/configuration#themes)). The new shell has breadcrumbs, settings grouped by area, product edit pages instead of tabs, and a customer page shell. An expired session opens a modal to confirm the password instead of losing the form, and in-app notifications can be stored in the database once `notifications.database.enabled` is turned on in `config/shopper/admin.php`. The panel is translated into English, French, Spanish, Turkish and Swedish.
+
+## Team and Security
+
+Team members can sign in with a passkey once `SHOPPER_ENABLED_PASSKEYS` is set to `true`. Permissions use dot notation, such as `system.settings`. Every admin action and Livewire mutation checks its permission, and admin authentication runs again on each Livewire request.
+
+## Extending
+
+- Outbound webhooks send signed requests to your endpoints on order, shipment, product and customer events. Each request carries an `X-Shopper-Signature` header, private and local addresses are refused, and `Webhooks::register()` adds your own events. `php artisan shopper:webhooks:redispatch`, scheduled every 15 minutes, requeues deliveries that never reached the queue or were left pending by a dead worker; failed deliveries retry on their own backoff.
+- Add-ons add sections to the product edit page with `$panel->addonProductSections()` in their `register()` method.
+- The payment, shipping, import and sales channel managers extend Laravel's `Illuminate\Support\Manager`, so a custom driver registers with `extend()` like any Laravel driver.
+
+See [Extending](/3.x/extending).
+
+## Requirements
+
+Shopper 3.0 requires PHP 8.3, Laravel 12.68 or 13.27, Filament 5.11 and Livewire 4.1 at least. Laravel 11 is no longer supported. Spatie Permission moves to version 7, and Shopper now installs Laravel Scout, Laravel Sanctum, Laravel Passkeys, `league/csv` and `spatie/laravel-query-builder`. See [Requirements](/3.x/requirements).
+
+## Upgrading
+
+Shopper 3.0 has breaking changes in the config files, the `ShopperUser`, `Cart`, `CartLine`, `PaymentDriver` and `Order` contracts, the product edit screen and the settings namespace. The `shopper/upgrade` package applies most of them: `php artisan shopper:upgrade` runs the migrations, renames classes with Rector, moves permissions to dot notation, fixes zero-decimal currency amounts, reconciles the stock snapshot with the inventory ledger and recreates the storage and panel asset links, and its [Laravel Boost skills](/3.x/ai-tools#upgrade-skills) guide a coding agent through the changes that need a decision. The [upgrade guide](/3.x/upgrade) lists every change with the code before and after.

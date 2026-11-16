@@ -143,7 +143,7 @@ export function Footer({ tree, stars }: { tree: TreeNode[]; stars?: number }) {
             </p>
           </div>
           <div className="flex flex-col gap-4 lg:items-end">
-            <InstallCommand command="composer require shopper/framework" className="w-full max-w-sm" />
+            <InstallCommand variant="overlay" command="composer require shopper/framework" className="w-full max-w-sm" />
             <a
               href={links.github}
               target="_blank"

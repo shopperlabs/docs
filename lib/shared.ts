@@ -26,7 +26,7 @@ export const links = {
   contributing: 'https://github.com/shopperlabs/shopper/blob/3.x/CONTRIBUTING.md',
   demo: 'https://demo.shopperphp.com',
   blog: `${siteUrl}/blog`,
-  discord: 'https://discord.gg/r4VUvHm34',
+  discord: 'https://laravelshopper.dev/discord',
   x: 'https://x.com/laravelshopper',
 };
 

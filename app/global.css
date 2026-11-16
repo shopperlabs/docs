@@ -62,6 +62,9 @@
   --animate-slide-out-left: slide-out-left 0.2s ease-in;
   --animate-page-enter: page-enter 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   --animate-scale-in: scale-in 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  --animate-mark-rise: mark-rise 0.9s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-mark-drop: mark-drop 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-mark-float: mark-float 6s ease-in-out infinite;
 
   @keyframes fade-in {
     from { opacity: 0; transform: translateY(3px); }
@@ -86,6 +89,18 @@
   @keyframes scale-in {
     from { opacity: 0; transform: scale(0.5); }
     to { opacity: 1; transform: scale(1); }
+  }
+  @keyframes mark-rise {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes mark-drop {
+    from { opacity: 0; transform: translateY(-12px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes mark-float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-2px); }
   }
 }
 

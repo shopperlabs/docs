@@ -1,0 +1,92 @@
+---
+title: Using Shopper with AI Tools
+sidebarTitle: AI Tools
+description: Give Claude Code, Cursor or any coding agent the Shopper conventions through Laravel Boost, and read this documentation as Markdown.
+---
+
+A coding agent knows Laravel well, but it does not know how Shopper registers an admin page, which contract to implement for a custom model, or which config key turns off a feature. Shopper gives agents that context in two ways: guidelines and skills shipped inside the Shopper packages for [Laravel Boost](https://laravel.com/docs/boost), and this documentation served as Markdown.
+
+## Laravel Boost
+
+Laravel Boost writes guidelines and skills into the instruction files of your agent, such as `CLAUDE.md` or `AGENTS.md`, based on the packages installed in your application. It also runs an MCP server through which the agent reads your database schema, the application logs and the browser errors. Install it as a development dependency:
+
+```bash
+composer require laravel/boost --dev
+php artisan boost:install
+```
+
+The installer asks which Boost features to install, which third-party packages to take guidelines and skills from (select `shopper/framework`), and which agents you use. Livewire and Filament guidelines are added only when your `composer.json` requires those packages directly.
+
+If Boost was already installed before you added Shopper, run the update command. It lists the packages you require directly that ship Boost guidelines or skills and are not in your Boost configuration yet, and asks which ones to add:
+
+```bash
+php artisan boost:update
+```
+
+The prompt only appears when the command runs in a terminal. Run `boost:update` again after each Shopper upgrade so that the files your agent reads follow the installed version.
+
+### Guidelines
+
+Guidelines are loaded at the start of every agent session. The Shopper guidelines cover the conventions an agent needs for most tasks in a Shopper application:
+
+- the installation and the configuration files
+- custom admin pages, routes and sidebar navigation
+- the model architecture, custom models, product types, stock, pricing, categories and orders
+- events, overriding the panel's Livewire components, permissions and feature flags
+- helper functions, Artisan commands, media, Blade components and database tables
+- testing an application that uses Shopper
+
+### Skills
+
+A skill is loaded only when the task needs it, which keeps the agent's context small. `shopper/framework` ships one skill:
+
+| Skill | What it covers |
+|-------|----------------|
+| `shopper-customization` | Customizing Shopper in your application: sidebar navigation, component overrides, event listeners, and features such as stock, pricing and media. |
+
+## Upgrade Skills
+
+The `shopper/upgrade` package ships nine more skills, each for a change that needs a decision rather than a search and replace. Install the package as a development dependency when the [upgrade guide](/3.x/upgrade) asks for it, run `php artisan shopper:upgrade`, then let Boost add the skills:
+
+```bash
+php artisan boost:update
+```
+
+Five skills cover the move to 3.x:
+
+| Skill | When the agent uses it |
+|-------|------------------------|
+| `shopper-upgrade-permissions` | Moving permission names from underscores (`read_orders`) to dot notation (`orders.read`). |
+| `shopper-upgrade-config` | Reconciling the published config files with the 3.x ones: admin notifications, campaigns, themes, cart pipelines, the promotions limit, shipping rates cache, carrier driver packages and discount components. |
+| `shopper-upgrade-contracts` | Moving the `ShopperUser`, `Cart` and `CartLine` contracts to their new packages, and adding the methods now required on the `PaymentDriver` and `Order` contracts. |
+| `shopper-upgrade-product-edit` | Moving overrides of the product edit screen from Livewire form components to pages, and registering sections in `config/shopper/components/product.php`. |
+| `shopper-upgrade-settings-namespace` | Moving custom settings pages from `Shopper\Settings\*` to `Shopper\Navigation\Setting\*`, and updating a published `config/shopper/settings.php`. |
+
+The other four cover changes made during the 2.x releases, for a store that upgrades from an older 2.x version:
+
+| Skill | When the agent uses it |
+|-------|------------------------|
+| `shopper-upgrade-money-storage` | Moving storefront code to amounts stored in cents (Shopper 2.7). |
+| `shopper-upgrade-filament-schemas` | Moving custom Filament components from `InteractsWithForms` to `InteractsWithSchemas`. |
+| `shopper-upgrade-slide-overs` | Moving custom slide-over components from Shopper's `SlideOverComponent` to the `laravelcm/livewire-slide-overs` package. |
+| `shopper-upgrade-two-factor-auth` | Replacing the `TwoFactorAuthenticatable` trait on the User model with the new two-factor interfaces. |
+
+Remove `shopper/upgrade` once the upgrade is done.
+
+## Documentation as Markdown
+
+Every page of this documentation is also served as Markdown, which an agent reads with fewer tokens than the HTML page:
+
+| URL | What it returns |
+|-----|-----------------|
+| [`/llms.txt`](https://docs.laravelshopper.dev/llms.txt) | The list of every page with its summary, for an agent to choose what to read. |
+| [`/llms-full.txt`](https://docs.laravelshopper.dev/llms-full.txt) | The whole documentation in one Markdown file. |
+| `/3.x/installation.md` | One page as Markdown: add `.md` to the URL of any page. |
+
+A request for a page URL with the `Accept: text/markdown` header also returns the Markdown version, so an agent that fetches `https://docs.laravelshopper.dev/3.x/installation` with that header gets Markdown without a different URL.
+
+<Note>
+  `llms.txt` and `llms-full.txt` cover every version of the documentation. Each page title carries its path, such as `/3.x/installation` or `/2.x/installation`: tell your agent to read the `/3.x` pages.
+</Note>
+
+The menu at the top of each page copies the page as Markdown, or opens it in ChatGPT, Claude, Cursor or Scira AI with the page as context, to ask a question about it.

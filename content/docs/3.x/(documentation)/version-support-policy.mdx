@@ -1,0 +1,30 @@
+---
+title: Version Support Policy
+description: How Shopper numbers its versions, and how long each major version receives new features, bug fixes and security fixes.
+---
+
+Shopper follows [Semantic Versioning](https://semver.org/): minor and patch releases never contain breaking changes. Major versions follow Filament's major versions, since the admin panel is built on Filament. A Filament major does not force a Shopper major when the upgrade asks almost nothing of your application.
+
+## Support Policy
+
+| Version | Filament | New features | Bug fixes | Security fixes |
+|---------|----------|--------------|-----------|----------------|
+| 1.x | 2.x | Ended July 2023 | Ended July 2023 | Ended July 2023 |
+| 2.x | 4.x | Ended October 2026 | Until April 2027 | Until October 2027 |
+| 3.x | 5.x | Until the Shopper 4.0 release | About 1 year after the Shopper 4.0 release | About 2 years after the Shopper 4.0 release |
+
+## New Features
+
+New features go into the latest major version only. Once a new major version is released, pull requests that add a feature to an older version are retargeted to the latest major or closed, depending on how far the branches have moved apart.
+
+## Bug Fixes
+
+After a new major version is released, the previous major keeps receiving bug fixes until the date in the table. After that date, pull requests for that version are no longer accepted.
+
+Bug reports for supported versions are handled in the order they arrive, critical bugs first. A fix is written for the latest major version. Anyone can backport it to another supported version with a pull request on that version's branch.
+
+## Security Fixes
+
+A major version receives security fixes until the date in the table, after its bug fixes have stopped. Report a vulnerability privately through [GitHub](https://github.com/shopperlabs/shopper/security/advisories/new) or by email at [arthur@shopperlabs.co](mailto:arthur@shopperlabs.co), never in a public issue. Every reported vulnerability is addressed promptly.
+
+A Shopper version that still receives security fixes can run on a PHP, Laravel, Filament or Livewire version that no longer does. An application on an older Shopper version stays exposed to the vulnerabilities of those dependencies: keep them on supported versions too.

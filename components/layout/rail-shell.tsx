@@ -14,6 +14,7 @@ export function RailShell({
   children,
   onMenuClick,
   drawerOpen,
+  home,
 }: {
   tree: TreeNode[];
   stars?: number;
@@ -22,23 +23,30 @@ export function RailShell({
   children: ReactNode;
   onMenuClick: () => void;
   drawerOpen: boolean;
+  home: boolean;
 }) {
   return (
     <>
       <Header tree={tree} stars={stars} onMenuClick={onMenuClick} drawerOpen={drawerOpen} />
 
-      <div className="lg:grid lg:grid-cols-[var(--spacing-sidebar)_minmax(0,1fr)]">
-        <aside
-          aria-label="Documentation sidebar"
-          className="sticky top-subheader hidden h-[calc(100dvh-var(--spacing-subheader))] border-r border-zinc-100 lg:block dark:border-white/6"
-        >
-          <Sidebar nodes={nodes} navClassName="px-6 pb-10" header={<SectionHeading name={sectionName} />} />
-        </aside>
-
-        <main id="content" tabIndex={-1} className="min-w-0 outline-hidden">
-          <div className="mx-auto flex w-full max-w-6xl gap-x-24 px-6 pt-12 pb-24 sm:px-8">{children}</div>
+      {home ? (
+        <main id="content" tabIndex={-1} className="outline-hidden">
+          {children}
         </main>
-      </div>
+      ) : (
+        <div className="lg:grid lg:grid-cols-[var(--spacing-sidebar)_minmax(0,1fr)]">
+          <aside
+            aria-label="Documentation sidebar"
+            className="sticky top-subheader hidden h-[calc(100dvh-var(--spacing-subheader))] border-r border-zinc-100 lg:block dark:border-white/6"
+          >
+            <Sidebar nodes={nodes} navClassName="px-6 pb-10" header={<SectionHeading name={sectionName} />} />
+          </aside>
+
+          <main id="content" tabIndex={-1} className="min-w-0 outline-hidden">
+            <div className="mx-auto flex w-full max-w-6xl gap-x-24 px-6 pt-12 pb-24 sm:px-8">{children}</div>
+          </main>
+        </div>
+      )}
 
       <Footer tree={tree} stars={stars} />
     </>

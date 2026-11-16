@@ -76,12 +76,16 @@ function versionPath(version: TreeFolder) {
   return `/${version.$id}`;
 }
 
+/** Versions with a landing page of their own, `app/(docs)/3.x/page.tsx`. */
+const homes = new Set(['3.x']);
+
 /**
- * Where a link to a version goes: its first page. `/1.x` and `/2.x` are
- * redirects (`redirects.json`), and the router prefetches a link to a redirect
- * in a loop.
+ * Where a link to a version goes: its landing page, or its first page when it
+ * has none. `/1.x` and `/2.x` are redirects (`redirects.json`), and the router
+ * prefetches a link to a redirect in a loop.
  */
 export function versionHome(version: TreeFolder): string {
+  if (version.$id && homes.has(version.$id)) return versionPath(version);
   return firstUrl(version) ?? versionPath(version);
 }
 
@@ -101,7 +105,7 @@ export interface Tab {
 
 /**
  * The sections shown in the bar under the header. A version split into root
- * folders (2.x) gets one tab per folder; a flat version (3.x, 1.x) gets a
+ * folders (2.x, 3.x) gets one tab per folder; a flat version (1.x) gets a
  * single "Documentation" tab covering all of it.
  */
 export function tabsFor(version: TreeFolder): Tab[] {
@@ -128,13 +132,15 @@ export interface Scope {
   tab: Tab;
   /** What the sidebar lists, and what previous/next walk through. */
   nodes: TreeNode[];
+  /** On the version's landing page, which belongs to no tab. */
+  home: boolean;
 }
 
 export function scopeFor(tree: TreeNode[], pathname: string): Scope {
   const version = versionFor(tree, pathname);
   const tabs = tabsFor(version);
   const tab = activeTab(tabs, pathname);
-  return { version, tabs, tab, nodes: tab.folder.children };
+  return { version, tabs, tab, nodes: tab.folder.children, home: pathname === versionPath(version) };
 }
 
 /** Same page in another version when it exists there, that version's landing page otherwise. */

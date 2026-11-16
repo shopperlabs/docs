@@ -1,0 +1,79 @@
+---
+title: Contribution Guide
+description: Report a bug, propose a feature or send a pull request to Shopper, and run the checks a pull request must pass.
+---
+
+Shopper is developed in the open on GitHub. Bug reports, fixes, features and documentation improvements are all welcome. This page explains where each kind of contribution goes and what a pull request needs before it can be merged.
+
+## Where the Code Lives
+
+All the Composer and npm packages live in one repository, [shopperlabs/shopper](https://github.com/shopperlabs/shopper), each in its own folder under `packages/`. The repositories named after a single package, such as `shopperlabs/core` or `shopperlabs/admin`, are read-only copies published from that repository on every release. Open issues and pull requests on `shopperlabs/shopper` only.
+
+The documentation you are reading lives in [shopperlabs/docs](https://github.com/shopperlabs/docs). Every page has an **Edit on GitHub** link at the bottom.
+
+## Reporting a Bug
+
+Open an [issue](https://github.com/shopperlabs/shopper/issues/new) with the bug report form. It asks for the Shopper, Laravel, Livewire and PHP versions, the steps to reproduce the problem, and a link to a repository that reproduces it. Issues without a working reproduction repository are closed: a maintainer cannot fix a bug they cannot run.
+
+A pull request with a failing test that shows the bug is even more useful than a report.
+
+## Proposing a Feature or Asking a Question
+
+Feature ideas and support questions go to [GitHub Discussions](https://github.com/shopperlabs/shopper/discussions), not to issues. For a large feature, start a discussion before writing code, so you know it fits Shopper before you spend time on it.
+
+## Choosing a Branch
+
+Each major version has its own branch. Pull requests for Shopper 3 target the `3.x` branch.
+
+New features are only accepted on the latest major version. Bug fixes can also target the previous major version while it still receives bug fixes. The [Version Support Policy](/3.x/version-support-policy) lists the dates for each version.
+
+## Setting Up the Repository
+
+Fork the repository on GitHub, then clone your fork and install the dependencies:
+
+```bash
+git clone git@github.com:<your-username>/shopper.git
+cd shopper
+git checkout 3.x
+composer install
+```
+
+The tests run on [Orchestra Testbench](https://packages.tools/testbench) with an in-memory SQLite database, so you do not need a Laravel application or a database server to run them. They live in `tests/`, with one folder per package (`tests/Core`, `tests/Cart`, `tests/Admin` and so on), and are written with [Pest](https://pestphp.com).
+
+## Running the Checks
+
+Run these commands before you open a pull request. The continuous integration runs Pint, PHPStan and the test suite on every pull request.
+
+| Command | What it does |
+|---|---|
+| `composer lint` | Formats the code with Laravel Pint. |
+| `composer test:lint` | Fails if a file is not formatted. |
+| `composer test:types` | Runs the PHPStan static analysis. |
+| `composer test:sqlite` | Runs the Pest test suite on SQLite. |
+| `composer test` | Runs the type coverage check (90% minimum), PHPStan and the SQLite tests in one go. |
+
+The continuous integration runs PHPStan on PHP 8.3, 8.4 and 8.5, Pint on PHP 8.4, and the test suite on SQLite, MySQL and PostgreSQL with Laravel 12 and 13. To reproduce a MySQL or PostgreSQL failure locally, run `composer test:mysql` or `composer test:pgsql` against a local server with a `testing` database, as the continuous integration does.
+
+## Writing a Pull Request
+
+Keep each pull request to one change. If you want to fix a bug and add a feature, send two pull requests: they are easier to review and to revert.
+
+A pull request that changes behaviour comes with tests that cover it. If it changes something the documentation describes, open a matching pull request on [shopperlabs/docs](https://github.com/shopperlabs/docs).
+
+Shopper follows [Semantic Versioning](https://semver.org/): minor and patch releases never contain breaking changes. A change that breaks a public method, a contract, a config key, an event or a migration waits for the next major version.
+
+Write the pull request title as a [Conventional Commit](https://www.conventionalcommits.org), with the package as the scope, such as `fix(cart): keep the discount when a line is removed`. Pull requests are squashed when they are merged, so the title becomes the commit message.
+
+## Coding Style
+
+Shopper follows the Laravel coding style, checked by [Laravel Pint](https://laravel.com/docs/pint). The `pint.json` file at the root of the repository adds stricter rules: every file declares `strict_types`, comparisons are strict, classes and functions are imported, and methods that return nothing declare `void`. Run `composer lint` and Pint applies them for you.
+
+Classes follow the [PSR-4](https://www.php-fig.org/psr/psr-4/) autoloading standard, under the `Shopper\` namespace.
+
+## Security Vulnerabilities
+
+If you discover a security vulnerability in Shopper, do not open a public issue. Report it privately through [GitHub](https://github.com/shopperlabs/shopper/security/advisories/new) or by email at [arthur@shopperlabs.co](mailto:arthur@shopperlabs.co). All security vulnerabilities are addressed promptly.
+
+## Code of Conduct
+
+Shopper follows the [Contributor Covenant](https://github.com/shopperlabs/shopper/blob/3.x/CODE_OF_CONDUCT.md). Report unacceptable behaviour to [arthur@shopperlabs.co](mailto:arthur@shopperlabs.co).

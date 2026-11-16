@@ -1,0 +1,398 @@
+---
+title: Configuration
+description: The configuration files Shopper publishes, and the settings to decide before your store goes live, from the admin prefix to feature flags.
+---
+
+Shopper publishes its configuration files to `config/shopper/` during installation. This page goes through the files and the settings you are most likely to change when you set up a store: the admin panel address, the table prefix, the sections you need, your own models, and the settings pages. Each page of the documentation covers the configuration of its own feature in more depth.
+
+## Configuration Files
+
+`php artisan shopper:install` publishes these files:
+
+| File | Package | Purpose |
+|------|---------|---------|
+| `addons.php` | admin | Disables an installed add-on by its ID |
+| `admin.php` | admin | Admin panel prefix, domain, roles, branding, locales, notifications |
+| `auth.php` | admin | Authentication guard, two-factor authentication, passkeys, password reset |
+| `features.php` | admin | Feature flags for the optional sections of the admin panel |
+| `media.php` | admin | Media disk, accepted file types, maximum sizes, image conversions |
+| `models.php` | admin | The class used for each swappable model |
+| `routes.php` | admin | Extra middleware and a custom route file for the admin panel |
+| `settings.php` | admin | The pages listed on the settings screen |
+| `themes.php` | admin | The admin panel themes and the default one |
+| `core.php` | core | Table prefix, barcode type, import chunk size, category tree cache |
+| `orders.php` | core | Order number format and the reclaim of unpaid orders |
+| `search.php` | core | Search indexers, facets and the search engine of each model |
+| `webhooks.php` | core | Outgoing webhooks: events, queue, retries, limits, pruning |
+| `cart.php` | cart | Cart pipeline, promotions, abandoned cart pruning |
+| `payment.php` | payment | Reconciliation of pending payments |
+| `shipping.php` | shipping | Units, rates cache, shipment tracking sync |
+
+When `shopper/api` is installed, the same command also publishes `api.php` (pagination, token lifetime, filters and includes of each resource) and `http.php` (route prefix, rate limits, zone and channel resolution).
+
+Payment and carrier drivers publish their own file on demand, with the `shopper-stripe-config`, `shopper-fedex-config`, `shopper-ups-config` or `shopper-usps-config` tag, for example `php artisan vendor:publish --tag=shopper-stripe-config`. The [Add-ons](/3.x/addons) tab covers each driver.
+
+To publish the configuration files again after an upgrade, together with the translations, run `php artisan shopper:publish`. Existing files are kept; add `--force` to overwrite them.
+
+## Admin Panel
+
+The admin panel answers on `/cpanel` by default. Change the prefix in `config/shopper/admin.php`, or set `SHOPPER_PREFIX` in your `.env` file:
+
+```php title="config/shopper/admin.php"
+'prefix' => env('SHOPPER_PREFIX', 'cpanel'),
+```
+
+To serve the admin panel on its own domain, such as `admin.example.com`, set `SHOPPER_DOMAIN`. Shopper passes it to Laravel's `Route::domain()`:
+
+```php title="config/shopper/admin.php"
+'domain' => env('SHOPPER_DOMAIN'),
+```
+
+The branding keys set the logo, the favicon and the Filament primary color of the admin panel:
+
+```php title="config/shopper/admin.php"
+'brand' => null,
+'favicon' => null,
+'primary_color' => \Filament\Support\Colors\Color::Blue,
+```
+
+`primary_color` accepts any color of the `Filament\Support\Colors\Color` class, such as `Color::Emerald`.
+
+### Avatar Colors
+
+Users without a profile photo get an avatar generated from their initials. These keys set its text and background colors, as hexadecimal values without the `#`:
+
+```php title="config/shopper/admin.php"
+'avatar' => [
+    'color' => '1d4ed8',
+    'bg_color' => 'dbeafe',
+],
+```
+
+### Locales
+
+The languages a user can pick for the admin panel. Each entry maps a locale code to a label and a flag code (ISO 3166-1 alpha-2, lowercase):
+
+```php title="config/shopper/admin.php"
+'locales' => [
+    'en' => ['label' => 'English', 'flag' => 'gb'],
+    'fr' => ['label' => 'Français', 'flag' => 'fr'],
+],
+```
+
+### Custom Pages
+
+`php artisan make:shopper-page` creates an admin page in this namespace and view path:
+
+```php title="config/shopper/admin.php"
+'pages' => [
+    'namespace' => 'App\\Livewire\\Shopper',
+    'view_path' => resource_path('views/livewire/shopper'),
+],
+```
+
+### Notifications
+
+Shopper can store notifications for administrators, such as a new order or a failed payment, and show them under a bell in the top bar. They are off by default:
+
+```php title="config/shopper/admin.php"
+'notifications' => [
+    'database' => [
+        'enabled' => false,
+        'polling_interval' => '30s',
+    ],
+],
+```
+
+`polling_interval` sets how often the bell refreshes. Set it to `null` to stop polling and rely on broadcasting through Laravel Echo. The [Notifications](/3.x/notifications) page covers the events that create a notification.
+
+### Themes
+
+The admin panel ships with three themes: `default`, `midnight` and `evergreen`. `config/shopper/themes.php` sets the theme used until a user picks one in the **Appearance** settings, and registers the available themes. The [Themes](/3.x/themes) page explains how to add your own.
+
+## Database Table Prefix
+
+All Shopper tables are prefixed with `sh_` so that they never collide with the tables of your application:
+
+```php title="config/shopper/core.php"
+'table_prefix' => 'sh_',
+```
+
+<Warning>
+  Set the table prefix before the Shopper migrations run. Changing it afterwards requires a custom migration that renames every Shopper table.
+</Warning>
+
+The file only exists once the installer has published it, so change the prefix in this order:
+
+<Steps>
+  <Step title="Install without migrating">
+    Run `php artisan shopper:install` and answer no when it asks to run the migrations and seeders.
+  </Step>
+  <Step title="Change the prefix">
+    Set `table_prefix` in `config/shopper/core.php`.
+  </Step>
+  <Step title="Migrate and seed">
+    Run the migrations and the two seeders the installer would have run:
+
+    ```bash
+    php artisan migrate
+    php artisan db:seed --class="Shopper\Core\Database\Seeders\ShopperSeeder"
+    php artisan db:seed --class="Shopper\Database\Seeders\AuthTableSeeder"
+    ```
+  </Step>
+</Steps>
+
+## Feature Flags
+
+`config/shopper/features.php` turns the optional sections of the admin panel on and off. Set a feature to `FeatureState::Disabled` and its pages, its sidebar entry and its fields in the product form disappear:
+
+```php title="config/shopper/features.php"
+use Shopper\Enum\FeatureState;
+
+return [
+    'attribute' => FeatureState::Enabled,
+    'brand' => FeatureState::Enabled,
+    'campaign' => FeatureState::Enabled,
+    'category' => FeatureState::Enabled,
+    'collection' => FeatureState::Enabled,
+    'discount' => FeatureState::Enabled,
+    'review' => FeatureState::Enabled,
+    'supplier' => FeatureState::Disabled,
+    'tag' => FeatureState::Enabled,
+];
+```
+
+A store that does not collect product reviews sets `'review' => FeatureState::Disabled`: the reviews page and its sidebar link are removed. Suppliers are the only section disabled on a fresh install; enable them to show the supplier field on products.
+
+## Models
+
+`config/shopper/models.php` lists the class Shopper uses for each swappable model. Replace a class with your own, which extends the original, and the admin panel, the relationships and the route bindings all use it:
+
+```php title="config/shopper/models.php"
+use Shopper\Models;
+
+return [
+    'address' => Shopper\Core\Models\Address::class,
+    'brand' => Models\Brand::class,
+    'category' => Models\Category::class,
+    'collection' => Models\Collection::class,
+    'product' => Models\Product::class,
+    'variant' => Models\ProductVariant::class,
+    'attribute_product' => Models\AttributeProduct::class,
+    'channel' => Shopper\Core\Models\Channel::class,
+    'inventory' => Shopper\Core\Models\Inventory::class,
+    'order' => Shopper\Core\Models\Order::class,
+    'supplier' => Shopper\Core\Models\Supplier::class,
+    'tax_zone' => Shopper\Core\Models\TaxZone::class,
+    'tax_rate' => Shopper\Core\Models\TaxRate::class,
+];
+```
+
+The catalog models come from the `Shopper\Models` namespace of the admin package, which adds media support to them; the others come from `Shopper\Core\Models`. Extend the exact class listed for the entry you replace. The [Models](/3.x/models) page explains how swapping works.
+
+## Authentication
+
+`config/shopper/auth.php` sets the guard of the admin panel and the sign-in options:
+
+```php title="config/shopper/auth.php"
+return [
+    'guard' => 'web',
+    '2fa_enabled' => env('SHOPPER_ENABLED_TWO_FACTOR', false),
+    'passkeys_enabled' => env('SHOPPER_ENABLED_PASSKEYS', false),
+    'password_reset' => true,
+];
+```
+
+Set `SHOPPER_ENABLED_TWO_FACTOR=true` to make two-factor authentication available to admin users, and `SHOPPER_ENABLED_PASSKEYS=true` to let them sign in with a passkey. Neither is forced on anyone: each user turns them on from their account page. The [Two-Factor Authentication](/3.x/two-factor) page lists what your `User` model needs for both.
+
+## Middleware
+
+The `middleware` key adds your own middleware to every admin route behind the login, for example to log admin activity or restrict access to an office IP range:
+
+```php title="config/shopper/routes.php"
+'middleware' => [],
+```
+
+## Custom Routes
+
+Your `routes/web.php` file is not loaded inside the admin panel. To add routes that share its login and middleware, point `custom_file` to a route file of your own:
+
+```php title="config/shopper/routes.php"
+'custom_file' => base_path('routes/shopper.php'),
+```
+
+The routes in this file are served under the admin panel prefix and their names start with `shopper.`, like the admin panel routes.
+
+## Components
+
+Each section of the admin panel is made of Livewire components that you can replace one by one. Publish the component configuration of a section with its name:
+
+```bash
+php artisan shopper:component:publish product
+```
+
+The command creates `config/shopper/components/product.php`, where each page and component of the section points to a class you can change. The available sections are `account`, `brand`, `campaign`, `category`, `collection`, `customer`, `dashboard`, `discount`, `order`, `product`, `review` and `setting`.
+
+Pass `--all` to publish every section at once. Without a name or `--all`, the command asks which section to publish. Add `--force` to overwrite files you already published.
+
+## Settings
+
+The settings screen of the admin panel lists one page per class registered in `config/shopper/settings.php`. Set an entry to `false` to remove its page:
+
+```php title="config/shopper/settings.php"
+use Shopper\Navigation\Setting\Items;
+
+return [
+    'items' => [
+        Items\GeneralSetting::class => true,
+        Items\AppearanceSetting::class => true,
+        Items\StaffSetting::class => true,
+        Items\LocationSetting::class => true,
+        Items\ChannelSetting::class => true,
+        Items\PaymentSetting::class => true,
+        Items\CarrierSetting::class => true,
+        Items\LegalSetting::class => true,
+        Items\ZoneSetting::class => true,
+        Items\TaxSetting::class => true,
+        Items\CurrencySetting::class => true,
+        Items\WebhookSetting::class => true,
+    ],
+];
+```
+
+The screen groups the pages under four headings, in this order:
+
+| Group | Pages |
+|-------|-------|
+| Store | General, Appearance, Inventories, Legal, Webhooks |
+| Selling | Sales channels, Payment methods, Taxes, Currencies |
+| Shipping | Carriers, Zones |
+| Team | Staff & permissions |
+
+<Warning>
+  Removing a page removes the only screen where its data is managed. Disable the Taxes page and nobody can create a tax zone from the admin panel anymore.
+</Warning>
+
+### Adding a Settings Page
+
+A settings page is a class that extends `Shopper\Navigation\Setting\Setting`. It gives the name, description and icon shown on the settings screen, the URL the entry opens, and optionally its position, its group and the permission needed to see it:
+
+```php title="app/Shopper/Settings/LoyaltySetting.php"
+namespace App\Shopper\Settings;
+
+use Shopper\Enum\SettingGroup;
+use Shopper\Navigation\Setting\Setting;
+
+final class LoyaltySetting extends Setting
+{
+    public function name(): string
+    {
+        return __('Loyalty program');
+    }
+
+    public function description(): string
+    {
+        return __('Points earned per order and the rewards customers can claim.');
+    }
+
+    public function icon(): string
+    {
+        return 'phosphor-gift';
+    }
+
+    public function url(): string
+    {
+        return route('shopper.settings.loyalty');
+    }
+
+    public function order(): int
+    {
+        return 5;
+    }
+
+    public function group(): string
+    {
+        return SettingGroup::Selling->value;
+    }
+
+    public function permission(): ?string
+    {
+        return 'loyalty.manage';
+    }
+}
+```
+
+`group()` returns one of the four `SettingGroup` values, or any other string to create a group of your own: it is listed after the four built-in ones, with the string as its heading. A page without a group is listed last. A page with a permission is hidden from users who do not have it.
+
+Register the class in `config/shopper/settings.php`:
+
+```php title="config/shopper/settings.php"
+'items' => [
+    // ...
+    App\Shopper\Settings\LoyaltySetting::class => true,
+],
+```
+
+A package registers its page from a service provider instead, through the `SettingManager`:
+
+```php
+use Shopper\Navigation\Setting\SettingManager;
+
+app(SettingManager::class)->add(App\Shopper\Settings\LoyaltySetting::class);
+```
+
+The manager also has `enable()` and `disable()` to show or hide a registered page at runtime.
+
+## Orders
+
+`config/shopper/orders.php` sets the format of order numbers: a prefix, a date, and a padded sequence.
+
+```php title="config/shopper/orders.php"
+'generator' => [
+    'prefix' => 'ORD',
+    'separator' => '-',
+    'date_format' => 'Ymd',
+    'start_sequence_from' => 0,
+    'pad_length' => 6,
+    'pad_string' => '0',
+],
+```
+
+The sequence is the order's database ID plus `start_sequence_from`, so two checkouts that finish at the same time never get the same number. With the default of 0, the first order gets `000001`. A store that moves from another platform sets `start_sequence_from` to the last number it used, and its first Shopper order continues from there. With the defaults, the order with ID 124, placed on November 16, 2026, gets these numbers:
+
+| Configuration | Order number |
+|---------------|--------------|
+| Default | `ORD-20261116-000124` |
+| `'prefix' => null` | `20261116-000124` |
+| `'date_format' => null` | `ORD-000124` |
+| `'prefix' => null, 'date_format' => null` | `000124` |
+
+The same file sets how long an unpaid order holds its stock:
+
+```php title="config/shopper/orders.php"
+'reclaim_pending_after_hours' => 24,
+```
+
+Every hour, the `shopper:orders:reclaim` command cancels the pending orders that received no payment within this window and puts their reserved stock back on sale. Orders paid offline, such as cash on delivery, are never cancelled this way. Set the key to `null` to turn it off. The command runs through the Laravel scheduler, which the [Installation](/3.x/installation#run-the-scheduler-and-a-queue-worker) page sets up.
+
+## Environment Variables
+
+The variables Shopper reads from your `.env` file, besides those of the payment and shipping packages and their drivers:
+
+| Variable | Default | Purpose |
+|----------|---------|---------|
+| `SHOPPER_PREFIX` | `cpanel` | URL prefix of the admin panel |
+| `SHOPPER_DOMAIN` | none | Domain of the admin panel |
+| `SHOPPER_ENABLED_TWO_FACTOR` | `false` | Makes two-factor authentication available |
+| `SHOPPER_ENABLED_PASSKEYS` | `false` | Makes passkey sign-in available |
+| `SHOPPER_WEBHOOKS_QUEUE` | `webhooks` | Queue that delivers outgoing webhooks |
+| `SHOPPER_WEBHOOKS_ALLOWED_HOSTS` | empty | Comma-separated hosts webhooks may be sent to; empty allows any public host |
+| `SHOPPER_WEBHOOKS_MAX_SUBSCRIPTIONS` | `50` | Maximum number of webhook subscriptions |
+| `SHOPPER_WEBHOOKS_DB_CONNECTION` | default connection | Database connection of the webhook subscriptions, events and deliveries |
+| `SHOPPER_API_PREFIX` | `store` | URL prefix of the Store API |
+| `SHOPPER_API_PER_PAGE` | `15` | Default page size of the Store API |
+| `SHOPPER_API_TOKEN_EXPIRATION` | `43200` | Lifetime of customer tokens, in minutes (30 days) |
+| `SHOPPER_API_DEFAULT_ZONE` | none | Zone code used when a request sends none |
+| `SHOPPER_API_DEFAULT_CHANNEL` | none | Channel slug used when a request sends none |
+
+The variables of the payment and shipping packages and of each driver are listed on their pages.

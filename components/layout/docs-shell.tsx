@@ -73,6 +73,7 @@ export function DocsShell({ tree, stars, children }: { tree: TreeNode[]; stars?:
         sectionName={scope.tab.name}
         onMenuClick={() => setDrawerOpen(true)}
         drawerOpen={drawerOpen}
+        home={scope.home}
       >
         {children}
       </RailShell>

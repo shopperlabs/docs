@@ -17,7 +17,7 @@ export function SubNav({ scope }: { scope: Scope }) {
       {/* Scrolls without an edge fade if a version outgrows the bar: 2.x's five tabs fit from md. */}
       <ul role="list" className="no-scrollbar flex h-full list-none gap-x-6 overflow-x-auto text-sm">
         {scope.tabs.map((tab) => {
-          const active = tab === scope.tab;
+          const active = !scope.home && tab === scope.tab;
           return (
             <li key={tab.href} className="flex">
               <Link

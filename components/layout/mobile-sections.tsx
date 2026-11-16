@@ -78,7 +78,7 @@ export function MobileSections({ tree, onNavigate }: { tree: TreeNode[]; onNavig
         <div className="border-t border-zinc-100 p-1 dark:border-white/6">
           <ul role="list" className="list-none">
             {scope.tabs.map((tab) => {
-              const active = tab === scope.tab;
+              const active = !scope.home && tab === scope.tab;
               return (
                 <li key={tab.href}>
                   <Link

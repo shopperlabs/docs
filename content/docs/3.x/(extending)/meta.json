@@ -1,0 +1,8 @@
+{
+  "title": "Extending",
+  "description": "Add pages and features to the admin panel and swap the parts Shopper ships.",
+  "root": true,
+  "pages": [
+    "extending"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "title": "Reference",
+  "description": "Configuration keys, commands, events, permissions and types, one table per kind.",
+  "root": true,
+  "pages": [
+    "index"
+  ]
+}

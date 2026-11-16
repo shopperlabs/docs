@@ -1,0 +1,8 @@
+{
+  "title": "Upgrade",
+  "description": "Move a Shopper 2.x store to 3.0.",
+  "root": true,
+  "pages": [
+    "upgrade"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "title": "Add-ons",
+  "description": "Official packages for payment and shipping providers.",
+  "root": true,
+  "pages": [
+    "addons"
+  ]
+}

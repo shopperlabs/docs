@@ -1,0 +1,8 @@
+{
+  "title": "User Guide",
+  "description": "Run the store from the admin panel, screen by screen, without writing code.",
+  "root": true,
+  "pages": [
+    "index"
+  ]
+}
