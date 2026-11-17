@@ -143,11 +143,26 @@ export function scopeFor(tree: TreeNode[], pathname: string): Scope {
   return { version, tabs, tab, nodes: tab.folder.children, home: pathname === versionPath(version) };
 }
 
-/** Same page in another version when it exists there, that version's landing page otherwise. */
+const equivalents: Record<string, Record<string, string>> = {
+  '2.x': {
+    '/models': '/configuration#models',
+    '/money': '/pricing#money-storage-standard',
+    '/settings': '/setup-store#settings-model',
+  },
+};
+
+/**
+ * Same page in another version when it exists there, the page that covers its
+ * topic there (`equivalents`, for a page 3.x split out of a 2.x page), that
+ * version's landing page otherwise.
+ */
 export function versionHref(target: TreeFolder, current: TreeFolder, pathname: string): string {
   const relative = pathname.slice(versionPath(current).length);
-  const candidate = `${versionPath(target)}${relative}`;
-  return relative && flattenPages(target.children).some((page) => page.url === candidate)
-    ? candidate
-    : versionHome(target);
+  // A 404 outside every version falls back to the first version in `versionFor`, so its pathname has no page path.
+  if (!relative.startsWith('/')) return versionHome(target);
+  const urls = new Set(flattenPages(target.children).map((page) => page.url));
+  const path = [relative, equivalents[target.$id ?? '']?.[relative]].find(
+    (candidate) => candidate !== undefined && urls.has(`${versionPath(target)}${candidate.split('#')[0]}`),
+  );
+  return path ? `${versionPath(target)}${path}` : versionHome(target);
 }

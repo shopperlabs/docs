@@ -1,0 +1,295 @@
+---
+title: Settings
+description: The key-value table behind the store settings, the helpers that read and write it, its cache, and every setting key Shopper uses.
+---
+
+Shopper keeps the configuration a merchant changes from the admin panel, such as the store name, its address, its currencies or the admin theme, in a key-value table rather than in config files: a change applies at once, without a deployment. This page covers that table, how to read and write a setting from your code, how settings are cached, and the keys Shopper itself reads and writes.
+
+The settings screen of the admin panel and the `config/shopper/settings.php` file that lists its pages are described in [Configuration](/3.x/configuration#settings). The store details as a merchant fills them in are covered on the [Setup Store](/3.x/setup-store) page.
+
+## Settings Model
+
+Each setting is a row of the `Shopper\Core\Models\Setting` model, stored in the `sh_settings` table with the default table prefix. A row holds one key and its value. The `value` column is JSON and the model casts it to `array`, so a setting holds any JSON value: a string such as the store name, an integer ID, a boolean, or a list such as the store currencies.
+
+The model implements `Shopper\Core\Models\Contracts\Setting`. It has no entry in `config/shopper/models.php` and cannot be swapped for a class of your own.
+
+### Database Schema
+
+The `create_settings_table` migration of `shopper/core` creates the table:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto increment | Primary key |
+| `key` | string | no | none | Setting key, unique |
+| `display_name` | string | yes | `null` | Label of the key |
+| `value` | json | yes | `null` | Setting value, cast to `array` |
+| `locked` | boolean | no | `false` | Set once the merchant has confirmed the value, see [Locked Settings](#locked-settings) |
+| `created_at`, `updated_at` | timestamp | yes | `null` | Timestamps |
+
+When the admin panel saves a key, it fills `display_name` with the translated label of the field, "Store name" for `name`, or with the key in title case for a key it does not know. The `locked` attribute is hidden from the model's array and JSON output.
+
+## Retrieving Settings
+
+The `shopper_setting()` helper of `shopper/core` returns the value of a key, or `null` when the key does not exist:
+
+```php
+$storeName = shopper_setting('name');
+$currencyIds = shopper_setting('currencies');
+```
+
+It works the same in the Blade views of your storefront:
+
+```blade title="resources/views/components/footer.blade.php"
+<footer>
+    <p>{{ shopper_setting('name') }}</p>
+    <a href="mailto:{{ shopper_setting('email') }}">{{ shopper_setting('email') }}</a>
+</footer>
+```
+
+Values come back with their JSON type: `currencies` is an array of currency IDs, `setup_guide_done` a boolean. A key that holds an ID returns the ID, so load the model yourself:
+
+```php
+use Shopper\Core\Models\Country;
+
+$country = Country::query()->find(shopper_setting('country_id'));
+```
+
+The store logo and cover are file paths on the media disk set in `config/shopper/media.php`. Build their URL from that disk:
+
+```blade title="resources/views/components/header.blade.php"
+@if ($logo = shopper_setting('logo'))
+    <img
+        src="{{ Storage::disk(config('shopper.media.storage.disk_name'))->url($logo) }}"
+        alt="{{ shopper_setting('name') }}"
+    />
+@endif
+```
+
+The default currency has its own helper: `shopper_currency()` returns the code of the currency stored in `default_currency_id`, such as `EUR`, and `USD` when no default currency is set. The [Money](/3.x/money) page shows how Shopper formats amounts with it.
+
+To read several keys in one query, use the model. The `value` cast also applies to `pluck()`:
+
+```php
+use Shopper\Core\Models\Setting;
+
+$address = Setting::query()
+    ->whereIn('key', ['street_address', 'postal_code', 'city', 'state'])
+    ->pluck('value', 'key');
+```
+
+This query goes to the database every time: the cache described below only applies to `shopper_setting()`.
+
+## Caching
+
+`shopper_setting()` keeps each value in your application cache for 24 hours, under the key `shopper-setting.{key}`, for example `shopper-setting.name`. The admin panel reads several settings on every request (the store name in the top bar, the email and street address checked before each page, the theme), and the cache keeps those reads off the database.
+
+The helper relies on Laravel's `Cache::remember()`, which explains two behaviors:
+
+- `Cache::remember()` treats a cached `null` as a miss, so each read of a key that does not exist, or that holds `null`, queries the database.
+- `withCache: false` keeps a value read from the database for one second instead of 24 hours. When the key is already in the cache, the helper still returns the cached value. To read the database whatever the cache holds, query the model.
+
+```php
+shopper_setting('name', withCache: false);
+```
+
+`shopper_currency()` keeps the currency code for one hour under `shopper-setting.default_currency`.
+
+### Clearing the Cache
+
+When Shopper saves a setting, it forgets the cache key of each key it wrote, and also `shopper-setting.default_currency` when it writes `default_currency_id`. A setting you write through the model keeps its old cached value for up to 24 hours unless you forget its key, as shown in [Writing Settings](#writing-settings).
+
+## Writing Settings
+
+The admin panel saves settings through the `Shopper\Traits\SaveSettings` trait of `shopper/framework`. Use it in your own admin pages, for instance a settings page registered as shown in [Adding a Settings Page](/3.x/configuration#adding-a-settings-page). Its `saveSettings()` method takes an array of keys and values, writes them in one database transaction, fills their `display_name` and forgets the cache of each key:
+
+```php title="app/Livewire/Shopper/ShippingNotice.php"
+namespace App\Livewire\Shopper;
+
+use Illuminate\Contracts\View\View;
+use Livewire\Component;
+use Shopper\Traits\SaveSettings;
+
+final class ShippingNotice extends Component
+{
+    use SaveSettings;
+
+    public ?string $notice = null;
+
+    public function mount(): void
+    {
+        $this->authorize('system.settings');
+
+        $this->notice = shopper_setting('shipping_notice');
+    }
+
+    public function save(): void
+    {
+        $this->authorize('system.settings');
+
+        $this->saveSettings(['shipping_notice' => $this->notice]);
+    }
+
+    public function render(): View
+    {
+        return view('livewire.shopper.shipping-notice');
+    }
+}
+```
+
+Outside such a class, for example in a seeder or an Artisan command, write the row with the model, then forget its cache key:
+
+```php
+use Illuminate\Support\Facades\Cache;
+use Shopper\Core\Models\Setting;
+
+Setting::query()->updateOrCreate(
+    ['key' => 'shipping_notice'],
+    ['value' => 'Free shipping on orders over $50'],
+);
+
+Cache::forget('shopper-setting.shipping_notice');
+```
+
+### Locked Settings
+
+`saveSettings()` takes a second argument, `locked`, which is `true` by default. Shopper uses it in the setup wizard: each step saves its fields with `locked: false` when the merchant moves to the next step, and the final submit saves every field with `locked: true`. A save with `locked: false` never overwrites a locked row:
+
+```php
+$this->saveSettings(['name' => 'Classic Apparel'], locked: false);
+```
+
+If `name` is already locked, this call leaves it as it is. The settings pages save with `locked: true`, so a merchant's edit always applies. A row you create through the model starts with `locked` set to `false`, the column default.
+
+## Setting Keys
+
+These are the keys Shopper writes and reads. Your own keys live in the same table, so pick names that do not collide with them.
+
+| Key | Value | Written by | Read by |
+|-----|-------|------------|---------|
+| `name` | String | Setup wizard, General settings | Admin top bar, setup wizard, default inventory, Store API |
+| `legal_name` | String | General settings | Store API |
+| `email` | String | Setup wizard, General settings | Setup check of the admin panel, default inventory, Store API |
+| `phone_number` | String | Setup wizard, General settings | Default inventory, Store API |
+| `about` | HTML from the rich text editor | General settings | Store API |
+| `logo` | Path on the media disk | General settings | Store API |
+| `cover` | Path on the media disk | General settings | Store API |
+| `street_address` | String | Setup wizard, General settings | Setup check of the admin panel, default inventory, Store API |
+| `postal_code` | String | Setup wizard, General settings | Default inventory, Store API |
+| `city` | String | Setup wizard, General settings | Default inventory, Store API |
+| `state` | String | Setup wizard, General settings | Store API |
+| `country_id` | Country ID | Setup wizard, General settings | Default country of phone inputs and of the `Shopper\Core\Rules\Phone` rule, default inventory, Store API |
+| `currencies` | Array of currency IDs | Setup wizard, General settings | Price forms of products and variants, zone form, currency filters of the orders list and the revenue chart, campaign form, product import, cart currency check of the Store API, Store API |
+| `default_currency_id` | Currency ID | Setup wizard, General settings | `shopper_currency()`, variant generator prices, price rules of automatic collections, product import, Store API |
+| `social_links` | List of `platform` and `url` pairs | Setup wizard, General settings | Store API |
+| `admin_theme` | Theme ID | Appearance settings | Theme of the admin panel, for every user |
+| `default_product_type` | A `Shopper\Core\Enum\ProductType` value, such as `variant` | "Set as default product type" toggle of the new product form | New product form, which then skips the type step |
+| `setup_guide_done` | `true` | Dashboard setup guide | Dashboard |
+| `permissions_dot_notation_applied` | Date of the run | `shopper:upgrade:permissions` | The same command, so that it runs once |
+| `zero_decimal_fix_applied` | Date of the run | `shopper:upgrade:fix-zero-decimal-currencies` | The same command, so that it runs once |
+
+The `social_links` value keeps the order the merchant set, with a `platform` from the `Shopper\Core\Enum\SocialPlatform` enum (`facebook`, `instagram`, `x`, `tiktok` and others) and the profile `url`:
+
+```php
+[
+    ['platform' => 'instagram', 'url' => 'https://instagram.com/classicapparel'],
+    ['platform' => 'tiktok', 'url' => 'https://tiktok.com/@classicapparel'],
+]
+```
+
+Shopper 2.x stored the social links in three keys: `facebook_link`, `instagram_link` and `twitter_link`. When `social_links` is empty, the General settings page builds it from these keys, and the first save writes `social_links`. The old rows are left in the table.
+
+## Setup Wizard and Settings Pages
+
+On the first login, the setup wizard asks for the store information, its address and its social links. It saves only the keys listed in the table above as written by the setup wizard, and ignores any other key in the submitted form. The first two steps save their fields with `locked: false` when the merchant clicks next, and the wizard fills its form from these rows when it opens again. The final submit saves every field with `locked: true` and creates the default inventory from the store name, email and address, in one transaction.
+
+Until `email` and `street_address` both have a value, every admin page behind the login redirects to the wizard, as described in [Dashboard](/3.x/dashboard#access-requirements). Once they do, the wizard redirects to the dashboard. The wizard is open to administrators and to users with the `system.settings` permission.
+
+The **General** settings page loads the store keys and saves the whole form, locked, when the merchant saves. The **Appearance** page saves `admin_theme`. Both require the `system.settings` permission, described on the [Permissions](/3.x/acl) page.
+
+## Store API
+
+`GET /store/settings` returns the public store settings to a storefront, without authentication (`store` is the default prefix of the Store API, set by `SHOPPER_API_PREFIX`). The settings table also holds keys meant for the admin panel only, such as `admin_theme` and `setup_guide_done`, so the endpoint returns only the keys listed under `settings.expose` in `config/shopper/api.php`:
+
+```php title="config/shopper/api.php"
+'settings' => [
+    'expose' => [
+        'name',
+        'legal_name',
+        'about',
+        'email',
+        'phone_number',
+        'street_address',
+        'city',
+        'postal_code',
+        'state',
+        'country_id',
+        'logo',
+        'cover',
+        'social_links',
+        'default_currency_id',
+        'currencies',
+    ],
+
+    'max_age' => 300,
+],
+```
+
+Six keys come back in a public shape instead of their stored value:
+
+| Setting key | Attribute | Returned value |
+|-------------|-----------|----------------|
+| `country_id` | `country` | The ISO 3166-1 alpha-2 `code` and the country `name`, translated in the language of the request |
+| `default_currency_id` | `default_currency` | The currency code returned by `shopper_currency()` |
+| `currencies` | `currencies` | The currency codes, sorted by currency name |
+| `logo`, `cover` | `logo`, `cover` | An object with an absolute `url` |
+| `social_links` | `social_links` | Each link with its `platform`, `url` and the platform `label`; links with an unknown platform or an empty URL are left out |
+
+The other keys come back as stored, and `null` when the merchant never filled them in. Two attributes are always added: `default_locale`, the locale the response is written in, and `supported_locales`, the locales of `config/shopper/admin.php`. A request picks its language with the `Accept-Language` header, matched against these locales:
+
+```json
+{
+    "data": {
+        "id": "store",
+        "type": "settings",
+        "attributes": {
+            "name": "Classic Apparel",
+            "legal_name": "Classic Apparel LLC",
+            "about": "<p>Organic cotton basics, made to last.</p>",
+            "email": "hello@classic-apparel.com",
+            "phone_number": "+33142685300",
+            "street_address": "12 Rue de la Paix",
+            "city": "Paris",
+            "postal_code": "75002",
+            "state": null,
+            "country": { "code": "FR", "name": "France" },
+            "logo": { "url": "https://classic-apparel.com/storage/01JD8XQ6S9W3T4N5V6B7C8D9EF.png" },
+            "cover": null,
+            "social_links": [
+                { "platform": "instagram", "url": "https://instagram.com/classicapparel", "label": "Instagram" }
+            ],
+            "default_currency": "EUR",
+            "currencies": ["EUR", "USD"],
+            "default_locale": "en",
+            "supported_locales": [
+                { "code": "en", "label": "English" },
+                { "code": "fr", "label": "Français" }
+            ]
+        }
+    }
+}
+```
+
+The endpoint reads the listed keys in one query, without the `shopper_setting()` cache, except `default_currency`, which comes from the cached `shopper_currency()`. The response is public and cacheable: it carries `max-age` and `s-maxage` set to `max_age` (300 seconds by default), an `ETag`, and `Vary: Accept-Language`. A client that sends the ETag back in `If-None-Match` gets a `304 Not Modified` while nothing changed. Browsers and shared caches can serve the previous response for up to `max_age` seconds after a merchant edits the settings.
+
+To expose a key of your own, add it to the list. It comes back as stored:
+
+```php title="config/shopper/api.php"
+'settings' => [
+    'expose' => [
+        // ...
+        'shipping_notice',
+    ],
+],
+```
+
+With the JavaScript SDK, `sdk.store.setting.retrieve()` returns all the attributes and `sdk.store.setting.get('email')` a single one. The [Storefront](/3.x/storefront) tab covers the Store API and the SDK.

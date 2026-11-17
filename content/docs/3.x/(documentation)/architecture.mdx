@@ -1,0 +1,179 @@
+---
+title: Architecture and Packages
+sidebarTitle: Architecture and Packages
+description: The Composer and npm packages that make up Shopper 3, how they depend on each other, and the two ways a storefront reads store data.
+---
+
+Shopper 3 is split into 13 Composer packages and 2 npm packages. They are developed together in the [shopperlabs/shopper](https://github.com/shopperlabs/shopper) repository, as the [Contributing](/3.x/contributing) page explains. Each release tags the Composer packages and `@shopperlabs/shopper-types` at the same version; `@shopperlabs/shopper-sdk` is published with a version number of its own. Your application requires `shopper/framework`, then adds the Store API, a payment driver or a carrier driver when the store needs one.
+
+## Packages
+
+Each package has one job. The last column tells whether Composer installs the package as a dependency of another one, or whether you require it yourself.
+
+| Package | Role | Installed by |
+|---------|------|--------------|
+| `shopper/framework` | The admin panel: Livewire pages and components, roles and permissions, media on the catalog models, the `shopper:install` and `shopper:user` commands | You |
+| `shopper/core` | The e-commerce engine: models and their contracts, migrations, enums, observers, stock, prices, channels, search, outgoing webhooks | `shopper/framework` |
+| `shopper/cart` | Carts and their totals pipeline (lines, automatic promotions, discount codes, taxes), and the creation of an order from a cart | `shopper/framework` |
+| `shopper/payment` | The payment manager and its `manual` driver, payment transactions, payment provider events, reconciliation of pending payments | `shopper/framework` |
+| `shopper/shipping` | The shipping manager and its `manual` driver, carrier rates, shipment tracking sync | `shopper/framework` |
+| `shopper/sidebar` | The navigation builder behind the admin panel sidebar | `shopper/framework` |
+| `shopper/api` | The Store API: catalog, cart, checkout, customer and order endpoints as JSON:API under `/store`, and the `shopper:api:install` command | You |
+| `shopper/http` | The HTTP layer of the Store API: route groups, rate limiters, CORS, and the middleware that resolves the channel, zone, locale and customer of a request | `shopper/api` |
+| `shopper/stripe` | The `stripe` payment driver | You |
+| `shopper/fedex` | The `fedex` carrier driver: live rates and tracking | You |
+| `shopper/ups` | The `ups` carrier driver: live rates and tracking | You |
+| `shopper/usps` | The `usps` carrier driver: live rates | You |
+| `shopper/upgrade` | The `shopper:upgrade` command that moves a 2.x store to 3.x, required as a dev dependency and removed after the upgrade | You |
+| `@shopperlabs/shopper-sdk` | The JavaScript client of the Store API | You (npm) |
+| `@shopperlabs/shopper-types` | The TypeScript types of the Store API resources | `@shopperlabs/shopper-sdk` |
+
+`shopper/core`, `shopper/cart`, `shopper/payment`, `shopper/shipping` and `shopper/http` are not meant to be required on their own. Core binds its model contracts to the classes listed in `config/shopper/models.php`, a file that `shopper/framework` ships, so an application always starts from `shopper/framework`.
+
+`shopper/sidebar` is the exception: it does not depend on any other Shopper package and works in any Laravel application that runs Livewire 4.
+
+## Dependencies
+
+Every Shopper Composer package requires its Shopper dependencies at `self.version`, so Composer keeps all the Shopper packages of an application on the same version.
+
+| Package | Shopper packages it requires | Main third-party packages |
+|---------|------------------------------|---------------------------|
+| `shopper/framework` | core, cart, payment, shipping, sidebar | `filament/filament`, `spatie/laravel-medialibrary`, `spatie/laravel-permission`, `laravel/passkeys` |
+| `shopper/core` | None | `laravel/scout`, `league/csv`, `staudenmeir/laravel-adjacency-list`, `giggsey/libphonenumber-for-php` |
+| `shopper/cart` | core | None |
+| `shopper/payment` | core | None |
+| `shopper/shipping` | core | None |
+| `shopper/sidebar` | None | `livewire/livewire` |
+| `shopper/api` | core, cart, payment, shipping, http | `spatie/laravel-query-builder`, `spatie/laravel-medialibrary` |
+| `shopper/http` | core | `laravel/sanctum` |
+| `shopper/stripe` | payment | `stripe/stripe-php` |
+| `shopper/fedex` | core, shipping | None |
+| `shopper/ups` | core, shipping | None |
+| `shopper/usps` | shipping | None |
+| `shopper/upgrade` | None | `rector/rector` |
+
+`shopper/api` does not list `shopper/framework` in its `composer.json`, but it runs next to it: the customer endpoints need the `Shopper\Traits\InteractsWithShopper` trait on your `User` model, which `shopper/framework` provides. Install the Store API in an application where `shopper/framework` is already installed and migrated.
+
+On the npm side, `@shopperlabs/shopper-sdk` depends on `@shopperlabs/shopper-types` and re-exports its types, so a storefront installs the SDK only. `@shopperlabs/shopper-types` has no dependency and can be installed alone in a project that calls the Store API with its own HTTP client.
+
+## What shopper/framework Installs
+
+`composer require shopper/framework` installs the admin panel and five Shopper packages: core, cart, payment, shipping and sidebar. It also brings Filament 5, Livewire 4, Spatie Media Library and Spatie Laravel Permission, along with smaller packages for two-factor authentication, passkeys, charts and barcodes.
+
+With this single package, a store has its admin panel, its catalog, carts and orders, the `manual` payment driver and the `manual` shipping driver. These packages are not installed until you require them:
+
+- `shopper/api` and `shopper/http`, for a storefront that runs outside your Laravel application;
+- `shopper/stripe`, to take card payments with Stripe;
+- `shopper/fedex`, `shopper/ups` and `shopper/usps`, for live carrier rates;
+- `shopper/upgrade`, to move a 2.x store to 3.x.
+
+The [Installation](/3.x/installation) page installs `shopper/framework` and the Store API, and the [Add-ons](/3.x/addons) tab covers the drivers.
+
+## Service Providers
+
+Every Composer package registers one service provider through Laravel package discovery, declared under `extra.laravel.providers` in its `composer.json`. You have nothing to add to `bootstrap/providers.php`.
+
+| Service provider | Package | What it registers |
+|------------------|---------|-------------------|
+| `Shopper\ShopperServiceProvider` | `shopper/framework` | The admin routes, the Livewire pages and components, the sidebar, the settings and themes, the admin commands |
+| `Shopper\Core\CoreServiceProvider` | `shopper/core` | The model contract bindings, the morph map, the observers, the price, stock and channel services, the order reclaim and webhook redispatch tasks |
+| `Shopper\Cart\CartServiceProvider` | `shopper/cart` | The `Cart` and `CartLine` bindings, the cart pipeline, the promotion and discount services, the `shopper:prune-carts` task |
+| `Shopper\Payment\PaymentServiceProvider` | `shopper/payment` | The `Payment` manager, the payment session gateway, the `shopper:payments:reconcile` task |
+| `Shopper\Shipping\ShippingServiceProvider` | `shopper/shipping` | The `Shipping` manager, the carrier rate service, the `shopper:shipments:sync-tracking` task |
+| `Shopper\Sidebar\SidebarServiceProvider` | `shopper/sidebar` | The `sidebar` Livewire component and its assets |
+| `Shopper\Api\ApiServiceProvider` | `shopper/api` | The `/store` routes, the `shopper:api:install` command, the daily `sanctum:prune-expired` task |
+| `Shopper\Http\HttpServiceProvider` | `shopper/http` | The `shopper:store`, `shopper:store-auth` and `shopper:store-webhook` middleware groups, the rate limiters, the zone and channel resolvers, the CORS paths, the JSON:API error renderer |
+| `Shopper\Stripe\StripeServiceProvider` | `shopper/stripe` | The `stripe` payment driver |
+| `Shopper\FedEx\FedExServiceProvider` | `shopper/fedex` | The `fedex` shipping driver |
+| `Shopper\Ups\UpsServiceProvider` | `shopper/ups` | The `ups` shipping driver |
+| `Shopper\Usps\UspsServiceProvider` | `shopper/usps` | The `usps` shipping driver |
+| `Shopper\Upgrade\UpgradeServiceProvider` | `shopper/upgrade` | The `shopper:upgrade` command and its steps |
+
+The providers of framework, core, cart and payment load their migrations from the package: `php artisan migrate` runs them from `vendor/`, and they are never published. The installers publish only the migrations of third-party packages: `shopper:install` the Spatie Media Library one, `shopper:api:install` the Laravel Sanctum one.
+
+Payment and carrier drivers plug into two Laravel managers. `Shopper\Payment\PaymentManager` and `Shopper\Shipping\ShippingManager` each provide a `manual` driver. `shopper/stripe` adds the `stripe` driver with `Payment::extend()`, and the carrier packages add `fedex`, `ups` and `usps` with `Shipping::extend()`. A driver of your own registers the same way, as the [Extending](/3.x/extending) section covers.
+
+## Configuration Files
+
+Each package merges its configuration under the `shopper` key, one file per key: `config/shopper/cart.php` is read with `config('shopper.cart')`. The `shopper-config` publish tag groups the files of every installed Shopper package, which is why `php artisan shopper:install` also publishes `api.php` and `http.php` once `shopper/api` is installed. Drivers use a tag of their own, so their file is published only when you ask for it.
+
+| Package | Files in `config/shopper/` | Publish tag |
+|---------|----------------------------|-------------|
+| `shopper/framework` | `addons.php`, `admin.php`, `auth.php`, `features.php`, `media.php`, `models.php`, `routes.php`, `settings.php`, `themes.php` | `shopper-config` |
+| `shopper/core` | `core.php`, `orders.php`, `search.php`, `webhooks.php` | `shopper-config` |
+| `shopper/cart` | `cart.php` | `shopper-config` |
+| `shopper/payment` | `payment.php` | `shopper-config` |
+| `shopper/shipping` | `shipping.php` | `shopper-config` |
+| `shopper/api` | `api.php` | `shopper-config` |
+| `shopper/http` | `http.php` | `shopper-config` |
+| `shopper/stripe` | `stripe.php` | `shopper-stripe-config` |
+| `shopper/fedex` | `fedex.php` | `shopper-fedex-config` |
+| `shopper/ups` | `ups.php` | `shopper-ups-config` |
+| `shopper/usps` | `usps.php` | `shopper-usps-config` |
+
+`shopper/sidebar` keeps its file outside this folder: `config/sidebar.php`, read with `config('sidebar')` and published with the `sidebar-config` tag. `shopper:install` does not publish it. `shopper/upgrade` has no configuration file.
+
+`shopper/framework` also writes the component files of the admin panel to `config/shopper/components/` when you run `php artisan shopper:component:publish`, as described in [Components](/3.x/configuration#components). The [Configuration](/3.x/configuration#configuration-files) page describes what each file holds.
+
+## Reading Store Data
+
+A storefront reaches the store data in one of two ways, depending on where it runs: inside your Laravel application, or as a separate application that calls the Store API.
+
+### From Your Laravel Application
+
+A storefront rendered by the same Laravel application, with Blade, Livewire or Inertia, queries the Shopper models with Eloquent and needs no extra package. Resolve a model through its contract, so the class you set in `config/shopper/models.php` is the one queried:
+
+```php title="app/Http/Controllers/ShopController.php"
+namespace App\Http\Controllers;
+
+use Illuminate\Contracts\View\View;
+use Shopper\Core\Models\Contracts\Product;
+
+final class ShopController extends Controller
+{
+    public function index(): View
+    {
+        $products = resolve(Product::class)::query()
+            ->publish()
+            ->with('brand')
+            ->latest('published_at')
+            ->paginate(24);
+
+        return view('shop.index', ['products' => $products]);
+    }
+}
+```
+
+The `publish` scope keeps the products that are visible and whose publication date has passed. The [Models](/3.x/models) page lists every model with its contract.
+
+The visitor's cart lives in the session: the `Shopper\Cart\Facades\Cart` facade returns it with `Cart::current()`, or `null` while the visitor has no cart and `shopper.cart.session.auto_create` is off, its default. The [Cart](/3.x/cart) page covers the cart in detail.
+
+<Note>
+  The routes that receive payment and carrier webhooks, `POST /store/webhooks/{driver}` and `POST /store/webhooks/shipping/{driver}`, are registered by `shopper/api`. Without that package, a payment provider such as Stripe has no route to notify your store.
+</Note>
+
+### Through the Store API
+
+A storefront that runs elsewhere, such as a Next.js or Nuxt site or a mobile app, calls the Store API. `shopper/api` serves the catalog, carts, checkout, customer accounts and orders as [JSON:API](https://jsonapi.org) documents under `/store`. `shopper/http` holds the layer around these endpoints: the route groups, the rate limiters, CORS on the store routes, and the middleware that resolves the channel from the `X-Shopper-Channel` header, the zone from `X-Shopper-Zone`, the locale from `Accept-Language` and the customer from a Laravel Sanctum token.
+
+The prefix comes from `config('shopper.http.prefix')`, which reads the `SHOPPER_API_PREFIX` environment variable. The [Installation](/3.x/installation#install-the-store-api) page installs the Store API.
+
+The JavaScript SDK wraps these endpoints and returns the nested objects described by `@shopperlabs/shopper-types`. It runs wherever `fetch` exists: browsers, Node.js 18+, React Native and edge runtimes.
+
+```bash
+npm install @shopperlabs/shopper-sdk
+```
+
+```typescript
+import Shopper from '@shopperlabs/shopper-sdk'
+
+const sdk = new Shopper({ baseUrl: 'https://shop.example.com' })
+
+const { data: products } = await sdk.store.product.list({
+  filter: { name: 't-shirt' },
+  sort: ['-published_at'],
+  page: { size: 12 },
+})
+```
+
+The SDK calls `/store` by default; set its `storePrefix` option when you change the API prefix. The [Storefront](/3.x/storefront) section covers the endpoints and the SDK in detail.

@@ -1,0 +1,431 @@
+---
+title: Permissions
+description: The roles and dot notation permissions of the admin panel, what each section checks, the team safeguards, and how to check permissions in code.
+---
+
+Shopper controls access to the admin panel with [spatie/laravel-permission](https://spatie.be/docs/laravel-permission) 7. Each team member has one or more roles, and each role holds permissions named in dot notation, `resource.action`: `orders.browse` opens the order list, `products.edit` opens the product editor, `system.settings` opens the settings pages. Spatie registers its check on Laravel's gate, so `can()`, `@can`, `$this->authorize()` and the `can:` route middleware all accept these names.
+
+The [User Guide](/3.x/user-guide) shows how merchants add team members and edit roles from the admin panel.
+
+## Roles
+
+Shopper relies on three roles. Their names are set in `config/shopper/admin.php`:
+
+```php title="config/shopper/admin.php"
+'roles' => [
+    'admin' => 'administrator',
+    'manager' => 'manager',
+    'user' => 'user',
+],
+```
+
+`php artisan shopper:install` creates the three roles and the permissions when you accept to run the seeders:
+
+| Role | Display name | Access |
+|------|--------------|--------|
+| `administrator` | Administrator | Opens the admin panel and receives every seeded permission. Only an administrator can manage the administrator role, create or delete permissions, and delete team members. |
+| `manager` | Manager | Opens the admin panel. The seeder gives it no permission: grant the ones the team needs from the role page or in code. |
+| `user` | User | The customer role. The Team screen does not list it, and it cannot be given to a team member from the admin panel. |
+
+The seeder creates the three roles with `can_be_removed` set to `false`, so the admin panel never offers to delete them. Any other role, such as a "Fulfillment" role for the warehouse team, opens the admin panel only when it holds the `system.dashboard` permission.
+
+<Warning>
+Keep these names once users hold the roles. `isAdmin()` compares the role name with `config('shopper.admin.roles.admin')`: renaming the administrator role, in the config file or from its role page, removes administrator rights from everyone who holds it. The role page shows a warning when you open the administrator role for this reason.
+</Warning>
+
+## Models
+
+Both models extend the Spatie models, so every Spatie method works on them. Their tables are named by Spatie's `permission.table_names` configuration, `roles` and `permissions` by default, without the Shopper table prefix.
+
+### Role
+
+`Shopper\Models\Role` adds a display name, a description and a removal flag to Spatie's role:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `name` | string | no | | Role name, such as `administrator`. Unique per guard. |
+| `guard_name` | string | no | | Filled by Spatie with the default guard |
+| `display_name` | string | yes | null | Name shown in the admin panel |
+| `description` | text | yes | null | Description shown on the role page |
+| `can_be_removed` | boolean | no | true | `false` hides the delete action of the role |
+
+`isAdmin()` tells whether a role is the administrator role:
+
+```php
+use Shopper\Models\Role;
+
+$role = Role::findByName(config('shopper.admin.roles.admin'));
+
+$role->isAdmin();
+```
+
+### Permission
+
+`Shopper\Models\Permission` adds a group, a display name, a description and the same removal flag to Spatie's permission:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `name` | string | no | | Permission name in dot notation, such as `orders.browse`. Unique per guard. |
+| `guard_name` | string | no | | Filled by Spatie with the default guard |
+| `group_name` | string | yes | null | Group the role page lists the permission under |
+| `display_name` | string | yes | null | Label shown next to the checkbox on the role page |
+| `description` | string | yes | null | Description of the permission |
+| `can_be_removed` | boolean | no | true | `false` blocks the deletion of the permission |
+
+### Permission Groups
+
+The role page lists permissions by group. `Permission::groups()` returns the built-in groups, keyed by the value stored in `group_name`:
+
+```php
+use Shopper\Models\Permission;
+
+Permission::groups();
+```
+
+| Key | Label |
+|-----|-------|
+| `system` | System |
+| `catalog` | Catalog |
+| `products` | Products |
+| `sales` | Sales |
+| `customers` | Customers |
+| `inventory` | Inventory |
+
+The forms that create permissions on the role page offer these groups. The role page lists each permission under its group key, such as `catalog`, not the label, and a permission without a group under "Custom permission".
+
+## Seeded Permissions
+
+`Shopper\Database\Seeders\AuthTableSeeder` creates the three roles, then 73 permissions, then gives every permission to the administrator role. None of these permissions can be deleted from the admin panel.
+
+### System Permissions
+
+The `system` group holds the three permissions that cover the panel itself:
+
+| Permission | Display name | Allows |
+|------------|--------------|--------|
+| `system.dashboard` | Access Dashboard | Opening the admin panel, for a user who is neither administrator nor manager |
+| `system.settings` | Access Settings | Opening and changing the settings pages, including the roles and permissions of the Team screen |
+| `system.users` | View Users | Opening the Team screen, viewing roles and team members, and adding a team member |
+
+### Resource Permissions
+
+Each resource has five permissions: `browse` (the list page), `read` (a single record), `create`, `edit` and `delete`. The name of a permission is the resource followed by the action, such as `brands.create` or `products.variants.edit`:
+
+| Resource | Group | Admin section |
+|----------|-------|---------------|
+| `brands` | Catalog | Brands |
+| `categories` | Catalog | Categories |
+| `collections` | Catalog | Collections |
+| `products` | Products | Products |
+| `products.variants` | Products | Variants of a product |
+| `attributes` | Products | Attributes |
+| `suppliers` | Products | Suppliers |
+| `tags` | Products | Tags |
+| `reviews` | Products | Reviews |
+| `orders` | Sales | Orders, shipments and abandoned carts |
+| `discounts` | Sales | Discounts |
+| `campaigns` | Sales | Campaigns |
+| `customers` | Customers | Customers |
+| `inventories` | Inventory | Inventory locations, in the settings |
+
+## Access by Section
+
+Every page of the admin panel checks its permission when it loads, and the actions on the page check theirs again when they run, so a hidden button is never the only protection. A user who fails the check when a page loads lands on the forbidden page.
+
+| Section | Permissions checked |
+|---------|---------------------|
+| Admin panel, every page | Administrator or manager role, or `system.dashboard` |
+| Dashboard widgets | `orders.browse`, `products.browse`, `customers.browse`, as listed on the [Dashboard](/3.x/dashboard#widgets) page |
+| Products | `products.browse` for the list, `products.create` to add a product or import a CSV file, `products.edit` for every tab of the product editor, `products.delete`, `attributes.delete` to remove an attribute from a product |
+| Variants | `products.edit` to open the variant page, `products.variants.create` to add variants, `products.variants.edit` to generate variants and to change a variant, its stock, its media and its prices, `products.variants.delete` |
+| Brands, categories, collections, attributes, suppliers, tags | `{resource}.browse` for the list, then `{resource}.create`, `{resource}.edit` and `{resource}.delete` for the matching actions |
+| Reviews | `reviews.browse` for the list, `reviews.edit` to approve or reject a review, `reviews.delete` |
+| Orders | `orders.browse` for the orders, shipments and abandoned carts lists, `orders.read` for an order or a shipment, `orders.edit` for every action on an order: status changes, notes, shipping labels, shipment events |
+| Customers | `customers.browse` for the list, `customers.read` for a customer, `customers.create`, `customers.delete` to anonymize a customer |
+| Discounts | `discounts.browse` for the list, `discounts.create` to add or duplicate a discount, `discounts.edit`, `discounts.delete` |
+| Campaigns | `campaigns.browse` for the list, then `campaigns.create`, `campaigns.edit` and `campaigns.delete` |
+| Settings, Locations | `inventories.browse`, `inventories.create`, `inventories.edit`, `inventories.delete` |
+| Settings, Team | `system.users` and `system.settings`, as described in [Team Management Safeguards](#team-management-safeguards) |
+| Every other settings page, and the store setup wizard | `system.settings` |
+
+The admin panel does not check the following seeded permissions: `brands.read`, `categories.read`, `collections.read`, `products.read`, `products.variants.browse`, `products.variants.read`, `attributes.read`, `suppliers.read`, `tags.read`, `reviews.read`, `reviews.create`, `orders.create`, `orders.delete`, `discounts.read`, `campaigns.read`, `customers.edit` and `inventories.read`. They exist in the database, and your own code can check them.
+
+## Team Management Safeguards
+
+The Team screen relies on two system permissions. `system.users` opens it, lists the roles and the team members, opens a role and adds a team member. `system.settings` creates, renames and deletes roles, and grants or revokes permissions.
+
+Holding `system.settings` does not make a user an administrator. A merchant can give it to a staff member who configures shipping and taxes without handing over the access control system, because four rules apply to every user who is not an administrator:
+
+| Rule | Effect |
+|------|--------|
+| The administrator role is out of reach | A non-administrator cannot open the administrator role, change it, or give it to a new team member. |
+| Grant only what you hold | Granting a permission to a role requires holding that permission. Revoking a permission has no such condition. |
+| Permission definitions are administrator only | Creating, generating and deleting permissions requires the administrator role. |
+| Deleting team members is administrator only | An administrator can delete any team member except their own account and the last administrator. Deleting a team member deletes the user. |
+
+The rules run on the server, in the Livewire actions, so a forged request fails like a click in the interface. Roles and permissions with `can_be_removed` set to `false` are protected the same way: the server refuses to delete them.
+
+The grant rule covers permissions given to a role. Adding a team member with an existing role only requires `system.users`, so a user who holds it can give a new member any role except administrator, whatever permissions that role holds.
+
+## Generating Permissions
+
+`Permission::generate()` creates the five permissions of a resource in one call: `browse`, `read`, `create`, `edit` and `delete`. The first argument is the resource, the second the group. Without a group, the resource name is used as the group. Running it again for a resource it already created adds nothing.
+
+Shopper does not bypass the gate for administrators: they hold the seeded permissions because the seeder gave them every permission at install time. A permission created later belongs to no role until you give it, so give it to the administrator role as well, or administrators fail the check like everyone else.
+
+A seeder for a subscriptions feature of your store creates its permissions in the Sales group and gives them to the administrator role:
+
+```php title="database/seeders/SubscriptionPermissionSeeder.php"
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Shopper\Models\Permission;
+use Shopper\Models\Role;
+
+final class SubscriptionPermissionSeeder extends Seeder
+{
+    public function run(): void
+    {
+        Permission::generate('subscriptions', 'sales');
+
+        Role::findByName(config('shopper.admin.roles.admin'))->givePermissionTo([
+            'subscriptions.browse',
+            'subscriptions.read',
+            'subscriptions.create',
+            'subscriptions.edit',
+            'subscriptions.delete',
+        ]);
+    }
+}
+```
+
+Run it on each environment after the Shopper seeders:
+
+```bash
+php artisan db:seed --class=SubscriptionPermissionSeeder
+```
+
+Generated permissions have `can_be_removed` set to `false`, so they cannot be deleted from the admin panel. Administrators can also generate permissions from a role page with the "Generate permissions" button: the five permissions go to the role being edited only.
+
+## Working with Roles
+
+Roles are created and assigned with Spatie's methods, and checked with the helpers that Shopper adds to your `User` model.
+
+### Creating Roles
+
+A role for the warehouse team that prepares and ships orders needs `system.dashboard` to open the admin panel, then the permissions of the sections it works in:
+
+```php
+use Shopper\Models\Role;
+
+$role = Role::query()->create([
+    'name' => 'fulfillment',
+    'display_name' => 'Fulfillment',
+    'description' => 'Prepares and ships orders.',
+]);
+
+$role->givePermissionTo([
+    'system.dashboard',
+    'orders.browse',
+    'orders.read',
+    'orders.edit',
+    'customers.browse',
+    'customers.read',
+]);
+```
+
+Creating a role from the Team screen of the admin panel requires `system.settings`.
+
+### Assigning Roles
+
+`assignRole()` adds a role to a user, and `syncRoles()` replaces all of their roles:
+
+```php
+$user->assignRole('fulfillment');
+
+$user->syncRoles([config('shopper.admin.roles.manager')]);
+```
+
+Read the role names from `config('shopper.admin.roles')` rather than writing `administrator` or `manager`, so your code follows the configuration.
+
+### Checking Roles
+
+The `Shopper\Traits\InteractsWithShopper` trait on your `User` model brings Spatie's `HasRoles` trait and three methods built on the roles configuration:
+
+```php
+$user->isAdmin();
+
+$user->isManager();
+
+$user->canAccessDashboard();
+
+$user->hasRole('fulfillment');
+```
+
+`isAdmin()` and `isManager()` check the administrator and manager roles. `canAccessDashboard()` is the check that guards every admin page: it is true for an administrator, a manager, or a user who holds `system.dashboard`. `hasRole()` comes from Spatie and accepts any role name.
+
+The trait also adds an `administrators()` query scope, which returns the users with the administrator or manager role:
+
+```php
+use App\Models\User;
+
+$team = User::query()->administrators()->get();
+```
+
+## Working with Permissions
+
+Permissions go through Laravel's gate, so you check them with the authorization tools you already use, and you add your own next to the ones Shopper seeds.
+
+### Checking Permissions
+
+Spatie's gate hook grants an ability when the user holds a permission of that name, through a role or directly. Otherwise it gives no answer, and Laravel goes on to your own gates and policies, so permissions and policies work side by side.
+
+```php
+$user->can('orders.edit');
+
+$user->hasPermissionTo('orders.edit');
+```
+
+`can()` returns `false` for a name that matches no permission. `hasPermissionTo()` throws a `Spatie\Permission\Exceptions\PermissionDoesNotExist` exception instead, which surfaces a typo in a permission name.
+
+In Blade:
+
+```blade
+@can('orders.export')
+    <x-filament::button wire:click="export">
+        {{ __('Export orders') }}
+    </x-filament::button>
+@endcan
+```
+
+Livewire components call `authorize()` when the page loads, the way every Shopper page does:
+
+```php title="app/Livewire/Shopper/Subscriptions.php"
+public function mount(): void
+{
+    $this->authorize('subscriptions.browse');
+}
+```
+
+Filament actions take the permission with `authorize()`, which hides the action from a user who lacks it and checks it again when the action runs:
+
+```php
+use Filament\Actions\Action;
+
+Action::make('cancel')
+    ->authorize('subscriptions.edit');
+```
+
+The routes of your [custom route file](/3.x/configuration#custom-routes) take the `can:` middleware:
+
+```php title="routes/shopper.php"
+use App\Livewire\Shopper\Subscriptions;
+use Illuminate\Support\Facades\Route;
+
+Route::livewire('subscriptions', Subscriptions::class)
+    ->middleware('can:subscriptions.browse')
+    ->name('subscriptions.index');
+```
+
+Inside the admin panel, a failed check sends the user to the forbidden page. In a component that uses the `Shopper\Traits\HandlesAuthorizationExceptions` trait, a check that fails after the page has loaded shows an "Unauthorized" notification instead, and the user stays on the page.
+
+### Creating Custom Permissions
+
+For a single permission, create it with `Permission::query()->create()` and give it to the roles that need it, the administrator role included:
+
+```php
+use Shopper\Models\Permission;
+use Shopper\Models\Role;
+
+$permission = Permission::query()->create([
+    'name' => 'orders.export',
+    'group_name' => 'sales',
+    'display_name' => 'Export orders',
+    'description' => 'Allows downloading the order list as a CSV file.',
+]);
+
+Role::findByName(config('shopper.admin.roles.admin'))->givePermissionTo($permission);
+Role::findByName('fulfillment')->givePermissionTo($permission);
+```
+
+A permission created this way keeps the default `can_be_removed` value of `true`, so an administrator can delete it from the role page. Administrators can also create a permission from a role page with the "Create permission" button, which gives it to that role.
+
+### Revoking Permissions
+
+`revokePermissionTo()` removes a permission from a role:
+
+```php
+use Shopper\Models\Role;
+
+Role::findByName('fulfillment')->revokePermissionTo('orders.edit');
+```
+
+## Upgrading from 2.x
+
+Shopper 2.x named permissions with an action prefix, such as `browse_products` or `add_brands`. The `php artisan shopper:upgrade` command renames them in the database as one of its steps. To run that step alone, preview it first:
+
+```bash
+php artisan shopper:upgrade:permissions --dry-run
+```
+
+The command maps each 2.x action prefix to a 3.x suffix (`add_` becomes `.create`, the others keep their name), renames `product_variants` to `products.variants`, renames `access_dashboard`, `access_setting` and `view_users` to `system.dashboard`, `system.settings` and `system.users`, and moves each permission to its 3.x group. A permission whose 3.x name already exists is skipped. The command records that it ran and does nothing on the next run unless you pass `--force`.
+
+The roles keep their permissions, since only the names change. The command writes to the table directly, so Spatie keeps the 2.x names in its cache: clear it once the rename is done.
+
+```bash
+php artisan permission:cache-reset
+```
+
+Rename the permission checks in your own code as well: the [upgrade guide](/3.x/upgrade) lists the changes, and the `shopper-upgrade-permissions` [upgrade skill](/3.x/ai-tools#upgrade-skills) applies them.
+
+<Note>
+The `campaigns` resource is new in 3.x, and the rename does not create its permissions. Generate them with `Permission::generate('campaigns', 'sales')` and give them to the administrator role, as shown in [Generating Permissions](#generating-permissions), or nobody can open the Campaigns section.
+</Note>
+
+## Admin User Creation
+
+The `shopper:user` command creates a user with the administrator role:
+
+```bash
+php artisan shopper:user
+```
+
+It asks for an email address, a first name, a last name and a password of at least 6 characters, and marks the email as verified. It stops with an error when the administrator role does not exist yet: run `php artisan db:seed --class="Shopper\Database\Seeders\AuthTableSeeder"` first.
+
+To make an existing user an administrator in code, assign the role:
+
+```php
+$user->assignRole(config('shopper.admin.roles.admin'));
+```
+
+## Components
+
+The Team screen is part of the `setting` components. Publish them to replace a page or a component with your own Livewire class, as described in [Components](/3.x/configuration#components):
+
+```bash
+php artisan shopper:component:publish setting
+```
+
+The entries that build the Team screen in `config/shopper/components/setting.php`:
+
+```php title="config/shopper/components/setting.php"
+use Shopper\Livewire;
+use Shopper\Livewire\Components;
+use Shopper\Livewire\Pages;
+
+return [
+    'pages' => [
+        'team-index' => Pages\Settings\Team\Index::class,
+        'team-roles' => Pages\Settings\Team\RolePermission::class,
+    ],
+    'components' => [
+        'settings.team.administrators' => Components\Settings\Team\AdministratorsList::class,
+        'settings.team.permissions' => Components\Settings\Team\Permissions::class,
+        'slide-overs.create-team-member' => Livewire\SlideOvers\CreateTeamMember::class,
+    ],
+];
+```
+
+A replacement page or component keeps the safeguards only if it applies them: extend the Shopper class, or use the `Shopper\Traits\AuthorizesTeamManagement` trait the built-in components use.

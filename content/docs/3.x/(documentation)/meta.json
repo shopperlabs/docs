@@ -13,6 +13,14 @@
     "installation",
     "configuration",
     "dashboard",
-    "ai-tools"
+    "ai-tools",
+    "---Core Concepts---",
+    "architecture",
+    "models",
+    "money",
+    "channels",
+    "acl",
+    "events",
+    "settings"
   ]
 }

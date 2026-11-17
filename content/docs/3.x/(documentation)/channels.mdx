@@ -1,0 +1,475 @@
+---
+title: Channels
+description: Sales channels in Shopper, from the Channel model and its drivers to products per channel and the X-Shopper-Channel header of the Store API.
+---
+
+A channel is a place where the store sells: the website, a mobile app, a marketplace, a physical shop or a wholesale portal. Each product is attached to the channels it is sold on. The admin panel uses channels to choose where a product is available and to tell orders apart, and the Store API uses them to show each storefront only its own products.
+
+## Model
+
+The model is `Shopper\Core\Models\Channel`. It implements the `Shopper\Core\Models\Contracts\Channel` contract. Two of its traits change how you create and find channels:
+
+- `HasSlug` turns the `slug` you assign into a URL-safe value and appends `-1`, `-2` and so on when it is already taken. The slug is not derived from the name: pass one when you create a channel, because the Store API finds channels by their slug.
+- `HasPublicId` fills `public_id` with a ULID when the channel is created.
+
+The model can be swapped through the `channel` key of `config/shopper/models.php`.
+
+### Extending the Model
+
+To add your own methods, extend the model:
+
+```php title="app/Models/Channel.php"
+namespace App\Models;
+
+use Shopper\Core\Models\Channel as ShopperChannel;
+
+class Channel extends ShopperChannel
+{
+    public function isMobileApp(): bool
+    {
+        return $this->slug === 'mobile-app';
+    }
+}
+```
+
+Then point the configuration to your class:
+
+```php title="config/shopper/models.php"
+'channel' => App\Models\Channel::class,
+```
+
+Shopper binds the contract to the configured class, so `resolve(Shopper\Core\Models\Contracts\Channel::class)`, `$product->channels` and `$order->channel` all return your model. The [Models](/3.x/models) page explains how swapping works.
+
+## Database Schema
+
+Channels are stored in the `sh_channels` table (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)):
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `name` | string | no | - | Channel name |
+| `slug` | string | yes | null | Unique identifier sent in the `X-Shopper-Channel` header |
+| `description` | text | yes | null | Channel description |
+| `timezone` | string | yes | null | Stored for your own code, Shopper does not read it |
+| `url` | string | yes | null | Address of the channel, shown on the settings page |
+| `driver` | string | yes | null | Code of the [channel driver](#channel-drivers); `null` means `web` |
+| `is_default` | boolean | no | false | Default channel flag |
+| `is_enabled` | boolean | no | false | Whether the channel is active |
+| `metadata` | jsonb | yes | null | Your own data, cast to an array |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+## Relationships
+
+A channel is linked to the products it sells through a polymorphic pivot table, and every order or cart records the channel it was placed on.
+
+### Products
+
+Channels and products are linked through the polymorphic `sh_product_has_relations` table, which also links products to categories and collections. The relation works from both sides:
+
+```php
+use Shopper\Core\Models\Channel;
+use Shopper\Core\Models\Product;
+
+$channel = Channel::findBySlug('mobile-app');
+
+$channel->products;
+$channel->products()->attach([$sneakers->id, $hoodie->id]);
+$channel->products()->detach($hoodie->id);
+$channel->products()->sync($productIds);
+
+$product = Product::query()->where('slug', 'classic-t-shirt')->first();
+
+$product->channels;
+```
+
+### Orders and Carts
+
+Orders and carts carry a nullable `channel_id` column and a `channel()` relation. Deleting a channel sets the column to `null` on its orders and carts. The channel model has no inverse relation, so query orders by the column:
+
+```php
+use Shopper\Core\Models\Channel;
+use Shopper\Core\Models\Order;
+
+$mobileApp = Channel::findBySlug('mobile-app');
+
+$mobileOrders = Order::query()
+    ->where('channel_id', $mobileApp->id)
+    ->count();
+```
+
+## Query Scopes
+
+The model has a `default` and an `enabled` scope:
+
+```php
+use Shopper\Core\Models\Channel;
+
+$default = Channel::query()->default()->first();
+
+$channels = Channel::query()->enabled()->orderBy('name')->get();
+
+$channels = Channel::query()
+    ->enabled()
+    ->withCount('products')
+    ->get();
+```
+
+The traits add lookups by slug and by public ID. `findBySlug()` throws a `ModelNotFoundException` when no channel matches, `findByPublicId()` returns `null`:
+
+```php
+use Shopper\Core\Models\Channel;
+
+$webStore = Channel::findBySlug('web-store');
+
+$mobileApp = Channel::findByPublicId('01JZ8Q4X7M2N3P5R6S7T8V9W0Y');
+```
+
+## Default Channel
+
+The installer runs `Shopper\Core\Database\Seeders\ShopperSeeder`, which calls `ChannelSeeder`. It creates one channel, enabled and marked as default:
+
+| Attribute | Value |
+|-----------|-------|
+| `name` | Web Store |
+| `slug` | `web-store` |
+| `url` | `config('app.url')` |
+| `driver` | `null` (the `web` driver) |
+
+`Shopper\Core\Observers\ChannelObserver` keeps two rules each time a channel is created or updated:
+
+- Only one channel is the default. Saving a channel with `is_default` set to `true` removes the flag from the previous default.
+- The default channel is always enabled. Its `is_enabled` is forced to `true`.
+
+To make the mobile app the default channel:
+
+```php
+use Shopper\Core\Models\Channel;
+
+Channel::findBySlug('mobile-app')->update(['is_default' => true]);
+```
+
+The previous default loses its flag without firing model events.
+
+The admin panel uses the default channel in two places: the Add product form selects it for every new product, and the settings page lists it first with its status toggle locked. The Store API does not read `is_default`. A request without a channel header falls back to the slug in `SHOPPER_API_DEFAULT_CHANNEL`, as described in [The Store API](#the-store-api).
+
+## Creating Channels
+
+The settings page lists channels and turns them on and off. It has no form to create or edit a channel, so create them in code, for example in a seeder of your application:
+
+```php title="database/seeders/ChannelSeeder.php"
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Shopper\Core\Models\Channel;
+
+class ChannelSeeder extends Seeder
+{
+    public function run(): void
+    {
+        Channel::query()->create([
+            'name' => 'Mobile app',
+            'slug' => 'mobile-app',
+            'description' => 'iOS and Android app',
+            'url' => 'https://apps.apple.com/app/id6741234567',
+            'is_enabled' => true,
+            'metadata' => [
+                'ios_app_id' => '6741234567',
+                'android_package' => 'com.example.shop',
+            ],
+        ]);
+    }
+}
+```
+
+`is_enabled` defaults to `false`: a channel created without it stays disabled until someone turns it on from the settings page. The model has no guarded attributes, so every column can be filled with `create()`.
+
+Use `metadata` for the data your own code needs per channel, such as the store identifiers above:
+
+```php
+$androidPackage = Channel::findBySlug('mobile-app')->metadata['android_package'] ?? null;
+```
+
+## Channel Drivers
+
+A driver describes the platform a channel sells on: its name, its logo, and whether it has what it needs to work, such as API credentials. The admin panel reads the driver to show the logo and the driver badge on the settings page and the logo next to each channel in the product form.
+
+Shopper ships one driver, `web` (`Shopper\Core\Channel\Drivers\WebDriver`). A channel whose `driver` column is `null` uses it.
+
+### Writing a Driver
+
+A driver implements `Shopper\Core\Channel\Contracts\ChannelDriver`:
+
+```php title="app/Channels/MobileAppDriver.php"
+namespace App\Channels;
+
+use Shopper\Core\Channel\Contracts\ChannelDriver;
+
+final class MobileAppDriver implements ChannelDriver
+{
+    public function code(): string
+    {
+        return 'mobile';
+    }
+
+    public function name(): string
+    {
+        return 'Mobile app';
+    }
+
+    public function logo(): ?string
+    {
+        return asset('images/channels/mobile-app.svg');
+    }
+
+    public function isConfigured(): bool
+    {
+        return true;
+    }
+}
+```
+
+`logo()` returns an image URL or a data URI, or `null` for the default placeholder. `isConfigured()` returns `false` while the driver lacks something it needs; the settings page then shows its badge in orange.
+
+### Registering a Driver
+
+`Shopper\Core\Channel\ChannelManager` extends Laravel's `Illuminate\Support\Manager`. Register the driver with `extend()` in the `boot` method of a service provider, through the `Channels` facade:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Channels\MobileAppDriver;
+use Shopper\Core\Channel\Contracts\ChannelDriver;
+use Shopper\Core\Channel\Facades\Channels;
+
+public function boot(): void
+{
+    Channels::extend('mobile', fn (): ChannelDriver => new MobileAppDriver);
+}
+```
+
+The name passed to `extend()` is the value to store in the `driver` column, so keep it equal to `code()`:
+
+```php
+Channel::findBySlug('mobile-app')->update(['driver' => 'mobile']);
+```
+
+The facade also lists and checks drivers:
+
+| Method | Returns |
+|--------|---------|
+| `Channels::driver('mobile')` | The driver instance; throws `InvalidArgumentException` for an unknown name |
+| `Channels::availableDrivers()` | The driver names: `web` and every registered one |
+| `Channels::configuredDrivers()` | The drivers whose `isConfigured()` returns `true`, keyed by name |
+| `Channels::isConfigured('mobile')` | `false` for an unknown driver or one whose check throws |
+| `Channels::logoFor($channel->driver)` | The driver logo, the `web` logo for `null`, `null` for an unknown driver |
+
+A channel can name a driver that is not registered, for example after you remove a package. The settings page then shows the raw driver name in an orange badge and a placeholder logo.
+
+## Settings Page
+
+The channels page is under **Settings**, in the **Selling** group, as **Sales channels** (`/cpanel/setting/channels`). It requires the `system.settings` permission. The table lists every channel, the default one first and the others by name, with these columns:
+
+| Column | Content |
+|--------|---------|
+| Logo | The logo of the channel driver |
+| Name | The channel name, with its `url` below it |
+| Driver | The driver name: gray for `web`, green for a configured driver, orange otherwise |
+| Default | Whether the channel is the default one |
+| Status | A toggle for `is_enabled`, locked on the default channel |
+| Updated At | Date of the last change |
+
+Disabling a channel takes it out of the Store API and out of the channels a new product can be added to. Products keep their link to it, and the product form shows it grayed out with a Disabled badge.
+
+To hide the page, set `Items\ChannelSetting::class` to `false` in `config/shopper/settings.php`, as shown in [Settings](/3.x/configuration#settings). The [User Guide](/3.x/user-guide) covers the admin screens.
+
+## Assigning Products to Channels
+
+In the admin panel, the Add product form has a **Sales channels** field that lists the enabled channels and starts with the default channel selected. The product page has a **Sales channels** section with one toggle per channel and a counter such as "Available in 1 of 2 sales channels". The product list can be filtered by channel.
+
+In code, attach channels through the product:
+
+```php
+use Shopper\Core\Models\Channel;
+use Shopper\Core\Models\Product;
+
+$product = Product::query()->where('slug', 'classic-t-shirt')->first();
+
+$product->channels()->attach([
+    Channel::findBySlug('web-store')->id,
+    Channel::findBySlug('mobile-app')->id,
+]);
+```
+
+<Warning>
+  Products created in code or through an import are attached to no channel. As soon as a Store API request resolves a channel, they disappear from its catalog. Attach them to their channels after you create them.
+</Warning>
+
+The `channel` scope of the product model keeps the products attached to one channel, or to any of several channels. It takes channel IDs:
+
+```php
+use Shopper\Core\Models\Product;
+
+$products = Product::query()
+    ->channel([$webStore->id, $mobileApp->id])
+    ->publish()
+    ->get();
+```
+
+The search index of products also stores the public IDs of their channels, in a filterable `channels` field. The [Search](/3.x/search) page covers the index.
+
+### Storefront Example
+
+A storefront built in the same Laravel application filters the catalog itself. This controller lists the products of the default channel:
+
+```php title="app/Http/Controllers/ProductController.php"
+namespace App\Http\Controllers;
+
+use Illuminate\Contracts\View\View;
+use Shopper\Core\Models\Channel;
+use Shopper\Core\Models\Product;
+
+class ProductController extends Controller
+{
+    public function index(): View
+    {
+        $channel = Channel::query()->default()->firstOrFail();
+
+        $products = Product::query()
+            ->channel($channel->id)
+            ->publish()
+            ->with(['brand', 'categories'])
+            ->paginate(12);
+
+        return view('products.index', ['products' => $products]);
+    }
+}
+```
+
+## The Store API
+
+The Store API reads the channel of each request from the `X-Shopper-Channel` header, which carries a channel slug. The examples below use `store`, the default prefix of the Store API routes, set by `SHOPPER_API_PREFIX`:
+
+```bash
+curl https://example.com/store/products \
+  -H "X-Shopper-Channel: mobile-app"
+```
+
+The `Shopper\Http\Middleware\ResolveChannel` middleware runs on every route of the `shopper:store` and `shopper:store-auth` groups. It resolves the channel in this order:
+
+1. The enabled channel whose slug matches the header.
+2. When the header is missing, unknown, longer than 64 characters or names a disabled channel: the enabled channel whose slug is set in `SHOPPER_API_DEFAULT_CHANNEL`.
+3. Otherwise no channel. The request goes on without one and the API returns no error.
+
+The channel filters the catalog and never refuses a request. Without a resolved channel, the catalog is not filtered: the API returns every published product, including products attached to no channel and products reserved for another channel.
+
+<Warning>
+  Set `SHOPPER_API_DEFAULT_CHANNEL` before you open the Store API, for example to `web-store`. Without it, a client that omits the header sees the products of every channel.
+</Warning>
+
+The settings live in `config/shopper/http.php`:
+
+```php title="config/shopper/http.php"
+'channel' => [
+    'resolver' => Shopper\Http\Channel\DefaultChannelResolver::class,
+    'header' => 'X-Shopper-Channel',
+    'default_slug' => env('SHOPPER_API_DEFAULT_CHANNEL'),
+    'cache_ttl' => 60,
+],
+```
+
+The resolver caches each channel it finds for `cache_ttl` seconds, and forgets it when the channel is saved or deleted. Set `cache_ttl` to `0` to query the database on every request. Every response adds the header name to `Vary`, so a shared cache keeps one copy per channel.
+
+### What the Channel Changes
+
+When a channel is resolved:
+
+- `GET /store/products` lists only the products attached to it, and `GET /store/products/{slug}` answers 404 for a product that is not.
+- The `products` include of categories, collections, brands and tags, the `relatedProducts` include of a product, and the `products_count` include of categories count only its products.
+- `POST /store/carts` records it on the new cart, and the order placed from that cart keeps it. The admin panel shows the channel on the orders list, where it can also filter by channel, on the order page, and on abandoned carts.
+- The pricing context passed to the price resolver carries its ID in `Shopper\Core\Pricing\PricingContext::$channelId`. The default resolver ignores it; a custom one can set prices per channel, as described in [Pricing](/3.x/pricing).
+
+Categories, collections, brands and tags themselves are not filtered by channel, and neither are the review endpoints or `POST /store/carts/{cartId}/lines`: a cart accepts a product that is not attached to its channel.
+
+### Reading the Channel in Your Own Endpoints
+
+The middleware stores the channel in the `shopper_channel` request attribute, as an instance of the channel contract or `null`. A route registered inside `Shopper\Http\Facades\ShopperApi::store()` runs the same middleware and can read it:
+
+```php title="app/Http/Controllers/FeaturedProductController.php"
+namespace App\Http\Controllers;
+
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Shopper\Core\Models\Contracts\Channel;
+use Shopper\Core\Models\Product;
+
+class FeaturedProductController
+{
+    public function __invoke(Request $request): JsonResponse
+    {
+        $channel = $request->attributes->get('shopper_channel');
+
+        $products = Product::query()
+            ->publish()
+            ->where('featured', true)
+            ->when($channel instanceof Channel, fn (Builder $query) => $query->channel($channel->id))
+            ->limit(8)
+            ->get(['id', 'name', 'slug']);
+
+        return response()->json(['data' => $products]);
+    }
+}
+```
+
+Register the route in `routes/web.php`, which Laravel loads without an `/api` prefix, so it answers on `/store/featured-products`:
+
+```php title="routes/web.php"
+use App\Http\Controllers\FeaturedProductController;
+use Illuminate\Support\Facades\Route;
+use Shopper\Http\Facades\ShopperApi;
+
+ShopperApi::store(function (): void {
+    Route::get('featured-products', FeaturedProductController::class);
+});
+```
+
+### Custom Resolver
+
+To find the channel another way, from the domain of the storefront or an API key, implement `Shopper\Http\Contracts\ChannelResolver` and set it as the `resolver`. This resolver matches the `Origin` header of browser requests against the `url` of the channels, and falls back to the header lookup:
+
+```php title="app/Http/OriginChannelResolver.php"
+namespace App\Http;
+
+use Illuminate\Http\Request;
+use Shopper\Core\Models\Contracts\Channel;
+use Shopper\Http\Channel\DefaultChannelResolver;
+use Shopper\Http\Contracts\ChannelResolver;
+
+final class OriginChannelResolver implements ChannelResolver
+{
+    public function __construct(private readonly DefaultChannelResolver $headerResolver) {}
+
+    public function resolve(Request $request): ?Channel
+    {
+        $origin = $request->headers->get('Origin');
+
+        $channel = filled($origin)
+            ? resolve(Channel::class)::query()
+                ->enabled()
+                ->where('url', $origin)
+                ->first()
+            : null;
+
+        return $channel ?? $this->headerResolver->resolve($request);
+    }
+}
+```
+
+```php title="config/shopper/http.php"
+'channel' => [
+    'resolver' => App\Http\OriginChannelResolver::class,
+    // ...
+],
+```
+
+The [Storefront](/3.x/storefront) tab covers the rest of the Store API.

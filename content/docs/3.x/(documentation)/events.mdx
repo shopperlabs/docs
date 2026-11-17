@@ -1,0 +1,401 @@
+---
+title: Events
+description: The events Shopper dispatches for orders, payments, shipments, products, customers and carts, when each one fires, and how to listen to them.
+---
+
+Shopper dispatches Laravel events when an order is placed, paid, shipped or cancelled, when a payment fails, when a product changes and when a customer signs up. Your application listens to them to send emails, sync an ERP or a warehouse, or feed analytics, without changing Shopper's code.
+
+Each package keeps its events in its own namespace:
+
+| Namespace | Package | Events |
+|-----------|---------|--------|
+| `Shopper\Core\Events\Orders` | `shopper/core` | Orders, order items and shipments |
+| `Shopper\Core\Events\Products` | `shopper/core` | Products and product imports |
+| `Shopper\Core\Events\Customers` | `shopper/core` | Customer sign-ups |
+| `Shopper\Core\Events\Payments` | `shopper/core` | Payments received without an order |
+| `Shopper\Payment\Events` | `shopper/payment` | Failed payments |
+| `Shopper\Cart\Events` | `shopper/cart` | Checkout, coupons and cart prices |
+| `Shopper\Events` | `shopper/framework` | Admin panel |
+
+## Listening to Events
+
+Laravel 12 and 13 discover the listeners stored in `app/Listeners`: a class whose `handle` method type-hints a Shopper event is registered for that event, with no other step.
+
+```php title="app/Listeners/RecordSaleInAccounting.php"
+namespace App\Listeners;
+
+use App\Services\Accounting;
+use Shopper\Core\Events\Orders\OrderPaid;
+
+class RecordSaleInAccounting
+{
+    public function __construct(private Accounting $accounting) {}
+
+    public function handle(OrderPaid $event): void
+    {
+        $this->accounting->recordSale($event->order);
+    }
+}
+```
+
+Every event exposes its payload as public properties, such as `$event->order` above. Order, product and cart payloads are typed with the model contracts, so a listener receives your own model when you replace one: orders and products in `config/shopper/models.php`, as the [Models](/3.x/models) page explains, and carts in the `models` key of `config/shopper/cart.php`.
+
+A listener stored in another directory is registered in the `boot` method of a service provider:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Warehouse\CancelPickingList;
+use Illuminate\Support\Facades\Event;
+use Shopper\Core\Events\Orders\OrderCancelled;
+
+public function boot(): void
+{
+    Event::listen(OrderCancelled::class, CancelPickingList::class);
+}
+```
+
+Register each listener one way only: a listener in `app/Listeners` that is also passed to `Event::listen()` runs twice. To see every listener attached to a Shopper event, Shopper's own included, run:
+
+```bash
+php artisan event:list --event=Shopper
+```
+
+### Dispatched After Commit
+
+Most Shopper events implement Laravel's `ShouldDispatchAfterCommit` contract. When such an event is dispatched inside a database transaction, Laravel holds it until the transaction commits, and drops it if the transaction rolls back. A listener therefore never sees a half-written order: `OrderCreated` is dispatched when the order row is inserted, yet the checkout writes the items, the addresses and the promotions in the same transaction, and the listener finds all of them. Outside a transaction, the event is dispatched at once. The [reference table](#all-events-reference) shows which events wait for the commit.
+
+Waiting for the commit does not put a listener on the queue. Listeners still run during the request that dispatched the event, unless you queue them.
+
+### Queueing Listeners
+
+A listener that calls an external service or sends an email should not slow down the checkout or the admin panel. Implement `ShouldQueue` and Laravel pushes the listener to the queue instead of running it during the request:
+
+```php title="app/Listeners/RecordSaleInAccounting.php"
+namespace App\Listeners;
+
+use App\Services\Accounting;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Shopper\Core\Events\Orders\OrderPaid;
+
+class RecordSaleInAccounting implements ShouldQueue
+{
+    public $queue = 'accounting';
+
+    public function __construct(private Accounting $accounting) {}
+
+    public function handle(OrderPaid $event): void
+    {
+        $this->accounting->recordSale($event->order);
+    }
+}
+```
+
+The `$queue` property sends the job to a named queue. Without it, the job goes to the default queue. The queue worker must listen to every queue your listeners use, as described in [Installation](/3.x/installation#queue-worker).
+
+Most Shopper events use Laravel's `SerializesModels` trait: the queued job stores the IDs of the models and loads them again when it runs. The listener reads the order as it is when the job runs, which can differ from the order at dispatch time.
+
+## Order Events
+
+Order events follow an order from checkout to completion, cancellation or archiving. They live in the `Shopper\Core\Events\Orders` namespace.
+
+### Available Events
+
+The order events carry the order as `public Order $order`, typed with the `Shopper\Core\Models\Contracts\Order` contract. `OrderItemCreated` carries `public OrderItem $orderItem`, an instance of `Shopper\Core\Models\OrderItem`.
+
+| Event | Payload | Dispatched when |
+|-------|---------|-----------------|
+| `OrderCreated` | `Order $order` | An order row is inserted, at checkout or from your own code |
+| `OrderItemCreated` | `OrderItem $orderItem` | An order item row is inserted |
+| `OrderPaid` | `Order $order` | The payment status becomes Paid, see [Payment Events](#payment-events) |
+| `OrderShipped` | `Order $order` | The shipping status of the order becomes Shipped, see [Shipment Events](#shipment-events) |
+| `OrderCompleted` | `Order $order` | The order moves to Completed |
+| `OrderCancelled` | `Order $order` | The order moves to Cancelled |
+| `OrderArchived` | `Order $order` | The order is archived from the admin panel |
+| `OrderNoteAdded` | `Order $order` | A private note is saved on the order in the admin panel |
+| `OrderDeleted` | `Order $order` | An order is deleted, soft or forced |
+
+`OrderCreated`, `OrderItemCreated` and `OrderDeleted` come from model observers, so they fire wherever the row is created or deleted. An order inserted by your own code outside a transaction dispatches `OrderCreated` at once, before you add its items. The admin panel never deletes an order: `OrderDeleted` only fires when your code deletes one.
+
+### Order Lifecycle
+
+An order carries three statuses: `status` for the order itself, `payment_status` for its payment and `shipping_status` for its packages. The order status follows the `Shopper\Core\Enum\OrderStatus` state machine:
+
+| Status | Can move to |
+|--------|-------------|
+| New | Processing, Completed, Cancelled, Archived |
+| Processing | Completed, Cancelled, Archived |
+| Completed | Cancelled, Archived |
+| Cancelled | Archived |
+| Archived | None |
+
+`$order->transitionTo()` refuses any other move with a `Shopper\Core\Exceptions\InvalidOrderStatusTransitionException`. It dispatches no event: the code that moves the order dispatches the matching event after the transition. Shopper moves orders in these places:
+
+| Move | Triggered by | Event |
+|------|--------------|-------|
+| Created as New | The checkout turns a cart into an order | `OrderCreated` |
+| New to Processing | Start processing or Mark as paid in the admin panel, or the carrier picking up the first package | None |
+| Processing to Completed | Mark complete in the admin panel, offered once the order is paid, or automatically once the order is paid and every item is delivered | `OrderCompleted` |
+| To Cancelled | Cancel Order in the admin panel, a cancellation reported by the payment provider on an unpaid order, or the hourly `shopper:orders:reclaim` command for orders left unpaid | `OrderCancelled` |
+| To Archived | Archive in the admin panel, offered for orders neither paid nor completed | `OrderArchived` |
+
+The automatic completion runs in two places: when the last package of a paid order is delivered, and when an order whose items are all delivered gets paid, through the `OrderPaid` listener Shopper registers. An item whose package came back is never counted as delivered, so an order with a returned package is not completed automatically. The delay before `shopper:orders:reclaim` cancels an unpaid order is set by `reclaim_pending_after_hours` in `config/shopper/orders.php`, described on the [Configuration](/3.x/configuration) page.
+
+When your own code moves an order, dispatch the matching event after the transition so that your listeners and the webhooks see the change:
+
+```php
+use Shopper\Core\Enum\OrderStatus;
+use Shopper\Core\Events\Orders\OrderCompleted;
+
+$order->transitionTo(OrderStatus::Completed);
+
+OrderCompleted::dispatch($order);
+```
+
+## Payment Events
+
+The payment status follows its own state machine, `Shopper\Core\Enum\PaymentStatus`: Pending moves to Authorized, Paid or Voided; Authorized to Paid or Voided; Paid to Partially refunded or Refunded; Partially refunded to Partially refunded or Refunded. Only the move to Paid dispatches an event. Amounts in payment events are in cents.
+
+| Event | Namespace | Payload | Dispatched when |
+|-------|-----------|---------|-----------------|
+| `OrderPaid` | `Shopper\Core\Events\Orders` | `Order $order` | The payment status becomes Paid |
+| `PaymentFailed` | `Shopper\Payment\Events` | `Order $order`, `TransactionType $type`, `?string $reason` | The provider declines an authorization, a capture or a refund |
+| `PaymentOrphaned` | `Shopper\Core\Events\Payments` | `string $driver`, `string $reference`, `?int $amount`, `?string $cartId` | A payment authorized or captured by the provider still has no order |
+| `OrphanedPaymentRefunded` | `Shopper\Core\Events\Payments` | `string $driver`, `string $reference`, `?int $amount` | An orphaned payment is refunded |
+
+`OrderPaid` is dispatched by `$order->transitionPaymentTo(PaymentStatus::Paid)`, whatever moved the payment: Mark as paid in the admin panel for offline payments such as cash on delivery, Capture payment in the admin panel for an authorized payment, or the capture event of the payment provider, applied at checkout, from the provider's webhook or by the `shopper:payments:reconcile` command.
+
+`PaymentFailed` carries `$type`, a `Shopper\Payment\Enum\TransactionType` case (`Authorize`, `Capture` or `Refund`), and `$reason`, the message returned by the provider. A failure reported by the provider's webhook only dispatches the event while the payment is still pending: the order keeps its reserved stock so that the customer can try again.
+
+### Orphaned Payments
+
+A customer can pay and lose the connection before the checkout creates the order. Every 15 minutes, the scheduled `shopper:payments:reconcile` command looks for provider authorizations and captures that still have no order after `reconciliation.orphan_after_minutes` in `config/shopper/payment.php` (30 by default, set with `PAYMENT_ORPHAN_AFTER_MINUTES`), and dispatches `PaymentOrphaned` for each one. Listeners run during the command and answer through three methods of the event:
+
+| Method | Meaning |
+|--------|---------|
+| `recognize()` | The payment belongs to one of the store's carts |
+| `resolve()` | The listener created the order for this payment |
+| `defer()` | The payment is checked again on the next run |
+
+Shopper's cart package recognizes a payment whose reference matches a cart. With the Store API installed, a second listener completes that cart and calls `resolve()`, or `defer()` when the cart is locked or the provider does not answer. A payment recognized but not resolved is reported to your exception handler, then refunded when `config('shopper.payment.reconciliation.orphans')` is `refund` (`PAYMENT_ORPHANS`, `alert` by default). A successful refund dispatches `OrphanedPaymentRefunded`, with `$amount` set to `null`. The provider's refund webhook also dispatches it for a payment without an order, with the refunded amount when the provider sends one. A storefront that completes its checkout without the Store API can listen to `PaymentOrphaned` and complete the cart the same way.
+
+## Shipment Events
+
+An order ships in one or more packages, each an `OrderShipping` model with its own status. A package is created from the order page of the admin panel. Its status then changes when an administrator records a tracking event or marks it delivered, or when the carrier reports it, through its webhook or the `shopper:shipments:sync-tracking` command. The [Fulfillment](/3.x/fulfillment) page describes the shipment statuses.
+
+### Available Events
+
+Shipment events live in `Shopper\Core\Events\Orders` with the order events. They carry the order and the package, an instance of `Shopper\Core\Models\OrderShipping`:
+
+| Event | Payload | Dispatched when |
+|-------|---------|-----------------|
+| `OrderShipmentCreated` | `Order $order`, `OrderShipping $shipment` | A package is created, with the status Pending |
+| `OrderShipmentDelivered` | `Order $order`, `OrderShipping $shipment` | The package reaches Delivered |
+| `OrderShipmentDeliveryFailed` | `Order $order`, `OrderShipping $shipment` | The package reaches Delivery failed |
+| `OrderShipmentReturned` | `Order $order`, `OrderShipping $shipment` | The package reaches Returned |
+| `OrderShipmentEventRecorded` | `Order $order`, `OrderShipping $shipment`, `OrderShippingEvent $event`, `bool $statusChanged` | A tracking event is recorded on the package |
+| `OrderShipped` | `Order $order` | The shipping status of the order becomes Shipped |
+
+`OrderShipmentEventRecorded` fires each time a tracking event is recorded on an existing package, after the event of the status it reached. The Pending event written when the package is created only dispatches `OrderShipmentCreated`. `$event` is the `Shopper\Core\Models\OrderShippingEvent` row. `$statusChanged` is `false` when a carrier scan is logged without changing the package status, such as a scan older than the current status. A carrier event already recorded under the same external ID is ignored and dispatches nothing.
+
+```php title="app/Listeners/PushTrackingToCustomerApp.php"
+namespace App\Listeners;
+
+use App\Services\PushNotifications;
+use Shopper\Core\Events\Orders\OrderShipmentEventRecorded;
+
+class PushTrackingToCustomerApp
+{
+    public function __construct(private PushNotifications $push) {}
+
+    public function handle(OrderShipmentEventRecorded $event): void
+    {
+        if (! $event->statusChanged) {
+            return;
+        }
+
+        $this->push->send($event->order->customer, $event->shipment->tracking_number, $event->event->status);
+    }
+}
+```
+
+### Shipment vs Order Events
+
+Shipment events fire per package, order events per order. A status recorded on a package also updates its items and the order:
+
+- The first time a package reaches Picked up or a later status other than Returned, its items become Shipped, a New order moves to Processing, and the shipping status of the order is computed again. `OrderShipped` fires when every item of the order is shipped and none is delivered or returned yet.
+- When a package is delivered, its items become Delivered, and the order is completed if it is paid, in Processing, and every item is delivered.
+- When a package is returned, its items become Cancelled and the shipping status of the order is computed again: Returned when every item came back, Partially returned when the other items are all shipped or delivered.
+- Delivery failed changes nothing else.
+
+For a paid order of three items sent in two packages, the events arrive in this order:
+
+| Step | Events, in dispatch order |
+|------|---------------------------|
+| Package A is created with two items | `OrderShipmentCreated` |
+| The carrier picks up package A | `OrderShipmentEventRecorded` |
+| Package B is created with the last item | `OrderShipmentCreated` |
+| The carrier picks up package B while A is in transit | `OrderShipped`, `OrderShipmentEventRecorded` |
+| The first delivery attempt of package A fails | `OrderShipmentDeliveryFailed`, `OrderShipmentEventRecorded` |
+| Package A is delivered | `OrderShipmentDelivered`, `OrderShipmentEventRecorded` |
+| Package B is delivered | `OrderCompleted`, `OrderShipmentDelivered`, `OrderShipmentEventRecorded` |
+
+A package that comes back to the store dispatches `OrderShipmentReturned`, then `OrderShipmentEventRecorded`.
+
+<Warning>
+  `OrderShipped` never fires when a package is delivered before the last package is picked up: the shipping status of the order goes from Partially delivered to Delivered without passing through Shipped. To follow every package, listen to the shipment events.
+</Warning>
+
+## Product Events
+
+Product events live in `Shopper\Core\Events\Products`. The product events carry `public Product $product`, typed with the `Shopper\Core\Models\Contracts\Product` contract. The admin panel and the CSV import dispatch them, no model observer does: `Product::create()` in your own code or in a seeder dispatches nothing.
+
+| Event | Payload | Dispatched when |
+|-------|---------|-----------------|
+| `ProductCreated` | `Product $product` | A product is created in the admin panel, or a CSV import creates a new product |
+| `ProductUpdated` | `Product $product` | The main product form is saved in the admin panel |
+| `ProductDeleted` | `Product $product` | A product is deleted from the admin panel, just before the deletion |
+| `ProductImportCompleted` | `ProductImport $import` | A CSV import finishes |
+
+`ProductUpdated` only fires from the main form of the product page: name, description, visibility, publication date, channels, brand, categories, collections and tags. Saving the pricing, inventory, media, files, shipping, SEO, attributes or variants of a product, or updating an existing product through a CSV import, dispatches no event.
+
+Products are soft deleted, so a queued listener of `ProductDeleted` still loads the product it receives.
+
+`ProductImportCompleted` carries the `Shopper\Core\Models\ProductImport` record. Its `status` is `Completed` or `CompletedWithErrors` (`Shopper\Core\Enum\ImportStatus`), next to the `total_products`, `imported_count`, `failed_count` and `errors` columns. An import that fails before its rows are read ends with the status `Failed` and dispatches no event. The [Import](/3.x/import) page covers the CSV format.
+
+## Customer Events
+
+`Shopper\Core\Events\Customers\CustomerRegistered` carries `public Authenticatable $customer`, an instance of your user model. It fires when a customer is created in the admin panel, or signs up through `POST /store/auth/register` in the [Store API](/3.x/storefront). A sign-up handled by your own code dispatches no Shopper event.
+
+The Store API also dispatches two Laravel events: `Illuminate\Auth\Events\Lockout` when a login is refused after too many failed attempts, and `Illuminate\Auth\Events\PasswordReset` when a customer resets their password.
+
+## Cart and Discount Events
+
+Cart events live in `Shopper\Cart\Events` and carry the cart as `public Cart $cart`, typed with the `Shopper\Cart\Models\Contracts\Cart` contract. Shopper dispatches no event when a discount or a campaign is created, changed or used up: the coupon events come from the cart.
+
+| Event | Payload | Dispatched when |
+|-------|---------|-----------------|
+| `CartCompleted` | `Cart $cart`, `Order $order` | The checkout turns the cart into an order |
+| `CouponApplied` | `Cart $cart`, `string $code` | A coupon code is applied to the cart |
+| `CouponRemoved` | `Cart $cart` | Coupon codes are removed from the cart |
+| `CartLinesRepriced` | `Cart $cart`, `Collection $changes` | The unit price of one or more lines changes |
+
+`CartCompleted` is dispatched once the order, its items and the cart are committed, after `OrderCreated` and `OrderItemCreated`.
+
+`CouponRemoved` does not say which code left the cart. It fires when the customer removes a code through `DELETE /store/carts/{cartId}/promotion`, which removes every code when the request names none, and when Shopper drops a code that no longer applies after the currency or the zone of the cart changes, or when a signed-in customer takes over a guest cart. It also fires when the code to remove was not on the cart.
+
+`CartLinesRepriced` fires when Shopper prices a cart again and at least one unit price changed: when the zone or the channel of the cart changes, when a signed-in customer takes over or merges a guest cart, before a payment session is created, and when the checkout is refused because a unit price went up. Each item of `$changes` is an array with `line`, the `Shopper\Cart\Models\CartLine`, and `from` and `to`, the unit price before and after, in cents.
+
+## Admin Panel Events
+
+The `shopper/framework` package dispatches three events from the admin panel:
+
+| Event | Payload | Dispatched when |
+|-------|---------|-----------------|
+| `Shopper\Events\LoadShopper` | None | On every request to the admin panel, Livewire requests included |
+| `Shopper\Events\TwoFactor\TwoFactorAuthenticationEnabled` | `$user` | An admin user turns on two-factor authentication from their profile |
+| `Shopper\Events\TwoFactor\TwoFactorAuthenticationDisabled` | `$user` | Never dispatched |
+
+`Shopper::serving()` attaches a closure to `LoadShopper`, to run code only when the admin panel is serving a request, and `Shopper::isServing()` tells whether the current request belongs to the admin panel. Both come from the `Shopper\Facades\Shopper` facade.
+
+`TwoFactorAuthenticationDisabled` exists, but Shopper does not dispatch it when a user turns two-factor authentication off, so a listener on it never runs. The [Two-Factor Authentication](/3.x/two-factor) page covers the feature.
+
+The sidebar of the admin panel is built through its own `Shopper\Sidebar\SidebarBuilder` event. The [Extending](/3.x/extending) section shows how to add menu groups and items with it.
+
+## Listeners Shopper Registers
+
+Shopper listens to some of its own events. Check this list before writing a listener, so that yours does not repeat their work:
+
+| Event | Listener | What it does | Runs |
+|-------|----------|--------------|------|
+| `OrderCreated` | `Shopper\Listeners\EnsureCustomerRole` | Gives the order's customer the role set in `config('shopper.admin.roles.user')` | During the request |
+| `OrderPaid` | `Shopper\Core\Listeners\Orders\CompleteFulfilledOrderListener` | Completes the order when every item is already delivered | During the request |
+| `OrderCancelled` | `Shopper\Core\Listeners\Orders\RestoreOrderStockListener` | Puts the stock reserved by the order back on sale | Default queue |
+| `OrderCancelled` | `Shopper\Core\Listeners\Orders\ReleaseCampaignBudgetListener` | Gives the discount budget spent by the order back to its campaign | Default queue |
+| `PaymentOrphaned` | `Shopper\Cart\Listeners\RecognizeOrphanedPayment` | Recognizes a payment that matches a cart | During the command |
+| `PaymentOrphaned` | `Shopper\Api\Listeners\CompleteOrphanedCart` | Completes the cart the payment belongs to, with the Store API installed | During the command |
+| `OrphanedPaymentRefunded` | `Shopper\Cart\Listeners\ForgetRefundedPaymentSession` | Clears the refunded payment session from its cart | During the request or the command |
+
+When `notifications.database.enabled` is `true` in `config/shopper/admin.php` (`false` by default), the admin panel also notifies its administrators under the bell of the top bar on `OrderCreated`, `OrderPaid`, `PaymentFailed` and `ProductImportCompleted`. These four listeners run on a queue named `notifications`, so the queue worker must listen to it. The [Notifications](/3.x/notifications) page describes them.
+
+## Example: Order Notification System
+
+A store emails the customer when the order is placed, then again when each package arrives. Two queued listeners in `app/Listeners` cover it, each with a mailable created by `php artisan make:mail`:
+
+```php title="app/Listeners/SendOrderConfirmation.php"
+namespace App\Listeners;
+
+use App\Mail\OrderConfirmation;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Support\Facades\Mail;
+use Shopper\Core\Events\Orders\OrderCreated;
+
+class SendOrderConfirmation implements ShouldQueue
+{
+    public function handle(OrderCreated $event): void
+    {
+        Mail::to($event->order->email)->send(new OrderConfirmation($event->order));
+    }
+}
+```
+
+The Store API checkout always stores the customer's email on the order, for guests and signed-in customers alike. `OrderCreated` fires as soon as the order exists, before a card payment is captured: to confirm paid orders only, listen to `OrderPaid` instead.
+
+```php title="app/Listeners/SendDeliveryConfirmation.php"
+namespace App\Listeners;
+
+use App\Mail\PackageDelivered;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Support\Facades\Mail;
+use Shopper\Core\Events\Orders\OrderShipmentDelivered;
+
+class SendDeliveryConfirmation implements ShouldQueue
+{
+    public function handle(OrderShipmentDelivered $event): void
+    {
+        $event->shipment->load('items');
+
+        Mail::to($event->order->email)->send(new PackageDelivered($event->order, $event->shipment));
+    }
+}
+```
+
+`OrderShipmentDelivered` sends one email per package, with the items it carried. `OrderCompleted` fires once per order and suits a single thank-you email, sent when the last package is delivered on a paid order.
+
+## Webhooks
+
+Fourteen of these events can also reach external systems as signed HTTP requests. A webhook subscription picks events by their public name, given in the Webhook column of the [reference table](#all-events-reference), such as `order.paid` or `shipment.delivered`. The other events are never sent as webhooks. The map from event class to name lives in the `events` key of `config/shopper/webhooks.php`, and the `Shopper\Core\Webhooks\Facades\Webhooks` facade registers your own events with `Webhooks::register()`. The [Webhooks](/3.x/webhooks) page covers subscriptions, payloads, signatures and retries.
+
+## All Events Reference
+
+The After commit column marks the events that implement `ShouldDispatchAfterCommit`.
+
+| Event | Namespace | After commit | Webhook |
+|-------|-----------|--------------|---------|
+| `OrderCreated` | `Shopper\Core\Events\Orders` | Yes | `order.created` |
+| `OrderItemCreated` | `Shopper\Core\Events\Orders` | Yes | None |
+| `OrderPaid` | `Shopper\Core\Events\Orders` | Yes | `order.paid` |
+| `OrderShipped` | `Shopper\Core\Events\Orders` | Yes | `order.shipped` |
+| `OrderCompleted` | `Shopper\Core\Events\Orders` | Yes | `order.completed` |
+| `OrderCancelled` | `Shopper\Core\Events\Orders` | Yes | `order.cancelled` |
+| `OrderArchived` | `Shopper\Core\Events\Orders` | Yes | None |
+| `OrderNoteAdded` | `Shopper\Core\Events\Orders` | Yes | None |
+| `OrderDeleted` | `Shopper\Core\Events\Orders` | Yes | None |
+| `OrderShipmentCreated` | `Shopper\Core\Events\Orders` | Yes | `shipment.created` |
+| `OrderShipmentDelivered` | `Shopper\Core\Events\Orders` | Yes | `shipment.delivered` |
+| `OrderShipmentDeliveryFailed` | `Shopper\Core\Events\Orders` | Yes | `shipment.delivery_failed` |
+| `OrderShipmentReturned` | `Shopper\Core\Events\Orders` | Yes | `shipment.returned` |
+| `OrderShipmentEventRecorded` | `Shopper\Core\Events\Orders` | Yes | None |
+| `PaymentFailed` | `Shopper\Payment\Events` | Yes | None |
+| `PaymentOrphaned` | `Shopper\Core\Events\Payments` | No | None |
+| `OrphanedPaymentRefunded` | `Shopper\Core\Events\Payments` | No | None |
+| `ProductCreated` | `Shopper\Core\Events\Products` | Yes | `product.created` |
+| `ProductUpdated` | `Shopper\Core\Events\Products` | Yes | `product.updated` |
+| `ProductDeleted` | `Shopper\Core\Events\Products` | Yes | `product.deleted` |
+| `ProductImportCompleted` | `Shopper\Core\Events\Products` | No | None |
+| `CustomerRegistered` | `Shopper\Core\Events\Customers` | Yes | `customer.registered` |
+| `CartCompleted` | `Shopper\Cart\Events` | Yes | `cart.completed` |
+| `CouponApplied` | `Shopper\Cart\Events` | No | None |
+| `CouponRemoved` | `Shopper\Cart\Events` | No | None |
+| `CartLinesRepriced` | `Shopper\Cart\Events` | No | None |
+| `LoadShopper` | `Shopper\Events` | No | None |
+| `TwoFactorAuthenticationEnabled` | `Shopper\Events\TwoFactor` | No | None |
+| `TwoFactorAuthenticationDisabled` | `Shopper\Events\TwoFactor` | No | None |

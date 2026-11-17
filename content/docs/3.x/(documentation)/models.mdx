@@ -1,0 +1,331 @@
+---
+title: Models and Contracts
+sidebarTitle: Models and Contracts
+description: The Eloquent models Shopper ships, how to replace one with your own class, and the morph aliases, public IDs and table names they share.
+---
+
+Shopper stores its data with Eloquent models. Most of them live in `shopper/core` under the `Shopper\Core\Models` namespace, the cart and payment packages add their own, and the admin package (`shopper/framework`) extends the catalog models to give them images. Thirteen core models, the cart and its lines can be replaced with a class of your own, and Shopper then loads your class everywhere it uses that model.
+
+This page lists the models by domain, explains how swapping works and how Shopper resolves the class to use, and covers what the models share: morph aliases, the public ID and the table prefix. How the packages depend on each other is described in [Architecture and Packages](/3.x/architecture).
+
+## Models by Domain
+
+The tables below give each model, its table name without the prefix, and its key in `config/shopper/models.php` when the model can be swapped. Models are in `Shopper\Core\Models` unless the section says otherwise. Each swappable model implements a contract of the same name in `Shopper\Core\Models\Contracts`, such as `Shopper\Core\Models\Contracts\Product`, and the container binds that contract to the configured class.
+
+### Catalog
+
+The catalog models hold what the store sells. Seven of them are swappable, and six of those are configured with the admin package's `Shopper\Models` subclasses, described in [Core Models and Admin Models](/3.x/models#core-models-and-admin-models).
+
+| Model | Table | `models.php` key | Page |
+|-------|-------|------------------|------|
+| `Product` | `products` | `product` | [Products](/3.x/products) |
+| `ProductVariant` | `product_variants` | `variant` | [Product Variants](/3.x/product-variants) |
+| `Attribute` | `attributes` | | [Attributes](/3.x/attributes) |
+| `AttributeValue` | `attribute_values` | | [Attributes](/3.x/attributes) |
+| `AttributeProduct` | `attribute_product` | `attribute_product` | [Attributes](/3.x/attributes) |
+| `Brand` | `brands` | `brand` | [Brands](/3.x/brands) |
+| `Category` | `categories` | `category` | [Categories](/3.x/categories) |
+| `Collection` | `collections` | `collection` | [Collections](/3.x/collections) |
+| `CollectionRule` | `collection_rules` | | [Collections](/3.x/collections) |
+| `ProductTag` | `product_tags` | | [Product Tags](/3.x/product-tags) |
+| `Price` | `prices` | | [Pricing](/3.x/pricing) |
+| `Review` | `reviews` | | [Reviews](/3.x/reviews) |
+| `Supplier` | `suppliers` | `supplier` | [Suppliers](/3.x/suppliers) |
+| `ProductImport` | `product_imports` | | [Import](/3.x/import) |
+
+### Inventory
+
+An inventory is a location that holds stock, such as a warehouse or a shop. Stock movements are recorded in a ledger, and the stock level of each product or variant at each location is kept in its own table.
+
+| Model | Table | `models.php` key | Page |
+|-------|-------|------------------|------|
+| `Inventory` | `inventories` | `inventory` | [Locations](/3.x/locations) |
+| `InventoryHistory` | `inventory_histories` | | [Locations](/3.x/locations) |
+| `StockLevel` | `stock_levels` | | [Locations](/3.x/locations) |
+
+### Orders and Taxes
+
+An order keeps a copy of everything it needs once the cart is gone: its items, its addresses, its tax lines and its shipments.
+
+| Model | Table | `models.php` key | Page |
+|-------|-------|------------------|------|
+| `Order` | `orders` | `order` | [Orders](/3.x/orders) |
+| `OrderItem` | `order_items` | | [Orders](/3.x/orders) |
+| `OrderAddress` | `order_addresses` | | [Orders](/3.x/orders) |
+| `OrderRefund` | `order_refunds` | | [Orders](/3.x/orders) |
+| `OrderShipping` | `order_shipping` | | [Fulfillment](/3.x/fulfillment) |
+| `OrderShippingEvent` | `order_shipping_events` | | [Fulfillment](/3.x/fulfillment) |
+| `OrderTaxLine` | `order_tax_lines` | | [Taxes](/3.x/taxes) |
+| `TaxZone` | `tax_zones` | `tax_zone` | [Taxes](/3.x/taxes) |
+| `TaxRate` | `tax_rates` | `tax_rate` | [Taxes](/3.x/taxes) |
+| `TaxRateRule` | `tax_rate_rules` | | [Taxes](/3.x/taxes) |
+| `TaxProvider` | `tax_providers` | | [Taxes](/3.x/taxes) |
+
+### Discounts and Campaigns
+
+Discounts hold the promotion rules, `DiscountDetail` links a discount to the products or customers it applies to, and `OrderPromotion` records the promotions applied to an order.
+
+| Model | Table | `models.php` key | Page |
+|-------|-------|------------------|------|
+| `Discount` | `discounts` | | [Discounts](/3.x/discounts) |
+| `DiscountDetail` | `discountables` | | [Discounts](/3.x/discounts) |
+| `OrderPromotion` | `order_promotions` | | [Discounts](/3.x/discounts) |
+| `Campaign` | `campaigns` | | [Campaigns](/3.x/campaigns) |
+| `CampaignBudgetMovement` | `campaign_budget_movements` | | [Campaigns](/3.x/campaigns) |
+
+### Cart and Payments
+
+The cart models are in `Shopper\Cart\Models` (`shopper/cart`) and the payment models in `Shopper\Payment\Models` (`shopper/payment`). The cart and its lines are swapped in `config/shopper/cart.php`, under the `models` key, and their contracts are `Shopper\Cart\Models\Contracts\Cart` and `Shopper\Cart\Models\Contracts\CartLine`.
+
+| Model | Table | `cart.php` key | Page |
+|-------|-------|----------------|------|
+| `Cart` | `carts` | `models.cart` | [Cart](/3.x/cart) |
+| `CartLine` | `cart_lines` | `models.cart_line` | [Cart](/3.x/cart) |
+| `CartAddress` | `cart_addresses` | | [Cart](/3.x/cart) |
+| `CartLineAdjustment` | `cart_line_adjustments` | | [Cart](/3.x/cart) |
+| `CartLineTaxLine` | `cart_line_tax_lines` | | [Cart](/3.x/cart) |
+| `CartPromotion` | `cart_promotions` | | [Cart](/3.x/cart) |
+| `PaymentTransaction` | `payment_transactions` | | [Payments](/3.x/payments) |
+| `PaymentWebhookEvent` | `payment_webhook_events` | | [Payments](/3.x/payments) |
+
+### Customers and Store Setup
+
+Customers and team members are rows of your application's `users` table: Shopper does not ship a user model. Your `User` model uses the `Shopper\Traits\InteractsWithShopper` trait, as shown in [Installation](/3.x/installation), and roles and permissions use `Shopper\Models\Role` and `Shopper\Models\Permission`, which extend the Spatie permission models (see [Permissions](/3.x/acl)). The other models of this group describe the store itself.
+
+| Model | Table | `models.php` key | Page |
+|-------|-------|------------------|------|
+| `Address` | `user_addresses` | `address` | [Customers](/3.x/customers) |
+| `Geolocation` | `users_geolocation_history` | | [Customers](/3.x/customers) |
+| `Channel` | `channels` | `channel` | [Channels](/3.x/channels) |
+| `Zone` | `zones` | | [Zones](/3.x/zones) |
+| `Country` | `countries` | | [Zones](/3.x/zones) |
+| `Currency` | `currencies` | | [Currencies](/3.x/currencies) |
+| `Carrier` | `carriers` | | [Carriers](/3.x/carriers) |
+| `CarrierOption` | `carrier_options` | | [Carriers](/3.x/carriers) |
+| `PaymentMethod` | `payment_methods` | | [Payment Methods](/3.x/payment-methods) |
+| `Legal` | `legals` | | [Legal](/3.x/legal) |
+| `Setting` | `settings` | | [Settings](/3.x/settings) |
+| `WebhookSubscription` | `webhook_subscriptions` | | [Webhooks](/3.x/webhooks) |
+| `WebhookEvent` | `webhook_events` | | [Webhooks](/3.x/webhooks) |
+| `WebhookDelivery` | `webhook_deliveries` | | [Webhooks](/3.x/webhooks) |
+
+## Core Models and Admin Models
+
+The admin package ships six subclasses in the `Shopper\Models` namespace: `Product`, `ProductVariant`, `Brand`, `Category`, `Collection` and `AttributeProduct`. Each one extends the core class of the same name and implements Spatie Media Library's `HasMedia` interface, which adds the media collections and image conversions configured in `config/shopper/media.php`, and helpers such as `getThumbnailUrl()`. These are the classes `config/shopper/models.php` lists for those six keys. The seven other keys list a core class, because those models have no media.
+
+When you swap a model, extend the class `config/shopper/models.php` lists for its key: `Shopper\Models\Product` for `product`, `Shopper\Core\Models\Order` for `order`. The admin panel calls the media methods on catalog models, for example `getThumbnailUrl()` in the product pickers, so a product class that extends `Shopper\Core\Models\Product` breaks those screens.
+
+Shopper also checks the class when one of its models boots. If the configured class does not extend the Shopper class being booted, it throws a `Shopper\Core\Exceptions\InvalidModelConfigurationException` with a message such as `[App\Models\Product] must extend [Shopper\Core\Models\Product]`. Shopper's code names the core classes, so the check compares your class with the core class and does not catch a product class that extends `Shopper\Core\Models\Product` instead of `Shopper\Models\Product`.
+
+## Swapping a Model
+
+Swap a model when you need your own methods, scopes, relationships or casts on it. Your class extends the Shopper class, so it keeps every column, relationship and behavior of the original.
+
+<Steps>
+  <Step title="Create the model">
+    This product model adds a scope for the products the merchant marks as featured, and a relationship to a wishlist model of the application:
+
+    ```php title="app/Models/Product.php"
+    <?php
+
+    namespace App\Models;
+
+    use Illuminate\Database\Eloquent\Attributes\Scope;
+    use Illuminate\Database\Eloquent\Builder;
+    use Illuminate\Database\Eloquent\Relations\HasMany;
+    use Shopper\Models\Product as ShopperProduct;
+
+    class Product extends ShopperProduct
+    {
+        #[Scope]
+        protected function featured(Builder $query): void
+        {
+            $query->where('featured', true);
+        }
+
+        public function wishlistItems(): HasMany
+        {
+            return $this->hasMany(WishlistItem::class, 'product_id');
+        }
+    }
+    ```
+  </Step>
+  <Step title="Register it">
+    Point the `product` key to your class:
+
+    ```php title="config/shopper/models.php"
+    'product' => App\Models\Product::class,
+    ```
+  </Step>
+  <Step title="Refresh the cached configuration">
+    Shopper reads the configured classes when the application boots. If you cache your configuration, run `php artisan config:cache` again after the change.
+  </Step>
+</Steps>
+
+Your scope and relationship are then available on every product Shopper loads, including the ones the admin panel and the Store API return:
+
+```php
+use App\Models\Product;
+
+$featured = Product::query()
+    ->featured()
+    ->publish()
+    ->latest('published_at')
+    ->take(8)
+    ->get();
+```
+
+The Shopper models declare their casts in a `casts()` method. When you override it to cast a column you added, merge the parent casts with `array_merge(parent::casts(), [...])`, or the Shopper columns lose theirs.
+
+### What Uses Your Class
+
+Once a class is registered, Shopper uses it wherever it loads that model:
+
+- The container binds the contract, here `Shopper\Core\Models\Contracts\Product`, to your class. The admin panel, the Store API and the cart resolve models through these contracts.
+- Relationships read the class from the configuration: `$variant->product` and `$category->products` return instances of your class.
+- The morph map points the `product` alias to your class, so polymorphic relations such as order items and stock levels load it too.
+- The admin pages bind their route parameters to your class: the product edit page receives an `App\Models\Product`.
+- Shopper's observers are registered on your class, and the model events of your class are dispatched a second time under the core class name, such as `eloquent.created: Shopper\Core\Models\Product`. Listeners registered on the Shopper model keep firing after the swap.
+
+### Swapping the Cart Models
+
+The cart and its lines follow the same rules with their own configuration file. Extend `Shopper\Cart\Models\Cart` or `Shopper\Cart\Models\CartLine` and register the class under `models` in `config/shopper/cart.php`:
+
+```php title="config/shopper/cart.php"
+'models' => [
+    'cart' => App\Models\Cart::class,
+    'cart_line' => Shopper\Cart\Models\CartLine::class,
+],
+```
+
+### Models You Cannot Swap
+
+A model without a configuration key is always loaded with its own class: `$product->tags` returns `Shopper\Core\Models\ProductTag` instances and `$order->items` returns `Shopper\Core\Models\OrderItem` instances. To add a relationship to one of these models, register it from a service provider with Eloquent's `resolveRelationUsing()` method:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Models\GiftMessage;
+use Shopper\Core\Models\OrderItem;
+
+public function boot(): void
+{
+    OrderItem::resolveRelationUsing('giftMessage', function (OrderItem $orderItem) {
+        return $orderItem->hasOne(GiftMessage::class, 'order_item_id');
+    });
+}
+```
+
+## Resolving Models in Your Code
+
+In your application, use your own class directly. Code that must work whatever the configuration, such as a package, an add-on or a shared action, resolves the class from the contract or from the configuration instead of naming one. The Store API loads a product by its slug this way:
+
+```php
+use Shopper\Core\Models\Contracts\Product;
+
+$product = resolve(Product::class)::query()
+    ->publish()
+    ->where('slug', 'classic-t-shirt')
+    ->firstOrFail();
+```
+
+A relationship from one of your models to a swappable Shopper model reads the class from `config('shopper.models.*')`, as Shopper's own relationships do:
+
+```php title="app/Models/WishlistItem.php"
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+
+public function product(): BelongsTo
+{
+    return $this->belongsTo(config('shopper.models.product'), 'product_id');
+}
+```
+
+### Route Model Binding
+
+Laravel binds a route parameter only when the controller type-hints an Eloquent model. The Shopper contracts are interfaces Laravel does not bind: type-hint one and the container injects an empty model instead of the one in the URL. Type-hint your class, or the Shopper class, which looks the record up through the configured class:
+
+```php title="app/Http/Controllers/ProductController.php"
+use App\Models\Product;
+use Illuminate\View\View;
+
+public function show(Product $product): View
+{
+    return view('products.show', ['product' => $product]);
+}
+```
+
+With a route such as `Route::get('/products/{product:slug}', [ProductController::class, 'show'])`, `/products/classic-t-shirt` loads the Classic T-Shirt.
+
+## Morph Map
+
+Polymorphic columns, such as `product_type` on order items or `priceable_type` on prices, store a short alias instead of a class name. Shopper registers these aliases with `Relation::morphMap()`. The aliases of the swappable models point to the configured class, so swapping a model changes the class Eloquent loads without changing a single stored row.
+
+| Alias | Model |
+|-------|-------|
+| `address`, `brand`, `category`, `collection`, `product`, `variant`, `attribute_product`, `channel`, `order`, `inventory`, `supplier`, `tax_zone`, `tax_rate` | The class configured for the `models.php` key of the same name |
+| `product_tag` | `Shopper\Core\Models\ProductTag` |
+| `country` | `Shopper\Core\Models\Country` |
+| `carrier` | `Shopper\Core\Models\Carrier` |
+| `carrier_option` | `Shopper\Core\Models\CarrierOption` |
+| `payment_method` | `Shopper\Core\Models\PaymentMethod` |
+
+An order item that sells a variant stores `variant` in `product_type`, and `$item->product` returns an instance of the class configured for the `variant` key. Compare morph types with the alias that `getMorphClass()` returns, never with a class name:
+
+```php
+use Shopper\Core\Models\Contracts\ProductVariant;
+
+$variantItems = $order->items
+    ->where('product_type', resolve(ProductVariant::class)->getMorphClass());
+```
+
+Shopper does not enforce a morph map. Models without an alias, such as `OrderItem`, `OrderShipping`, the cart or your `User` model, are stored with their class name. If your application calls `Relation::enforceMorphMap()`, add an alias for each of them, or Laravel throws a `ClassMorphViolationException` when Shopper writes one to a polymorphic column.
+
+## Public IDs
+
+Most Shopper tables have a `public_id` column next to the auto-increment `id`. It holds a ULID, a 26-character identifier that sorts by creation time, filled by the `Shopper\Core\Models\Traits\HasPublicId` trait when the row is created. A copy made with `replicate()` gets a new one. Use the public ID wherever an identifier leaves your application, in a URL, an email or a payment provider's metadata: it cannot be guessed from another one, and it does not reveal how many orders the store has taken.
+
+The Store API returns `public_id` as the `id` of every resource that has one, and outgoing webhooks send it as `resource.id`. Foreign keys between Shopper tables keep using `id`. To find a record by its public ID, use `findByPublicId()` or the `wherePublicId` scope:
+
+```php
+use Shopper\Core\Models\Order;
+
+$order = Order::findByPublicId('01JZ8Q4V6S3W9D2M7K5T1B8XNC');
+
+$orders = Order::query()
+    ->wherePublicId('01JZ8Q4V6S3W9D2M7K5T1B8XNC')
+    ->with('items')
+    ->get();
+```
+
+Every model in the tables above has a public ID except the line and ledger rows, the tax setup and a few internal tables: `AttributeProduct`, `AttributeValue`, `CampaignBudgetMovement`, `CollectionRule`, `DiscountDetail`, `Geolocation`, `InventoryHistory`, `Legal`, `OrderPromotion`, `OrderTaxLine`, `Setting`, `StockLevel`, `TaxProvider`, `TaxRate`, `TaxRateRule`, `TaxZone`, `WebhookSubscription`, `CartLineAdjustment`, `CartLineTaxLine`, `CartPromotion`, `PaymentTransaction` and `PaymentWebhookEvent`. The `InteractsWithShopper` trait gives your `User` model one as well, stored in a `public_id` column Shopper adds to the `users` table. On a store upgraded from 2.x, the migration that adds the column fills it for the existing rows.
+
+## Table Names
+
+Every Shopper model builds its table name with the `shopper_table()` helper, which prepends the `table_prefix` of `config/shopper/core.php`. With the default `sh_` prefix, `shopper_table('products')` returns `sh_products`, and the Shopper migrations create their tables the same way. Choosing another prefix is covered in [Configuration](/3.x/configuration#database-table-prefix).
+
+Use the helper whenever your own code names a Shopper table, in a migration, a raw query or a validation rule, so that it follows the configured prefix:
+
+```php title="database/migrations/2026_11_16_000000_add_care_instructions_to_products_table.php"
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Schema::table(shopper_table('products'), function (Blueprint $table) {
+            $table->text('care_instructions')->nullable();
+        });
+    }
+
+    public function down(): void
+    {
+        Schema::table(shopper_table('products'), function (Blueprint $table) {
+            $table->dropColumn('care_instructions');
+        });
+    }
+};
+```
+
+The pivot tables take the prefix too: `sh_product_has_relations` links products to their categories, collections, channels, tags and related products, and `sh_zone_has_relations` links zones to their countries, carriers, payment methods and collections. Three groups of tables are not prefixed, because they belong to your application or to another package: the `users` table, the role and permission tables named in `config/permission.php`, and the `media` table of Spatie Media Library.

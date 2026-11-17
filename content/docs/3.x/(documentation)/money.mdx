@@ -1,0 +1,229 @@
+---
+title: Money
+description: How Shopper stores amounts as integers in cents, handles zero-decimal currencies, and formats prices in PHP, the admin panel and the Store API.
+---
+
+Every amount Shopper stores, from a product price to an order total, is an integer in cents. This page explains that convention, the columns that hold amounts, how zero-decimal currencies differ, how to format an amount for display and convert a customer's input, and what the Store API returns. Prices per currency, the `HasPrices` trait and the `Price` model are on the [Pricing](/3.x/pricing) page, and the list of currencies a store sells in on [Currencies](/3.x/currencies).
+
+## Amounts in Cents
+
+Shopper stores an amount as a whole number of cents of its currency. A Classic T-Shirt sold at $29.99 is stored as `2999`, and an order of €1,250.00 as `125000`. Currencies without a minor unit in use, such as the CFA franc or the Japanese yen, are stored in whole units, as described in [Zero-Decimal Currencies](#zero-decimal-currencies).
+
+| Displayed price | Currency | Stored value |
+|-----------------|----------|--------------|
+| $29.99 | USD | `2999` |
+| €1,250.00 | EUR | `125000` |
+| 15,000 FCFA | XAF | `15000` |
+| ¥1,500 | JPY | `1500` |
+
+Integers keep the arithmetic exact. A float cannot hold most decimal prices: in PHP, `0.1 + 0.2` gives `0.30000000000000004` and `19.99 * 100` gives `1998.9999999999998`. With integers, a cart subtotal is the exact sum of its lines, and rounding only happens where a fraction of a cent appears: Shopper rounds each tax amount, each percentage discount and each share of a fixed discount spread over several lines to a whole cent with `round()` when it computes them.
+
+The same integers go to the payment provider without conversion. A payment driver receives the amount to charge as an `int` in cents, which is the unit Stripe expects.
+
+## Amount Columns
+
+Every database column that holds money is an integer column, except the two string columns described after the table. The table names below leave out the `sh_` prefix set by `table_prefix` in `config/shopper/core.php`.
+
+| Table | Amount columns |
+|-------|----------------|
+| `orders` | `price_amount` (the amount charged), `tax_amount`, `shipping_amount`, `discount_value_at_apply` |
+| `order_items` | `unit_price_amount`, `discount_amount`, `tax_amount` |
+| `order_tax_lines` | `amount` |
+| `order_promotions` | `amount`, `value_at_apply` |
+| `order_refunds` | `amount` |
+| `payment_transactions` | `amount` |
+| `carts` | `shipping_amount` |
+| `cart_lines` | `unit_price_amount` |
+| `cart_line_adjustments` | `amount` |
+| `cart_line_tax_lines` | `amount` |
+| `cart_promotions` | `computed_amount`, `value` |
+| `prices` | `amount`, `compare_amount`, `cost_amount` |
+| `carrier_options` | `price` |
+| `carriers` | `shipping_amount` |
+| `discounts` | `value`, `min_required_value` |
+| `collection_rules` | `value` |
+| `campaigns` | `budget_amount`, `spent_amount` |
+| `campaign_budget_movements` | `amount`, `balance_after` |
+
+An amount is in the currency of its record: the `currency_code` of an order, a cart or a payment transaction, the `currency` of a refund, the currency of a price, the currency of the zone for a carrier option, and for a discount the currency of its zone, or the store default currency when it has no zone, and for a collection price rule the store default currency.
+
+A few columns depend on another value. A discount `value`, and the `value_at_apply` and `discount_value_at_apply` copied on the order, hold cents for a `fixed_amount` discount and a percentage for a `percentage` discount. `discounts.min_required_value` is a string column: it holds cents when the requirement is a minimum purchase amount, and a number of items when it is a minimum quantity. `collection_rules.value` is a string column too: it holds cents for a `product_price` or `compare_at_price` rule. Rates are decimal columns: `order_tax_lines.rate` holds a percentage such as `20.0000`.
+
+Totals are computed rather than stored. The `total` attribute of an order item is `unit_price_amount * quantity - discount_amount`, `Order::total()` adds up the item totals, and the totals of a cart come from the cart pipeline described on the [Cart](/3.x/cart) page.
+
+## Formatting Amounts
+
+`shopper_money_format()` turns an amount in cents into a price for display. It divides the amount by 100, except for a zero-decimal currency, and formats it with Laravel's `Number::currency()` in the application locale returned by `app()->getLocale()`. Formatting relies on the `intl` PHP extension listed in the [requirements](/3.x/requirements).
+
+```blade title="resources/views/orders/show.blade.php"
+<p>Total: {{ shopper_money_format($order->price_amount, $order->currency_code) }}</p>
+```
+
+The second argument is the currency of the amount. Without it, the helper uses the store default currency, which gives a wrong price for an order or a price in another currency: pass the currency code of the record whenever the store sells in more than one currency.
+
+The locale decides the symbol, the separators and the position of the currency, and the currency decides the number of decimals:
+
+| Call | `en` locale | `fr` locale |
+|------|-------------|-------------|
+| `shopper_money_format(2999, 'USD')` | $29.99 | 29,99 $US |
+| `shopper_money_format(2999, 'EUR')` | €29.99 | 29,99 € |
+| `shopper_money_format(15000, 'XAF')` | FCFA 15,000 | 15 000 FCFA |
+| `shopper_money_format(1500, 'JPY')` | ¥1,500 | 1 500 JPY |
+
+To hand a price to a view as one value, `Price::from()` returns an object with the `amount` in cents, the `currency` code and the `formatted` string. The currency defaults to the store default currency:
+
+```php title="app/Http/Controllers/OrderController.php"
+use Shopper\Core\Helpers\Price;
+
+$total = Price::from($order->price_amount, $order->currency_code);
+
+return view('orders.show', [
+    'order' => $order,
+    'total' => $total,
+]);
+```
+
+For an order of €58.88, `$total->amount` is `5888`, `$total->currency` is `EUR` and `$total->formatted` is `€58.88` in the `en` locale.
+
+## Default Currency
+
+Merchants choose the store default currency in the setup wizard and change it on the **General** settings page. Shopper keeps the ID of that currency in the `default_currency_id` setting, and `shopper_currency()` returns its ISO code, such as `EUR`, or `USD` when no default currency is set. The code is cached for one hour, as described in [Settings](/3.x/settings#caching).
+
+The default currency is the fallback for every amount that comes without a currency: `shopper_money_format()`, `Price::from()`, the admin money fields, a cart created through the Store API without a currency and outside a zone that has one, and the product prices the Store API returns when neither the request nor its zone names a currency. Shopper never converts an amount from one currency to another: each price is set per currency, and an order keeps the currency it was placed in when the default currency changes.
+
+## Zero-Decimal Currencies
+
+Some currencies have no minor unit in everyday use: nobody pays 15,000.50 FCFA. Shopper stores these currencies in whole units, so 15,000 FCFA is stored as `15000`. The `zero_decimal_currencies()` helper returns the list, which is fixed in `shopper/core`: BIF, CLP, DJF, GNF, HTG, JPY, KMF, KRW, MGA, PYG, RWF, VND, VUV, XAF, XAG, XAU, XDR, XOF and XPF.
+
+`is_no_division_currency()` tells whether a code is in that list: `is_no_division_currency('XAF')` returns `true` and `is_no_division_currency('EUR')` returns `false`. The comparison is case-sensitive, so pass the code in uppercase, the way Shopper stores it. Every part of Shopper that turns stored amounts into decimals checks this list: `shopper_money_format()`, the admin money field and its validation rules. Your own conversions must check it too, as shown in [Converting Input](#converting-input).
+
+Every other currency is stored in cents, including the currencies with three decimals such as the Kuwaiti dinar: 12.34 KWD is stored as `1234` and displayed as KWD 12.340, and an amount like 12.345 KWD cannot be stored.
+
+### Data From Shopper 2.x
+
+Before 2.7, Shopper 2.x multiplied every amount by 100 when saving it, zero-decimal currencies included, so 15,000 FCFA reached the database as `1500000`. Version 2.7 stopped multiplying zero-decimal amounts and added a command that divides the old rows by 100. In 3.x, that command is `shopper:upgrade:fix-zero-decimal-currencies`, and `shopper:upgrade` runs it as step 4 of the [upgrade](/3.x/upgrade).
+
+The command divides by 100, with rounding, the amounts in a zero-decimal currency in these tables: `prices` (`amount`, `compare_amount`, `cost_amount`), `orders` (`price_amount`, `tax_amount`), `order_items` (`unit_price_amount`, `tax_amount`, `discount_amount`), `cart_lines`, `cart_line_tax_lines`, `cart_line_adjustments`, the `carrier_options` of zones in such a currency, and the fixed-amount `discounts` of those zones. Run it with `--dry-run` to see how many rows each table would change:
+
+```bash
+php artisan shopper:upgrade:fix-zero-decimal-currencies --dry-run
+```
+
+Once it has run, the command records the `zero_decimal_fix_applied` setting and refuses to run again unless you pass `--force`.
+
+<Warning>
+  `shopper:upgrade` calls the command with `--force`, so it divides again on a store where `zero_decimal_fix_applied` is already set. The command also divides every row in a zero-decimal currency, including rows written by 2.7 or later, which already hold whole units. Back up the database before you upgrade a store that sells in one of these currencies, and compare a few prices and orders in that currency before and after the upgrade.
+</Warning>
+
+## Converting Input
+
+A storefront form, an import or an integration receives prices as decimals. Convert a decimal to cents before you save it: multiply by 100 and round, unless the currency is a zero-decimal one.
+
+```php title="app/Http/Controllers/GiftCardController.php"
+$currency = $request->input('currency_code');
+$price = $request->input('price');
+
+$amount = is_no_division_currency($currency)
+    ? (int) $price
+    : (int) round((float) $price * 100);
+```
+
+Round before the cast: `(int) (19.99 * 100)` truncates `1998.9999999999998` to `1998` and loses a cent. To fill a form with a stored amount, divide it by 100 unless the currency is a zero-decimal one.
+
+### Admin Forms and Tables
+
+Admin pages and slide-overs you add, as described in [Extending](/3.x/extending), get the same conversion from `MoneyInput`, the Filament field behind every price field of the admin panel. It shows the stored cents as a decimal, saves the decimal as cents, masks the input with the separators of the current locale and shows the currency code as a suffix. `currency()` sets the currency of the field, which uses the store default currency without it:
+
+```php title="app/Livewire/Shopper/FreeShippingSettings.php"
+use Filament\Schemas\Schema;
+use Shopper\Components\Form\MoneyInput;
+
+public function form(Schema $schema): Schema
+{
+    return $schema
+        ->components([
+            MoneyInput::make('free_shipping_threshold')
+                ->label('Free shipping from')
+                ->currency(shopper_currency())
+                ->amountRules()
+                ->required(),
+        ]);
+}
+```
+
+`amountRules()` accepts up to six digits with up to two decimals, or up to nine digits without decimals for a zero-decimal currency. `money(false)` turns off the conversion and the currency suffix; the discount form uses it with a closure so that the same `value` field takes cents for a fixed amount and a percentage otherwise.
+
+In a Filament table, the `currency()` macro of `TextColumn` formats a column of cents with `shopper_money_format()`. Pass the currency of the record, or nothing for the store default currency:
+
+```php title="app/Livewire/Shopper/OrdersReport.php"
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
+use Shopper\Core\Models\Contracts\Order;
+
+public function table(Table $table): Table
+{
+    return $table
+        ->query(resolve(Order::class)::query())
+        ->columns([
+            TextColumn::make('number'),
+            TextColumn::make('price_amount')
+                ->label('Total')
+                ->currency(fn (Order $record): string => $record->currency_code),
+        ]);
+}
+```
+
+## Amounts in the Store API
+
+The Store API returns amounts as they are stored: integers in cents, or whole units for a zero-decimal currency, next to the code of their currency. A cart from `GET /store/carts/{cartId}` carries its totals in the cart currency (attributes shortened):
+
+```json
+{
+  "data": {
+    "id": "01JD3XQ5Z8K2M4N6P8R0T2V4W6",
+    "type": "carts",
+    "attributes": {
+      "currency_code": "EUR",
+      "subtotal": 5998,
+      "discount_total": 600,
+      "tax_total": 900,
+      "shipping_total": 490,
+      "total": 5888,
+      "tax_inclusive": true
+    }
+  }
+}
+```
+
+A cart takes the `currency_code` sent when it is created, then the currency of the request zone, then the store default currency. These resources return amounts:
+
+| Type | Amount attributes | Currency attribute |
+|------|-------------------|--------------------|
+| `carts` | `subtotal`, `discount_total`, `tax_total`, `shipping_total`, `total`, `promotions[].amount` | `currency_code` |
+| `cart-lines` | `unit_price_amount`, `subtotal`, `discount_total`, `tax_total`, `adjustments[].amount`, `tax_lines[].amount` | The cart's |
+| `orders` | `price_amount`, `total`, `tax_amount`, `shipping_amount` | `currency_code` |
+| `order-items` | `unit_price_amount`, `total` | The order's |
+| `order-refunds` | `amount` | `currency` |
+| `products`, `variants` | `prices[].amount`, `prices[].compare_amount`, `calculated_price`, `price_range` (products only) | `currency_code` of each entry |
+| `shipping-options` | `amount` | `currency` |
+| `payment-sessions` | `amount` | `currency_code` |
+
+On an order, `price_amount` is the amount charged, with tax and shipping. `total` is the sum of the item totals: it leaves out shipping, and leaves out tax when prices exclude tax. Show `price_amount` as the order total.
+
+The `prices` of a product or a variant list its prices in every enabled currency. `calculated_price` and `price_range` use one currency: the `filter[currency]` parameter of the request, then the currency of the request zone, then the store default currency. The [Pricing](/3.x/pricing) page describes these fields, and [Storefront](/3.x/storefront) the Store API itself. Webhook payloads carry the same integers.
+
+### Formatting in JavaScript
+
+A JavaScript storefront formats amounts with `Intl.NumberFormat`, which follows the same ICU rules as the PHP formatter. The Store API does not say which currencies are zero-decimal ones: `isNoDivisionCurrency()` from `@shopperlabs/shopper-types` holds the same list as `zero_decimal_currencies()`. The SDK re-exports only the types of that package, so add `@shopperlabs/shopper-types` to the storefront to import the function. `GET /store/settings` returns the store `default_currency` and `default_locale`, as shown on the [Settings](/3.x/settings#store-api) page.
+
+```ts title="lib/money.ts"
+import { isNoDivisionCurrency } from '@shopperlabs/shopper-types'
+
+export function formatMoney(amount: number, currency: string, locale: string): string {
+  const value = isNoDivisionCurrency(currency) ? amount : amount / 100
+
+  return new Intl.NumberFormat(locale, { style: 'currency', currency }).format(value)
+}
+```
+
+`formatMoney(5888, 'EUR', 'fr')` returns `58,88 €`, and `formatMoney(15000, 'XAF', 'fr')` returns `15 000 FCFA`.
