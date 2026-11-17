@@ -6,7 +6,7 @@
   },
   {
     "source": "/2.x",
-    "destination": "/2.x/user-guide/getting-started/introduction",
+    "destination": "/2.x/getting-started",
     "permanent": false
   },
   {
