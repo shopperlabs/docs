@@ -9,7 +9,7 @@ Collections are curated groups of products for marketing and merchandising. Unli
 
 The model used is `Shopper\Models\Collection`, which extends `Shopper\Core\Models\Collection`. The core model provides the business logic, relationships, scopes, rule evaluation, and slug generation. The admin model adds media collections and conversions through Spatie MediaLibrary.
 
-The core model implements `Shopper\Core\Models\Contracts\Collection` and uses the `HasSlug` trait for automatic slug generation with collision handling.
+The core model implements `Shopper\Core\Models\Contracts\Collection` and uses the `HasSlug` trait to keep slugs unique.
 
 ### Extending the Model
 
@@ -41,25 +41,29 @@ return [
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
 | `name` | string | no | - | Collection name |
-| `slug` | string | no | auto | URL-friendly identifier (unique) |
+| `slug` | string | yes | null | URL-friendly identifier (unique) |
 | `description` | longtext | yes | null | Collection description |
-| `type` | string | no | - | Collection type (manual/auto) |
-| `sort` | string | yes | null | Product sorting method |
-| `match_conditions` | string | yes | null | Rule matching logic (all/any) |
-| `published_at` | datetime | yes | null | Publication date |
+| `type` | string | no | - | Collection type (`manual` or `auto`) |
+| `sort` | string | yes | null | Product sorting method (Shopper does not read it) |
+| `match_conditions` | string | yes | null | Rule matching logic (`all` or `any`) |
+| `published_at` | datetimeTz | no | migration date | Publication date. The column default is the date the migration ran, so a collection created without it is published at once |
 | `seo_title` | string(60) | yes | null | SEO meta title |
 | `seo_description` | string(160) | yes | null | SEO meta description |
-| `metadata` | json | yes | null | Additional custom data |
+| `metadata` | jsonb | yes | null | Additional custom data |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
 
 ### CollectionRule Table
 
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | bigint | no | Primary key |
-| `rule` | string | no | Rule type identifier |
-| `operator` | string | no | Comparison operator |
-| `value` | string | no | Value to compare against |
-| `collection_id` | bigint | no | Foreign key to collection |
+| `rule` | string | no | Rule type (`Rule` enum value) |
+| `operator` | string | no | Comparison operator (`Operator` enum value) |
+| `value` | string | no | Value to compare against: cents for price rules, a `Y-m-d` date for the creation date rule, `1` or `0` for the featured rule |
+| `collection_id` | bigint | no | Foreign key to collection. Rules are deleted with their collection |
+| `created_at` | timestamp | yes | Creation timestamp |
+| `updated_at` | timestamp | yes | Last update timestamp |
 
 ## Collection Types
 
@@ -81,7 +85,7 @@ $collection->isAutomatic(); // true for automatic collections
 
 ### Products
 
-A collection groups products together for merchandising, such as "Summer Essentials", "New Arrivals", or "Black Friday Deals". For manual collections, you explicitly attach and detach products. For automatic collections, products are matched by rules (see [Collection Rules](#collection-rules)).
+A collection groups products together for merchandising, such as "Summer Essentials", "New Arrivals", or "Black Friday Deals". For manual collections, you explicitly attach and detach products. For automatic collections, products are matched by rules (see [Collection Rules](#collection-rules)) and `products` holds the last synced matches.
 
 ```php
 $collection->products;
@@ -109,6 +113,8 @@ $collection->zones()->sync($zoneIds);
 From the zone side, you can retrieve all associated collections:
 
 ```php
+use Shopper\Core\Models\Zone;
+
 $zone = Zone::query()->find($id);
 $zone->collections;
 ```
@@ -136,7 +142,9 @@ $collection->rules()->create([
 
 ## Slug & Lookup
 
-The `HasSlug` trait generates unique slugs automatically and provides a `findBySlug()` static method:
+When you assign a `slug`, the `HasSlug` trait passes it through `Str::slug()` and appends `-1`, `-2` and so on when another collection already uses it. The trait does not build the slug from `name`: the admin fills it from the name, but in code you pass it yourself.
+
+The `findBySlug()` static method returns the collection or throws a `ModelNotFoundException`, which Laravel turns into a 404 response:
 
 ```php
 use Shopper\Models\Collection;
@@ -182,19 +190,19 @@ Rule::ProductSalesCount // Match total units sold
 |------|---------------|-------------|
 | Product Title | `product_title` | Match against product name |
 | Product Price | `product_price` | Match against `amount` on prices table (stored in cents) |
-| Compare Price | `compare_at_price` | Match against `compare_amount` on prices table (stored in cents) |
-| Inventory Stock | `inventory_stock` | Match against stock level |
+| Compare At Price | `compare_at_price` | Match against `compare_amount` on prices table (stored in cents) |
+| Inventory Stock | `inventory_stock` | Match against the product's total stock across all locations |
 | Product Brand | `product_brand` | Match against brand name |
 | Product Category | `product_category` | Match against category name |
-| Product Created Date | `product_created_at` | Match against creation date |
+| Product Created Date | `product_created_at` | Match against creation date (`Y-m-d`) |
 | Product Featured | `product_featured` | Match featured status (1 or 0) |
 | Product Rating | `product_rating` | Match average approved rating |
-| Product Sales Count | `product_sales_count` | Match total units sold (paid/shipped/delivered/completed orders only) |
+| Product Sales Count | `product_sales_count` | Match total units sold (orders with status `processing` or `completed` and payment status `paid`) |
 
 <Note>
-  **Price rules** (`ProductPrice`, `CompareAtPrice`) store values in cents. Pass the value in cents directly (e.g., `'5000'` for $50.00). Price rules are evaluated against the shop's default currency.
+  **Price rules** (`ProductPrice`, `CompareAtPrice`) store values in cents. Pass the value in cents directly (e.g., `'5000'` for $50.00). For a [zero-decimal currency](/2.x/pricing#zero-decimal-currencies), pass the amount as-is, like prices. Price rules are evaluated against the shop's default currency.
 
-  **Sales count** (`ProductSalesCount`) only counts units from orders with a valid status: `paid`, `shipped`, `delivered`, or `completed`.
+  **Sales count** (`ProductSalesCount`) only counts units from orders with the status `processing` or `completed` and the payment status `paid`.
 </Note>
 
 ### Operators
@@ -212,9 +220,17 @@ Operator::Contains      // contains
 Operator::NotContains   // not_contains
 ```
 
+Each rule accepts a subset of these operators, returned by `Rule::allowedOperators()`. Text rules (title, brand, category) accept `equals_to`, `not_equal_to`, `starts_with`, `ends_with`, `contains` and `not_contains`. Numeric rules (prices, stock, rating, sales count) accept `equals_to`, `not_equal_to`, `greater_than` and `less_than`.
+
+```php
+use Shopper\Core\Enum\Rule;
+
+$operators = Rule::ProductPrice->allowedOperators();
+```
+
 ### Match Conditions
 
-When a collection has multiple rules, `match_conditions` determines how they combine. With `all`, every rule must match. With `any`, a single matching rule is enough.
+When a collection has multiple rules, `match_conditions` determines how they combine. With `all`, every rule must match. With `any`, a single matching rule is enough. The column has no default: any value other than `all`, including `null`, behaves as `any`.
 
 ```php
 $collection->match_conditions = 'all';
@@ -223,7 +239,7 @@ $collection->match_conditions = 'any';
 
 ## Display Helpers
 
-The `firstRule()` method returns a human-readable summary of the collection's rules, like "Product title contains Summer + 2 other":
+The `firstRule()` method returns a summary of an automatic collection's first rule and the number of other rules, like `Product title Contains summer + 2 other(s)`. The labels come from the translation files and price values are formatted with `shopper_money_format()`. It returns `null` for manual collections:
 
 ```php
 $collection->firstRule();
@@ -239,6 +255,7 @@ use Shopper\Core\Enum\CollectionType;
 
 $collection = Collection::query()->create([
     'name' => 'Summer Essentials',
+    'slug' => 'summer-essentials',
     'type' => CollectionType::Manual,
     'published_at' => now(),
 ]);
@@ -254,9 +271,11 @@ Automatic collections populate themselves based on rules. Here's a "Sale Items" 
 use Shopper\Core\Enum\CollectionType;
 use Shopper\Core\Enum\Operator;
 use Shopper\Core\Enum\Rule;
+use Shopper\Models\Collection;
 
 $collection = Collection::query()->create([
     'name' => 'Sale Items',
+    'slug' => 'sale-items',
     'type' => CollectionType::Auto,
     'match_conditions' => 'all',
     'published_at' => now(),
@@ -276,13 +295,16 @@ $collection->rules()->createMany([
 ]);
 ```
 
+`getProducts()` and `productsQuery()` evaluate these rules right away. Rules created in code do not fill the `products` relationship on their own: run the [sync action](#sync-action) after creating them.
+
 ### Best Sellers Collection
 
-A collection that automatically includes products with more than 10 units sold:
+A collection that automatically includes products with more than 10 units sold in paid orders:
 
 ```php
 $collection = Collection::query()->create([
     'name' => 'Best Sellers',
+    'slug' => 'best-sellers',
     'type' => CollectionType::Auto,
     'match_conditions' => 'all',
     'published_at' => now(),
@@ -297,9 +319,12 @@ $collection->rules()->create([
 
 ### Top Rated Collection
 
+A collection of products whose average approved rating is above 3:
+
 ```php
 $collection = Collection::query()->create([
     'name' => 'Top Rated',
+    'slug' => 'top-rated',
     'type' => CollectionType::Auto,
     'match_conditions' => 'all',
     'published_at' => now(),
@@ -308,7 +333,7 @@ $collection = Collection::query()->create([
 $collection->rules()->create([
     'rule' => Rule::ProductRating,
     'operator' => Operator::GreaterThan,
-    'value' => '3', // Average rating > 3 (4-5 stars)
+    'value' => '3',
 ]);
 ```
 
@@ -320,12 +345,12 @@ All published collections:
 $collections = Collection::query()->published()->get();
 ```
 
-A collection with its published products:
+A collection with its products. `productsQuery()` only returns [published products](/2.x/products#published-products), so you do not filter them again:
 
 ```php
 $collection = Collection::findBySlug('summer-essentials');
 
-$products = $collection->productsQuery()->publish()->get();
+$products = $collection->productsQuery()->get();
 ```
 
 Filter by type:
@@ -345,7 +370,7 @@ Shopper provides built-in methods to retrieve products from collections, handlin
 
 ### Basic Usage
 
-The `getProducts()` method works for both collection types. For manual collections it returns attached products. For automatic collections it evaluates the rules and returns matching products.
+The `getProducts()` method works for both collection types. For manual collections it returns the attached products. For automatic collections it evaluates the rules and returns the matching products. In both cases, only published products (visible, with a `published_at` date in the past or present) are returned.
 
 ```php
 $collection = Collection::query()->find($id);
@@ -366,12 +391,12 @@ $products = $collection->productsQuery()
 
 ### How It Works
 
-For **manual collections**, `getProducts()` returns the attached products via the `products()` relationship.
+For **manual collections**, `getProducts()` returns the published products attached through the `products()` relationship.
 
-For **automatic collections**, `getProducts()` evaluates all defined rules and returns matching products:
+For **automatic collections**, `getProducts()` evaluates all defined rules and returns matching products. A collection without rules returns no products:
 
-- **Match All**: All rules must be satisfied (AND logic)
-- **Match Any**: At least one rule must be satisfied (OR logic)
+- **Match All**: `match_conditions` is `all`, all rules must be satisfied (AND logic)
+- **Match Any**: any other value, at least one rule must be satisfied (OR logic)
 
 ```php
 $collection = Collection::query()
@@ -388,16 +413,18 @@ The `CollectionProductsQuery` class handles rule evaluation for all supported ru
 
 | Rule | Column/Relation | Supported Operators |
 |------|-----------------|---------------------|
-| `ProductTitle` | `name` | All string operators |
+| `ProductTitle` | `name` | Text operators |
 | `ProductPrice` | `amount` (prices table) | Numeric operators |
 | `CompareAtPrice` | `compare_amount` (prices table) | Numeric operators |
-| `InventoryStock` | `inventoryHistories` | Numeric operators |
-| `ProductBrand` | `brand` relation | All string operators |
-| `ProductCategory` | `categories` relation | All string operators |
+| `InventoryStock` | `inventoryHistories` (SUM quantity) | Numeric operators |
+| `ProductBrand` | `brand` relation | Text operators |
+| `ProductCategory` | `categories` relation | Text operators |
 | `ProductCreatedAt` | `created_at` | `equals_to`, `less_than`, `greater_than` |
 | `ProductFeatured` | `featured` | `equals_to` |
 | `ProductRating` | `ratings` relation (AVG) | Numeric operators |
 | `ProductSalesCount` | `order_items` (SUM quantity) | Numeric operators |
+
+Price, stock and sales count rules read the product's own prices, inventory movements and order lines: the prices, stock and sales of its variants are not counted. A product with no price in the default currency, no inventory movement or no approved review never matches a price, stock or rating rule. `ProductFeatured` ignores the operator and compares `featured` with the value.
 
 ```php
 use Shopper\Core\Queries\CollectionProductsQuery;
@@ -413,19 +440,28 @@ $builder = $query->query($collection);
 $products = $builder->with('brand')->paginate(10);
 ```
 
+To check a single product against the rules, use `matches()`. It returns `false` for manual collections and for collections without rules:
+
+```php
+$isMatching = $query->matches($collection, $product);
+```
+
 ## Automatic Synchronization
 
-For automatic collections, Shopper keeps the product associations in sync with the collection rules. Products are stored in the pivot table for optimal query performance.
+For automatic collections, Shopper also stores the matching products in the `product_has_relations` pivot table, so `$collection->products`, `$product->collections` and `withCount('products')` work as they do for manual collections. `getProducts()` and `productsQuery()` do not read this table: they always evaluate the rules.
 
 ### How Sync Works
 
-Synchronization happens automatically via observers:
+Two events start a sync:
 
 | Event | Action |
 |-------|--------|
-| Product created/updated | Product is added/removed from matching collections |
-| Collection saved | All matching products are synced |
-| Collection rule added/updated/deleted | Collection products are re-synced |
+| Product saved (created or updated) | `SyncProductWithCollectionsJob` adds the product to, or removes it from, every automatic collection |
+| Conditions saved in the admin | `SyncCollectionProductsJob` re-syncs that collection |
+
+<Warning>
+  Nothing else starts a sync. Creating or updating a collection or its rules in code leaves the pivot table as it was, and so do changes to prices, stock, orders or reviews, because they do not save the product. Run the [sync action](#sync-action) after changing rules in code, and schedule the sync command if you use price, stock, rating or sales count rules.
+</Warning>
 
 ### Manual Sync Command
 
@@ -439,9 +475,17 @@ php artisan shopper:collections:sync
 php artisan shopper:collections:sync --collection=1
 ```
 
+To keep automatic collections current, schedule the command in `routes/console.php`:
+
+```php
+use Illuminate\Support\Facades\Schedule;
+
+Schedule::command('shopper:collections:sync')->hourly();
+```
+
 ### Sync Action
 
-For programmatic sync, use the `SyncCollectionProductsAction`:
+For programmatic sync, use the `SyncCollectionProductsAction`. It replaces the collection's products with the current matches and returns how many products matched. Manual collections are left untouched and return `0`:
 
 ```php
 use Shopper\Core\Actions\SyncCollectionProductsAction;
@@ -457,8 +501,16 @@ $syncedCount = $action->execute($collection);
 
 Sync operations run in queued jobs to avoid blocking requests:
 
-- `SyncCollectionProductsJob` - Syncs a single collection
-- `SyncProductWithCollectionsJob` - Syncs a product with all automatic collections
+- `Shopper\Core\Jobs\SyncCollectionProductsJob` - Syncs a single collection
+- `Shopper\Core\Jobs\SyncProductWithCollectionsJob` - Syncs a product with all automatic collections
+
+You can dispatch them yourself:
+
+```php
+use Shopper\Core\Jobs\SyncCollectionProductsJob;
+
+SyncCollectionProductsJob::dispatch($collection);
+```
 
 Configure your queue worker to process these jobs:
 
@@ -503,6 +555,8 @@ return [
     'collection' => FeatureState::Disabled,
 ];
 ```
+
+This removes the collection pages and their sidebar entry from the admin and hides the collections field in the product forms. The models, the queries and the product sync keep working.
 
 ### Permissions
 
@@ -577,13 +631,15 @@ class CollectionController extends Controller
 }
 ```
 
+`withCount('products')` counts rows in the pivot table: every attached product for a manual collection, published or not, and the last synced matches for an automatic one.
+
 ## Use Cases
 
 | Type | Example | Description |
 |------|---------|-------------|
 | Manual | Gift Guides | Curated selection of gift ideas |
 | Manual | Editor's Picks | Hand-picked featured products |
-| Auto | New Arrivals | `ProductCreatedAt` greater than 30 days ago |
+| Auto | New Arrivals | `ProductCreatedAt` greater than a fixed date, such as `2026-09-01` |
 | Auto | Sale Items | `CompareAtPrice` greater than 0 |
 | Auto | Low Stock | `InventoryStock` less than 5 |
 | Auto | Featured | `ProductFeatured` equals 1 |

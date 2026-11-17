@@ -3,7 +3,7 @@ title: Payment Methods
 description: Complete reference for the PaymentMethod model, configuration, and payment management in Shopper.
 ---
 
-Payment methods represent the ways customers can pay for their orders. Shopper provides a flexible system to manage multiple payment providers, each with its own logo, description, and customer-facing instructions.
+Payment methods represent the ways customers can pay for their orders. Shopper provides a flexible system to manage multiple payment providers, each with its own driver, description, and customer-facing instructions.
 
 ## Model
 
@@ -17,15 +17,18 @@ The model used is `Shopper\Core\Models\PaymentMethod`. It implements `Shopper\Co
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
 | `title` | string | no | - | Payment method name |
-| `slug` | string | yes | auto | URL-friendly identifier (unique) |
-| `logo` | string | yes | null | Path to the logo file |
+| `slug` | string | yes | null | URL-friendly identifier (unique) |
+| `logo` | string | yes | null | Not read by Shopper: the logo comes from the driver, see [Logo Handling](/2.x/payment-methods#logo-handling) |
 | `link_url` | string | yes | null | Payment provider website or documentation URL |
 | `description` | text | yes | null | Description displayed to customers when choosing a payment method |
 | `instructions` | text | yes | null | Instructions displayed to customers after placing an order |
-| `is_enabled` | boolean | no | false | Payment method visibility |
-| `driver` | string | yes | null | Payment driver code (`stripe`, `manual`, etc.), added by `shopper/payment` |
+| `is_enabled` | boolean | no | false | Whether the method is active. Methods added in the admin start disabled |
+| `driver` | string | yes | null | Payment driver code (`manual`, `stripe` or a custom driver), added by `shopper/payment`. `null` is handled as `manual` |
+| `metadata` | jsonb | yes | null | Custom data. The model does not cast it, so it reads back as a JSON string |
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
+
+The admin fills `slug` from the title. In code, the slug is not generated: pass it yourself. The `HasSlug` trait turns the value into a slug and appends `-1`, `-2` when it is already taken.
 
 ## Contract
 
@@ -45,7 +48,7 @@ interface PaymentMethod
 Payment methods use zones to control availability by geographic region. A payment method can be assigned to multiple zones, and a zone can have multiple payment methods.
 
 <Note>
-The `driver` column connects a payment method to a registered payment driver (`stripe`, `manual`, `paypal`, etc.). When the `PaymentProcessingService` processes a payment, it uses this value to resolve the correct driver. See [Payments](/2.x/payments) for driver registration and the full payment lifecycle.
+The `driver` column connects a payment method to a registered payment driver. `manual` is built in, `stripe` comes with the `shopper/stripe` package, and you add others with `Payment::extend()`. A `null` driver resolves to `manual`, and a code that no driver is registered under makes `Payment::driver()` throw an `InvalidArgumentException`. When the `PaymentProcessingService` processes a payment, it uses this value to resolve the correct driver. See [Payments](/2.x/payments) for driver registration and the full payment lifecycle.
 </Note>
 
 ## Relationships
@@ -59,6 +62,8 @@ $paymentMethod->zones;
 $paymentMethod->zones()->attach([$zoneId1, $zoneId2]);
 $paymentMethod->zones()->detach($zoneId);
 ```
+
+In the admin, payment methods are assigned to a zone from the zone form. From the zone side, use `$zone->paymentMethods` (see [Zones](/2.x/zones#payment-methods)).
 
 ### Orders
 
@@ -74,6 +79,8 @@ Order::query()
     ->get();
 ```
 
+The foreign key is nullable: deleting a payment method keeps its orders and sets their `payment_method_id` to `null`.
+
 ## Query Scopes
 
 ```php
@@ -82,20 +89,24 @@ PaymentMethod::query()->enabled()->get();
 
 ## Logo Handling
 
-Payment method logos use Spatie Media Library. The `logoUrl()` method returns the first media URL from the thumbnail collection, with a fallback to the payment driver's logo:
+A payment method shows the logo of its driver. The `logo()` method returns the URL the driver provides (the `manual` and `stripe` drivers ship one), or `null` when the driver has none or `shopper/payment` is not installed. `PaymentProcessingService::getLogoUrl()` returns the same value:
 
 ```php
-$paymentMethod->logoUrl(); // Media library URL or null
-
 use Shopper\Payment\Services\PaymentProcessingService;
 
+$paymentMethod->logo(); // Driver logo URL or null
+
 $service = resolve(PaymentProcessingService::class);
-$service->getLogoUrl($paymentMethod); // Media URL → driver logo → null
+$service->getLogoUrl($paymentMethod); // Same as $paymentMethod->logo()
 ```
+
+The `logo` column is neither filled by the admin nor read by `logo()`. To show a logo for your own driver, return its URL from the driver's `logo()` method (see [Custom Drivers](/2.x/payments#custom-drivers)).
 
 ## Creating Payment Methods
 
 ### Basic Payment Method
+
+The `stripe` driver needs the `shopper/stripe` package (see [Available Drivers](/2.x/payments#available-drivers)). Leave out `is_enabled` and the method is created disabled.
 
 ```php
 use Shopper\Core\Models\PaymentMethod;
@@ -165,6 +176,8 @@ $method = PaymentMethod::query()
     ->first();
 ```
 
+`PaymentMethod::findBySlug('credit-card')` from the `HasSlug` trait does the same, but throws a `ModelNotFoundException` when no method matches.
+
 Payment methods available in a specific zone:
 
 ```php
@@ -172,6 +185,14 @@ $methods = PaymentMethod::query()
     ->enabled()
     ->whereHas('zones', fn ($q) => $q->where('zone_id', $zoneId))
     ->get();
+```
+
+`PaymentProcessingService::getMethodsForZone()` returns the zone's enabled methods whose driver is configured. It only returns methods attached to the zone (see [Payments](/2.x/payments#getting-available-payment-methods-for-a-zone)):
+
+```php
+use Shopper\Payment\Services\PaymentProcessingService;
+
+$methods = resolve(PaymentProcessingService::class)->getMethodsForZone($zone);
 ```
 
 Payment methods with no zone restriction (available everywhere):
@@ -201,6 +222,12 @@ $order->paymentMethod->title;
 $order->paymentMethod->instructions;
 ```
 
+`CreateOrderFromCartAction` does not set `payment_method_id`. Set it on the order the action returns (see [Order Conversion](/2.x/cart#order-conversion)):
+
+```php
+$order->update(['payment_method_id' => $paymentMethod->id]);
+```
+
 ## Storefront Example
 
 ### Checkout Payment Selection
@@ -208,6 +235,8 @@ $order->paymentMethod->instructions;
 ```php
 namespace App\Http\Controllers;
 
+use Illuminate\Http\Request;
+use Shopper\Cart\Facades\Cart;
 use Shopper\Core\Models\PaymentMethod;
 use Shopper\Core\Models\Zone;
 
@@ -230,7 +259,7 @@ class CheckoutController extends Controller
 
     public function storePayment(Request $request)
     {
-        $paymentMethod = PaymentMethod::query()->findOrFail(
+        $paymentMethod = PaymentMethod::query()->enabled()->findOrFail(
             $request->input('payment_method_id')
         );
 
@@ -241,20 +270,27 @@ class CheckoutController extends Controller
 
     private function getCustomerZone(): ?Zone
     {
-        $address = Cart::shippingAddress();
+        $countryId = Cart::current()?->shippingAddress()?->country_id;
+
+        if (! $countryId) {
+            return null;
+        }
 
         return Zone::query()
-            ->whereHas('countries', fn ($q) => $q->where('name', $address->country_name))
+            ->enabled()
+            ->whereHas('countries', fn ($q) => $q->where('id', $countryId))
             ->first();
     }
 }
 ```
 
 <Note>
-Payment methods without any zone assignment are considered globally available and will be shown to all customers regardless of their location.
+In this example, payment methods without any zone are shown to all customers regardless of their location. `getMethodsForZone()` does not follow this rule: it only returns methods attached to the zone.
 </Note>
 
 ## Use Cases
+
+Any of these can be a payment method. A method that charges online needs a driver: Shopper ships `manual` and `stripe`, and you write [custom drivers](/2.x/payments#custom-drivers) for the others.
 
 | Payment Method | Description |
 |----------------|-------------|

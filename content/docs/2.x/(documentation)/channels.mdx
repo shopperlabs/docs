@@ -7,7 +7,7 @@ Channels represent different sales platforms where your products can be sold. Ex
 
 ## Model
 
-The model used is `Shopper\Core\Models\Channel`. It implements `Shopper\Core\Models\Contracts\Channel` and uses the `HasSlug` trait for automatic slug generation. The model is configurable via `config/shopper/models.php`.
+The model used is `Shopper\Core\Models\Channel`. It implements `Shopper\Core\Models\Contracts\Channel` and uses the `HasSlug` trait: the `slug` you set is converted with `Str::slug()` and gets a `-1`, `-2` suffix when it is already taken. The slug is not generated from the name, so pass one when you create a channel. The model is configurable via `config/shopper/models.php`.
 
 ### Extending the Model
 
@@ -33,17 +33,19 @@ return [
 
 ## Database Schema
 
+Channels are stored in the `sh_channels` table (`sh_` is the default [table prefix](/2.x/configuration#database-table-prefix)).
+
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
 | `name` | string | no | - | Channel name |
-| `slug` | string | yes | auto | URL-friendly identifier (unique) |
+| `slug` | string | yes | null | URL-friendly identifier (unique) |
 | `description` | text | yes | null | Channel description |
-| `timezone` | string | yes | null | Channel timezone |
+| `timezone` | string | yes | null | Channel timezone, stored for your own code (Shopper does not read it) |
 | `url` | string | yes | null | Channel URL |
 | `is_default` | boolean | no | false | Default channel flag |
-| `is_enabled` | boolean | no | false | Channel visibility |
-| `metadata` | json | yes | null | Additional custom data |
+| `is_enabled` | boolean | no | false | Whether the channel is active. Only enabled channels are listed in the admin product form |
+| `metadata` | jsonb | yes | null | Additional custom data, cast to an array |
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
 
@@ -67,6 +69,20 @@ $channel->products()->detach($productId);
 $channel->products()->sync($productIds);
 ```
 
+### Orders and Carts
+
+Orders and carts store the channel they were placed on in a nullable `channel_id` column and expose a `channel()` relation. Deleting a channel sets this column to `null`. The `Channel` model has no inverse relation, so query orders by the column:
+
+```php
+use Shopper\Core\Models\Order;
+
+$order->channel; // Channel model or null
+
+$mobileOrders = Order::query()
+    ->where('channel_id', $mobileChannel->id)
+    ->count();
+```
+
 ## Query Scopes
 
 ```php
@@ -87,7 +103,7 @@ Channel::query()
 
 ## Observer Behavior
 
-The `ChannelObserver` ensures only one channel can be default:
+The `Shopper\Core\Observers\ChannelObserver` ensures only one channel can be default:
 
 ```php
 // When creating/updating a channel with is_default = true:
@@ -100,12 +116,17 @@ $channel = Channel::query()->create([
 ]);
 ```
 
+The previous default is updated with `updateQuietly()`, so no model events fire for it. The observer does not keep a default in place: setting `is_default` to `false` on the current default leaves the store without one.
+
 ## Default Channel
 
-You can retrieve the default channel using the `default` scope:
+When you accept the database step of `php artisan shopper:install`, the `ChannelSeeder` creates one channel named Web Store, with the slug `web-store`, the `url` from `config('app.url')`, enabled and marked as default.
+
+You can retrieve the default channel using the `default` scope. It returns `null` when no channel is marked as default:
 
 ```php
 use Shopper\Core\Models\Channel;
+use Shopper\Models\Product;
 
 // Get the default channel
 $channel = Channel::query()->default()->first();
@@ -124,7 +145,11 @@ public function index()
 
 ## Creating Channels
 
+The 2.x admin panel has no page to manage channels: create them in code, for example in a seeder. `is_enabled` defaults to `false`, so pass `'is_enabled' => true` for a channel you want to pick in the admin product form.
+
 ### Default Website Channel
+
+Creating a channel with `'is_default' => true` removes the flag from the current default, such as the seeded Web Store channel.
 
 ```php
 use Shopper\Core\Models\Channel;
@@ -133,8 +158,8 @@ $channel = Channel::query()->create([
     'name' => 'Website',
     'slug' => 'website',
     'description' => 'Main e-commerce website',
-    'url' => 'https://example.com',
-    'timezone' => 'UTC',
+    'url' => config('app.url'),
+    'timezone' => config('app.timezone'),
     'is_default' => true,
     'is_enabled' => true,
 ]);
@@ -182,6 +207,9 @@ $channel = Channel::query()
     ->where('slug', 'website')
     ->first();
 
+// Get channel by slug, throws ModelNotFoundException when none matches
+$channel = Channel::findBySlug('website');
+
 // Get channel with products
 $channel = Channel::query()
     ->with('products')
@@ -211,7 +239,7 @@ $products = Product::query()
     ->publish()
     ->get();
 
-// Get products available on multiple channels
+// Get products assigned to at least one of these channels
 $products = Product::query()
     ->forChannel([$channelId1, $channelId2])
     ->publish()
@@ -249,6 +277,8 @@ class ProductController extends Controller
 ```php
 namespace App\Http\Controllers\Api;
 
+use App\Http\Controllers\Controller;
+use Illuminate\Http\Request;
 use Shopper\Core\Models\Channel;
 use Shopper\Models\Product;
 
@@ -288,12 +318,12 @@ class ProductController extends Controller
 
 1. **Default Channel**: Always have one default channel for fallback
 2. **Product Assignment**: Assign products to relevant channels during creation
-3. **Timezone**: Set appropriate timezone for each channel
-4. **Metadata**: Use metadata for channel-specific configuration (API keys, etc.)
+3. **Timezone**: Shopper stores `timezone` but does not read it: use it in your own code (for example to show order dates in the channel's timezone)
+4. **Metadata**: Use metadata for channel-specific configuration (marketplace or seller IDs). Keep secrets such as API keys in `.env`, not in a database column
 
 ```php
-// Example: Channel-specific pricing
+// Example: Channel-specific settings
 $channel = Channel::query()->find($id);
-$apiKey = $channel->metadata['api_key'] ?? null;
-$merchantId = $channel->metadata['merchant_id'] ?? null;
+$marketplaceId = $channel->metadata['marketplace_id'] ?? null;
+$sellerId = $channel->metadata['seller_id'] ?? null;
 ```

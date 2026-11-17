@@ -26,11 +26,11 @@ The Carrier model implements `Shopper\Core\Models\Contracts\Carrier` and uses th
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
 | `name` | string | no | - | Carrier name |
-| `slug` | string | yes | auto | URL-friendly identifier (unique) |
-| `driver` | string | yes | null | Shipping driver code (ups, fedex, usps, or null for manual) |
+| `slug` | string | yes | null | URL-friendly identifier (unique). The value you pass is slugified and suffixed (`-1`, `-2`) when taken; nothing is generated when you omit it. The admin form fills it from the name |
+| `driver` | string | yes | null | Shipping driver code (`manual`, `ups`, `fedex`, `usps` or a custom driver). `null` is treated as `manual`; the admin form stores `manual` |
 | `link_url` | string | yes | null | Carrier website URL |
 | `description` | string | yes | null | Carrier description |
-| `shipping_amount` | integer | yes | null | Default shipping amount (cents) |
+| `shipping_amount` | integer | yes | null | Amount in cents. Shopper does not read this column: rates come from the driver or from carrier options |
 | `is_enabled` | boolean | no | false | Carrier visibility |
 | `metadata` | json | yes | null | Additional custom data |
 | `created_at` | timestamp | yes | null | Creation timestamp |
@@ -41,7 +41,7 @@ The Carrier model implements `Shopper\Core\Models\Contracts\Carrier` and uses th
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
-| `name` | string | no | - | Option name (unique) |
+| `name` | string | no | - | Option name, unique per zone (unique index on `name` and `zone_id`) |
 | `description` | string(255) | yes | null | Option description |
 | `price` | integer | no | - | Shipping price (cents) |
 | `is_enabled` | boolean | no | false | Option visibility |
@@ -72,7 +72,7 @@ All driver credentials are stored in your `.env` file. Publish the shipping conf
 php artisan vendor:publish --tag=shopper-config
 ```
 
-This creates `config/shopper/shipping.php`:
+The `shopper-config` tag publishes every Shopper config file; files already in `config/shopper` are kept unless you add `--force` (Laravel's `vendor:publish` behavior). This creates `config/shopper/shipping.php`:
 
 ```php
 return [
@@ -112,6 +112,8 @@ return [
 ];
 ```
 
+The published file also contains `canada_post` and `purolator` entries. No built-in driver reads them: to use those carriers, register a [custom driver](/2.x/carriers#custom-shipping-drivers) under the same code. Shopper does not apply the `units` value to packages for you: read it with `config('shopper.shipping.units')` when you build your `Package` objects.
+
 Add the credentials to your `.env` file:
 
 ```dotenv
@@ -123,6 +125,8 @@ UPS_CLIENT_SECRET=your-client-secret
 UPS_USER_ID=your-user-id
 UPS_ACCOUNT_NUMBER=your-account-number
 ```
+
+A driver is ready when its credentials are filled: UPS needs all four values above, FedEx needs `client_id`, `client_secret` and `account_number`, USPS needs `client_id` and `client_secret`. The `enabled` flag only decides whether the driver appears in `Shipping::configuredDrivers()`. Rate calculation and the admin carrier form check the credentials, not this flag.
 
 ### Using the Shipping Facade
 
@@ -140,20 +144,28 @@ $configured = Shipping::configuredDrivers();
 $isReady = Shipping::isConfigured('fedex');
 ```
 
+- `driver()` returns a `ShippingDriver` instance. Called without a name, it returns the `manual` driver. An unknown name throws an `InvalidArgumentException`.
+- `availableDrivers()` returns the driver codes: `manual`, `ups`, `fedex`, `usps` and every custom driver you registered.
+- `configuredDrivers()` returns a collection of driver instances keyed by code: `manual` plus the drivers whose `enabled` flag is `true`.
+- `isConfigured()` returns `true` when the driver's credentials are filled, and `false` for an unknown driver.
+
 ### Carrier Driver Integration
 
-The Carrier model provides methods to work with shipping drivers:
+The Carrier model has no driver methods of its own: the `CarrierRateService` resolves the driver from the carrier's `driver` column, and `logo()` asks that driver for its logo URL:
 
 ```php
-$carrier = Carrier::query()->where('driver', 'ups')->first();
+use Shopper\Core\Models\Carrier;
+use Shopper\Shipping\Services\CarrierRateService;
 
-if ($carrier->usesApiDriver()) {
-    $driver = $carrier->getShippingDriver();
-    $isConfigured = $carrier->isDriverConfigured();
-}
+$carrier = Carrier::query()->where('driver', 'ups')->first();
+$service = app(CarrierRateService::class);
+
+$driver = $service->resolveDriver($carrier);
+$isConfigured = $service->isDriverConfigured($carrier);
+$logo = $carrier->logo();
 ```
 
-When a carrier has a driver assigned, Shopper uses that driver to fetch real-time rates from the carrier's API. When no driver is assigned (or set to `manual`), rates come from the CarrierOption records in your database.
+`resolveDriver()` returns `null` when the carrier's driver is empty or `manual`. When a carrier has a driver whose credentials are set, Shopper uses that driver to fetch real-time rates from the carrier's API. When no driver is assigned, the driver is `manual`, or its credentials are missing, rates come from the CarrierOption records in your database.
 
 ## Calculating Shipping Rates
 
@@ -197,6 +209,8 @@ $packages = [
 ];
 ```
 
+The `country` of an `Address` is the two-letter ISO code (`US`, `CA`, `FR`), which the drivers send to the carrier API. A `Package` takes `unit: 'metric'` (centimeters and kilograms, the default) or `unit: 'imperial'` (inches and pounds). The built-in drivers convert packages to the units their API expects.
+
 ### Getting Rates for a Carrier
 
 ```php
@@ -209,11 +223,11 @@ $rates = $service->getRatesForCarrier(
 );
 ```
 
-For carriers with an API driver, rates are fetched from the carrier's API. For manual carriers, rates come from the CarrierOption records associated with the specified zone.
+For carriers with an API driver whose credentials are set, rates are fetched from the carrier's API. For manual carriers, rates come from the enabled CarrierOption records of the specified zone. The `zone` argument is optional: without it, every enabled option of the carrier is returned, priced in the store's default currency. When the carrier API fails, the driver throws a `Shopper\Shipping\Exceptions\ShippingException`.
 
 ### Getting Rates for a Zone
 
-To get all available shipping rates for a zone across all enabled carriers:
+To get all available shipping rates for a zone across its enabled carriers:
 
 ```php
 $rates = $service->getRatesForZone(
@@ -222,6 +236,23 @@ $rates = $service->getRatesForZone(
     to: $to,
     packages: $packages,
 );
+```
+
+Only carriers attached to the zone are included (see [zone carriers](/2.x/zones#carriers)). `getRatesForZone()` does not catch a `ShippingException`: when one carrier API fails, the call throws and returns no rate at all. To keep the other carriers' rates, call `getRatesForCarrier()` for each carrier yourself:
+
+```php
+use Shopper\Core\Models\Carrier;
+use Shopper\Shipping\Exceptions\ShippingException;
+
+$rates = $zone->carriers()->enabled()->get()->flatMap(function (Carrier $carrier) use ($service, $from, $to, $packages, $zone) {
+    try {
+        return $service->getRatesForCarrier($carrier, $from, $to, $packages, $zone);
+    } catch (ShippingException $exception) {
+        report($exception);
+
+        return collect();
+    }
+});
 ```
 
 ### ShippingRate DTO
@@ -236,9 +267,13 @@ foreach ($rates as $rate) {
     $rate->currency;
     $rate->carrierCode;
     $rate->estimatedDays;
+    $rate->estimatedDelivery;
     $rate->formattedAmount();
+    $rate->toArray();
 }
 ```
+
+`amount` is in cents and `formattedAmount()` formats it with `shopper_money_format()`. For a manual rate, `serviceCode` is the CarrierOption id, `serviceName` its name, `currency` the zone's currency code, `carrierCode` the carrier slug (its name when the slug is empty), and `estimatedDays` and `estimatedDelivery` are `null`.
 
 ## Custom Shipping Drivers
 
@@ -254,6 +289,7 @@ Create your driver class:
 namespace App\Shipping\Drivers;
 
 use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Http;
 use Shopper\Shipping\Drivers\Driver;
 use Shopper\Shipping\DataTransferObjects\Address;
 use Shopper\Shipping\DataTransferObjects\Package;
@@ -288,6 +324,16 @@ final class DhlDriver extends Driver
         return filled($this->apiKey) && filled($this->accountNumber);
     }
 
+    public function supportsLabels(): bool
+    {
+        return false;
+    }
+
+    public function supportsTracking(): bool
+    {
+        return false;
+    }
+
     public function calculateRates(Address $from, Address $to, array $packages): Collection
     {
         if (! $this->isConfigured()) {
@@ -312,7 +358,9 @@ final class DhlDriver extends Driver
         return collect($response->json('products'))->map(fn (array $product) => new ShippingRate(
             serviceCode: $product['productCode'],
             serviceName: $product['productName'],
-            amount: (int) ($product['totalPrice'] * 100),
+            amount: is_no_division_currency($product['priceCurrency'])
+                ? (int) $product['totalPrice']
+                : (int) round($product['totalPrice'] * 100),
             currency: $product['priceCurrency'],
             carrierCode: 'dhl',
             estimatedDays: $product['deliveryCapabilities']['estimatedDeliveryDays'] ?? null,
@@ -366,11 +414,13 @@ The `ShippingDriver` contract defines the following methods:
 | `createShipment()` | `Shipment` | Create a shipment and get the label |
 | `track()` | `TrackingInfo` | Get tracking information for a shipment |
 
-The abstract `Driver` class provides default implementations for `supportsRealTimeRates()`, `supportsLabels()`, and `supportsTracking()` (all return `true`), and throws `ShippingException::notSupported()` for `createShipment()` and `track()`. Override these methods as needed for your driver.
+The abstract `Driver` class provides default implementations for `logo()` (returns `null`), `supportsRealTimeRates()`, `supportsLabels()`, and `supportsTracking()` (all return `true`), and throws `ShippingException::notSupported()` for `createShipment()` and `track()`. Override these methods as needed for your driver: a driver that keeps the default `createShipment()` and `track()` should return `false` from `supportsLabels()` and `supportsTracking()`. None of the built-in drivers creates labels or tracks shipments: their `createShipment()` and `track()` throw `ShippingException::notSupported()`.
+
+The `amount` of a `ShippingRate` is an integer in cents. Convert the decimal price of a carrier API with `round()` and skip the multiplication for zero-decimal currencies (`is_no_division_currency()`), as the built-in drivers do. See [zero-decimal currencies](/2.x/pricing#zero-decimal-currencies).
 
 ### Registering the Driver
 
-Register your custom driver in a service provider using the `extend` method on the Shipping facade:
+Register your custom driver in a service provider using the `extend` method on the Shipping facade. Add the provider to `bootstrap/providers.php`, or put the `extend` call in the `boot()` method of your `AppServiceProvider`:
 
 ```php
 namespace App\Providers;
@@ -444,10 +494,20 @@ $carrier->options()->enabled()->get();
 
 $carrier->options()->create([
     'name' => 'Express Delivery',
-    'price' => 15,
+    'price' => 1500,
     'zone_id' => $zoneId,
     'is_enabled' => true,
 ]);
+```
+
+### Zones
+
+The `HasZones` trait links a carrier to zones through the `zone_has_relations` pivot table. `CarrierRateService::getRatesForZone()` only uses carriers attached to the zone, and the admin shipping option form only lists them (see [zone carriers](/2.x/zones#carriers)):
+
+```php
+$carrier->zones;
+
+$carrier->zones()->attach($zoneId);
 ```
 
 ### Zone (CarrierOption)
@@ -465,6 +525,8 @@ CarrierOption::query()
 
 ```php
 $option->carrier;
+
+$option->isEnabled();
 ```
 
 ## Query Scopes
@@ -493,6 +555,8 @@ $option = CarrierOption::query()->create([
 shopper_money_format($option->price, $zone->currency->code);
 ```
 
+`1000` is 10.00 in a currency with cents. For a zero-decimal currency such as XAF or JPY, the price is stored in whole units and `shopper_money_format()` does not divide it (see [zero-decimal currencies](/2.x/pricing#zero-decimal-currencies)).
+
 ## Creating Carriers
 
 ### Manual Carrier
@@ -509,16 +573,18 @@ $carrier = Carrier::query()->create([
     'is_enabled' => true,
 ]);
 
+$carrier->zones()->attach($localZoneId);
+
 $carrier->options()->createMany([
     [
         'name' => 'Standard',
-        'price' => 5,
+        'price' => 500,
         'zone_id' => $localZoneId,
         'is_enabled' => true,
     ],
     [
         'name' => 'Express (2 hours)',
-        'price' => 15,
+        'price' => 1500,
         'zone_id' => $localZoneId,
         'is_enabled' => true,
     ],
@@ -537,9 +603,11 @@ $carrier = Carrier::query()->create([
     'link_url' => 'https://ups.com',
     'is_enabled' => true,
 ]);
+
+$carrier->zones()->attach($nationalZoneId);
 ```
 
-With an API driver, you don't need to create CarrierOption records. Rates are fetched directly from the carrier's API when needed.
+With an API driver whose credentials are set, you don't need to create CarrierOption records. Rates are fetched directly from the carrier's API when needed. Until the credentials are set, the carrier falls back to its CarrierOption records.
 
 ### Free Shipping Option
 
@@ -550,6 +618,8 @@ $freeShipping = Carrier::query()->create([
     'description' => 'Free standard shipping',
     'is_enabled' => true,
 ]);
+
+$freeShipping->zones()->attach($domesticZoneId);
 
 $freeShipping->options()->create([
     'name' => 'Free Standard Delivery',
@@ -562,6 +632,8 @@ $freeShipping->options()->create([
     ],
 ]);
 ```
+
+Shopper stores `metadata` as is and never reads these keys: your checkout must hide the option when the cart total is below `min_order_amount` (in cents) and display `estimated_days` itself.
 
 ## Retrieving Carriers
 
@@ -578,6 +650,8 @@ $carrier = Carrier::query()
     ->where('slug', 'fedex')
     ->first();
 
+$carrier = Carrier::findBySlug('fedex');
+
 $options = CarrierOption::query()
     ->where('zone_id', $zoneId)
     ->enabled()
@@ -592,22 +666,29 @@ $cheapest = CarrierOption::query()
     ->first();
 ```
 
+`findBySlug()` comes from the `HasSlug` trait and throws a `ModelNotFoundException` when no carrier has that slug.
+
 ## Working with Orders
 
 ```php
+use Shopper\Core\Enum\ShipmentStatus;
 use Shopper\Core\Models\Order;
 use Shopper\Core\Models\OrderShipping;
 
 $order->shippingOption;
 
+$order->shippings;
+
 OrderShipping::query()->create([
     'order_id' => $order->id,
     'carrier_id' => $carrierId,
-    'shipped_at' => now(),
+    'status' => ShipmentStatus::Pending,
     'tracking_number' => 'TRACK123456',
     'tracking_url' => 'https://fedex.com/track/TRACK123456',
 ]);
 ```
+
+`shippingOption` is the CarrierOption the customer picked (`shipping_option_id` on the order), and `shippings` are the order's shipments. Create a shipment with the `Pending` status: `shipped_at` is set when you record the carrier pickup (see [Creating Shipments](/2.x/fulfillment#creating-shipments)).
 
 ## Storefront Example
 
@@ -618,6 +699,11 @@ The origin address for shipping calculations should come from your store's inven
 ```php
 namespace App\Http\Controllers;
 
+use Shopper\Cart\Facades\Cart;
+use Shopper\Cart\Models\Cart as CartModel;
+use Shopper\Cart\Models\CartAddress;
+use Shopper\Cart\Models\CartLine;
+use Shopper\Core\Enum\Dimension\Weight;
 use Shopper\Core\Models\Inventory;
 use Shopper\Core\Models\Zone;
 use Shopper\Shipping\Services\CarrierRateService;
@@ -632,11 +718,14 @@ class CheckoutController extends Controller
 
     public function showShipping(?int $inventoryId = null)
     {
+        $cart = Cart::current() ?? abort(404);
+        $address = $cart->shippingAddress() ?? abort(404);
+
         $inventory = $this->getShippingInventory($inventoryId);
-        $zone = $this->getCustomerZone();
+        $zone = $this->getCustomerZone($cart, $address);
         $from = $this->getInventoryAddress($inventory);
-        $to = $this->getCustomerAddress();
-        $packages = $this->getCartPackages();
+        $to = $this->getCustomerAddress($address);
+        $packages = $this->getCartPackages($cart);
 
         $shippingOptions = $this->rateService->getRatesForZone(
             zone: $zone,
@@ -673,43 +762,60 @@ class CheckoutController extends Controller
         );
     }
 
-    private function getCustomerAddress(): Address
+    private function getCustomerAddress(CartAddress $address): Address
     {
-        $address = Cart::shippingAddress();
-
         return new Address(
-            firstName: $address->first_name,
+            firstName: $address->first_name ?? '',
             lastName: $address->last_name,
-            street: $address->street_address,
+            street: $address->address_1,
             city: $address->city,
             postalCode: $address->postal_code,
             state: $address->state ?? '',
-            country: $address->country_name,
+            country: $address->country->cca2,
+            company: $address->company,
+            street2: $address->address_2,
+            phone: $address->phone,
         );
     }
 
-    private function getCartPackages(): array
+    private function getCartPackages(CartModel $cart): array
     {
+        $weight = $cart->lines()->with('purchasable')->get()->sum(
+            fn (CartLine $line): float => $this->weightInKilograms($line) * $line->quantity
+        );
+
         return [
             new Package(
-                length: Cart::totalLength(),
-                width: Cart::totalWidth(),
-                height: Cart::totalHeight(),
-                weight: Cart::totalWeight(),
+                length: 40,
+                width: 30,
+                height: 20,
+                weight: $weight,
             ),
         ];
     }
 
-    private function getCustomerZone(): Zone
+    private function weightInKilograms(CartLine $line): float
     {
-        $address = Cart::shippingAddress();
+        $value = (float) $line->purchasable->weight_value;
 
-        return Zone::query()
-            ->whereHas('countries', fn ($q) => $q->where('name', $address->country_name))
-            ->first();
+        return match ($line->purchasable->weight_unit) {
+            Weight::G => $value / 1000,
+            Weight::LBS => $value * 0.453592,
+            default => $value,
+        };
+    }
+
+    private function getCustomerZone(CartModel $cart, CartAddress $address): Zone
+    {
+        return $cart->zone ?? Zone::query()
+            ->enabled()
+            ->whereHas('countries', fn ($query) => $query->whereKey($address->country_id))
+            ->firstOrFail();
     }
 }
 ```
+
+Products and variants have their own dimensions (`width_value`, `height_value`, `depth_value`), but adding them up does not give the size of a box. This example ships everything in one 40 x 30 x 20 cm box and sums the weights (`weight_value` converted from `weight_unit`). Replace the box with your own packing rules.
 
 <Note>
 If your store has multiple warehouses, you can pass the inventory ID to ship from a specific location. This is useful for selecting the nearest warehouse to the customer or the one with available stock:
@@ -732,7 +838,7 @@ return redirect()->route('checkout.shipping', ['inventoryId' => $nearestInventor
 | Scenario | Implementation |
 |----------|----------------|
 | Flat rate shipping | Manual carrier with single option at fixed price |
-| Free shipping threshold | Use metadata for min_order_amount |
+| Free shipping threshold | Store `min_order_amount` in the option's metadata and check it in your checkout |
 | Zone-based pricing | Create options per zone for manual carriers |
-| Real-time rates | Assign a shipping driver to the carrier |
+| Real-time rates | Assign a shipping driver to the carrier and set the driver's credentials |
 | Hybrid approach | Manual carriers for local, API drivers for national/international |

@@ -10,9 +10,9 @@ Order fulfillment in Shopper is designed around the concept of **shipments**, ph
 The fulfillment system connects four models:
 
 ```
-Order (1) ──→ (many) OrderShipping (1) ──→ (many) OrderItem
+Order (1) ──> (many) OrderShipping (1) ──> (many) OrderItem
                       (shipment)    │              (items in this package)
-                                    └──→ (many) OrderShippingEvent
+                                    └──> (many) OrderShippingEvent
                                                  (tracking timeline)
 ```
 
@@ -46,6 +46,8 @@ use Shopper\Core\Enum\FulfillmentStatus;
 | `tracking_number` | string | yes | Carrier tracking number |
 | `tracking_url` | string | yes | URL for customer tracking |
 | `voucher` | json | yes | Shipping label/voucher data |
+| `created_at` | timestamp | yes | Creation timestamp |
+| `updated_at` | timestamp | yes | Last update timestamp |
 
 ### OrderShippingEvent Table
 
@@ -56,18 +58,19 @@ use Shopper\Core\Enum\FulfillmentStatus;
 | `status` | string(32) | no | Shipment status at this event |
 | `description` | text | yes | Event description |
 | `location` | string | yes | Location name |
-| `latitude` | decimal(10,7) | yes | GPS latitude |
+| `latitude` | decimal(11,7) | yes | GPS latitude |
 | `longitude` | decimal(10,7) | yes | GPS longitude |
-| `occurred_at` | datetime | yes | When the event occurred |
+| `occurred_at` | datetime | no | When the event occurred (`logEvent()` sets it to now when you omit it) |
 | `metadata` | jsonb | yes | Additional event data |
 | `created_at` | timestamp | yes | Creation timestamp |
+| `updated_at` | timestamp | yes | Last update timestamp |
 
 ### OrderItem Fulfillment Columns
 
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `order_shipping_id` | bigint | yes | FK to the shipment this item belongs to |
-| `fulfillment_status` | string | yes | Current fulfillment state of this item |
+| `fulfillment_status` | string | yes | Current fulfillment state of this item. `pending` when the item is created through the `OrderItem` model; items created before this column existed keep `null` |
 
 ## Fulfillment Status
 
@@ -88,16 +91,20 @@ FulfillmentStatus::Cancelled            // Fulfillment cancelled
 
 | From | Possible Transitions |
 |------|---------------------|
-| Pending | Processing, ForwardedToSupplier, Cancelled |
+| Pending | Processing, ForwardedToSupplier, Shipped, Cancelled |
 | ForwardedToSupplier | Processing, Shipped, Cancelled |
 | Processing | Shipped, Cancelled |
-| Shipped | Delivered |
-| Delivered | (terminal state) |
+| Shipped | Delivered, Cancelled |
+| Delivered | Cancelled |
 | Cancelled | (terminal state) |
+
+The table lists the transitions that make sense for an item. Nothing on `OrderItem` enforces them: `fulfillment_status` accepts any case.
+
+Shopper performs three of them, in [`RecordShipmentEventAction`](/2.x/fulfillment#recordshipmenteventaction), on the items of the shipment that receives the event: `Pending` to `Shipped` when the carrier picks up the package, `Shipped` to `Delivered` on delivery, and any status to `Cancelled` when the package is returned. Your own code sets every other transition. Shopper never sets `Processing` or `ForwardedToSupplier`, and the pickup leaves items in these two statuses as they are, so move them to `Shipped` yourself, as the [dropshipping workflow](/2.x/fulfillment#dropshipping-workflow) does. The admin's shipping label form only offers items that are in no shipment yet and whose status is `Pending` (or `null`), so an item you moved to `Processing` or `ForwardedToSupplier` cannot be added to a label there.
 
 ## Shipping Status (Order Level)
 
-The `ShippingStatus` enum lives on the **Order** model and reflects the combined state of all its shipments. It answers "has this order been shipped/delivered?".
+The `ShippingStatus` enum lives on the **Order** model (`shipping_status`, `Unfulfilled` by default). [`SyncOrderShippingStatusAction`](/2.x/fulfillment#syncordershippingstatusaction) computes it from the fulfillment status of all the order's items. It answers "has this order been shipped/delivered?".
 
 ```php
 use Shopper\Core\Enum\ShippingStatus;
@@ -105,8 +112,8 @@ use Shopper\Core\Enum\ShippingStatus;
 ShippingStatus::Unfulfilled        // No items shipped yet
 ShippingStatus::PartiallyShipped   // Some items shipped
 ShippingStatus::Shipped            // All items shipped
-ShippingStatus::PartiallyDelivered // Some packages delivered
-ShippingStatus::Delivered          // All packages delivered
+ShippingStatus::PartiallyDelivered // Some items delivered
+ShippingStatus::Delivered          // All items delivered
 ShippingStatus::PartiallyReturned  // Some items returned
 ShippingStatus::Returned           // All items returned
 ```
@@ -130,7 +137,7 @@ ShipmentStatus::Returned        // Returned to sender
 
 ### Shipment Transitions
 
-The `HasFulfillmentTransitions` trait on `OrderShipping` enforces valid state transitions:
+The `HasFulfillmentTransitions` trait on `OrderShipping` defines the valid state transitions. `transitionTo()` and the [actions](/2.x/fulfillment#actions) check them; writing `status` with `update()` skips the check.
 
 | From | Possible Transitions |
 |------|---------------------|
@@ -143,17 +150,21 @@ The `HasFulfillmentTransitions` trait on `OrderShipping` enforces valid state tr
 | DeliveryFailed | InTransit, OutForDelivery, Returned |
 | Returned | (terminal state) |
 
+A shipment whose `status` is `null` (created without one) can only move to `Pending`.
+
 ```php
 $shipment->canTransitionTo(ShipmentStatus::InTransit); // true or false
 
-$shipment->allowedTransitions(); // Collection of valid next statuses
+$shipment->allowedTransitions(); // array of valid next statuses
 
 $shipment->canBeDelivered(); // shorthand for canTransitionTo(Delivered)
+
+OrderShipping::shipmentTransitions(); // the full table above, keyed by status value
 ```
 
 ### Transitioning Shipment Status
 
-Use `transitionTo()` to update the shipment status. It validates the transition and automatically logs a tracking event:
+Use `transitionTo()` to update the shipment status. It checks the transition and automatically logs a tracking event:
 
 ```php
 $shipment->transitionTo(ShipmentStatus::PickedUp, [
@@ -164,11 +175,11 @@ $shipment->transitionTo(ShipmentStatus::PickedUp, [
 ]);
 ```
 
-This creates an `OrderShippingEvent` record with the status, timestamp, and optional location data.
+This creates an `OrderShippingEvent` record with the status, timestamp, and optional location data. When the transition is not allowed, `transitionTo()` returns without saving anything and throws no exception. It only changes the shipment and its timeline: to also update the items and the order, use [`RecordShipmentEventAction`](/2.x/fulfillment#recordshipmenteventaction).
 
 ### Tracking Events
 
-Each shipment has a timeline of events that record its journey:
+Each shipment has a timeline of events that record its journey. Adding an event does not change the shipment `status`:
 
 ```php
 $shipment->events; // Collection<OrderShippingEvent>
@@ -180,11 +191,17 @@ $shipment->events()->create([
     'occurred_at' => now(),
     'metadata' => ['facility_code' => 'LYS-01'],
 ]);
+
+// logEvent() writes the same record and sets occurred_at to now when omitted
+$shipment->logEvent(ShipmentStatus::InTransit, [
+    'description' => 'Package departed sorting facility',
+    'location' => 'Lyon Hub',
+]);
 ```
 
 ## Relationships
 
-### Order → Shipments
+### Order to Shipments [#order--shipments]
 
 ```php
 // Get all shipments for an order
@@ -193,13 +210,13 @@ $order->shippings; // Collection<OrderShipping>
 // Load shipments with their carrier and items
 $order->load('shippings.carrier', 'shippings.items');
 
-// Check if order is fully shipped
-$allShipped = $order->items->every(
+// Check if every item has been delivered
+$allDelivered = $order->items->every(
     fn (OrderItem $item) => $item->fulfillment_status === FulfillmentStatus::Delivered
 );
 ```
 
-### OrderShipping → Items & Events
+### OrderShipping to Items and Events [#ordershipping--items--events]
 
 ```php
 // Get all items in a shipment
@@ -215,7 +232,7 @@ $shipment->order; // Order model
 $shipment->events; // Collection<OrderShippingEvent>
 ```
 
-### OrderItem → Shipment
+### OrderItem to Shipment [#orderitem--shipment]
 
 ```php
 // Get the shipment for an item
@@ -234,82 +251,82 @@ $item->shipment?->carrier?->name;
 When all items ship in one package:
 
 ```php
+use Shopper\Core\Actions\RecordShipmentEventAction;
+
 $order = Order::query()->find($orderId);
 
-// Create the shipment
+// Create the shipment: the label exists, the carrier has not collected the package yet
 $shipment = $order->shippings()->create([
     'carrier_id' => $carrier->id,
+    'status' => ShipmentStatus::Pending,
     'tracking_number' => '1Z999AA10123456784',
     'tracking_url' => 'https://ups.com/track?num=1Z999AA10123456784',
-    'shipped_at' => now(),
 ]);
 
-// Link all items and update their status
-$order->items()->update([
-    'order_shipping_id' => $shipment->id,
-    'fulfillment_status' => FulfillmentStatus::Shipped,
-]);
+// Link all items to the package
+$order->items()->update(['order_shipping_id' => $shipment->id]);
+
+// Record the carrier pickup
+resolve(RecordShipmentEventAction::class)->execute($shipment, ShipmentStatus::PickedUp);
 ```
+
+Recording `PickedUp` sets `shipped_at`, moves the linked items from `Pending` to `Shipped`, moves a `New` order to `Processing`, and recomputes the order's `shipping_status`. Create the shipment with the `Pending` status: a shipment without a status can only move to `Pending`, so recording `PickedUp` on it does nothing.
 
 ### Partial Shipment (Split Across Packages)
 
 When items ship in multiple packages with different carriers:
 
 ```php
+use Shopper\Core\Actions\RecordShipmentEventAction;
+
 $order = Order::query()
     ->with('items')
     ->find($orderId);
 
+$recordEvent = resolve(RecordShipmentEventAction::class);
+
 // First package: items 1 and 2 via Colissimo
 $shipment1 = $order->shippings()->create([
     'carrier_id' => $colissimoId,
+    'status' => ShipmentStatus::Pending,
     'tracking_number' => 'LP123456789FR',
     'tracking_url' => 'https://laposte.fr/suivi/LP123456789FR',
-    'shipped_at' => now(),
 ]);
 
 $order->items()
     ->whereIn('id', [$item1->id, $item2->id])
-    ->update([
-        'order_shipping_id' => $shipment1->id,
-        'fulfillment_status' => FulfillmentStatus::Shipped,
-    ]);
+    ->update(['order_shipping_id' => $shipment1->id]);
+
+$recordEvent->execute($shipment1, ShipmentStatus::PickedUp);
 
 // Second package: item 3 via UPS (ships later)
 $shipment2 = $order->shippings()->create([
     'carrier_id' => $upsId,
+    'status' => ShipmentStatus::Pending,
     'tracking_number' => '1Z999AA10987654321',
     'tracking_url' => 'https://ups.com/track?num=1Z999AA10987654321',
-    'shipped_at' => now(),
 ]);
 
 $order->items()
     ->where('id', $item3->id)
-    ->update([
-        'order_shipping_id' => $shipment2->id,
-        'fulfillment_status' => FulfillmentStatus::Shipped,
-    ]);
+    ->update(['order_shipping_id' => $shipment2->id]);
+
+$recordEvent->execute($shipment2, ShipmentStatus::PickedUp);
 ```
+
+After the first pickup the order's `shipping_status` is `PartiallyShipped`. After the second it is `Shipped`, and `OrderShipped` is dispatched.
 
 ### Marking as Delivered
 
 ```php
-// Mark a specific shipment as delivered
-$shipment->update(['received_at' => now()]);
+use Shopper\Core\Actions\MarkShipmentDeliveredAction;
 
-$shipment->items()->update([
-    'fulfillment_status' => FulfillmentStatus::Delivered,
+resolve(MarkShipmentDeliveredAction::class)->execute($shipment, [
+    'description' => 'Left with the building concierge',
 ]);
-
-// Check if all items are delivered to complete the order
-$allDelivered = $order->items()
-    ->where('fulfillment_status', '!=', FulfillmentStatus::Delivered)
-    ->doesntExist();
-
-if ($allDelivered) {
-    $order->update(['status' => OrderStatus::Completed]);
-}
 ```
+
+The action sets `received_at`, moves the shipment's `Shipped` items to `Delivered`, recomputes the order's `shipping_status`, and moves the order from `Processing` to `Completed` once every item of the order is delivered. `Delivered` is only reachable from `OutForDelivery`: on a shipment in any other status the action does nothing, so record `InTransit` and `OutForDelivery` with `RecordShipmentEventAction` first.
 
 ## Dropshipping Workflow
 
@@ -322,10 +339,10 @@ Dropshipping requires the [Supplier](/2.x/suppliers) feature to be enabled. Exte
 ### Complete Dropshipping Flow
 
 ```php
-use Shopper\Core\Models\Contracts\Supplier;
+use Shopper\Core\Actions\RecordShipmentEventAction;
 
 $order = Order::query()
-    ->with('items.product.supplier')
+    ->with('items.product')
     ->find($orderId);
 
 // Step 1: Forward items to their suppliers
@@ -340,25 +357,32 @@ foreach ($order->items as $item) {
 // Step 2: When the supplier ships, create the shipment
 $shipment = $order->shippings()->create([
     'carrier_id' => $carrierId,
+    'status' => ShipmentStatus::Pending,
     'tracking_number' => $trackingFromSupplier,
     'tracking_url' => $trackingUrlFromSupplier,
-    'shipped_at' => now(),
 ]);
 
-// Link supplier items to shipment
+// Link supplier items to the shipment and mark them shipped:
+// the pickup event below only moves Pending items to Shipped
 $order->items()
     ->where('fulfillment_status', FulfillmentStatus::ForwardedToSupplier)
     ->update([
         'order_shipping_id' => $shipment->id,
         'fulfillment_status' => FulfillmentStatus::Shipped,
     ]);
+
+resolve(RecordShipmentEventAction::class)->execute($shipment, ShipmentStatus::PickedUp);
 ```
+
+`OrderItem::product()` is polymorphic: a variant line points to a `ProductVariant`, which has no `supplier_id` and no `supplier` relation. For those lines, read the supplier from the parent product: `$item->product->product->supplier_id`.
 
 ### Mixed Orders (Own Products + Supplier Products)
 
 An order can contain both your own products and dropshipped products:
 
 ```php
+use Shopper\Core\Actions\RecordShipmentEventAction;
+
 $order = Order::query()
     ->with('items.product')
     ->find($orderId);
@@ -375,16 +399,15 @@ $supplierItems = $order->items->filter(
 if ($ownItems->isNotEmpty()) {
     $shipment = $order->shippings()->create([
         'carrier_id' => $yourCarrierId,
+        'status' => ShipmentStatus::Pending,
         'tracking_number' => $yourTracking,
-        'shipped_at' => now(),
     ]);
 
     $order->items()
         ->whereIn('id', $ownItems->pluck('id'))
-        ->update([
-            'order_shipping_id' => $shipment->id,
-            'fulfillment_status' => FulfillmentStatus::Shipped,
-        ]);
+        ->update(['order_shipping_id' => $shipment->id]);
+
+    resolve(RecordShipmentEventAction::class)->execute($shipment, ShipmentStatus::PickedUp);
 }
 
 // Forward supplier items
@@ -402,6 +425,8 @@ if ($supplierItems->isNotEmpty()) {
 ### Items by Status
 
 ```php
+use Illuminate\Database\Eloquent\Relations\MorphTo;
+
 // Get all unfulfilled items across orders
 $unfulfilledItems = OrderItem::query()
     ->whereNull('fulfillment_status')
@@ -409,10 +434,13 @@ $unfulfilledItems = OrderItem::query()
     ->with('order.customer')
     ->get();
 
-// Get items waiting for supplier
+// Get items waiting for supplier, with the supplier of product lines
+// (variant lines have no supplier relation)
 $awaitingSupplier = OrderItem::query()
     ->where('fulfillment_status', FulfillmentStatus::ForwardedToSupplier)
-    ->with('product.supplier')
+    ->with(['product' => fn (MorphTo $morphTo) => $morphTo->morphWith([
+        config('shopper.models.product') => ['supplier'],
+    ])])
     ->get();
 ```
 
@@ -430,8 +458,7 @@ $ordersToFulfill = Order::query()
 
 // Orders partially shipped
 $partiallyShipped = Order::query()
-    ->whereHas('items', fn ($q) => $q->where('fulfillment_status', FulfillmentStatus::Shipped))
-    ->whereHas('items', fn ($q) => $q->where('fulfillment_status', '!=', FulfillmentStatus::Shipped))
+    ->where('shipping_status', ShippingStatus::PartiallyShipped)
     ->get();
 ```
 
@@ -449,14 +476,14 @@ $customerShipments = OrderShipping::query()
 ## Handling Returns
 
 ```php
-// Mark a shipment as returned
-$shipment->update(['returned_at' => now()]);
+use Shopper\Core\Actions\RecordShipmentEventAction;
 
-// Update item statuses
-$shipment->items()->update([
-    'fulfillment_status' => FulfillmentStatus::Cancelled,
+resolve(RecordShipmentEventAction::class)->execute($shipment, ShipmentStatus::Returned, [
+    'description' => 'Returned to sender: recipient unknown at this address',
 ]);
 ```
+
+Recording `Returned` sets `returned_at`, marks every item of the shipment as `Cancelled`, and recomputes the order's `shipping_status`: `Returned` when every item of the order is cancelled, `PartiallyReturned` when the other items are shipped or delivered. Any status except `Returned` can move to `Returned`. The order `status` does not change.
 
 ## Actions
 
@@ -464,7 +491,7 @@ Shopper provides dedicated action classes for fulfillment operations. These hand
 
 ### RecordShipmentEventAction
 
-The recommended way to record shipment events. It validates the transition, updates the shipment status, logs the event, and handles side effects based on the new status:
+The recommended way to record shipment events. It checks the transition, updates the shipment status, logs the event, and handles side effects based on the new status. It returns the created `OrderShippingEvent`, or `null` without changing anything when the transition is not allowed or when `occurred_at` is earlier than the shipment's latest event:
 
 ```php
 use Shopper\Core\Actions\RecordShipmentEventAction;
@@ -479,15 +506,17 @@ $action->execute($shipment, ShipmentStatus::PickedUp, [
 ]);
 ```
 
-When a shipment transitions to **PickedUp**, the action automatically updates all items in the shipment to `FulfillmentStatus::Shipped` and changes the order status from `New` to `Processing`.
+When a shipment transitions to **PickedUp**, the action sets `shipped_at` to the event date, updates the shipment's `Pending` items to `FulfillmentStatus::Shipped` (items in another status keep it), and changes the order status from `New` to `Processing`.
 
-When a shipment transitions to **Delivered**, the action updates all items to `FulfillmentStatus::Delivered` and completes the order if all items across all shipments are delivered.
+When a shipment transitions to **Delivered**, the action sets `received_at`, updates the shipment's `Shipped` items to `FulfillmentStatus::Delivered`, and moves the order from `Processing` to `Completed` when every item of the order is delivered. It does not dispatch `OrderShipmentDelivered` or `OrderCompleted`: use `MarkShipmentDeliveredAction` below when your listeners need the delivery event.
 
-When a shipment transitions to **Returned**, the action updates all items to `FulfillmentStatus::Cancelled`.
+When a shipment transitions to **Returned**, the action sets `returned_at` and updates all items of the shipment to `FulfillmentStatus::Cancelled`.
+
+After each of these three transitions, the action runs `SyncOrderShippingStatusAction` on the order. Other statuses (`InTransit`, `AtSortingCenter`, `OutForDelivery`, `DeliveryFailed`) only update the shipment and its timeline.
 
 ### MarkShipmentDeliveredAction
 
-A convenience action for marking a shipment as delivered. It validates that the shipment can transition to `Delivered` and dispatches the `OrderShipmentDelivered` event:
+A convenience action for marking a shipment as delivered. It records the `Delivered` event through `RecordShipmentEventAction` and dispatches the `OrderShipmentDelivered` event. When the shipment cannot transition to `Delivered` (its status is not `OutForDelivery`), it does nothing:
 
 ```php
 use Shopper\Core\Actions\MarkShipmentDeliveredAction;
@@ -502,7 +531,7 @@ $action->execute($shipment, [
 
 ### SyncOrderShippingStatusAction
 
-This action computes the order-level `shipping_status` from the fulfillment statuses of all its items. It runs automatically after every shipment event, but you can call it manually if you update item statuses directly:
+This action computes the order-level `shipping_status` from the fulfillment statuses of all its items. `RecordShipmentEventAction` runs it after a `PickedUp`, `Delivered` or `Returned` event. Call it yourself when you update item statuses directly:
 
 ```php
 use Shopper\Core\Actions\SyncOrderShippingStatusAction;
@@ -512,7 +541,7 @@ $action = resolve(SyncOrderShippingStatusAction::class);
 $action->execute($order);
 ```
 
-The algorithm counts items by fulfillment status and determines the order shipping status:
+The algorithm counts items by fulfillment status and determines the order shipping status. The first matching row wins, and an order without items is left unchanged:
 
 | Condition | Order Shipping Status |
 |-----------|----------------------|
@@ -528,13 +557,13 @@ When the status transitions to `Shipped`, the `OrderShipped` event is dispatched
 
 ## Events
 
-Fulfillment events are dispatched automatically by the actions above:
+`OrderShipped` and `OrderShipmentDelivered` are dispatched by the actions above. `OrderShipmentCreated` is dispatched by the admin when a staff member creates a shipping label; creating a shipment in your own code does not dispatch it, so dispatch it yourself if your listeners need it: `OrderShipmentCreated::dispatch($order, $shipment)`.
 
 | Event | Dispatched When | Properties |
 |-------|-----------------|------------|
-| `OrderShipmentCreated` | A new shipment is created for an order | `Order $order`, `OrderShipping $shipment` |
-| `OrderShipped` | Order `shipping_status` transitions to `Shipped` | `Order $order` |
-| `OrderShipmentDelivered` | A shipment is marked as delivered | `Order $order`, `OrderShipping $shipment` |
+| `OrderShipmentCreated` | A shipping label is created from the admin | `Order $order`, `OrderShipping $shipment` |
+| `OrderShipped` | Order `shipping_status` transitions to `Shipped` (`SyncOrderShippingStatusAction`) | `Order $order` |
+| `OrderShipmentDelivered` | A shipment is marked as delivered with `MarkShipmentDeliveredAction` | `Order $order`, `OrderShipping $shipment` |
 
 ```php
 use Shopper\Core\Events\Orders\OrderShipmentCreated;
@@ -586,8 +615,8 @@ class OrderTrackingController extends Controller
 
 | Practice | Description |
 |----------|-------------|
-| Update statuses atomically | Always update `order_shipping_id` and `fulfillment_status` together when shipping |
-| Complete orders automatically | Check if all items are delivered and update the order status accordingly |
+| Update statuses atomically | Record shipment events with `RecordShipmentEventAction` so the shipment, its items and the order `shipping_status` change together |
+| Complete orders automatically | Let `RecordShipmentEventAction` complete the order on delivery; if you change item statuses yourself, check that all items are delivered and update the order status |
 | Group items by carrier | Items from the same supplier or warehouse should share a shipment |
 | Store tracking URLs | Always provide `tracking_url` so customers can track packages directly |
 | Handle mixed orders | Process your own products and supplier products as separate shipments |

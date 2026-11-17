@@ -9,7 +9,7 @@ Categories provide a hierarchical organization structure for your products. Shop
 
 The model used is `Shopper\Models\Category`, which extends `Shopper\Core\Models\Category`. It implements the `Shopper\Core\Models\Contracts\Category` contract and `Spatie\MediaLibrary\HasMedia` for media support.
 
-The core model provides the business logic (relationships, scopes, slug generation, hierarchical structure via [laravel-adjacency-list](https://github.com/staudenmeir/laravel-adjacency-list)), while the admin model adds media collections and conversions through `HasMedia` and `RegistersMediaCollections` traits. This separation means the core model has no dependency on Spatie MediaLibrary. Media support is added at the admin layer.
+The core model provides the business logic (relationships, scopes, slug handling, hierarchical structure via [laravel-adjacency-list](https://github.com/staudenmeir/laravel-adjacency-list)) and declares its two media collections in `getMediaCollections()`. The admin model registers those collections with Spatie MediaLibrary and adds the image conversions through the `HasMedia` and `RegistersMediaCollections` traits. This separation means the core model has no dependency on Spatie MediaLibrary. Media support is added at the admin layer.
 
 ### Extending the Model
 
@@ -35,23 +35,25 @@ return [
 
 ## Database Schema
 
+Categories are stored in the `sh_categories` table (`sh_` is the default [table prefix](/2.x/configuration#database-table-prefix)).
+
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
 | `name` | string | no | - | Category name |
-| `slug` | string | yes | auto | URL-friendly identifier (unique, auto-generated) |
+| `slug` | string | yes | null | URL-friendly identifier (unique) |
 | `description` | longtext | yes | null | Category description |
-| `position` | smallint | no | 0 | Display order position |
+| `position` | smallint (unsigned) | no | 0 | Display order among siblings (set by the admin reorder panel) |
 | `is_enabled` | boolean | no | false | Category visibility status |
 | `seo_title` | string(60) | yes | null | SEO meta title |
 | `seo_description` | string(160) | yes | null | SEO meta description |
 | `metadata` | jsonb | yes | null | Additional custom data |
-| `parent_id` | bigint | yes | null | Foreign key to parent category |
+| `parent_id` | bigint (unsigned) | yes | null | Foreign key to the parent category. Set to `null` when the parent is deleted, so its children become root categories |
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
 
 <Note>
-  The `slug` column is nullable at the database level, but is always auto-generated from the `name` when you set it. You never need to set it manually.
+  The `HasSlug` trait runs any slug you set through `Str::slug()` and appends `-1`, `-2`, etc. if the slug is already taken. It does not build the slug from the `name`. The admin category form fills the slug from the name for you, and the `CategoryObserver` sets it for subcategories (see [Custom Paths & Slug Behavior](#custom-paths--slug-behavior)). When you create a root category in code, pass a `slug` yourself, otherwise the column stays `null`.
 </Note>
 
 ## Hierarchical Structure
@@ -78,11 +80,11 @@ Categories support two media collections through [Spatie MediaLibrary](https://s
 | Default gallery | `shopper.media.storage.collection_name` | Multiple files | Category images |
 | Thumbnail | `shopper.media.storage.thumbnail_collection` | Single file | Primary image for listings and navigation |
 
-Both collections accept JPEG, PNG, WebP, AVIF, and SVG files by default (configurable in `config/shopper/media.php`).
+Both collections accept the MIME types listed in `shopper.media.accepts_mime_types`: JPEG, PNG, WebP and AVIF by default (configurable in `config/shopper/media.php`). The admin category form uploads a single image to the thumbnail collection, limited to `shopper.media.max_size.thumbnail` kilobytes (1024 by default). The admin does not upload to the default gallery collection: fill it from your own code.
+
+The collection names are defined in `config/shopper/media.php` under the `storage` key (`uploads` and `thumbnail` by default). The `getFirstMediaUrl` method returns the URL for the first media in a collection. If no media has been uploaded, a fallback URL is returned instead. You can also request a specific conversion size like `medium` (500x500) or `large` (800x800), defined under `shopper.media.conversions`.
 
 To display a category's thumbnail on your storefront:
-
-The collection names are defined in `config/shopper/media.php` under the `storage` key. The `getFirstMediaUrl` method returns the URL for the first media in a collection. If no media has been uploaded, a fallback URL is returned instead. You can also request a specific conversion size like `medium` (500x500) or `large` (800x800).
 
 ```php
 use Shopper\Models\Category;
@@ -107,13 +109,13 @@ $category->addMedia($pathToImage)
 
 ### Parent Category
 
-Every category can optionally belong to a parent category. Use this to build breadcrumbs or display the parent context:
+Every category can optionally belong to a parent category. Use this to build breadcrumbs or display the parent context. Ancestors carry a negative `depth` (`-1` for the parent, `-2` for the grandparent), so ordering by `depth` lists the root category first:
 
 ```php
 $category->parent;
 
 if ($category->parent) {
-    $breadcrumb = $category->ancestors;
+    $breadcrumb = $category->ancestors()->orderBy('depth')->get();
 }
 ```
 
@@ -132,11 +134,16 @@ $category->descendantsAndSelf;
 
 ### Descendant Categories
 
-The `descendantCategories()` relationship returns a `HasManyOfDescendants` Eloquent relation, which means you can use it in `whereHas()`, `withCount()`, and other query builder contexts. This differs from `descendants()` which is a recursive scope and cannot be used the same way.
+To work with every category below a given one, at any depth, use the `descendants` relationship. It is an Eloquent relation like `children`: you can eager load it, count it, or add constraints before running the query. Use `descendantsAndSelf` to include the category itself.
 
 ```php
-$categoriesWithDescendants = Category::query()
-    ->withCount('descendantCategories')
+$total = $category->descendants()->count();
+
+$enabledDescendants = $category->descendants()->enabled()->get();
+
+$categories = Category::query()
+    ->whereNull('parent_id')
+    ->with('descendants')
     ->get();
 ```
 
@@ -203,7 +210,9 @@ Category::tree()->get();
 
 ## Custom Paths & Slug Behavior
 
-Categories automatically generate slug paths for nested URLs. For a category "Laptops" under "Computers" under "Electronics", `$category->slug_path` returns `electronics/computers/laptops`:
+The model declares a `slug_path` custom path for nested URLs. The `laravel-adjacency-list` package fills it on categories loaded through a recursive query (`tree()`, `descendants`, `ancestors` and the other tree relations) by joining the slugs with `/`, starting at the first level of that query. A category loaded with `find()` or `findBySlug()` has no `slug_path`.
+
+With `Category::tree()`, the path starts at the root. For a category "Laptops" under "Computers" under "Electronics", `slug_path` is `electronics/electronics-computers/electronics-computers-laptops`, because each subcategory slug already starts with its parent's slug (see the note below):
 
 ```php
 public function getCustomPaths(): array
@@ -219,14 +228,14 @@ public function getCustomPaths(): array
 ```
 
 <Note>
-  When a category has a parent, the `CategoryObserver` automatically combines the parent's slug with the category name on creation and update. For example, creating a "Laptops" category under a parent with slug `computers` produces the slug `computers-laptops`. This ensures slug uniqueness across the hierarchy.
+  When a category has a parent, the `CategoryObserver` sets its slug to the parent's slug followed by the category name, on creation and on every update made through the model. For example, creating a "Laptops" category under a parent with slug `electronics-computers` produces the slug `electronics-computers-laptops`, and a slug you pass for a subcategory is replaced. This keeps same-named subcategories under different parents apart (`electronics-phones-accessories`, `electronics-audio-accessories`). If a slug is still taken, the `HasSlug` trait appends `-1`, `-2`, etc.
 </Note>
 
 ## Methods & Helpers
 
 ### Find by Slug
 
-The `findBySlug` static method looks up a category by its slug and throws a `ModelNotFoundException` if not found:
+The `findBySlug` static method looks up a category by its slug and throws a `ModelNotFoundException` if not found. It does not check `is_enabled`:
 
 ```php
 use Shopper\Models\Category;
@@ -238,7 +247,7 @@ $category = Category::findBySlug('electronics');
 
 The `getLabelOptionName()` method returns the full hierarchical path as a formatted string, useful for select dropdowns and admin interfaces:
 
-For a category "Laptops" nested under "Computers" under "Electronics", the method returns `Electronics / Computers / Laptops`.
+For a category "Laptops" nested under "Computers" under "Electronics", the method returns `Electronics / Computers / Laptops`. It walks up the `parent` relation, which runs one query per level unless the parents are already loaded.
 
 ```php
 $category->getLabelOptionName();
@@ -248,7 +257,7 @@ $category->getLabelOptionName();
 
 Toggle a category's visibility with `updateStatus()`:
 
-Pass `true` to enable a category or `false` to disable it.
+Pass `true` (the default) to enable a category or `false` to disable it.
 
 ```php
 $category->updateStatus(true);
@@ -257,17 +266,18 @@ $category->updateStatus(false);
 
 ## Creating Categories
 
-Create a root category by omitting the `parent_id`:
+Create a root category by omitting the `parent_id`. Pass the `slug` yourself, because the model does not build it from the name:
 
 ```php
 $electronics = Category::query()->create([
     'name' => 'Electronics',
+    'slug' => 'electronics',
     'is_enabled' => true,
     'position' => 1,
 ]);
 ```
 
-Create a subcategory by setting `parent_id`:
+Create a subcategory by setting `parent_id`. The `CategoryObserver` sets its slug from the parent's slug and the name, `electronics-computers` here:
 
 ```php
 $computers = Category::query()->create([
@@ -308,7 +318,7 @@ $category = Category::query()
     ->with('descendants')
     ->first();
 
-$breadcrumb = $category->ancestors;
+$breadcrumb = $category->ancestors()->orderBy('depth')->get();
 ```
 
 For navigation menus with nested enabled children:
@@ -349,6 +359,7 @@ The `metadata` JSON column lets you store arbitrary key-value data on a category
 ```php
 $category = Category::query()->create([
     'name' => 'Summer Sale',
+    'slug' => 'summer-sale',
     'is_enabled' => true,
     'metadata' => [
         'banner_color' => '#FF6B35',
@@ -362,7 +373,7 @@ $color = $category->metadata['banner_color'];
 
 ## Disabling Category Feature
 
-If your store doesn't use categories, you can disable the feature entirely. This removes the category section from the admin panel:
+If your store doesn't use categories, you can disable the feature entirely. This removes the category menu and pages from the admin panel, and the category field from the product forms:
 
 In your `config/shopper/features.php` file, set the category feature to disabled:
 
@@ -376,14 +387,14 @@ return [
 
 ### Permissions
 
-The admin panel generates four permissions for category management:
+The permissions seeder creates five permissions for category management:
 
 | Permission | Description |
 |------------|-------------|
-| `browse_categories` | View the categories list |
-| `read_categories` | View a single category |
+| `browse_categories` | View the categories list and the Categories menu entry |
+| `read_categories` | View a single category. Not checked by the admin category screens |
 | `add_categories` | Create new categories |
-| `edit_categories` | Edit existing categories |
+| `edit_categories` | Edit existing categories, change their status and reorder them |
 | `delete_categories` | Delete categories |
 
 ## Components
@@ -441,7 +452,7 @@ class CategoryController extends Controller
 
         abort_unless($category->is_enabled, 404);
 
-        $category->load('ancestors');
+        $category->load(['ancestors' => fn ($query) => $query->orderBy('depth')]);
 
         $categoryIds = $category->descendants
             ->pluck('id')

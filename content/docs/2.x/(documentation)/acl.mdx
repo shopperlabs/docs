@@ -22,8 +22,10 @@ Roles are configured in `config/shopper/admin.php`. These names are used through
 | Role | Purpose | Admin Access |
 |------|---------|-------------|
 | `administrator` | Full access to all admin panel features | Yes |
-| `manager` | Configurable access based on assigned permissions | Yes |
-| `user` | Customer role, assigned to storefront users | No |
+| `manager` | Access limited to the permissions you give the role (none by default) | Yes |
+| `user` | Customer role. Shopper gives it to customers created in the admin panel; give it to customers who register on your storefront too, because the customers list only shows users with this role | No |
+
+A user with any other role can open the admin panel only if they hold the `access_dashboard` permission (see [System Permissions](/2.x/acl#system-permissions)).
 
 <Warning>
 Do not rename roles after they have been assigned to users. Role names are used in middleware and authorization checks throughout the system.
@@ -38,18 +40,18 @@ The model used is `Shopper\Models\Role`, which extends Spatie's Role model with 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
-| `name` | string | no | - | Role name in lowercase (e.g., `administrator`) |
+| `name` | string | no | - | Unique role name used in authorization checks (e.g., `administrator`) |
 | `guard_name` | string | no | auto | Filled automatically by Spatie |
 | `display_name` | string | yes | null | Human-readable name |
 | `description` | text | yes | null | Role description |
 | `can_be_removed` | boolean | no | true | Whether the role can be deleted |
 
-The Role model provides an `isAdmin()` method:
+The Role model provides an `isAdmin()` method, which returns `true` when the role name matches `shopper.admin.roles.admin`:
 
 ```php
 use Shopper\Models\Role;
 
-$role = Role::query()->where('name', 'administrator')->first();
+$role = Role::query()->where('name', config('shopper.admin.roles.admin'))->first();
 $role->isAdmin(); // true
 ```
 
@@ -64,12 +66,12 @@ The model used is `Shopper\Models\Permission`, which extends Spatie's Permission
 | `guard_name` | string | no | auto | Filled automatically by Spatie |
 | `group_name` | string | yes | null | Permission group for organization |
 | `display_name` | string | yes | null | Human-readable name |
-| `description` | text | yes | null | Permission description |
+| `description` | string | yes | null | Permission description |
 | `can_be_removed` | boolean | no | true | Whether the permission can be deleted |
 
 ### Permission Groups
 
-Permissions are organized into groups for display in the admin panel:
+Each permission belongs to a group through its `group_name` column, and the role page in the admin panel lists permissions by group. `Permission::groups()` returns the built-in groups, used as the options of the group select when you create or generate a permission in the admin panel:
 
 ```php
 use Shopper\Models\Permission;
@@ -77,7 +79,7 @@ use Shopper\Models\Permission;
 Permission::groups();
 ```
 
-This returns the built-in groups: `system`, `brands`, `categories`, `collections`, `products`, `customers`, `orders`, `discounts`.
+This returns an array keyed by group name, with a translated label for each: `system`, `brands`, `categories`, `collections`, `products`, `customers`, `orders`, `discounts`.
 
 ### System Permissions
 
@@ -85,8 +87,11 @@ The `system` group contains the global capabilities that gate everything outside
 
 | Permission | Description |
 |---|---|
-| `access_setting` | Required for any write action on settings surfaces (PaymentMethods, Currencies, Carriers, Locations, Legal, Team, Roles, Permissions) |
-| `view_users` | Required to view the customers list and customer detail pages |
+| `access_dashboard` | Opens the admin panel for a user who has neither the administrator nor the manager role (checked by `canAccessDashboard()`) |
+| `access_setting` | Required to open the settings pages (General, Payment methods, Currencies, Carriers, Zones, Taxes, Legal) and for every write action on the Team, Roles and Permissions pages |
+| `view_users` | Required to view the team pages: the staff list, and a role page with its permissions and members |
+
+Locations are not covered by `access_setting`: their pages check the inventory permissions (`browse_inventories`, `add_inventories`, `edit_inventories`, `delete_inventories`). The customers pages check the customer permissions (`browse_customers`, `read_customers`, and so on).
 
 <Note>
 Since v2.8, `access_setting` is the only permission that grants write access to PaymentMethods, Currencies, Carriers, Team management, and Role/Permission management. Roles that previously relied on `view_users` to mutate these surfaces must be granted `access_setting` to keep working.
@@ -94,15 +99,15 @@ Since v2.8, `access_setting` is the only permission that grants write access to 
 
 ### Team Management Safeguards
 
-Holding `access_setting` grants access to the team settings surfaces, but since v2.11.2 it no longer grants unrestricted control over the access control system itself. Without these safeguards, granting `access_setting` to a staff member so they could configure shipping or taxes also handed them a path to full administrator capability. Non administrator users are now subject to three rules:
+Holding `access_setting` grants write access to the team settings surfaces, but since v2.11.2 it no longer grants unrestricted control over the access control system itself, so you can give it to a staff member who configures shipping or taxes without handing them control of roles and permissions. Non administrator users are subject to three rules:
 
 | Rule | Effect |
 |------|--------|
 | The administrator role cannot be targeted | A non administrator cannot open, update, delete the administrator role, or assign it to a new team member |
 | A permission can only be granted if the acting user holds it | A staff member cannot give a role a capability they do not have themselves |
-| Permission definitions are administrator only | Creating or deleting a permission requires the administrator role |
+| Permission definitions are administrator only | Creating, generating or deleting a permission requires the administrator role |
 
-Administrators are unaffected: they hold every permission, so every rule short circuits for them. Permissions and roles flagged with `can_be_removed` set to `false` are also protected on the server, not only hidden in the UI.
+Administrators are unaffected: each rule is skipped when the acting user has the administrator role. Removing a team member is also limited to administrators, and an administrator account cannot be removed from the panel. Permissions and roles flagged with `can_be_removed` set to `false` are also protected on the server, not only hidden in the UI.
 
 ### Generating Permissions
 
@@ -115,6 +120,8 @@ Permission::generate('brands');
 Permission::generate('tags', 'products');
 // Creates: browse_tags, read_tags, add_tags, edit_tags, delete_tags (in the "products" group)
 ```
+
+Without a second argument, the group is the resource name. Generated permissions have `can_be_removed` set to `false`, and the method gives them to no role: assign them yourself (see [Creating Custom Permissions](/2.x/acl#creating-custom-permissions)). The **Generate permissions** action on a role page in the admin panel calls the same method and gives the five permissions to that role.
 
 ## Working with Roles
 
@@ -132,6 +139,7 @@ $role = Role::query()->create([
 ]);
 
 $role->givePermissionTo([
+    'access_dashboard',
     'browse_inventories',
     'read_inventories',
     'edit_inventories',
@@ -139,6 +147,8 @@ $role->givePermissionTo([
     'read_products',
 ]);
 ```
+
+The `access_dashboard` permission lets users with this role open the admin panel. Without it, only the administrator and manager roles get in.
 
 ### Assigning Roles
 
@@ -157,8 +167,18 @@ The `InteractsWithShopper` trait on the User model provides role checking method
 ```php
 $user->isAdmin();    // true if user has the administrator role
 $user->isManager();  // true if user has the manager role
+$user->canAccessDashboard(); // true for administrators, managers and users holding access_dashboard
 
 $user->hasRole('warehouse-manager');
+```
+
+The trait also adds two query scopes:
+
+```php
+use App\Models\User;
+
+User::query()->administrators()->get(); // users with the administrator or manager role
+User::query()->customers()->get();      // users with the user role
 ```
 
 ## Working with Permissions
@@ -176,8 +196,8 @@ $user->can('edit_products');
 In Blade templates:
 
 ```blade
-@can('add_products')
-    <a href="/admin/products/create">Add Product</a>
+@can('browse_products')
+    <a href="{{ route('shopper.products.index') }}">Products</a>
 @endcan
 ```
 
@@ -192,7 +212,7 @@ public function mount(): void
 
 ### Creating Custom Permissions
 
-To add a custom permission and assign it to a role:
+To add a custom permission and assign it to the administrator and manager roles:
 
 ```php
 use Shopper\Models\Permission;
@@ -205,11 +225,21 @@ $permission = Permission::query()->create([
     'description' => 'Access the analytics dashboard.',
 ]);
 
-$role = Role::query()->where('name', 'manager')->first();
-$role->givePermissionTo($permission);
+$roles = Role::query()
+    ->whereIn('name', [
+        config('shopper.admin.roles.admin'),
+        config('shopper.admin.roles.manager'),
+    ])
+    ->get();
+
+foreach ($roles as $role) {
+    $role->givePermissionTo($permission);
+}
 ```
 
-Custom permissions without a recognized group appear in a "Custom permissions" section in the admin panel.
+Administrators get no automatic pass on permission checks. The installer gave the administrator role every permission that existed at that time, nothing more, so give each permission you create later to the administrator role too, or `can()` returns `false` for administrators.
+
+On the role page in the admin panel, a permission without a `group_name` is listed under a "Custom permission" heading. A permission whose `group_name` is not one of the built-in groups is listed under a heading named after its `group_name`.
 
 ### Revoking Permissions
 
@@ -227,13 +257,15 @@ You can create an admin user from the command line:
 php artisan shopper:user
 ```
 
-Or programmatically:
+The command asks for the email, first name, last name and password (at least 6 characters), then gives the new user the administrator role.
+
+Or programmatically. `forceCreate()` saves the attributes even when they are not in your User model's `$fillable`, as the command does:
 
 ```php
 use App\Models\User;
 use Illuminate\Support\Facades\Hash;
 
-$admin = User::query()->create([
+$admin = User::query()->forceCreate([
     'first_name' => 'John',
     'last_name' => 'Doe',
     'email' => 'admin@example.com',

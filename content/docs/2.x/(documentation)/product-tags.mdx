@@ -3,11 +3,11 @@ title: Product Tags
 description: "Organize products with flat, flexible labels for filtering and marketing campaigns."
 ---
 
-Tags are simple labels you attach to products for cross-cutting organization. Unlike [categories](/2.x/categories) (hierarchical) or [collections](/2.x/collections) (rule-based), tags are flat and flexible, ideal for seasonal labels ("Summer 2026"), marketing campaigns ("Flash Sale"), or storefront filtering ("New Arrival", "Best Seller").
+Tags are simple labels you attach to products for cross-cutting organization. Unlike [categories](/2.x/categories) (hierarchical) or [collections](/2.x/collections) (manual or rule-based), tags are flat and flexible, ideal for seasonal labels ("Summer 2026"), marketing campaigns ("Flash Sale"), or storefront filtering ("New Arrival", "Best Seller").
 
 ## Model
 
-The model used is `Shopper\Core\Models\ProductTag`. Unlike products, categories, or brands, the tag model has no admin wrapper and is not configurable via `config/shopper/models.php`. It uses the `HasSlug` trait, which generates unique, URL-friendly slugs with collision handling.
+The model used is `Shopper\Core\Models\ProductTag`, stored in the `product_tags` table (`sh_product_tags` with the default [table prefix](/2.x/configuration#database-table-prefix)). Products, categories and brands have an admin model that you can replace in `config/shopper/models.php`; tags do not. `Product::tags()` and the `product_tag` morph map entry reference `ProductTag` directly, so the tag model cannot be swapped through configuration. It uses the `HasSlug` trait, which turns the slug you give it into a unique, URL-friendly value (see [Slug Generation](#slug-generation)).
 
 ## Database Schema
 
@@ -17,7 +17,7 @@ The model used is `Shopper\Core\Models\ProductTag`. Unlike products, categories,
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
 | `name` | string | no | - | Tag name |
-| `slug` | string | yes | auto | URL-friendly identifier (unique) |
+| `slug` | string | yes | null | URL-friendly identifier (unique), see [Slug Generation](#slug-generation) |
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
 
@@ -33,7 +33,9 @@ Tags use the shared polymorphic `product_has_relations` pivot table. This is the
 
 ## Slug Generation
 
-The `HasSlug` trait provides automatic slug generation with collision handling. When you set the `slug` attribute, the trait runs the value through `Str::slug()` and checks for uniqueness. If a slug already exists, it appends an incrementing suffix (`-1`, `-2`, etc.) until it finds a unique one.
+The `HasSlug` trait normalizes the slug and handles collisions. When you set the `slug` attribute, the trait runs the value through `Str::slug()` and checks for uniqueness. If a slug already exists, it appends an incrementing suffix (`-1`, `-2`, etc.) until it finds a unique one. A value with no URL-safe characters gets a random 5-character slug.
+
+The trait does not build the slug from the `name`. Always pass a `slug` when you create a tag in code: without one the column stays `null` and `findBySlug()` cannot find the tag.
 
 ```php
 use Shopper\Core\Models\ProductTag;
@@ -43,7 +45,7 @@ $tag2 = ProductTag::query()->create(['name' => 'New Arrival 2', 'slug' => 'new-a
 // $tag2->slug === 'new-arrival-1' (auto-incremented to avoid collision)
 ```
 
-The trait also provides a `findBySlug()` static method that looks up a tag by its slug and throws a `ModelNotFoundException` if not found:
+The trait also provides a `findBySlug()` static method that looks up a tag by its slug and throws a `ModelNotFoundException` if not found (Laravel turns it into a 404 response):
 
 ```php
 $tag = ProductTag::findBySlug('summer-2026');
@@ -53,7 +55,7 @@ $tag = ProductTag::findBySlug('summer-2026');
 
 ### Products
 
-Tags connect to products through a `morphToMany` / `morphedByMany` polymorphic relationship via the `product_has_relations` table.
+`ProductTag::products()` is a `morphToMany` relationship and `Product::tags()` is its `morphedByMany` inverse, both through the `product_has_relations` table.
 
 From the tag side:
 
@@ -96,6 +98,8 @@ $tag->products()->attach([$product1->id, $product2->id]);
 
 Tags can also be created inline from the product edit form in the admin panel. The tag selection field includes a "Create" option that opens a modal form, so administrators can add new tags without leaving the product page.
 
+In the admin, both this modal and the Tags page fill the slug from the name and keep the slug field read-only. A name whose slug is already taken is rejected by validation instead of receiving a `-1` suffix.
+
 ## Retrieving Tags
 
 To get all tags ordered by name with their product count:
@@ -135,19 +139,21 @@ return [
 ];
 ```
 
-When disabled, the tag menu item is hidden from the sidebar, tag-related routes are not registered, and the tag selection field is removed from product forms.
+When disabled, the tag menu item is hidden from the sidebar, tag-related routes are not registered, and the tag selection field is removed from product forms. The `ProductTag` model, its table and `Product::tags()` keep working in your own code.
 
 ### Permissions
 
-The admin panel generates four permissions for tag management:
+The admin panel generates five permissions for tag management, in the `products` permission group:
 
 | Permission | Description |
 |------------|-------------|
-| `browse_tags` | View the tags list |
-| `read_tags` | View a single tag |
-| `add_tags` | Create new tags |
-| `edit_tags` | Edit existing tags |
-| `delete_tags` | Delete tags |
+| `browse_tags` | Open the Tags page |
+| `read_tags` | Created with the others; no admin screen checks it, since tags have no detail page |
+| `add_tags` | Create tags from the Tags page |
+| `edit_tags` | Edit tags from the Tags page |
+| `delete_tags` | Delete tags, one by one or in bulk |
+
+The permissions seeder creates them on a fresh install. An installation that started before Shopper 2.3 creates them with `Shopper\Models\Permission::generate('tags', 'products')`, then assigns them to its roles, as described in the [2.2 to 2.3 upgrade guide](/2.x/upgrade/v2-2-to-v2-3#new-permissions).
 
 ## Components
 
@@ -157,7 +163,7 @@ Tags are managed under the product components configuration. To customize the ad
 php artisan shopper:component:publish product
 ```
 
-The tag page is registered in `config/shopper/components/product.php`:
+This creates `config/shopper/components/product.php`. The tag page is registered there under the `tag-index` key, next to the product pages. Point the key to your own Livewire component to replace the page:
 
 ```php
 return [
@@ -166,6 +172,8 @@ return [
     ],
 ];
 ```
+
+To add content above or below the tags table without replacing the page, use the `TAGS_TABLE_BEFORE` and `TAGS_TABLE_AFTER` constants of `Shopper\View\CatalogRenderHook` as [render hooks](/2.x/render-hooks#catalog-hooks).
 
 ## Storefront Example
 

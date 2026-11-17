@@ -5,27 +5,33 @@ description: Manage legal pages like privacy policy, terms of service, and shipp
 
 As with any e-commerce site, it is important for users to know the terms and conditions and privacy policy that your site offers. This is for their own safety and yours as well.
 
-This section allows you to set up your pages for your privacy policy, return policy, terms of use and shipping policy to be presented to customers.
+This section allows you to set up your pages for your privacy policy, refund policy, terms of use and shipping policy to be presented to customers.
 
 ## Model
 
-The model used is `Shopper\Core\Models\Legal`. It uses the `HasSlug` trait for automatic slug generation.
+The model used is `Shopper\Core\Models\Legal`. It uses the `HasSlug` trait: a slug you assign is converted with `Str::slug()` and gets a `-1`, `-2` suffix when another page already uses it. The trait does not build the slug from the title. It also adds `Legal::findBySlug('privacy')`, which returns the page whether it is enabled or not and throws a `ModelNotFoundException` when no page has that slug.
 
 ### Database Schema
+
+Legal pages are stored in the `sh_legals` table (`sh_` is the default [table prefix](/2.x/configuration#database-table-prefix)).
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
-| `title` | string | no | - | Legal page title (unique) |
-| `slug` | string | no | auto | URL-friendly identifier (unique) |
-| `content` | longtext | yes | null | Legal page content (rich text) |
+| `title` | string | no | - | Legal page title |
+| `slug` | string | yes | null | URL-friendly identifier (unique) |
+| `content` | longtext | yes | null | Legal page content, HTML from the rich text editor |
 | `is_enabled` | boolean | no | false | Whether this legal page is published |
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
 
 ## Components
 
-The components used to manage Legal page are found in the component configuration file `config/shopper/components/setting.php`. Each component corresponds to the page that is defined
+The components used to manage Legal pages are found in the component configuration file `config/shopper/components/setting.php`. To publish it in your application:
+
+```bash
+php artisan shopper:component:publish setting
+```
 
 ```php
 use Shopper\Livewire;
@@ -33,28 +39,37 @@ use Shopper\Livewire;
 return [
     'pages' => [
         // ...
-        'settings.legal.privacy' => Components\Settings\Legal\Privacy::class,
-        'settings.legal.refund' => Components\Settings\Legal\Refund::class,
-        'settings.legal.shipping' => Components\Settings\Legal\Shipping::class,
-        'settings.legal.terms' => Components\Settings\Legal\Terms::class,
+        'legal' => Livewire\Pages\Settings\LegalPage::class,
         // ...
-    ];
+    ],
+    'components' => [
+        // ...
+        'settings.legal.privacy' => Livewire\Components\Settings\Legal\Privacy::class,
+        'settings.legal.refund' => Livewire\Components\Settings\Legal\Refund::class,
+        'settings.legal.shipping' => Livewire\Components\Settings\Legal\Shipping::class,
+        'settings.legal.terms' => Livewire\Components\Settings\Legal\Terms::class,
+        'settings.legal.form' => Livewire\Components\Settings\Legal\PolicyForm::class,
+        // ...
+    ],
 ];
 ```
 
+`LegalPage` renders the tabs. Each tab component (`Privacy`, `Refund`, `Shipping`, `Terms`) shows the heading of its policy, and `PolicyForm` is the form the four tabs share.
+
 ## Add Legal content
 
-In your administration area you must click on the "cog" icon to display the settings page of your store.
+In your admin panel, click **Settings** at the bottom of the sidebar, then **Legal**. The page is at `/{prefix}/setting/legal`, where the prefix is `config('shopper.admin.prefix')` (`cpanel` by default), and it requires the [`access_setting`](/2.x/acl#system-permissions) permission.
 
-From your admin panel, on the blue sidebar click on the cog icon, go to `Settings > Legal`.
-Once in this page, all the legal pages are displayed as a tab. You can just fill in the content of each page and click on the Enable switch to retrieve the content of your page and display it in your front-end.
+The installer seeds four legal pages through `Shopper\Core\Database\Seeders\LegalsPageTableSeeder`, with the slugs `privacy`, `terms`, `shipping` and `refund`. Each one is a tab of this page: Privacy policy, Terms of use, Shipping policy and Refund policy. The admin panel edits these four pages and has no button to add or rename one.
+
+Write the content of each page, turn on the **Enabled** toggle and click **Save**. Only enabled pages are returned by `Legal::enabled()` in your front-end. The seeded pages start enabled and without content, and the form requires content to save, even to disable a page: write the content of a page before you link to it from your store.
 
 <Frame>
   <img src="/images/v2/legal.png" alt="legal settings" />
 </Frame>
 
 <Warning>
-Shopper does not generate the routes for the legal pages, you should set them up yourself. As mentioned in the introduction of this documentation, the **Framework** is just an e-commerce administration
+Shopper does not generate the routes for the legal pages, you should set them up yourself. As mentioned in the [introduction](/2.x/getting-started#headless-from-day-one) of this documentation, Shopper provides the admin panel and your application builds the storefront.
 </Warning>
 
 ## Retrieve Data
@@ -79,34 +94,34 @@ class LegalController extends Controller
     public function privacy()
     {
         return view('legal.privacy', [
-            'legal' => Legal::enabled()->where('slug', 'privacy')->first(),
+            'legal' => Legal::enabled()->where('slug', 'privacy')->firstOrFail(),
         ]);
     }
 
     public function refund()
     {
         return view('legal.refund', [
-            'legal' => Legal::enabled()->where('slug', 'refund')->first(),
+            'legal' => Legal::enabled()->where('slug', 'refund')->firstOrFail(),
         ]);
     }
 
     public function terms()
     {
         return view('legal.terms', [
-            'legal' => Legal::enabled()->where('slug', 'terms')->first(),
+            'legal' => Legal::enabled()->where('slug', 'terms')->firstOrFail(),
         ]);
     }
 
     public function shipping()
     {
         return view('legal.shipping', [
-            'legal' => Legal::enabled()->where('slug', 'shipping')->first(),
+            'legal' => Legal::enabled()->where('slug', 'shipping')->firstOrFail(),
         ]);
     }
 }
 ```
 
-`Legal::enabled()` is a scope that filters legal pages where `is_enabled` is `true`. This ensures draft pages are not shown to customers.
+`Legal::enabled()` is a scope that filters legal pages where `is_enabled` is `true`. This ensures draft pages are not shown to customers. `firstOrFail()` answers with a 404 when the page is disabled or the slug does not exist, so the view always receives a page.
 
 ### Routes
 
@@ -114,6 +129,7 @@ Once we have created the controllers we will associate the routes that will allo
 
 ```php
 use App\Http\Controllers\LegalController;
+use Illuminate\Support\Facades\Route;
 
 /*
 * Legal routes
@@ -152,12 +168,14 @@ Example of a view
             <h2 class="text-2xl font-bold uppercase text-dark tracking-wider font-heading sm:text-3xl">
                 {{ __('Privacy Policy') }}
             </h2>
-            <span class="text-sm leading-5 text-gray-500">{{ __('Last update: :date', ['date' => $legal->created_at->format('d, F Y')]) }}</span>
+            <span class="text-sm leading-5 text-gray-500">{{ __('Last update: :date', ['date' => $legal->updated_at->format('d, F Y')]) }}</span>
         </x-slot>
 
-        {!! $legal->content  !!}
+        {!! str($legal->content)->sanitizeHtml() !!}
 
     </x-legal-layout>
 
 @endsection
 ```
+
+The content is the HTML saved by the rich text editor. `sanitizeHtml()` is a string helper registered by Filament, which the Shopper admin panel requires: it removes scripts and unsafe attributes before `{!! !!}` prints the HTML.

@@ -3,15 +3,17 @@ title: "Installation"
 description: "Install Shopper into your existing Laravel application in a few steps."
 ---
 
-Shopper requires an existing Laravel 11.28+, 12 or 13 application. If you do not have one yet, create a new Laravel project first by following the [Laravel installation guide](https://laravel.com/docs/installation).
+Shopper requires an existing Laravel 11.28+, 12 or 13 application. If you do not have one yet, create a new Laravel project first by following the [Laravel installation guide](https://laravel.com/docs/installation). Check the [Requirements](/2.x/requirements) page before you start: Composer refuses to install Shopper while a required PHP extension, such as `intl`, is missing.
 
 ## Install the Package
 
 Install `shopper/framework` via Composer:
 
 ```bash
-composer require shopper/framework
+composer require shopper/framework:"^2.0"
 ```
+
+The package pulls in `shopper/core`, `shopper/cart`, `shopper/payment`, `shopper/shipping` and `shopper/sidebar`, along with Filament and Livewire.
 
 <Note>
   If you have a cached config from a previous setup, run `php artisan config:clear` before installing.
@@ -19,16 +21,33 @@ composer require shopper/framework
 
 ## Prepare Your User Model
 
-Shopper relies on your `User` model having certain relationships and methods for authentication, permissions, and admin panel access. Add the `InteractsWithShopper` trait and implement the `ShopperUser` interface on your User model:
+Shopper relies on your `User` model having certain relationships and methods for authentication, permissions, and admin panel access. In your existing User model, add the `InteractsWithShopper` trait, implement the `ShopperUser` interface and replace the fillable columns with the ones Shopper writes. Keep the other traits your model already uses:
 
 ```php title="app/Models/User.php"
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
 use Shopper\Models\Contracts\ShopperUser;
 use Shopper\Traits\InteractsWithShopper;
 
 class User extends Authenticatable implements ShopperUser
 {
     use InteractsWithShopper;
+    use Notifiable;
+
+    protected $fillable = [
+        'first_name',
+        'last_name',
+        'email',
+        'password',
+        'phone_number',
+        'gender',
+        'birth_date',
+        'opt_in',
+        'email_verified_at',
+        'avatar_type',
+        'avatar_location',
+        'last_login_ip',
+    ];
 
     protected $hidden = [
         'password',
@@ -39,7 +58,9 @@ class User extends Authenticatable implements ShopperUser
 }
 ```
 
-The `InteractsWithShopper` trait provides roles and permissions, orders, addresses, discounts and the profile photo. Two-factor authentication needs two more contracts and traits, described on the [Two-Factor Authentication](/2.x/two-factor) page. The `ShopperUser` interface ensures your model adheres to the contract expected by Shopper's admin panel.
+The `InteractsWithShopper` trait provides roles and permissions, orders, addresses, discounts and the profile photo. Two-factor authentication needs two more contracts and traits, described on the [Two-Factor Authentication](/2.x/two-factor) page. The `ShopperUser` interface declares the methods the admin panel calls on the signed-in user, such as `isAdmin()` and `canAccessDashboard()`, and the setup wizard answers with a 403 error to a user whose model does not implement it.
+
+The admin panel creates and updates customers, team members and profiles with mass assignment, so the fillable list replaces Laravel's default `name`, `email` and `password`: the Shopper migrations rename the `name` column to `last_name`. `Notifiable` sends the login details to new customers and team members, and the password reset email. The two extra hidden attributes hold the two-factor authentication secret and recovery codes.
 
 ## Run the Installer
 
@@ -54,24 +75,28 @@ The installer performs these steps:
 1. Publishes Shopper config files to `config/shopper/`
 2. Publishes Spatie MediaLibrary migrations
 3. Publishes Filament assets
-4. Creates a symlink from `vendor/shopper/framework/public` to `public/cpanel` (or your configured prefix)
-5. Prompts you to run migrations and seed the database with roles, permissions, and default data
+4. Runs `php artisan shopper:link`, which links `public/cpanel` (or your configured prefix) to the panel assets in `vendor/shopper/framework/public`
+5. Prompts you to run migrations and seed the database with roles, permissions, and default data (countries, currencies, legal pages, a sales channel, a carrier and payment methods)
 
-If `config/shopper/admin.php` already exists, the installer stops and prints the commands to publish the configuration and run the migrations by hand.
+If `config/shopper/admin.php` already exists, the installer stops and prints the commands to publish the configuration and run the migrations by hand. It does not print the seeders: if the database has never been seeded, run the two seeders listed on the [Configuration](/2.x/configuration#database-table-prefix) page after the migrations.
 
 <Warning>
-  The migrations change your `users` table: the `name` column is renamed to `last_name`, and columns such as `first_name`, `gender`, `phone_number` and `birth_date` are added. Update any code, factory or form of your application that reads or writes `name` before you migrate.
+  The migrations change your `users` table: the `name` column is renamed to `last_name` (or created when the table has none), `password` becomes nullable, and columns such as `first_name`, `gender`, `phone_number`, `birth_date`, `timezone` and `last_login_at` are added. Update any code, factory or form of your application that reads or writes `name` before you migrate.
 </Warning>
 
 <Note>
   All Shopper database tables are prefixed with `sh_` by default to avoid conflicts with your existing tables. To use another prefix, answer no when the installer asks to run the migrations, change `table_prefix` in `config/shopper/core.php`, then run `php artisan migrate` and the two seeders listed on the [Configuration](/2.x/configuration#database-table-prefix) page.
 </Note>
 
-Product, category and brand images are stored on the `public` disk. If your application has never run it, create the storage link so that they are served:
+Product, variant, category, collection and brand images, profile photos and the store logo and cover are stored on the disk set by `storage.disk_name` in `config/shopper/media.php`, `public` by default. If your application has never run it, create the storage link so that they are served:
 
 ```bash
 php artisan storage:link
 ```
+
+<Note>
+  Shopper queues the assignment of a discount to its products and customers, and the product sync of automatic collections. A new Laravel application uses the `database` queue connection, so run a worker with `php artisan queue:work`, or these jobs never run.
+</Note>
 
 ## Create an Admin User
 
@@ -81,7 +106,14 @@ Create your first admin user to access the dashboard:
 php artisan shopper:user
 ```
 
-The command prompts for an email, first name, last name, and password (at least 6 characters). The user is assigned the administrator role, which exists only once the seeders have run: if you skipped them in the installer, run them first.
+The command prompts for an email, first name, last name, and password (at least 6 characters). The user is assigned the administrator role, which exists only once the seeders have run: if you skipped them in the installer, run them first. Without the role, the command prints an error but still saves the user, who then gets a 403 error in the admin panel. Run the seeders, then give the role to that user in `php artisan tinker`:
+
+```php
+App\Models\User::query()
+    ->where('email', 'admin@laravelshopper.dev')
+    ->first()
+    ->assignRole(config('shopper.admin.roles.admin'));
+```
 
 ## Access the Admin Panel
 
@@ -93,7 +125,7 @@ http://your-project.test/cpanel/login
 
 If you are using `php artisan serve`, the admin panel is available at `http://localhost:8000/cpanel/login`.
 
-On the first login, Shopper redirects you to a setup wizard that asks for the store name, email, address and currencies. The admin panel opens once these are saved. See [Setup Store](/2.x/setup-store) for what the wizard creates.
+On the first login, Shopper redirects you to a setup wizard that asks for the store name and email, its country, the currencies it sells in, its address and, optionally, its social links. The admin panel opens once these are saved: until the store has an email and a street address, every admin page sends you back to the wizard. See [Setup Store](/2.x/setup-store) for what the wizard creates.
 
 The `/cpanel` prefix is configurable. See the [Configuration](/2.x/configuration) page for details.
 

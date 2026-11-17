@@ -14,11 +14,32 @@ Shopper uses two models to manage discounts:
 | `Shopper\Core\Models\Discount` | The discount definition (code, type, value, rules) |
 | `Shopper\Core\Models\DiscountDetail` | Polymorphic link connecting discounts to specific products or customers |
 
-The Discount model implements `Shopper\Core\Models\Contracts\Discount`. Neither model is configurable via `config/shopper/models.php`.
+The Discount model implements `Shopper\Core\Models\Contracts\Discount` and the DiscountDetail model implements `Shopper\Core\Models\Contracts\DiscountDetail`. Neither model is configurable via `config/shopper/models.php`.
+
+Each discount also has a computed `status` attribute that returns a `Shopper\Core\Enum\DiscountStatus` case. The first matching rule wins:
+
+| Status | Database Value | When |
+|--------|---------------|------|
+| Draft | `draft` | The discount is not saved yet |
+| Disabled | `disabled` | `is_active` is `false` |
+| Expired | `expired` | `end_at` is in the past |
+| LimitReached | `limit_reached` | `total_use` has reached `usage_limit` |
+| Scheduled | `scheduled` | `start_at` is in the future |
+| Active | `active` | None of the above |
+
+```php
+use Shopper\Core\Enum\DiscountStatus;
+
+if ($discount->status === DiscountStatus::Active) {
+    // The code can be offered to customers
+}
+```
 
 ## Database Schema
 
 ### Discount Table
+
+The table is `discounts`, prefixed with `config('shopper.core.table_prefix')` (`sh_` by default).
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
@@ -26,31 +47,35 @@ The Discount model implements `Shopper\Core\Models\Contracts\Discount`. Neither 
 | `code` | string | no | - | Unique discount code |
 | `type` | string | no | - | Discount type enum |
 | `value` | integer | no | - | Discount value (percentage or cents) |
-| `is_active` | boolean | no | false | Discount visibility |
+| `is_active` | boolean | no | false | Whether the code can be used |
 | `apply_to` | string | no | - | Application scope enum |
 | `min_required` | string | no | - | Requirement type enum |
 | `min_required_value` | string | yes | null | Minimum value required |
 | `eligibility` | string | no | - | Eligibility type enum |
-| `usage_limit` | integer | yes | null | Maximum total uses |
+| `usage_limit` | unsigned integer | yes | null | Maximum total uses (null = unlimited) |
 | `usage_limit_per_user` | boolean | no | false | Limit one use per customer |
-| `total_use` | integer | no | 0 | Current total usage count |
+| `total_use` | unsigned integer | no | 0 | Current total usage count |
 | `start_at` | datetime | no | - | Discount start date |
 | `end_at` | datetime | yes | null | Discount end date (null = no expiry) |
-| `zone_id` | bigint | yes | null | FK to zone (null = all zones) |
-| `metadata` | json | yes | null | Additional custom data |
+| `zone_id` | bigint | yes | null | FK to zone (null = all zones), set to null when the zone is deleted |
+| `metadata` | jsonb | yes | null | Additional custom data (cast to array) |
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
 
 ### Discountable Table (Pivot)
 
+The table is `discountables`, with the same prefix.
+
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | bigint | no | Primary key |
 | `condition` | string | yes | Condition type (apply_to, eligibility) |
-| `total_use` | integer | no | Usage count for this relation |
+| `total_use` | unsigned integer | no | Default `0`. Shopper does not increment it: the per-user limit counts orders instead |
 | `discountable_id` | bigint | no | Polymorphic relation ID |
 | `discountable_type` | string | no | Polymorphic relation type |
-| `discount_id` | bigint | no | FK to discount |
+| `discount_id` | bigint | no | FK to discount, deleted with the discount |
+| `created_at` | timestamp | yes | Creation timestamp |
+| `updated_at` | timestamp | yes | Last update timestamp |
 
 ## Discount Type
 
@@ -66,7 +91,7 @@ DiscountType::FixedAmount  // fixed_amount - e.g., $10 off
 | Type | Database Value | Value Handling |
 |------|---------------|----------------|
 | Percentage | `percentage` | Stored as-is (10 = 10%) |
-| Fixed Amount | `fixed_amount` | Stored in cents (1000 = $10.00) |
+| Fixed Amount | `fixed_amount` | Stored in cents (1000 = $10.00), or in whole units for a [zero-decimal currency](/2.x/currencies#zero-decimal-currencies) |
 
 ## Discount Application
 
@@ -81,8 +106,8 @@ DiscountApplyTo::Products  // products - Applies to specific products
 
 | Scope | Database Value | Description |
 |-------|---------------|-------------|
-| Order | `order` | Discount applies to total order amount |
-| Products | `products` | Discount applies only to linked products |
+| Order | `order` | Discount applies to every cart line |
+| Products | `products` | Discount applies only to lines of linked products. A variant line matches when its parent product is linked |
 
 ## Discount Eligibility
 
@@ -97,8 +122,8 @@ DiscountEligibility::Customers  // customers - Specific customers only
 
 | Eligibility | Database Value | Description |
 |-------------|---------------|-------------|
-| Everyone | `everyone` | Any customer can use |
-| Customers | `customers` | Only linked customers can use |
+| Everyone | `everyone` | Any customer can use, guests included |
+| Customers | `customers` | Only linked customers can use. The cart must belong to a logged-in customer |
 
 ## Discount Requirements
 
@@ -115,8 +140,8 @@ DiscountRequirement::Quantity // quantity - Minimum items count
 | Requirement | Database Value | min_required_value |
 |-------------|---------------|-------------------|
 | None | `none` | Not used |
-| Price | `price` | Minimum amount in cents |
-| Quantity | `quantity` | Minimum item count |
+| Price | `price` | Minimum cart subtotal in cents (unit price times quantity for each line, before the discount) |
+| Quantity | `quantity` | Minimum number of items (sum of the cart line quantities) |
 
 ## Discount Condition
 
@@ -133,6 +158,8 @@ DiscountCondition::Eligibility  // eligibility - Links a customer to the discoun
 
 ### Items (DiscountDetail)
 
+Store the same `discountable_type` values as the admin panel: `config('shopper.models.product')` for products and `config('auth.providers.users.model')` for customers. The cart only accepts a customer link whose type matches `config('auth.providers.users.model')`.
+
 ```php
 use Shopper\Core\Enum\DiscountCondition;
 
@@ -142,14 +169,14 @@ $discount->items; // Collection of DiscountDetail models
 // Add a product to discount
 $discount->items()->create([
     'condition' => DiscountCondition::ApplyTo,
-    'discountable_type' => Product::class,
+    'discountable_type' => config('shopper.models.product'),
     'discountable_id' => $productId,
 ]);
 
 // Add eligible customer
 $discount->items()->create([
     'condition' => DiscountCondition::Eligibility,
-    'discountable_type' => User::class,
+    'discountable_type' => config('auth.providers.users.model'),
     'discountable_id' => $userId,
 ]);
 ```
@@ -171,18 +198,22 @@ Fixed amount values are stored in cents. Percentage values are stored as the per
 For a $10 fixed discount, store `1000` (cents). For a 15% percentage discount, store `15`:
 
 ```php
-Discount::query()->create([
-    'code' => 'SAVE10',
+use Shopper\Core\Enum\DiscountType;
+
+$discount->update([
     'type' => DiscountType::FixedAmount,
     'value' => 1000, // 1000 cents = $10.00
 ]);
 
-Discount::query()->create([
-    'code' => 'SAVE15',
+$discount->update([
     'type' => DiscountType::Percentage,
     'value' => 15, // 15%
 ]);
 ```
+
+Saving a discount throws `Shopper\Core\Exceptions\InvalidDiscountValueException` when `value` is `0` or less, or when a percentage is above `100`.
+
+A percentage is applied to each applicable line and rounded to the cent. A fixed amount is capped at the subtotal of the applicable lines and split across them in proportion to their subtotal. The cart applies the stored amount as-is, without currency conversion: the admin form reads it in the currency of the discount's zone, or in the store currency when no zone is set.
 
 ## Usage Limit Enforcement
 
@@ -196,24 +227,22 @@ The `usage_limit` column caps the total number of redemptions across all custome
 2. A conditional `UPDATE` increments `total_use` **only if** it is still below `usage_limit`.
 3. If the conditional update affects zero rows, the limit was exhausted between cart validation and commit. `DiscountLimitReachedException::global()` is thrown and the order transaction rolls back, so no order is created.
 
-This compare-and-swap pattern is what fixes the silent over-redemption issue that was patched in v2.8.
+This compare-and-swap check was added in v2.8. If you upgrade from an older release, follow the [v2.7 to v2.8 upgrade guide](/2.x/upgrade/v2-7-to-v2-8).
 
 ### Per-User Limit
 
 When `usage_limit_per_user` is `true`, each customer can redeem the discount at most once. The check counts prior orders on the `orders.discount_id` column (introduced in v2.8), not the legacy `DiscountDetail.total_use` counter:
 
 ```php
-use Shopper\Models\Order;
-
-Order::query()
+config('shopper.models.order')::query()
     ->where('discount_id', $discount->id)
     ->where('customer_id', $cart->customer_id)
     ->exists();
 ```
 
-The same query runs in two places. `DiscountValidator` rejects the code at cart-apply time so the customer is not surprised at checkout. `CreateOrderFromCartAction` re-checks at commit and throws `DiscountLimitReachedException::perUser()` if the customer redeemed it between cart apply and commit.
+The same query runs in two places. `DiscountValidator` runs it each time the cart is calculated, so a customer who already used the code sees the cart total without the discount before checkout. `CreateOrderFromCartAction` re-checks at commit and throws `DiscountLimitReachedException::perUser()` if the customer redeemed it in the meantime.
 
-A per-user limit is meaningless without an identified customer, so a guest cart (no `customer_id`) can never apply a discount that sets `usage_limit_per_user`. Both `DiscountValidator` and `CreateOrderFromCartAction` reject it with the `discount.requires_login` error rather than letting a guest redeem a once-per-customer code on every anonymous checkout.
+A per-user limit needs an identified customer, so a guest cart (no `customer_id`) can never apply a discount that sets `usage_limit_per_user`. `DiscountValidator` skips the discount with the `discount.requires_login` reason, and `CreateOrderFromCartAction` throws `DiscountLimitReachedException::perUser()`.
 
 ### Helpers
 
@@ -245,7 +274,7 @@ The exception has two static constructors that match the two limit types:
 | Constructor | Thrown When |
 |---|---|
 | `DiscountLimitReachedException::global($code)` | Global `usage_limit` was reached between cart validation and order commit |
-| `DiscountLimitReachedException::perUser($code)` | Customer already redeemed a discount with `usage_limit_per_user` set |
+| `DiscountLimitReachedException::perUser($code)` | Customer already redeemed a discount with `usage_limit_per_user` set, or a guest cart uses such a discount |
 
 ## Creating Discounts
 
@@ -306,12 +335,12 @@ $discount = Discount::query()->create([
 $discount->items()->createMany([
     [
         'condition' => 'apply_to',
-        'discountable_type' => Product::class,
+        'discountable_type' => config('shopper.models.product'),
         'discountable_id' => $product1->id,
     ],
     [
         'condition' => 'apply_to',
-        'discountable_type' => Product::class,
+        'discountable_type' => config('shopper.models.product'),
         'discountable_id' => $product2->id,
     ],
 ]);
@@ -336,7 +365,7 @@ $discount = Discount::query()->create([
 foreach ($vipCustomers as $customer) {
     $discount->items()->create([
         'condition' => 'eligibility',
-        'discountable_type' => User::class,
+        'discountable_type' => config('auth.providers.users.model'),
         'discountable_id' => $customer->id,
     ]);
 }
@@ -384,9 +413,11 @@ $discounts = Discount::query()
 
 ## Discount Validation
 
-When a coupon is applied to a cart via `CartManager::applyCoupon()`, the [Cart package](/2.x/cart#discount-validation) validates the discount automatically during the calculation pipeline. You do not need to build manual validation logic. The built-in `DiscountValidator` checks all rules (active status, date range, usage limits, eligibility, zone, minimum amounts) and produces clear error messages.
+`CartManager::applyCoupon()` only checks that the code exists. The [Cart package](/2.x/cart#discount-validation) validates the discount each time the cart is calculated: `Shopper\Cart\Discounts\DiscountValidator` checks the active flag, the value, the date range, the usage limits, the eligibility, the zone and the minimum amount or quantity. You do not need to build these rules yourself.
 
-For cases outside the cart pipeline where you need to check a discount programmatically:
+A discount that fails a check is skipped: the cart total is calculated without it, no exception is thrown and the code stays on the cart. To tell the customer why, call `DiscountValidator::validate()` yourself. It returns a `DiscountValidationResult` with a `valid` boolean and a translated `failureReason` (see the [Storefront Example](#storefront-example)).
+
+For a quick check outside the cart, without a cart context:
 
 ```php
 use Shopper\Core\Models\Discount;
@@ -397,7 +428,7 @@ $discount = Discount::query()
     ->first();
 
 if ($discount && ! $discount->hasReachedLimit()) {
-    // Discount is valid and has remaining uses
+    // Active and has remaining uses. Dates, eligibility, zone and minimums are not checked here.
 }
 ```
 
@@ -405,7 +436,7 @@ if ($discount && ! $discount->hasReachedLimit()) {
 
 ### Disabling Discounts
 
-If your store doesn't use discount codes, disable the feature in `config/shopper/features.php`:
+If your store doesn't use discount codes, disable the feature in `config/shopper/features.php`. This removes the Discounts page and its menu item from the admin panel. The cart does not read this flag: `CartManager::applyCoupon()` still accepts the codes already in the database.
 
 ```php
 use Shopper\Enum\FeatureState;
@@ -421,8 +452,8 @@ The admin panel generates five permissions for discount management:
 
 | Permission | Description |
 |------------|-------------|
-| `browse_discounts` | View the discounts list |
-| `read_discounts` | View a single discount |
+| `browse_discounts` | View the discounts list and its menu item |
+| `read_discounts` | Generated with the others, not checked by the 2.x admin panel |
 | `add_discounts` | Create new discounts |
 | `edit_discounts` | Edit existing discounts |
 | `delete_discounts` | Delete discounts |
@@ -452,15 +483,17 @@ return [
 
 ## Storefront Example
 
-Applying a discount code on the storefront uses the [Cart package](/2.x/cart) API. The `CartManager::applyCoupon()` method validates the code exists, and the calculation pipeline handles the rest (validation rules, discount calculation, and adjustment creation):
+Applying a discount code on the storefront uses the [Cart package](/2.x/cart) API. The `CartManager::applyCoupon()` method validates the code exists, and the calculation pipeline handles the rest (validation rules, discount calculation, and adjustment creation). A code that exists but breaks a rule is still saved on the cart, so the example runs the validator and removes the code when it does not apply:
 
 ```php
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
 use Shopper\Cart\CartManager;
+use Shopper\Cart\Discounts\DiscountValidator;
 use Shopper\Cart\Exceptions\InvalidDiscountException;
 use Shopper\Cart\Facades\Cart;
+use Shopper\Core\Models\Discount;
 
 class CouponController extends Controller
 {
@@ -469,11 +502,25 @@ class CouponController extends Controller
         $request->validate(['code' => 'required|string']);
 
         $manager = resolve(CartManager::class);
+        $cart = Cart::current();
+
+        if ($cart === null) {
+            return back()->with('error', 'Your cart is empty.');
+        }
 
         try {
-            $manager->applyCoupon(Cart::current(), $request->code);
+            $manager->applyCoupon($cart, $request->code);
         } catch (InvalidDiscountException $e) {
-            return back()->with('error', 'Invalid discount code.');
+            return back()->with('error', $e->getMessage());
+        }
+
+        $discount = Discount::query()->where('code', $request->code)->first();
+        $result = resolve(DiscountValidator::class)->validate($discount, $manager->calculate($cart));
+
+        if (! $result->valid) {
+            $manager->removeCoupon($cart);
+
+            return back()->with('error', $result->failureReason);
         }
 
         return back()->with('success', 'Discount applied.');
@@ -481,7 +528,13 @@ class CouponController extends Controller
 
     public function remove()
     {
-        resolve(CartManager::class)->removeCoupon(Cart::current());
+        $cart = Cart::current();
+
+        if ($cart === null) {
+            return back();
+        }
+
+        resolve(CartManager::class)->removeCoupon($cart);
 
         return back()->with('success', 'Discount removed.');
     }
@@ -493,8 +546,8 @@ class CouponController extends Controller
 | Scenario | Type | Apply To | Eligibility | Requirement |
 |----------|------|----------|-------------|-------------|
 | Site-wide sale | Percentage | Order | Everyone | None |
-| Free shipping over $50 | Fixed | Order | Everyone | Price |
+| $10 off orders over $50 | Fixed | Order | Everyone | Price |
 | Buy 3+ get 10% off | Percentage | Order | Everyone | Quantity |
 | VIP member exclusive | Percentage | Order | Customers | None |
 | Product clearance | Percentage | Products | Everyone | None |
-| First order discount | Fixed | Order | Customers | None |
+| Welcome code for selected customers | Fixed | Order | Customers | None |

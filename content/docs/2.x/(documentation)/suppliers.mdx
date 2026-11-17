@@ -6,12 +6,12 @@ description: Complete reference for the Supplier model, product sourcing, and dr
 Suppliers represent external vendors or manufacturers who provide products for your store. This is primarily used in **dropshipping** scenarios where products are shipped directly from the supplier to the customer, without you handling inventory.
 
 <Note>
-The supplier feature is gated behind a feature flag. It must be enabled in your `config/shopper/features.php` configuration file.
+The supplier feature is gated behind a feature flag and is disabled by default. It must be enabled in your `config/shopper/features.php` configuration file.
 </Note>
 
 ## Model
 
-The model used is `Shopper\Core\Models\Supplier`. It implements `Shopper\Core\Models\Contracts\Supplier` and uses the `HasSlug` trait for automatic slug generation. The model is configurable via `config/shopper/models.php`.
+The model used is `Shopper\Core\Models\Supplier`. It implements `Shopper\Core\Models\Contracts\Supplier` and uses the `HasSlug` trait: a `slug` you set is passed through `Str::slug()` and gets a numeric suffix (`-1`, `-2`) when another supplier already uses it. The trait does not create a slug from the name: the admin form fills it from the name, and in code you pass it yourself. `HasSlug` also adds `Supplier::findBySlug()`. The model is configurable via `config/shopper/models.php`.
 
 ### Extending the Model
 
@@ -40,7 +40,7 @@ return [
 Enable the supplier feature in `config/shopper/features.php`:
 
 ```php
-use Shopper\Core\Enum\FeatureState;
+use Shopper\Enum\FeatureState;
 
 return [
     // ...
@@ -48,7 +48,7 @@ return [
 ];
 ```
 
-When enabled, the Suppliers page appears under Products in the admin sidebar, and the supplier select field becomes visible on External product forms.
+When enabled, the Suppliers page appears under Products in the admin sidebar (route `shopper.suppliers.index`), and the edit page of External products shows a required supplier select that lists only enabled suppliers. The flag only controls the admin: the `suppliers` table, the model and its relationships exist either way.
 
 ## Database Schema
 
@@ -56,14 +56,14 @@ When enabled, the Suppliers page appears under Products in the admin sidebar, an
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
 | `name` | string | no | - | Supplier name |
-| `slug` | string | yes | auto | URL-friendly identifier (unique) |
+| `slug` | string | yes | null | URL-friendly identifier (unique) |
 | `email` | string | yes | null | Contact email |
 | `phone` | string | yes | null | Contact phone |
 | `contact_name` | string | yes | null | Primary contact person |
 | `website` | string | yes | null | Supplier website URL |
 | `description` | longText | yes | null | Detailed description |
 | `notes` | longText | yes | null | Internal notes |
-| `is_enabled` | boolean | no | false | Supplier visibility |
+| `is_enabled` | boolean | no | false | Whether the supplier is active (only enabled suppliers can be picked on a product) |
 | `metadata` | jsonb | yes | null | Additional custom data |
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
@@ -78,7 +78,7 @@ A supplier can have many products linked to it:
 // Get all products from a supplier
 $supplier->products; // Collection<Product>
 
-// Get enabled products
+// Get visible products
 $supplier->products()
     ->where('is_visible', true)
     ->get();
@@ -87,11 +87,13 @@ $supplier->products()
 $supplier->products()->count();
 ```
 
-### Product → Supplier
+### Product to Supplier [#product--supplier]
 
 Each product can optionally belong to one supplier:
 
 ```php
+use Shopper\Models\Product;
+
 // Get a product's supplier
 $product->supplier; // Supplier (nullable)
 
@@ -122,6 +124,7 @@ use Shopper\Core\Models\Supplier;
 
 $supplier = Supplier::query()->create([
     'name' => 'TechParts Co., Ltd',
+    'slug' => 'techparts-co',
     'email' => 'orders@techparts.com',
     'phone' => '+86 755 1234 5678',
     'contact_name' => 'Zhang Wei',
@@ -139,12 +142,14 @@ $supplier = Supplier::query()->create([
 
 ## Updating Status
 
+`updateStatus()` takes a boolean that defaults to `true`:
+
 ```php
 // Enable a supplier
-$supplier->updateStatus(enabled: true);
+$supplier->updateStatus();
 
 // Disable a supplier
-$supplier->updateStatus(enabled: false);
+$supplier->updateStatus(false);
 ```
 
 ## Retrieving Suppliers
@@ -156,22 +161,22 @@ $suppliers = Supplier::query()
     ->withCount('products')
     ->get();
 
-// Find by slug
-$supplier = Supplier::query()
-    ->where('slug', 'techparts-co')
-    ->firstOrFail();
+// Find by slug (throws ModelNotFoundException when missing)
+$supplier = Supplier::findBySlug('techparts-co');
 
-// Search suppliers
+// Search enabled suppliers by name or email
 $results = Supplier::query()
-    ->where('name', 'like', "%{$search}%")
-    ->orWhere('email', 'like', "%{$search}%")
     ->enabled()
+    ->where(function ($query) use ($search): void {
+        $query->where('name', 'like', "%{$search}%")
+            ->orWhere('email', 'like', "%{$search}%");
+    })
     ->get();
 ```
 
 ## Linking Products to Suppliers
 
-Products of type `External` can be linked to a supplier. The `supplier_id` column on the products table stores this relationship:
+The admin shows the supplier field on products of type `External` only. The link is stored in the nullable `supplier_id` column of the products table:
 
 ```php
 use Shopper\Core\Enum\ProductType;
@@ -194,6 +199,8 @@ $product->update(['supplier_id' => $newSupplier->id]);
 $product->update(['supplier_id' => null]);
 ```
 
+Deleting a supplier does not delete its products: the foreign key sets their `supplier_id` to `null`.
+
 ## Dropshipping Workflow
 
 The supplier feature is designed to work with the [Fulfillment](/2.x/fulfillment) system. Here's the complete flow:
@@ -201,9 +208,12 @@ The supplier feature is designed to work with the [Fulfillment](/2.x/fulfillment
 ### 1. Setup
 
 ```php
+use Shopper\Core\Models\Supplier;
+
 // Create your supplier
 $supplier = Supplier::query()->create([
     'name' => 'Shenzhen TechParts',
+    'slug' => 'shenzhen-techparts',
     'email' => 'orders@techparts.com',
     'is_enabled' => true,
 ]);
@@ -223,19 +233,31 @@ After receiving the customer's payment, you place the order with your supplier u
 ```php
 use Shopper\Core\Enum\FulfillmentStatus;
 
-// Mark items as forwarded
+// Mark this supplier's items as forwarded
 $order->items()
-    ->whereHas('product', fn ($q) => $q->where('supplier_id', $supplier->id))
+    ->where('fulfillment_status', FulfillmentStatus::Pending)
+    ->whereHasMorph(
+        'product',
+        [config('shopper.models.product')],
+        fn ($query) => $query->where('supplier_id', $supplier->id),
+    )
     ->update(['fulfillment_status' => FulfillmentStatus::ForwardedToSupplier]);
 ```
 
+An order item's `product` is a polymorphic relation that points to a product or a variant, and only products have a `supplier_id` column. `whereHasMorph()` limits the check to products. Only `Variant` products have variants, so the items of an External product always point to the product itself.
+
 ### 4. Supplier Ships
 
-When the supplier provides tracking information:
+When the supplier provides tracking information, create the shipment and attach this supplier's forwarded items to it:
 
 ```php
+use Shopper\Core\Actions\SyncOrderShippingStatusAction;
+use Shopper\Core\Enum\FulfillmentStatus;
+use Shopper\Core\Enum\ShipmentStatus;
+
 $shipment = $order->shippings()->create([
     'carrier_id' => $carrierId,
+    'status' => ShipmentStatus::PickedUp,
     'tracking_number' => $supplierTracking,
     'tracking_url' => $supplierTrackingUrl,
     'shipped_at' => now(),
@@ -243,40 +265,66 @@ $shipment = $order->shippings()->create([
 
 $order->items()
     ->where('fulfillment_status', FulfillmentStatus::ForwardedToSupplier)
+    ->whereHasMorph(
+        'product',
+        [config('shopper.models.product')],
+        fn ($query) => $query->where('supplier_id', $supplier->id),
+    )
     ->update([
         'order_shipping_id' => $shipment->id,
         'fulfillment_status' => FulfillmentStatus::Shipped,
     ]);
+
+(new SyncOrderShippingStatusAction)->execute($order);
 ```
+
+The items are updated here because `RecordShipmentEventAction` only moves `Pending` items to `Shipped`. [`SyncOrderShippingStatusAction`](/2.x/fulfillment#syncordershippingstatusaction) recomputes the order's `shipping_status` and dispatches `OrderShipped` when it becomes `Shipped`.
 
 ### 5. Delivery Confirmation
 
 ```php
-$shipment->update(['received_at' => now()]);
+$shipment->update([
+    'status' => ShipmentStatus::Delivered,
+    'received_at' => now(),
+]);
 
 $shipment->items()->update([
     'fulfillment_status' => FulfillmentStatus::Delivered,
 ]);
+
+(new SyncOrderShippingStatusAction)->execute($order);
 ```
 
 ## Querying by Supplier
 
 ```php
-// Get all pending orders for a supplier
+use Illuminate\Support\Facades\DB;
+use Shopper\Core\Enum\FulfillmentStatus;
+use Shopper\Core\Models\OrderItem;
+
+// Get the items still waiting on a supplier
 $pendingItems = OrderItem::query()
     ->whereIn('fulfillment_status', [
         FulfillmentStatus::Pending,
         FulfillmentStatus::ForwardedToSupplier,
     ])
-    ->whereHas('product', fn ($q) => $q->where('supplier_id', $supplier->id))
+    ->whereHasMorph(
+        'product',
+        [config('shopper.models.product')],
+        fn ($query) => $query->where('supplier_id', $supplier->id),
+    )
     ->with(['order.customer', 'order.shippingAddress'])
     ->get();
 
-// Get supplier revenue (items sold)
+// Get supplier revenue in cents (delivered items, after item discounts)
 $revenue = OrderItem::query()
-    ->whereHas('product', fn ($q) => $q->where('supplier_id', $supplier->id))
+    ->whereHasMorph(
+        'product',
+        [config('shopper.models.product')],
+        fn ($query) => $query->where('supplier_id', $supplier->id),
+    )
     ->where('fulfillment_status', FulfillmentStatus::Delivered)
-    ->sum(DB::raw('unit_price_amount * quantity'));
+    ->sum(DB::raw('unit_price_amount * quantity - discount_amount'));
 ```
 
 ## Permissions
@@ -285,10 +333,10 @@ The supplier feature uses the following permissions:
 
 | Permission | Description |
 |-----------|-------------|
-| `browse_suppliers` | View the suppliers list |
-| `read_suppliers` | View supplier details |
+| `browse_suppliers` | View the suppliers list and its sidebar entry |
+| `read_suppliers` | Not checked by the admin (there is no supplier detail page), available to your own code |
 | `add_suppliers` | Create new suppliers |
-| `edit_suppliers` | Update existing suppliers |
+| `edit_suppliers` | Update existing suppliers, enable or disable them in bulk |
 | `delete_suppliers` | Delete suppliers |
 
 ```php
@@ -297,6 +345,14 @@ $user->hasPermissionTo('browse_suppliers');
 
 // Assign permission to a role
 $role->givePermissionTo('browse_suppliers');
+```
+
+The installer creates these permissions in the `products` group. On a store installed before the supplier feature existed, create them before you enable the feature, then assign them to your roles:
+
+```php
+use Shopper\Models\Permission;
+
+Permission::generate('suppliers', 'products');
 ```
 
 ## Components
@@ -311,6 +367,8 @@ This includes:
 
 ```php
 // In config/shopper/components/product.php
+use Shopper\Livewire;
+
 return [
     'pages' => [
         'supplier-index' => Livewire\Pages\Supplier\Index::class,
@@ -323,6 +381,8 @@ return [
 ];
 ```
 
+The `SupplierForm` slide-over handles both creating and editing a supplier. To add content above or below the suppliers table without publishing components, use the `SalesRenderHook::SUPPLIERS_TABLE_BEFORE` and `SalesRenderHook::SUPPLIERS_TABLE_AFTER` [render hooks](/2.x/render-hooks#sales-hooks).
+
 ## Metadata
 
 The `metadata` column (JSON) can store any additional supplier-specific data:
@@ -330,6 +390,7 @@ The `metadata` column (JSON) can store any additional supplier-specific data:
 ```php
 $supplier = Supplier::query()->create([
     'name' => 'FastShip Logistics',
+    'slug' => 'fastship-logistics',
     'metadata' => [
         'payment_terms' => 'net_30',
         'currency' => 'USD',
@@ -343,3 +404,5 @@ $supplier = Supplier::query()->create([
 // Access metadata
 $terms = $supplier->metadata['payment_terms'];
 ```
+
+The supplier form in the admin edits `metadata` as key-value text pairs. Keep values flat (no nested arrays) so they stay editable there, and expect values saved from the form to come back as strings.

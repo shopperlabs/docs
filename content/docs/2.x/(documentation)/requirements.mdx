@@ -7,44 +7,45 @@ Shopper is a Laravel package and shares the same server requirements as Laravel 
 
 ## Server Requirements
 
-- PHP 8.3+
+- PHP 8.3+ (the test suite runs on PHP 8.3, 8.4 and 8.5)
 - MySQL 8+, PostgreSQL 15+ or SQLite
 
 The test suite runs on these three databases. MariaDB is not part of it.
 
 ### PHP Extensions
 
-The following PHP extensions are required:
+Shopper requires these extensions on top of the ones Laravel needs. Composer refuses to install Shopper if one of them is missing:
 
 | Extension | Purpose |
 |-----------|---------|
 | `intl` | Currency formatting, locale support, and internationalization |
-| `gd` | Required by `milon/barcode`, which draws the barcode on the variant page. GD is also the default image driver of Spatie Media Library, which builds the thumbnails of product, category, and brand images |
+| `gd` | Required by `milon/barcode`, which draws the barcode on the variant page. GD is also the default image driver of Spatie Media Library, which builds the resized copies (the `large` and `medium` conversions) of product, variant, category, brand, and collection images |
 | `exif` | Required by Spatie Media Library, which reads the metadata of uploaded images |
 | `zip`, `xmlreader` | Required by OpenSpout, the spreadsheet library of Filament's actions package |
 | `iconv` | Required by `bacon/bacon-qr-code`, which draws the QR code a user scans to set up two-factor authentication |
 | `soap` | Required by `ivanmitrikeski/laravel-shipping`, the carrier library behind `shopper/shipping`. Composer refuses to install Shopper without it, even if your store uses no carrier. |
 
 <Note>
-  Most PHP installations include `intl` and `gd` by default. The `soap` extension may need to be installed separately depending on your hosting environment.
+  Laravel Herd includes all of these extensions. On Linux servers and in the official `php` Docker images, `intl`, `gd`, `zip` and `soap` usually have to be installed separately (for example the `php8.3-intl` and `php8.3-soap` packages on Ubuntu). Run `php -m` to list the extensions your PHP has.
 </Note>
 
-GD stays required even if you prefer ImageMagick. To build the thumbnails with ImageMagick, install the `imagick` extension and set `IMAGE_DRIVER=imagick` in your `.env` file.
+GD stays required even if you prefer ImageMagick, because `milon/barcode` needs it. To build the image conversions with ImageMagick, install the `imagick` extension and set `IMAGE_DRIVER=imagick` in your `.env` file. Spatie Media Library reads this variable for its `image_driver` option.
 
 ## Package Requirements
 
 | Package | Version |
 |---------|---------|
 | Laravel | 11.28+ / 12.x / 13.x |
-| Filament | 4.12+ |
+| Filament | 4.12+ (not 5.x) |
+| Livewire | 3.8+ (not 4.x) |
 
-Shopper's Laravel version support follows Filament's compatibility. If Filament supports a Laravel version, Shopper supports it too.
+Composer installs Filament and Livewire as dependencies of Shopper, so you do not require them in your application. Shopper 2 stays on Filament 4, which runs on Livewire 3. The Laravel 11.28 minimum is also Filament 4's minimum. A new Laravel major version needs a Shopper release that adds it, even when Filament already supports it.
 
 ## Development Environments
 
 ### Laravel Herd
 
-[Laravel Herd](https://herd.laravel.com/) is the recommended development environment for both macOS and Windows. It provides PHP, Nginx, and database services with zero configuration. Herd includes all required PHP extensions out of the box.
+[Laravel Herd](https://herd.laravel.com/) is the recommended development environment for both macOS and Windows. It provides PHP and Nginx with zero configuration, and SQLite works out of the box. MySQL and PostgreSQL run as services in Herd Pro. Herd's PHP builds include all the extensions listed above.
 
 ### Laravel Valet
 

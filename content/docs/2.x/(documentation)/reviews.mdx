@@ -9,9 +9,11 @@ Reviews allow customers to rate and review products. Shopper provides a flexible
 
 The model used is `Shopper\Core\Models\Review`. It implements `Shopper\Core\Models\Contracts\Review`. Unlike products or brands, the Review model is not configurable via `config/shopper/models.php` and has no admin model wrapper.
 
-Products gain review capabilities through the `InteractsWithReviews` trait, which implements the `Shopper\Core\Contracts\HasReviews` interface. This is already applied to the Product model.
+Products gain review capabilities through the `Shopper\Core\Contracts\HasReviews` interface and the `Shopper\Core\Models\Traits\InteractsWithReviews` trait, which provides the interface's methods. `Shopper\Core\Models\Product` already implements and uses both, so `Shopper\Models\Product` has them too.
 
 ## Database Schema
+
+Reviews are stored in the `sh_reviews` table (the `sh_` prefix comes from `table_prefix` in `config/shopper/core.php`).
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
@@ -28,13 +30,17 @@ Products gain review capabilities through the `InteractsWithReviews` trait, whic
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
 
+<Note>
+  Shopper registers a morph map for its models, so `reviewrateable_type` stores the alias `product`, not a class name. `author_type` stores your user model's morph class (`App\Models\User` unless your application maps it). When you write or query these columns yourself, use `$model->getMorphClass()`, never `get_class($model)` or `Product::class`.
+</Note>
+
 ## Relationships
 
 ### Reviewrateable (Product)
 
 ```php
 // Get the reviewed entity (usually a product)
-$review->reviewrateable; // Product model
+$review->reviewrateable; // Instance of config('shopper.models.product')
 ```
 
 ### Author (User)
@@ -46,7 +52,7 @@ $review->author; // User model
 
 ## HasReviews Contract
 
-Products implement the `HasReviews` contract via the `InteractsWithReviews` trait:
+Products implement the `HasReviews` contract and use the `InteractsWithReviews` trait, which provides the contract's methods:
 
 ```php
 use Shopper\Core\Contracts\HasReviews;
@@ -62,11 +68,13 @@ class Product extends Model implements HasReviews
 
 ### Getting Ratings
 
+Each `get*Ratings()` method takes an id as its first argument (the product id, or the customer id for `getRecentUserRatings()`) and returns a collection of `Review` models ordered by creation date.
+
 ```php
-// Get all ratings for a product
+// Get all ratings for a product, pending ones included
 $product->ratings; // Collection of Review models
 
-// Get all ratings with sorting
+// Get all ratings, newest first ('asc' for oldest first)
 $product->getAllRatings($product->id, 'desc');
 
 // Get only approved ratings
@@ -75,40 +83,45 @@ $product->getApprovedRatings($product->id);
 // Get pending (not approved) ratings
 $product->getNotApprovedRatings($product->id);
 
-// Get recent ratings
+// Get the 5 most recent approved ratings
 $product->getRecentRatings($product->id, 5);
 
-// Get recent ratings by user
+// Get a customer's 5 most recent approved ratings, across all products
 $product->getRecentUserRatings($userId, 5, approved: true);
 ```
 
 ### Rating Counts
 
 ```php
-// Count all ratings
+// Count all ratings, pending ones included
 $product->countRating(); // Returns integer
 
 // Get rating sum
 $product->sumRating(); // Collection with sum
+
+// Get the sum of approved ratings only
+$product->sumRating(onlyApproved: true);
 ```
 
 ### Average Ratings
+
+`averageRating()` returns a collection holding a single value: call `first()` to read it. The value is `null` when the product has no review, and some database drivers return it as a numeric string, so cast it to `float` before using it as a number.
 
 ```php
 // Get average rating
 $product->averageRating(); // Collection with average
 
 // Get average rating rounded to 1 decimal
-$product->averageRating(round: 1); // e.g., 4.5
+(float) $product->averageRating(round: 1)->first(); // e.g., 4.5
 
 // Get average rating of approved reviews only
-$product->averageRating(round: 1, onlyApproved: true);
+(float) $product->averageRating(round: 1, onlyApproved: true)->first();
 ```
 
 ### Rating Percentage
 
 ```php
-// Get percentage of 5-star ratings
+// Get percentage of 5-star ratings, pending reviews included
 $product->ratingPercent(5); // e.g., 85.5
 
 // Useful for displaying rating distribution
@@ -164,9 +177,9 @@ $review = Review::query()->create([
     'is_recommended' => true,
     'approved' => false,
     'reviewrateable_id' => $product->id,
-    'reviewrateable_type' => get_class($product),
+    'reviewrateable_type' => $product->getMorphClass(),
     'author_id' => $user->id,
-    'author_type' => get_class($user),
+    'author_type' => $user->getMorphClass(),
 ]);
 ```
 
@@ -211,7 +224,7 @@ $review = new Review;
 $review->deleteRating($reviewId);
 
 // Direct delete
-Review::query()->find($reviewId)->delete();
+Review::query()->findOrFail($reviewId)->delete();
 ```
 
 ## Retrieving Reviews
@@ -233,8 +246,8 @@ $pending = Review::query()
 
 // Get approved reviews for a product
 $productReviews = Review::query()
-    ->where('reviewrateable_id', $productId)
-    ->where('reviewrateable_type', Product::class)
+    ->where('reviewrateable_id', $product->id)
+    ->where('reviewrateable_type', $product->getMorphClass())
     ->where('approved', true)
     ->with('author')
     ->latest()
@@ -242,8 +255,8 @@ $productReviews = Review::query()
 
 // Get reviews by user
 $userReviews = Review::query()
-    ->where('author_id', $userId)
-    ->where('author_type', User::class)
+    ->where('author_id', $user->id)
+    ->where('author_type', $user->getMorphClass())
     ->with('reviewrateable')
     ->get();
 ```
@@ -262,17 +275,19 @@ return [
 ];
 ```
 
+This removes the reviews page and its sidebar link from the admin panel. The `Review` model and the product rating methods keep working, so your storefront can still use them.
+
 ### Permissions
 
-The admin panel generates five permissions for review management:
+The permissions seeder creates five permissions for reviews, listed in the `products` group of the role permissions screen:
 
 | Permission | Description |
 |------------|-------------|
-| `browse_reviews` | View the reviews list |
-| `read_reviews` | View a single review |
-| `add_reviews` | Create new reviews |
-| `edit_reviews` | Edit existing reviews |
-| `delete_reviews` | Delete reviews |
+| `browse_reviews` | Open the reviews list and a review's detail panel |
+| `read_reviews` | Created with the others, not checked by the 2.x reviews pages |
+| `add_reviews` | Created with the others, not checked: the admin panel does not create reviews |
+| `edit_reviews` | Approve a review, or set an approved review back to pending |
+| `delete_reviews` | Delete reviews, one at a time or in bulk |
 
 ## Components
 
@@ -320,7 +335,7 @@ class ProductController extends Controller
             ->paginate(10);
 
         // Get rating stats
-        $averageRating = $product->averageRating(1, onlyApproved: true)->first();
+        $averageRating = (float) $product->averageRating(1, onlyApproved: true)->first();
         $reviewCount = $product->ratings()->where('approved', true)->count();
 
         // Rating distribution
@@ -352,6 +367,7 @@ class ProductController extends Controller
 ```php
 namespace App\Http\Controllers;
 
+use Illuminate\Http\Request;
 use Shopper\Models\Product;
 
 class ReviewController extends Controller
@@ -368,7 +384,7 @@ class ReviewController extends Controller
         // Check if user already reviewed this product
         $existingReview = $product->ratings()
             ->where('author_id', auth()->id())
-            ->where('author_type', get_class(auth()->user()))
+            ->where('author_type', auth()->user()->getMorphClass())
             ->exists();
 
         if ($existingReview) {
@@ -388,9 +404,12 @@ class ReviewController extends Controller
 
 ### Review Management (Admin)
 
+Shopper's admin panel already lists, approves and deletes reviews. Write a controller like this one only for a back office of your own.
+
 ```php
 namespace App\Http\Controllers\Admin;
 
+use App\Http\Controllers\Controller;
 use Shopper\Core\Models\Review;
 
 class ReviewController extends Controller
@@ -464,7 +483,7 @@ class ReviewController extends Controller
         @endif
         <p>{{ $review->content }}</p>
         @if ($review->is_recommended)
-            <span class="recommended">✓ Recommends this product</span>
+            <span class="recommended">Recommends this product</span>
         @endif
     </div>
 @endforeach

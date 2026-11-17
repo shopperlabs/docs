@@ -3,48 +3,71 @@ title: Customers
 description: Complete reference for the User model, addresses, and customer management in Shopper.
 ---
 
-Customers are users who have the customer role and can place orders in your store. Shopper extends your Laravel User model with e-commerce specific fields and relationships.
+Customers are users who have the customer role (`user` by default, set in `shopper.admin.roles.user`) and can place orders in your store. Shopper extends your Laravel User model with e-commerce specific fields and relationships.
 
 ## User Model Integration
 
-Shopper doesn't create a separate Customer model. Instead, it extends your existing `App\Models\User` model with the `InteractsWithShopper` trait and `ShopperUser` contract.
+Shopper doesn't create a separate Customer model. Instead, it extends your existing `App\Models\User` model (the model set in `auth.providers.users.model`) with the `InteractsWithShopper` trait and `ShopperUser` contract.
 
 ```php
 namespace App\Models;
 
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
 use Shopper\Models\Contracts\ShopperUser;
 use Shopper\Traits\InteractsWithShopper;
 
 class User extends Authenticatable implements ShopperUser
 {
     use InteractsWithShopper;
+    use Notifiable;
+
+    protected $fillable = [
+        'first_name',
+        'last_name',
+        'email',
+        'password',
+        'gender',
+        'phone_number',
+        'birth_date',
+        'avatar_type',
+        'avatar_location',
+        'opt_in',
+        'email_verified_at',
+        'last_login_ip',
+    ];
 }
 ```
 
+The admin customer form, the anonymize action and the admin profile page write users with Eloquent's `create()` and `update()`, and Laravel ignores every attribute that is not fillable. Declare the columns above as fillable. The Shopper migration renames the `name` column of the Laravel skeleton to `last_name`, so `name` leaves the list. Keep the skeleton's `Notifiable` trait: the admin uses it to email their credentials to a new customer.
+
 The `InteractsWithShopper` trait provides:
 - `HasRoles` (Spatie Permission) for role-based access control
-- `HasDiscounts` for customer-specific discount eligibility
-- `HasProfilePhoto` for avatar management
+- `HasDiscounts` for customer-specific discount eligibility, through the `discounts()` relation
+- `HasProfilePhoto` for avatar management, through the `picture` attribute
+
+It also casts `birth_date`, `email_verified_at` and `last_login_at` to Carbon dates, `gender` to `GenderType` and `opt_in` to a boolean.
 
 ## Database Schema
 
 ### User Table Modifications
 
-Shopper modifies the standard Laravel `users` table:
+Shopper's migrations modify the standard Laravel `users` table: they rename `name` to `last_name`, make `password` nullable and add the other columns below.
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
 | `first_name` | string | yes | null | First name |
-| `last_name` | string | no | - | Last name |
+| `last_name` | string | no | - | Last name (the `name` column of the Laravel skeleton, renamed) |
 | `email` | string | no | - | Email address (unique) |
 | `password` | string | yes | null | Password (nullable for social auth) |
+| `store_two_factor_secret` | text | yes | null | Encrypted two-factor secret, see [Two-Factor Authentication](/2.x/two-factor) |
+| `store_two_factor_recovery_codes` | text | yes | null | Encrypted two-factor recovery codes |
 | `email_verified_at` | timestamp | yes | null | Email verification date |
 | `gender` | string | yes | null | Gender enum value |
 | `phone_number` | string | yes | null | Phone number |
 | `birth_date` | date | yes | null | Birth date |
-| `avatar_type` | string | no | avatar_ui | Avatar source type |
+| `avatar_type` | string | no | avatar_ui | `avatar_ui` (generated from the name) or `storage` (uploaded file) |
 | `avatar_location` | string | yes | null | Avatar file path |
 | `timezone` | string | yes | null | User timezone |
 | `opt_in` | boolean | no | false | Marketing email consent |
@@ -52,6 +75,8 @@ Shopper modifies the standard Laravel `users` table:
 | `last_login_ip` | string | yes | null | Last login IP address |
 
 ### Address Table
+
+Addresses are stored in the `sh_user_addresses` table (`sh_` is the default [table prefix](/2.x/configuration#database-table-prefix)):
 
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
@@ -68,8 +93,9 @@ Shopper modifies the standard Laravel `users` table:
 | `shipping_default` | boolean | no | false | Default shipping address |
 | `billing_default` | boolean | no | false | Default billing address |
 | `type` | string | yes | null | Address type enum |
-| `country_id` | bigint | yes | null | FK to countries |
-| `user_id` | bigint | no | - | FK to users |
+| `metadata` | jsonb | yes | null | Extra JSON data (the model has no cast for it: add an `array` cast in a custom Address model) |
+| `country_id` | bigint | yes | null | FK to countries (set to null when the country is deleted) |
+| `user_id` | bigint | no | - | FK to users (the address is deleted with the user) |
 
 ## Gender Type
 
@@ -80,6 +106,8 @@ use Shopper\Core\Enum\GenderType;
 
 GenderType::Male    // male
 GenderType::Female  // female
+
+GenderType::Male->getLabel(); // "Male", translated
 ```
 
 ## Address Type
@@ -91,11 +119,15 @@ use Shopper\Core\Enum\AddressType;
 
 AddressType::Billing   // billing
 AddressType::Shipping  // shipping
+
+AddressType::Billing->getLabel(); // "Billing Address", translated
 ```
 
 ## Relationships
 
 ### Orders
+
+`orders()` returns the orders whose `customer_id` is the user's ID, using the model set in `shopper.models.order`.
 
 ```php
 // Get all customer orders
@@ -130,21 +162,24 @@ $customer->addresses()
 ```php
 use App\Models\User;
 
-// Get only customers (users with 'user' role)
+// Get only customers (users with the shopper.admin.roles.user role)
 User::query()->customers()->get();
 
-// Get administrators (admin or manager roles)
+// Get administrators (shopper.admin.roles.admin or shopper.admin.roles.manager role)
 User::query()->administrators()->get();
 ```
 
 ## Role Checking
 
 ```php
-// Check if user is an admin
+// Check if user has the shopper.admin.roles.admin role
 $user->isAdmin();
 
-// Check if user is a manager
+// Check if user has the shopper.admin.roles.manager role
 $user->isManager();
+
+// Check if user can open the admin panel: admin, manager, or the access_dashboard permission
+$user->canAccessDashboard();
 
 // Check if email is verified
 $user->isVerified();
@@ -153,13 +188,16 @@ $user->isVerified();
 ## Computed Attributes
 
 ```php
-// Get full name
+// Get full name (the last name alone when first_name is empty)
 $customer->full_name; // "John Doe"
 
-// Get formatted birth date
-$customer->birth_date_formatted; // "15, January 1990"
+// Get the birth date text shown in the admin ("Not defined" when empty)
+$customer->birth_date_formatted;
 
-// Get roles as comma-separated string
+// Format the birth date yourself: it is cast to a Carbon instance
+$customer->birth_date?->isoFormat('LL'); // "January 15, 1990"
+
+// Get role display names as a comma-separated string ("N/A" without roles)
 $customer->roles_label; // "User, VIP"
 
 // Get profile picture URL
@@ -183,7 +221,7 @@ class Address extends BaseAddress
 }
 ```
 
-Update `config/shopper/models.php`:
+Your class must extend `Shopper\Core\Models\Address`: Shopper throws a `Shopper\Core\Exceptions\InvalidModelConfigurationException` otherwise. Set the `address` key in `config/shopper/models.php` and keep the other keys:
 
 ```php
 return [
@@ -232,11 +270,15 @@ $customer = User::query()->create([
 $customer->assignRole(config('shopper.admin.roles.user'));
 ```
 
+These calls need the fillable columns listed in [User Model Integration](#user-model-integration).
+
 ### Customer with Address
 
 ```php
-use Shopper\Core\Models\Address;
+use App\Models\User;
 use Shopper\Core\Enum\AddressType;
+use Shopper\Core\Enum\GenderType;
+use Shopper\Core\Models\Country;
 
 $customer = User::query()->create([
     'first_name' => 'Jane',
@@ -255,8 +297,9 @@ $customer->addresses()->create([
     'last_name' => 'Doe',
     'street_address' => '123 Main Street',
     'city' => 'New York',
+    'state' => 'NY',
     'postal_code' => '10001',
-    'country_id' => $countryId,
+    'country_id' => Country::query()->where('cca2', 'US')->value('id'),
     'type' => AddressType::Shipping,
     'shipping_default' => true,
 ]);
@@ -304,6 +347,7 @@ $verified = User::query()
 ## Managing Addresses
 
 ```php
+use Shopper\Core\Enum\AddressType;
 use Shopper\Core\Models\Address;
 
 // Create address for customer
@@ -319,12 +363,8 @@ $address = Address::query()->create([
     'billing_default' => true,
 ]);
 
-// Update default address
-Address::query()
-    ->where('user_id', $customer->id)
-    ->where('type', AddressType::Shipping)
-    ->update(['shipping_default' => false]);
-
+// Make another address the default shipping address:
+// the observer removes the flag from the previous default
 $newDefault = Address::query()->find($addressId);
 $newDefault->update(['shipping_default' => true]);
 ```
@@ -341,6 +381,10 @@ $customer->delete();
 // Roles are detached and addresses are deleted automatically
 ```
 
+Orders are kept: the database sets their `customer_id` to null.
+
+`Shopper\Core\Observers\AddressObserver` runs when an address is created or updated. When the address has `shipping_default` set, the observer removes the flag from the customer's previous default shipping address, and it does the same for `billing_default`. The flags are exclusive per customer whatever the address `type`.
+
 ## Role Configuration
 
 Roles are defined in `config/shopper/admin.php`:
@@ -355,6 +399,8 @@ return [
 ];
 ```
 
+The Shopper seeder creates the three roles with these names, so set them before you seed.
+
 ## Permissions
 
 The admin panel generates five permissions for customer management:
@@ -364,8 +410,10 @@ The admin panel generates five permissions for customer management:
 | `browse_customers` | View the customers list |
 | `read_customers` | View a single customer profile |
 | `add_customers` | Create new customers |
-| `edit_customers` | Edit customer profiles |
-| `delete_customers` | Delete or anonymize customers |
+| `edit_customers` | Generated for your own screens: the 2.x customer page is read-only and does not check it |
+| `delete_customers` | Anonymize a customer (the admin has no delete action) |
+
+Anonymizing replaces the first and last names with "Deleted" and "Customer" (translated) and the email with an `@anonymized.local` address, clears the phone number, avatar, birth date and last login IP, turns `opt_in` off and deletes the customer's addresses. Orders are kept.
 
 ## Components
 
@@ -400,11 +448,10 @@ return [
 ```php
 namespace App\Http\Controllers;
 
-use App\Models\User;
-use Shopper\Core\Models\Address;
-use Shopper\Core\Enum\GenderType;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 use Shopper\Core\Enum\AddressType;
-use Illuminate\Support\Facades\Hash;
+use Shopper\Core\Models\Country;
 
 class AccountController extends Controller
 {
@@ -442,7 +489,7 @@ class AccountController extends Controller
             'street_address' => 'required|string',
             'city' => 'required|string',
             'postal_code' => 'required|string',
-            'country_id' => 'required|exists:countries,id',
+            'country_id' => ['required', Rule::exists(Country::class, 'id')],
             'type' => 'required|in:billing,shipping',
         ]);
 
@@ -467,4 +514,5 @@ class AccountController extends Controller
 |--------|-------------|
 | `isAdmin()` | Check if user has admin role |
 | `isManager()` | Check if user has manager role |
+| `canAccessDashboard()` | Check if user is an admin, a manager, or has the `access_dashboard` permission |
 | `isVerified()` | Check if email is verified |

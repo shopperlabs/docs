@@ -3,7 +3,7 @@ title: Orders
 description: Complete reference for the Order model, items, addresses, shipping, refunds, and order management in Shopper.
 ---
 
-Orders represent customer purchases and are central to your e-commerce operations. Shopper provides a comprehensive order management system with support for items, addresses, shipping, refunds, and status tracking.
+Orders represent customer purchases and are central to your e-commerce operations. Shopper stores each order with its items, addresses, shipments, refund, and three statuses (order, payment, shipping).
 
 ## Models
 
@@ -52,12 +52,13 @@ return [
 | `id` | bigint | no | auto | Primary key |
 | `number` | string(32) | no | - | Order number |
 | `price_amount` | integer | yes | null | Order total in cents |
-| `tax_amount` | integer | yes | null | Total tax in cents |
-| `status` | string(32) | no | new | Order status enum |
+| `tax_amount` | unsigned int | yes | null | Total tax in cents |
+| `status` | string(32) | no | - | Order status enum, set to `new` by the model |
 | `payment_status` | string(32) | no | pending | Payment status enum |
 | `shipping_status` | string(32) | no | unfulfilled | Shipping status enum |
 | `currency_code` | string | no | - | Currency code (USD, EUR, etc.) |
 | `notes` | text | yes | null | Order notes |
+| `metadata` | jsonb | yes | null | Custom key/value data |
 | `parent_order_id` | bigint | yes | null | FK to parent order |
 | `payment_method_id` | bigint | yes | null | FK to payment method |
 | `channel_id` | bigint | yes | null | FK to channel |
@@ -99,7 +100,7 @@ return [
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | bigint | no | Primary key |
-| `customer_id` | bigint | no | FK to user |
+| `customer_id` | bigint | yes | FK to user |
 | `first_name` | string | no | First name |
 | `last_name` | string | no | Last name |
 | `company` | string | yes | Company name |
@@ -131,13 +132,14 @@ return [
 | Column | Type | Nullable | Description |
 |--------|------|----------|-------------|
 | `id` | bigint | no | Primary key |
-| `refund_reason` | string | yes | Refund reason |
-| `refund_amount` | integer | yes | Refund amount (in cents) |
+| `reason` | text | yes | Refund reason |
+| `amount` | integer | no | Refund amount in cents |
 | `status` | string | no | Refund status enum |
 | `currency` | string | no | Currency code |
-| `notes` | string | yes | Admin notes |
+| `notes` | text | yes | Admin notes |
+| `metadata` | jsonb | yes | Custom key/value data |
 | `order_id` | bigint | no | FK to order |
-| `user_id` | bigint | yes | FK to user processing refund |
+| `user_id` | bigint | yes | FK to user, loaded with `$refund->customer` |
 
 ## Order Status
 
@@ -161,13 +163,13 @@ OrderStatus::Archived    // archived
 |--------|---------------|-------|-------------|
 | New | `new` | info | Newly placed order |
 | Processing | `processing` | primary | Order is being prepared |
-| Completed | `completed` | teal | Order fulfilled and delivered |
+| Completed | `completed` | teal | Order finished |
 | Cancelled | `cancelled` | danger | Order cancelled |
 | Archived | `archived` | gray | Removed from active list |
 
 ### Payment Status
 
-The `PaymentStatus` enum tracks whether payment has been collected. It is updated automatically by the [`PaymentProcessingService`](/2.x/payments#processing-payments) as transactions succeed.
+The `PaymentStatus` enum tracks whether payment has been collected. It is updated automatically by the [`PaymentProcessingService`](/2.x/payments#processing-payments) as transactions succeed. In the admin panel, the **Mark as paid** action of a pending or authorized order sets `Paid` directly: it does not call the payment driver and records no transaction. On an authorized Stripe payment, use **Capture payment** instead: once the order is `Paid`, the capture action is hidden and Shopper never captures the authorization (see [Status Transitions](/2.x/payments#status-transitions)).
 
 ```php
 use Shopper\Core\Enum\PaymentStatus;
@@ -195,7 +197,7 @@ For the full payment lifecycle, capture strategies, and transaction recording, s
 
 ### Shipping Status
 
-The `ShippingStatus` enum tracks the overall shipping state at the order level. It reflects the combined state of all shipments on the order.
+The `ShippingStatus` enum tracks the overall shipping state at the order level. Shopper computes it from the fulfillment status of the order's items each time a shipment is picked up, delivered or returned (`Shopper\Core\Actions\SyncOrderShippingStatusAction`).
 
 ```php
 use Shopper\Core\Enum\ShippingStatus;
@@ -231,7 +233,7 @@ $order->isProcessing();        // true if status is Processing
 $order->isCompleted();         // true if status is Completed
 $order->isArchived();          // true if status is Archived
 $order->isNotCancelled();      // true if status is NOT Cancelled
-$order->canBeCancelled();      // true if not Cancelled/Archived and shipping is Unfulfilled
+$order->canBeCancelled();      // true if not Cancelled/Archived and no package is delivered or returned
 
 $order->isPaid();              // true if payment_status is Paid
 $order->isPaymentPending();    // true if payment_status is Pending
@@ -307,7 +309,7 @@ $order->items;
 To add an item to an order, retrieve the product price for the order's currency:
 
 ```php
-$price = $product->getPrice('USD');
+$price = $product->getPrice($order->currency_code);
 
 $order->items()->create([
     'name' => $product->name,
@@ -334,23 +336,27 @@ $order->shippingOption;
 $order->shippings;
 ```
 
-To create a shipment and link items:
+To create a shipment, link items to it, and record the carrier pickup:
 
 ```php
+use Shopper\Core\Actions\RecordShipmentEventAction;
+use Shopper\Core\Enum\ShipmentStatus;
+
 $shipment = $order->shippings()->create([
     'carrier_id' => $carrierId,
-    'shipped_at' => now(),
-    'tracking_number' => 'TRACK123456',
-    'tracking_url' => 'https://carrier.com/track/TRACK123456',
+    'status' => ShipmentStatus::Pending,
+    'tracking_number' => '1Z999AA10123456784',
+    'tracking_url' => 'https://www.ups.com/track?tracknum=1Z999AA10123456784',
 ]);
 
 $order->items()
     ->whereIn('id', [$itemId1, $itemId2])
-    ->update([
-        'order_shipping_id' => $shipment->id,
-        'fulfillment_status' => FulfillmentStatus::Shipped,
-    ]);
+    ->update(['order_shipping_id' => $shipment->id]);
+
+resolve(RecordShipmentEventAction::class)->execute($shipment, ShipmentStatus::PickedUp);
 ```
+
+Recording `PickedUp` sets `shipped_at`, moves the linked items from `Pending` to `Shipped`, moves a `New` order to `Processing`, and recomputes the order's `shipping_status`. Create the shipment with the `Pending` status: a shipment without a status can only move to `Pending`, so recording `PickedUp` on it does nothing. Record `InTransit` and `OutForDelivery` the same way, then call `Shopper\Core\Actions\MarkShipmentDeliveredAction`: it records `Delivered` and dispatches `OrderShipmentDelivered`.
 
 ### Item Shipment
 
@@ -373,9 +379,11 @@ $order->refund;
 To create a refund:
 
 ```php
+use Shopper\Core\Enum\OrderRefundStatus;
+
 $order->refund()->create([
-    'refund_reason' => 'Product damaged',
-    'refund_amount' => $order->total(),
+    'reason' => 'Product damaged',
+    'amount' => $order->total(),
     'currency' => $order->currency_code,
     'status' => OrderRefundStatus::Pending,
 ]);
@@ -390,26 +398,32 @@ $order->zone;
 
 ### Discount
 
-Orders snapshot the discount that was redeemed at placement time. The `discount_id` foreign key still resolves the original `Discount` model while it exists, but the four snapshot columns (`discount_code`, `discount_type`, `discount_value_at_apply`, `discount_currency_code`) preserve the data even after the originating discount is edited or deleted. This follows the Shopify pattern of immutable order records.
+Orders snapshot the discount that was redeemed at placement time. The `discount_id` column points to the original discount while it exists and becomes `null` when that discount is deleted. The four snapshot columns (`discount_code`, `discount_type`, `discount_value_at_apply`, `discount_currency_code`) keep the data even after the discount is edited or deleted. This follows the Shopify pattern of immutable order records.
+
+The 2.x `Order` model has no `discount` relationship. Load the discount from its id:
 
 ```php
-$order->discount;
+use Shopper\Core\Models\Discount;
+
+$discount = Discount::query()->find($order->discount_id);
+
 $order->discount_code;
 $order->discount_type;
 $order->discount_value_at_apply;
 $order->discount_currency_code;
 ```
 
-To find every order that redeemed a given discount, use the same query Shopper uses internally to enforce the per-user usage limit:
+To find every order that redeemed a given discount:
 
 ```php
-use Shopper\Models\Order;
+use Shopper\Core\Models\Order;
 
-Order::query()
+$orders = Order::query()
     ->where('discount_id', $discount->id)
-    ->where('customer_id', $customerId)
-    ->exists();
+    ->get();
 ```
+
+Shopper runs the same query with `->where('customer_id', $customerId)->exists()` to enforce the per-user usage limit.
 
 <Note>
 For the full validation and atomic reservation rules, see [Usage Limit Enforcement](/2.x/discounts#usage-limit-enforcement) on the Discounts page.
@@ -434,12 +448,15 @@ The `total()` method returns the sum of all item totals in cents:
 $order->total();
 ```
 
+Each item's `total` is `unit_price_amount * quantity - discount_amount`, without tax. The `price_amount` column is a different value: the total computed at checkout by `CreateOrderFromCartAction`, which adds tax when your prices exclude it. Orders you create yourself only get a `price_amount` if you set it.
+
 ## Events
 
-Order lifecycle events are dispatched automatically throughout the order lifecycle:
+Shopper dispatches these events during the order lifecycle. `OrderCreated`, `OrderDeleted` and `OrderItemCreated` fire on every Eloquent create or delete, whatever code runs it. `OrderShipped` fires when the order's `shipping_status` becomes `shipped`, and `OrderShipmentDelivered` fires from `MarkShipmentDeliveredAction`. The others fire from the order detail page of the admin panel: updating `status` or `payment_status` in your own code dispatches nothing.
 
 ```php
 use Shopper\Core\Events\Orders\OrderCreated;
+use Shopper\Core\Events\Orders\OrderItemCreated;
 use Shopper\Core\Events\Orders\OrderPaid;
 use Shopper\Core\Events\Orders\OrderShipped;
 use Shopper\Core\Events\Orders\OrderCompleted;
@@ -464,7 +481,7 @@ use Shopper\Core\Enum\OrderStatus;
 $order = Order::query()->create([
     'number' => generate_number(),
     'customer_id' => auth()->id(),
-    'currency_code' => current_currency(),
+    'currency_code' => shopper_currency(),
     'channel_id' => $channelId,
     'status' => OrderStatus::New,
 ]);
@@ -472,15 +489,19 @@ $order = Order::query()->create([
 
 ### Complete Order with Items and Addresses
 
-Create the shipping and billing addresses:
+Create the shipping and billing addresses, then the order and its items from the cart lines:
 
 ```php
+use Shopper\Core\Models\Order;
+use Shopper\Core\Models\OrderAddress;
+
 $shippingAddress = OrderAddress::query()->create([
     'customer_id' => auth()->id(),
     'first_name' => 'John',
     'last_name' => 'Doe',
     'street_address' => '123 Main St',
     'city' => 'New York',
+    'state' => 'NY',
     'postal_code' => '10001',
     'country_name' => 'United States',
     'phone' => '+1234567890',
@@ -492,6 +513,7 @@ $billingAddress = OrderAddress::query()->create([
     'last_name' => 'Doe',
     'street_address' => '123 Main St',
     'city' => 'New York',
+    'state' => 'NY',
     'postal_code' => '10001',
     'country_name' => 'United States',
 ]);
@@ -499,26 +521,26 @@ $billingAddress = OrderAddress::query()->create([
 $order = Order::query()->create([
     'number' => generate_number(),
     'customer_id' => auth()->id(),
-    'currency_code' => 'USD',
+    'currency_code' => $cart->currency_code,
     'shipping_address_id' => $shippingAddress->id,
     'billing_address_id' => $billingAddress->id,
     'shipping_option_id' => $carrierOptionId,
     'zone_id' => $zoneId,
 ]);
 
-foreach ($cart->items as $cartItem) {
-    $price = $cartItem->product->getPrice($order->currency_code);
-
+foreach ($cart->lines as $line) {
     $order->items()->create([
-        'name' => $cartItem->product->name,
-        'sku' => $cartItem->product->sku,
-        'quantity' => $cartItem->quantity,
-        'unit_price_amount' => $price->amount,
-        'product_id' => $cartItem->product->id,
-        'product_type' => $cartItem->product->getMorphClass(),
+        'name' => $line->purchasable->name,
+        'sku' => $line->purchasable->sku,
+        'quantity' => $line->quantity,
+        'unit_price_amount' => $line->unit_price_amount,
+        'product_id' => $line->purchasable_id,
+        'product_type' => $line->purchasable_type,
     ]);
 }
 ```
+
+This example only copies the lines. To turn a cart into an order, use `CreateOrderFromCartAction` (see the [Storefront Example](#storefront-example)): it also sets `price_amount` and `tax_amount`, reserves stock and the discount, and writes the tax lines.
 
 ## Query Scopes
 
@@ -534,9 +556,11 @@ Order::query()->notArchived()->get();  // Exclude archived orders
 To get all non-archived orders with their relationships:
 
 ```php
+use Shopper\Core\Enum\OrderStatus;
 use Shopper\Core\Models\Order;
 
 $orders = Order::query()
+    ->notArchived()
     ->with(['customer', 'items', 'shippingAddress'])
     ->latest()
     ->get();
@@ -567,13 +591,22 @@ $order = Order::query()
 
 ## Order Number Generation
 
-Use the `generate_number()` helper to create unique order numbers:
+Use the `generate_number()` helper to create the next order number:
 
 ```php
 $orderNumber = generate_number();
 ```
 
-This returns a formatted string like `ORD-20260327-001234`. The format is configurable in `config/shopper/orders.php`.
+This returns a formatted string like `ORD-20260327-001234`. The format is configurable under the `generator` key of `config/shopper/orders.php` (`config('shopper.orders.generator')`):
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `prefix` | `ORD` | Text before the number, `null` to remove it |
+| `separator` | `-` | Character between each part |
+| `date_format` | `Ymd` | PHP date format of the date part, `null` to remove it |
+| `start_sequence_from` | `1` | Added to the id of the last order to get the sequence |
+| `pad_length` | `6` | Length of the sequence after padding |
+| `pad_string` | `0` | Character used for padding |
 
 ## Permissions
 
@@ -637,8 +670,11 @@ class CheckoutController extends Controller
 {
     public function store()
     {
-        $order = resolve(CreateOrderFromCartAction::class)
-            ->execute(Cart::current());
+        $cart = Cart::current();
+
+        abort_if($cart === null, 404);
+
+        $order = resolve(CreateOrderFromCartAction::class)->execute($cart);
 
         Cart::forget();
 
@@ -657,15 +693,19 @@ class CheckoutController extends Controller
 ```
 
 <Note>
-The `CreateOrderFromCartAction` handles everything in a single transaction: calculating totals, creating addresses, creating order items, applying discounts, computing taxes, and marking the cart as completed. See the [Cart](/2.x/cart#order-conversion) page for details.
+The `CreateOrderFromCartAction` handles everything in a single transaction: calculating totals, creating addresses, creating order items, reserving the discount and the stock, writing the tax lines, and marking the cart as completed. It throws `CartCompletedException` when the cart was already converted, `DiscountLimitReachedException` when the discount has reached a usage limit, and `InsufficientStockException` when the stock cannot cover a line (all in `Shopper\Cart\Exceptions`). It does not set `shipping_option_id`, because the 2.x cart has no shipping option: set it on the order yourself. See the [Cart](/2.x/cart#order-conversion) page for details.
 </Note>
 
 ## Order Status Flow
 
+The order detail page of the admin panel offers these transitions:
+
 | From Status | Possible Transitions |
 |-------------|---------------------|
 | New | Processing, Cancelled, Archived |
-| Processing | Completed, Cancelled |
-| Completed | Archived |
-| Cancelled | (terminal state) |
+| Processing | Completed, Cancelled, Archived |
+| Completed | (terminal state) |
+| Cancelled | Archived |
 | Archived | (terminal state) |
+
+**Mark complete** needs a paid order. **Archive** is offered only while the order is unpaid. **Cancel Order** follows `canBeCancelled()`. **Mark as paid** also moves a `New` order to `Processing`. Shipments change the status too: the first pickup moves a `New` order to `Processing`, and once every item is delivered, a `Processing` order moves to `Completed`. The model itself does not block any transition when you update `status` in your own code.

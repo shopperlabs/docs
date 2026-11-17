@@ -39,10 +39,10 @@ return [
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
 | `name` | string | no | - | Brand name |
-| `slug` | string | yes | auto | URL-friendly identifier (unique) |
+| `slug` | string | yes | null | URL-friendly identifier (unique) |
 | `website` | string | yes | null | Brand's official website URL |
 | `description` | longtext | yes | null | Brand description (supports rich text) |
-| `position` | smallint (unsigned) | no | 0 | Display order position |
+| `position` | smallint (unsigned) | no | 0 | Display order position (set by drag and drop in the admin brands table) |
 | `is_enabled` | boolean | no | false | Brand visibility status |
 | `seo_title` | string(60) | yes | null | SEO meta title |
 | `seo_description` | string(160) | yes | null | SEO meta description |
@@ -54,7 +54,9 @@ return [
 
 The `HasSlug` trait generates unique slugs automatically. When you set the `slug` attribute, the trait runs it through `Str::slug()` and appends an incrementing suffix (`-1`, `-2`, etc.) if a collision is detected.
 
-The trait also provides a `findBySlug()` static method:
+The trait does not build the slug from the name. The admin brand form fills it from the name for you, but when you create a brand in code, pass a `slug` yourself, otherwise the column stays `null`.
+
+The trait also provides a `findBySlug()` static method. It throws a `ModelNotFoundException` (a 404 response in a controller) when no brand matches, and it does not check `is_enabled`:
 
 ```php
 use Shopper\Models\Brand;
@@ -66,7 +68,7 @@ $brand = Brand::findBySlug('nike');
 
 ### Products
 
-A brand has many [products](/2.x/products). This is a standard `HasMany` relationship using the configured product model.
+A brand has many [products](/2.x/products). This is a standard `HasMany` relationship using the configured product model, through the `brand_id` column of the products table. Deleting a brand keeps its products and sets their `brand_id` to `null`.
 
 ```php
 $brand->products;
@@ -112,6 +114,8 @@ You can also update the field directly:
 $brand->update(['is_enabled' => true]);
 ```
 
+The brand select of the admin product forms only lists enabled brands.
+
 ## Media
 
 Brands support two media collections through [Spatie MediaLibrary](https://spatie.be/docs/laravel-medialibrary), using the same config-driven collection names as [products](/2.x/products#media).
@@ -120,6 +124,8 @@ Brands support two media collections through [Spatie MediaLibrary](https://spati
 |------------|-----------|----------|-------------|
 | Default gallery | `shopper.media.storage.collection_name` | Multiple files | Brand images |
 | Thumbnail | `shopper.media.storage.thumbnail_collection` | Single file | Brand logo |
+
+The collections default to `uploads` and `thumbnail`, use the `shopper.media.storage.disk_name` disk and accept the mime types listed in `shopper.media.accepts_mime_types`. The admin brand form uploads the logo to the thumbnail collection, up to `shopper.media.max_size.thumbnail` kilobytes.
 
 To add a brand logo:
 
@@ -136,6 +142,8 @@ $collection = config('shopper.media.storage.thumbnail_collection');
 
 $url = $brand->getFirstMediaUrl($collection, 'medium');
 ```
+
+Conversion names come from `shopper.media.conversions`: `large` and `medium` by default (see [image conversions](/2.x/media#image-conversions)). When the brand has no logo, `getFirstMediaUrl()` returns the Shopper placeholder image, not an empty string. Check `$brand->hasMedia($collection)` first if your storefront should show the brand name instead.
 
 From a URL:
 
@@ -177,13 +185,13 @@ To get all enabled brands ordered by position:
 Brand::query()->enabled()->orderBy('position')->get();
 ```
 
-To get brands that have at least one product, with product counts:
+To get brands that have at least one published product, with their published product counts:
 
 ```php
 $brands = Brand::query()
     ->enabled()
-    ->has('products')
-    ->withCount('products')
+    ->whereHas('products', fn ($query) => $query->publish())
+    ->withCount(['products' => fn ($query) => $query->publish()])
     ->get();
 ```
 
@@ -205,17 +213,16 @@ $brands = Brand::query()
 
 ## Metadata
 
-The `metadata` JSON column lets you store additional custom data that doesn't warrant its own database column:
+The `metadata` JSON column lets you store additional custom data that doesn't warrant its own database column. The model casts it to an array.
+
+The admin brand form edits `metadata` as a list of key-value pairs with text values. If your team also edits brands in the admin, keep the values flat strings:
 
 ```php
 $brand->update([
     'metadata' => [
         'country_of_origin' => 'USA',
-        'founded_year' => 1964,
-        'social' => [
-            'instagram' => '@nike',
-            'twitter' => '@nike',
-        ],
+        'founded_year' => '1964',
+        'instagram' => '@nike',
     ],
 ]);
 
@@ -236,19 +243,19 @@ return [
 ];
 ```
 
-When disabled, the brand menu item is hidden from the sidebar, brand-related routes are not registered, and brand selection is removed from product forms.
+When disabled, the brand menu item is hidden from the sidebar, brand-related routes are not registered, brand selection is removed from product forms, and the brand column is hidden from the products table.
 
 ### Permissions
 
-The admin panel generates four permissions for brand management:
+The admin panel generates five permissions for brand management:
 
 | Permission | Description |
 |------------|-------------|
-| `browse_brands` | View the brands list |
-| `read_brands` | View a single brand |
+| `browse_brands` | View the brands list and its sidebar item |
+| `read_brands` | View a single brand (the admin has no brand detail page and does not check it) |
 | `add_brands` | Create new brands |
-| `edit_brands` | Edit existing brands |
-| `delete_brands` | Delete brands |
+| `edit_brands` | Edit existing brands, reorder them, and enable or disable them in bulk |
+| `delete_brands` | Delete brands, one at a time or in bulk |
 
 ## Components
 
@@ -273,9 +280,11 @@ return [
 ];
 ```
 
+The `BrandForm` slide-over handles both creating and editing a brand. To add content above or below the brands table without publishing components, use the `CatalogRenderHook::BRANDS_TABLE_BEFORE` and `CatalogRenderHook::BRANDS_TABLE_AFTER` [render hooks](/2.x/render-hooks#catalog-hooks).
+
 ## Storefront Example
 
-This example shows a brand listing page and a brand detail page with its published products.
+This example shows a brand listing page and a brand detail page with its published products. The detail page queries with the `enabled` scope so a disabled brand returns a 404.
 
 ```php
 namespace App\Http\Controllers;
@@ -288,7 +297,7 @@ class BrandController extends Controller
     {
         $brands = Brand::query()
             ->enabled()
-            ->withCount('products')
+            ->withCount(['products' => fn ($query) => $query->publish()])
             ->orderBy('position')
             ->get();
 
@@ -297,7 +306,10 @@ class BrandController extends Controller
 
     public function show(string $slug)
     {
-        $brand = Brand::findBySlug($slug);
+        $brand = Brand::query()
+            ->enabled()
+            ->where('slug', $slug)
+            ->firstOrFail();
 
         $products = $brand->products()
             ->publish()
@@ -335,6 +347,7 @@ class BrandsComposer
 Register it in your `AppServiceProvider`:
 
 ```php
+use App\View\Composers\BrandsComposer;
 use Illuminate\Support\Facades\View;
 
 public function boot(): void

@@ -50,7 +50,11 @@ You can also customize the admin panel branding (logo, favicon, and Filament pri
 'primary_color' => \Filament\Support\Colors\Color::Blue,
 ```
 
-The `primary_color` key accepts any [Filament color](https://filamentphp.com/docs/support/colors) constant. After changing your primary color in your Tailwind config, update this value to keep Filament elements consistent.
+`brand` and `favicon` take a path from your `public` directory, such as `'/images/logo.svg'`. When `brand` is `null`, the Shopper logo is shown. To render the logo from your own HTML or Blade view instead, see [Branding Logo](/2.x/extending/control-panel#branding-logo).
+
+The `primary_color` key accepts any [Filament color](https://filamentphp.com/docs/support/colors) constant. Shopper's styles, including a custom theme built from its `theme.css`, read their `primary` colors from this value, so you change it here and nowhere else.
+
+The `roles` key in the same file names the admin, manager and user roles. It is covered on the [ACL](/2.x/acl#configuration) page.
 
 ### Avatar Colors
 
@@ -76,12 +80,25 @@ Available languages in the admin panel. Each entry maps a locale code to a displ
 
 ### Custom Pages
 
-If you create custom Livewire page components for the admin panel, configure the namespace and view path:
+The `php artisan make:shopper-page` command creates a Livewire page for the admin panel: a class that extends `Shopper\Livewire\Pages\AbstractPageComponent`, which renders it inside the admin panel layout, and its Blade view. These keys set where it writes them:
 
 ```php title="config/shopper/admin.php"
 'pages' => [
     'namespace' => 'App\\Livewire\\Shopper',
     'view_path' => resource_path('views/livewire/shopper'),
+],
+```
+
+The command does not register a route: add one in your [custom route file](/2.x/configuration#custom-routes).
+
+### Icon Picker Cache
+
+The icon picker on the attribute form caches its list of icons. Turn the cache off with `cache`, or change how long it lasts with `duration`, which takes any interval Carbon understands:
+
+```php title="config/shopper/admin.php"
+'icon-picker' => [
+    'cache' => true,
+    'duration' => '7 days',
 ],
 ```
 
@@ -92,6 +109,8 @@ All Shopper tables are prefixed with `sh_` by default so they do not conflict wi
 ```php title="config/shopper/core.php"
 'table_prefix' => 'sh_',
 ```
+
+The prefix applies to the tables Shopper creates. The columns Shopper adds to your `users` table and the roles and permissions tables of spatie/laravel-permission, named in `config/permission.php`, keep their own names.
 
 <Warning>
   Set the table prefix before the Shopper migrations run. Changing it afterwards requires a custom migration that renames every Shopper table.
@@ -111,7 +130,7 @@ php artisan db:seed --class="Shopper\Database\Seeders\AuthTableSeeder"
 
 ## Feature Flags
 
-The `features.php` config controls which sections of the admin panel are active. Set any feature to `FeatureState::Disabled` to hide it from the UI entirely:
+The `features.php` config controls which sections of the admin panel are active. Set a feature to `FeatureState::Disabled` to remove its pages and sidebar link from the admin panel, along with its field on the product form for brands, categories, collections, suppliers and tags. Suppliers are disabled by default:
 
 ```php title="config/shopper/features.php"
 use Shopper\Enum\FeatureState;
@@ -129,6 +148,14 @@ return [
 ```
 
 For example, if your store does not use product reviews, set `'review' => FeatureState::Disabled` and the reviews page and its sidebar link disappear from the admin panel.
+
+To check a flag in your own code, such as a storefront view, call `Shopper\Feature::enabled()` with the feature key:
+
+```blade
+@if (\Shopper\Feature::enabled('review'))
+    <x-product-reviews :product="$product" />
+@endif
+```
 
 ## Models
 
@@ -169,25 +196,38 @@ return [
 ];
 ```
 
-Set `SHOPPER_ENABLED_TWO_FACTOR=true` in your `.env` file to make two-factor authentication available to admin users. Each user then turns it on from their profile; it is not forced on anyone. See the [Two-Factor Authentication](/2.x/two-factor) page for setup details.
+`guard` is the name of a guard defined in your `config/auth.php`. The admin panel logs users in and checks them with this guard.
+
+Set `SHOPPER_ENABLED_TWO_FACTOR=true` in your `.env` file to make two-factor authentication available to admin users. Your user model must also implement `Shopper\Contracts\HasStoreAuthentication` and `Shopper\Contracts\HasStoreAuthenticationRecovery`, with the traits listed in [Interfaces and Traits](/2.x/two-factor#interfaces-and-traits). Each user then turns it on from their profile; it is not forced on anyone. See the [Two-Factor Authentication](/2.x/two-factor) page for setup details.
 
 ## Middleware
 
-Shopper lets you add extra middleware to all authenticated admin routes. This is useful for logging, rate limiting, or custom access control:
+Shopper lets you add extra middleware to the admin routes that require a logged-in user: the admin pages, the routes of your custom route file and the routes of add-ons. The login and password reset pages, `/cpanel/initialize` and `/cpanel/forbidden` do not get them. This is useful for logging, rate limiting, or custom access control:
 
 ```php title="config/shopper/routes.php"
 'middleware' => [],
 ```
 
+<Note>
+  The admin pages are Livewire components. On the requests a component sends after the page has loaded, Livewire only runs the middleware in its persistent list. If your middleware restricts access, also register it with `Livewire::addPersistentMiddleware()` in the `boot()` method of a service provider.
+</Note>
+
 ## Custom Routes
 
-By default, your `web.php` routes are not loaded inside the admin panel. To add custom routes that share Shopper's authentication middleware, point to a dedicated route file:
+By default, your `web.php` routes are not loaded inside the admin panel, and `custom_file` is `null`. To add custom routes that share Shopper's authentication middleware, point it to a dedicated route file:
 
 ```php title="config/shopper/routes.php"
 'custom_file' => base_path('routes/shopper.php'),
 ```
 
-Routes defined in this file are automatically loaded with the admin panel's middleware stack.
+Shopper loads this file inside its own route group: each route gets the admin panel prefix and domain, the `shopper.` name prefix and the admin panel's middleware, including the `middleware` key above. The route below answers at `/cpanel/settings/loyalty` and its name is `shopper.settings.loyalty`:
+
+```php title="routes/shopper.php"
+use App\Livewire\Shopper\LoyaltySettings;
+use Illuminate\Support\Facades\Route;
+
+Route::get('settings/loyalty', LoyaltySettings::class)->name('settings.loyalty');
+```
 
 ## Components
 
@@ -239,37 +279,37 @@ return [
 ];
 ```
 
-To disable a setting page, set its value to `false`.
+To hide a setting from the settings page and from the settings navigation, set its value to `false`.
 
 ### Creating a Custom Setting
 
-To create your own setting page, extend the `Shopper\Settings\Setting` base class:
+To add your own card to the settings page, extend the `Shopper\Settings\Setting` base class. `name()`, `description()` and `icon()` are required. `url()`, `permission()` and `order()` are optional and default to `null`, `null` and `0`:
 
 ```php
 namespace App\Settings;
 
 use Shopper\Settings\Setting;
 
-final class MyCustomSetting extends Setting
+final class LoyaltySetting extends Setting
 {
     public function name(): string
     {
-        return 'My Custom Setting';
+        return 'Loyalty program';
     }
 
     public function description(): string
     {
-        return 'Manage your custom configuration.';
+        return 'Set how many points customers earn on each order.';
     }
 
     public function icon(): string
     {
-        return 'heroicon-o-cog';
+        return 'heroicon-o-gift';
     }
 
     public function url(): string
     {
-        return route('shopper.settings.custom');
+        return route('shopper.settings.loyalty');
     }
 
     public function order(): int
@@ -279,31 +319,42 @@ final class MyCustomSetting extends Setting
 
     public function permission(): ?string
     {
-        return 'manage_custom_settings';
+        return 'manage_loyalty';
     }
 }
 ```
 
-Then register it in the `settings.php` config file:
+`url()` returns the address of your settings page, declared in your [custom route file](/2.x/configuration#custom-routes). A setting without a URL shows a "Soon" badge. `order()` sorts the cards; the built-in settings use 1 to 9. `permission()` shows the card only to users who have that permission, so create it first (see [Creating Custom Permissions](/2.x/acl#creating-custom-permissions)) and check it in your page component as well, for example with `$this->authorize('manage_loyalty')` in `mount()`.
 
-```php
+Then add it to the `items` array of `config/shopper/settings.php`, after the built-in settings:
+
+```php title="config/shopper/settings.php"
 'items' => [
-    App\Settings\MyCustomSetting::class => true,
+    App\Settings\LoyaltySetting::class => true,
 ],
 ```
 
 ### Programmatic Registration
 
-You can also register settings at runtime through the `SettingManager`:
+You can also register settings at runtime through the `SettingManager`, for example in the `boot()` method of a service provider:
 
 ```php
 use Shopper\Settings\SettingManager;
 
-app(SettingManager::class)->add(App\Settings\MyCustomSetting::class);
+app(SettingManager::class)->add(App\Settings\LoyaltySetting::class);
+```
+
+`add()` takes an optional second argument, `false` to register the setting disabled. `enable()` and `disable()` switch a setting that is already registered, including the built-in ones:
+
+```php
+use Shopper\Settings\Items\LegalSetting;
+use Shopper\Settings\SettingManager;
+
+app(SettingManager::class)->disable(LegalSetting::class);
 ```
 
 <Warning>
-  Disabling setting items removes the corresponding interface from the admin panel. Make sure your team does not need access to those settings before disabling them.
+  Disabling a setting item removes its card and its navigation tab, so your team can no longer open it from the admin panel. Make sure your team does not need access to those settings before disabling them.
 </Warning>
 
 ## Order Number Format
@@ -320,6 +371,10 @@ The `orders.php` config controls how order numbers are generated. You can custom
     'pad_string' => '0',
 ],
 ```
+
+The sequence is `start_sequence_from` plus the ID of the last order, padded on the left with `pad_string` up to `pad_length` characters. The parts are joined with `separator`, and a part set to `null` is left out.
+
+Shopper generates the number when it creates an order from a cart. If you create orders in your own code, call the `generate_number()` helper to fill the `number` column.
 
 Examples of generated numbers depending on configuration:
 

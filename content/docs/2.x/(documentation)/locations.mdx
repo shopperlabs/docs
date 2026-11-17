@@ -5,7 +5,7 @@ description: "Manage inventory locations, warehouses, and fulfillment origins fo
 
 Locations represent physical places where you store inventory and ship orders from: warehouses, retail stores, fulfillment centers, or even your apartment. Each location has its own address and can track stock independently, so a product can have 50 units in your Paris warehouse and 20 in your New York store.
 
-When Shopper is first installed, the [setup wizard](/2.x/setup-store) creates a default location using your store's address. All stock mutations target this location unless you specify another one. If your business ships from multiple places, you can add more locations and assign stock to each one.
+When Shopper is first installed, the [setup wizard](/2.x/setup-store) creates a default location using your store's address. The initial quantity you enter when creating a product or variant in the admin is recorded at this location. If your business ships from multiple places, you can add more locations and assign stock to each one.
 
 ## Model
 
@@ -48,11 +48,11 @@ return [
 | `city` | string | no | - | City |
 | `state` | string | yes | null | State/province/region |
 | `phone_number` | string | yes | null | Phone number |
-| `priority` | integer | no | 0 | Fulfillment priority order |
+| `priority` | integer | no | 0 | Allocation order at checkout, lower values first |
 | `latitude` | decimal(11,5) | yes | null | GPS latitude |
 | `longitude` | decimal(10,5) | yes | null | GPS longitude |
 | `is_default` | boolean | no | false | Default location for stock |
-| `country_id` | bigint | no | - | FK to countries table |
+| `country_id` | bigint | yes | null | FK to countries table, set to null when the country is deleted |
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
 
@@ -76,7 +76,7 @@ $location->histories; // Collection of InventoryHistory records
 
 ## Query Scopes
 
-The `default` scope returns the location marked as the default inventory. This is the location used by `InitialQuantityInventory` when setting stock during product creation.
+The `default` scope returns the location marked as the default inventory. The admin action `Shopper\Actions\Store\InitialQuantityInventory` uses it to record the initial quantity entered when creating a product or variant. With no default location, that initial quantity is not recorded.
 
 ```php
 use Shopper\Core\Models\Inventory;
@@ -96,6 +96,8 @@ $product->mutateStock(
 );
 ```
 
+`setStock()` works differently: it computes its delta from the total stock across all locations, then records that delta at the given location, as described in [Modifying Stock](/2.x/products#modifying-stock).
+
 To get stock for a product at a specific location:
 
 ```php
@@ -110,6 +112,46 @@ use Shopper\Models\Product;
 $products = Product::query()->get();
 
 Product::loadStockForInventory($products, $warehouse->id);
+```
+
+After this call, `$product->stock` returns the stock at that location, not the total.
+
+At checkout, Shopper reserves the stock of each line that tracks inventory, as described in [Stock Reservation](/2.x/cart#stock-reservation). Three services, bound in `Shopper\Core\CoreServiceProvider`, decide which locations the stock comes from:
+
+- `Shopper\Core\Stock\DefaultInventoryResolver` (contract `Shopper\Core\Contracts\InventoryResolver`) returns every location ordered by `priority`, lowest first, then by ID. It ignores `is_default`.
+- `Shopper\Core\Stock\PriorityStockAllocator` (contract `Shopper\Core\Contracts\StockAllocator`) takes the whole quantity from the first location that holds it. When no single location does, it splits the quantity across locations in the same order.
+- `Shopper\Core\Stock\LockingStockReserver` (contract `Shopper\Core\Contracts\StockReserver`) records one `decreaseStock()` movement per location, with the order as reference. When the locations together hold less than the quantity, it records nothing and the order is refused with `InsufficientStockException`. For a product with `allow_backorder` enabled, it takes the whole quantity from the first location returned by the resolver, whose stock goes negative.
+
+To change which locations an order draws from, or in which order, write your own resolver. This one tries the default location first, then the others by priority:
+
+```php
+namespace App\Stock;
+
+use Illuminate\Database\Eloquent\Collection;
+use Shopper\Core\Contracts\InventoryResolver;
+use Shopper\Core\Models\Contracts\Stockable;
+use Shopper\Core\Models\Inventory;
+
+final class DefaultFirstInventoryResolver implements InventoryResolver
+{
+    public function resolve(Stockable $product): Collection
+    {
+        return Inventory::query()
+            ->orderByDesc('is_default')
+            ->orderBy('priority')
+            ->orderBy('id')
+            ->get();
+    }
+}
+```
+
+Bind it in the `register` method of one of your service providers. The allocator and the reserver receive the resolver from the container, so they use yours:
+
+```php
+use App\Stock\DefaultFirstInventoryResolver;
+use Shopper\Core\Contracts\InventoryResolver;
+
+$this->app->bind(InventoryResolver::class, DefaultFirstInventoryResolver::class);
 ```
 
 ## Creating Locations
@@ -153,7 +195,7 @@ $locations = Inventory::query()
     ->get();
 ```
 
-To find the nearest location to a customer (if latitude/longitude are set):
+To find the nearest location to a customer (if latitude/longitude are set). This straight-line distance on coordinates is an approximation, enough to rank nearby locations:
 
 ```php
 $locations = Inventory::query()
@@ -172,7 +214,11 @@ $nearest = $locations->first();
 
 ## Default Location
 
-The default location is used as the origin address for shipping calculations and as the fallback when stock operations do not specify a location. Only one location can be the default.
+The default location receives the initial quantity entered when you create a product or variant in the admin. It is not a fallback for stock operations: `mutateStock()`, `decreaseStock()` and `setStock()` always need an `$inventoryId`, and checkout allocation follows `priority`, not `is_default`.
+
+Only one location can be the default. When you create or update a location with `is_default` set to `true`, Shopper sets `is_default` to `false` on every other location. The admin does not show a delete button on the default location.
+
+Shopper does not take a shipping origin from your locations. When you request carrier rates, you build the `from` address yourself, and a location's address is the usual source, as shown in [Checkout Shipping Selection](/2.x/carriers#checkout-shipping-selection).
 
 <Warning>
 Deleting a location removes all inventory history records tied to it. This affects stock levels for every product that had stock in that location. Proceed with caution.

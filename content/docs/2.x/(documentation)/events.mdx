@@ -5,10 +5,12 @@ description: Reference for all events dispatched by Shopper during order, produc
 
 Shopper dispatches events at key moments in the order, product, and cart lifecycle. These events allow you to hook into the system and add custom behavior like sending notifications, syncing with external services, updating analytics, or triggering workflows without modifying any Shopper code.
 
-Events are organized by domain across two namespaces:
+The events on this page are organized by domain across two namespaces:
 
-- `Shopper\Core\Events` order and product events
-- `Shopper\Cart\Events` cart events
+- `Shopper\Core\Events`: order and product events
+- `Shopper\Cart\Events`: cart events
+
+The admin panel also dispatches events that this page does not cover: `Shopper\Events\TwoFactor\TwoFactorAuthenticationEnabled` when a user turns on [two-factor authentication](/2.x/two-factor#interfaces-and-traits), `Shopper\Events\LoadShopper` on every admin request, and `Shopper\Sidebar\SidebarBuilder` when it builds the [sidebar](/2.x/sidebar/shopper-extension).
 
 ```php
 use Shopper\Core\Events\Orders\OrderCompleted;
@@ -18,7 +20,7 @@ use Shopper\Core\Events\Products\ProductCreated;
 
 ## Listening to Events
 
-Register listeners in your application's `EventServiceProvider` or use Laravel's event discovery:
+Register listeners with Laravel's event discovery (a listener in `app/Listeners` whose `handle` method type-hints the event), with `Event::listen()` in a service provider, or in the `$listen` array of an `EventServiceProvider`:
 
 ```php
 use Shopper\Core\Events\Orders\OrderCompleted;
@@ -62,15 +64,16 @@ Order events cover the full lifecycle of a purchase, from creation to completion
 | Event | Payload | Trigger |
 |-------|---------|---------|
 | `OrderCreated` | `Order $order` | Order is inserted in the database |
+| `OrderItemCreated` | `OrderItem $orderItem` | Order item is inserted in the database |
 | `OrderPaid` | `Order $order` | Admin marks order as paid |
 | `OrderCompleted` | `Order $order` | Admin marks order as completed |
 | `OrderShipped` | `Order $order` | All items reach shipped status |
 | `OrderCancelled` | `Order $order` | Admin cancels the order |
 | `OrderArchived` | `Order $order` | Admin archives the order |
-| `OrderDeleted` | `Order $order` | Order is soft-deleted |
+| `OrderDeleted` | `Order $order` | Order is being deleted (soft or force delete) |
 | `OrderNoteAdded` | `Order $order` | Admin adds a note to the order |
 
-All order events carry a single `public Order $order` property.
+All order events except `OrderItemCreated` carry a single `public Order $order` property. It is typed with the `Shopper\Core\Models\Contracts\Order` contract, so you receive an instance of the model set in `config('shopper.models.order')`. `OrderItemCreated` carries `public OrderItem $orderItem` (`Shopper\Core\Models\OrderItem`).
 
 ### Lifecycle Flow
 
@@ -79,7 +82,7 @@ OrderCreated
     │
     ├── OrderPaid
     │       │
-    │       ├── OrderShipped ──→ OrderCompleted
+    │       ├── OrderShipped ──> OrderCompleted
     │       │
     │       └── OrderCancelled
     │
@@ -92,25 +95,33 @@ OrderCreated
 
 ### How They Are Dispatched
 
-`OrderCreated` and `OrderDeleted` are dispatched automatically via the model observer. They fire on every insert and soft-delete, regardless of where the operation originates.
+`OrderCreated` and `OrderDeleted` are dispatched by `Shopper\Core\Observers\OrderObserver`, registered on the model set in `config('shopper.models.order')`. They fire on every Eloquent insert and delete, whether the operation comes from the admin panel, the cart checkout or your own code. `OrderDeleted` fires from the `deleting` hook, before the row is soft-deleted or removed. `OrderItemCreated` works the same way through `OrderItemObserver`, once per order item. Mass updates and deletes run through the query builder skip model events.
 
 ```php
 use Shopper\Core\Models\Order;
 
-$order = Order::query()->create([...]);
+$order = Order::query()->create([
+    'number' => generate_number(),
+    'price_amount' => 12900,
+    'currency_code' => shopper_currency(),
+    'customer_id' => $customer->id,
+]);
 ```
 
-Status-related events (`OrderPaid`, `OrderCompleted`, `OrderCancelled`, `OrderArchived`) are dispatched from the admin panel when an administrator changes the order status.
+Status-related events (`OrderPaid`, `OrderCompleted`, `OrderCancelled`, `OrderArchived`) are dispatched from the admin panel when an administrator changes the order status with the **Mark as paid**, **Mark complete**, **Cancel Order** or **Archive** action of the order detail page. Updating `status` or `payment_status` in your own code dispatches nothing: dispatch the event yourself, for example `event(new OrderPaid($order))`. Two built-in paths also change these statuses without an event: capturing an authorized payment sets `payment_status` to `paid` without `OrderPaid`, and delivering the last package sets `status` to `completed` without `OrderCompleted`.
 
-`OrderShipped` is dispatched by `SyncOrderShippingStatusAction` when the aggregated shipping status of all items transitions to `Shipped`. This happens automatically after shipment events are recorded, so you don't dispatch it manually.
+`OrderShipped` is dispatched by `SyncOrderShippingStatusAction` when the order's `shipping_status` transitions to `Shipped`, which means every item has the shipped fulfillment status. The action runs each time a shipment is recorded as picked up, delivered or returned, so you don't dispatch it manually.
 
-### Queueing
+### Dispatch After Commit [#queueing]
 
-All order events implement `ShouldDispatchAfterCommit`, meaning listeners run on the queue after the database transaction commits.
+All order events implement Laravel's `ShouldDispatchAfterCommit` contract. When one is dispatched inside a database transaction, Laravel holds it until the transaction commits and drops it if the transaction rolls back. Outside a transaction, it is dispatched at once. The checkout creates the order and its items in the same transaction, so an `OrderCreated` listener finds the items.
 
-| Event | Queued |
+The contract does not queue anything: a listener runs during the request unless it implements `Illuminate\Contracts\Queue\ShouldQueue`.
+
+| Event | After commit |
 |-------|--------|
 | `OrderCreated` | Yes |
+| `OrderItemCreated` | Yes |
 | `OrderPaid` | Yes |
 | `OrderCompleted` | Yes |
 | `OrderShipped` | Yes |
@@ -127,10 +138,12 @@ Shipment events track the creation and delivery of individual packages within an
 
 | Event | Payload | Trigger |
 |-------|---------|---------|
-| `OrderShipmentCreated` | `Order $order`, `OrderShipping $shipment` | A new shipment is created with a shipping label |
-| `OrderShipmentDelivered` | `Order $order`, `OrderShipping $shipment` | A shipment is marked as delivered |
+| `OrderShipmentCreated` | `Order $order`, `OrderShipping $shipment` | Admin creates a shipping label, which creates a new shipment |
+| `OrderShipmentDelivered` | `Order $order`, `OrderShipping $shipment` | A shipment is marked as delivered with `MarkShipmentDeliveredAction` |
 
-Both shipment events carry two properties: the order and the specific shipment. This is useful when an order has multiple packages and you need to know which one was created or delivered.
+Both shipment events carry two properties: the order and the specific shipment. This is useful when an order has multiple packages and you need to know which one was created or delivered. Both implement `ShouldDispatchAfterCommit`.
+
+`OrderShipmentDelivered` comes from `MarkShipmentDeliveredAction`, which the **Mark as delivered** action of the shipments list calls. Recording a **Delivered** status with **Add event** in the shipment panel updates the shipment and its items but does not dispatch it.
 
 ```php
 use Shopper\Core\Events\Orders\OrderShipmentDelivered;
@@ -154,10 +167,13 @@ Shipment events fire at the **package level**, order events fire at the **order 
 
 | Scenario | Events fired |
 |----------|-------------|
-| First package shipped (2 of 3 items) | `OrderShipmentCreated` |
-| Second package shipped (last item) | `OrderShipmentCreated`, `OrderShipped` |
+| Label created for the first package (2 of 3 items) | `OrderShipmentCreated` |
+| Label created for the second package (last item) | `OrderShipmentCreated` |
+| Last package picked up, every item now shipped | `OrderShipped` |
 | First package delivered | `OrderShipmentDelivered` |
-| Last package delivered | `OrderShipmentDelivered`, then `OrderCompleted` (if order is processing) |
+| Last package delivered | `OrderShipmentDelivered`, and the order `status` becomes `completed` if it was `processing` (no `OrderCompleted`) |
+
+`OrderShipped` needs every item shipped at the same time. If a package is delivered before the last one is picked up, the order goes from partially shipped to partially delivered and `OrderShipped` is not dispatched.
 
 ## Product Events
 
@@ -168,8 +184,10 @@ Product events are dispatched when products are created, updated, or deleted thr
 | Event | Payload | Trigger |
 |-------|---------|---------|
 | `ProductCreated` | `Product $product` | Product is created via admin |
-| `ProductUpdated` | `Product $product` | Product is updated via admin |
-| `ProductDeleted` | `Product $product` | Product is deleted via admin |
+| `ProductUpdated` | `Product $product` | Product **Overview** form is saved via admin |
+| `ProductDeleted` | `Product $product` | Product is deleted via admin, dispatched just before the delete |
+
+These events come from the admin actions, not from a model observer: `Product::query()->create()` or `$product->update()` in your own code dispatches nothing. Saving the other tabs of the product page (media, files, inventory, shipping, SEO) does not dispatch `ProductUpdated`.
 
 ```php
 use Shopper\Core\Events\Products\ProductCreated;
@@ -186,7 +204,7 @@ class SyncProductToCatalog
 ```
 
 <Note>
-All product events implement `ShouldDispatchAfterCommit`, so listeners run on the queue after the database transaction commits.
+All product events implement `ShouldDispatchAfterCommit`: inside a database transaction, they wait for the commit. Listeners run during the request unless they implement `ShouldQueue`.
 </Note>
 
 ## Example: Order Notification System
@@ -223,6 +241,8 @@ protected $listen = [
 A listener that sends a shipping confirmation:
 
 ```php
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Support\Facades\Mail;
 use Shopper\Core\Events\Orders\OrderShipped;
 
 class SendShippingConfirmation implements ShouldQueue
@@ -232,6 +252,10 @@ class SendShippingConfirmation implements ShouldQueue
         $order = $event->order;
 
         $order->load('customer', 'shippings.carrier');
+
+        if ($order->customer === null) {
+            return;
+        }
 
         Mail::to($order->customer->email)
             ->send(new OrderShippedMail($order));
@@ -247,9 +271,13 @@ Cart events are dispatched when a cart reaches a key state during the checkout p
 
 | Event | Payload | Trigger |
 |-------|---------|---------|
-| `CartCompleted` | `Cart $cart` | Cart is converted to an order |
-| `CouponApplied` | `Cart $cart`, `string $code` | A coupon code is successfully applied to the cart |
-| `CouponRemoved` | `Cart $cart`, `string $code` | A coupon code is removed from the cart |
+| `CartCompleted` | `Cart $cart`, `Order $order` | `CreateOrderFromCartAction` converts the cart to an order |
+| `CouponApplied` | `Cart $cart`, `string $code` | `CartManager::applyCoupon()` stores a code that matches an existing discount on the cart |
+| `CouponRemoved` | `Cart $cart` | `CartManager::removeCoupon()` clears the coupon code from the cart |
+
+`CouponRemoved` does not carry the removed code: the cart's `coupon_code` is already `null` when it fires.
+
+Cart events do not implement `ShouldDispatchAfterCommit`. `CartCompleted` is dispatched inside the checkout transaction, before the commit: a listener that runs during the request runs inside that transaction, and an exception it throws rolls the order back. A queued listener should implement `Illuminate\Contracts\Queue\ShouldQueueAfterCommit` so it never runs before the order is saved.
 
 Cart events are in the `Shopper\Cart\Events` namespace:
 
@@ -262,6 +290,7 @@ use Shopper\Cart\Events\CouponRemoved;
 ### Example: Sending a Cart Recovery Email on Coupon Removal
 
 ```php
+use Illuminate\Support\Facades\Mail;
 use Shopper\Cart\Events\CouponRemoved;
 
 class OfferAlternativeCoupon
@@ -269,7 +298,6 @@ class OfferAlternativeCoupon
     public function handle(CouponRemoved $event): void
     {
         $cart = $event->cart;
-        $removedCode = $event->code;
 
         $customer = $cart->customer;
 
@@ -282,9 +310,10 @@ class OfferAlternativeCoupon
 
 ## All Events Reference
 
-| Namespace | Event | Payload | Queued |
+| Namespace | Event | Payload | After commit |
 |-----------|-------|---------|--------|
 | `Events\Orders` | `OrderCreated` | `Order $order` | Yes |
+| `Events\Orders` | `OrderItemCreated` | `OrderItem $orderItem` | Yes |
 | `Events\Orders` | `OrderPaid` | `Order $order` | Yes |
 | `Events\Orders` | `OrderCompleted` | `Order $order` | Yes |
 | `Events\Orders` | `OrderShipped` | `Order $order` | Yes |
@@ -297,6 +326,6 @@ class OfferAlternativeCoupon
 | `Events\Products` | `ProductCreated` | `Product $product` | Yes |
 | `Events\Products` | `ProductUpdated` | `Product $product` | Yes |
 | `Events\Products` | `ProductDeleted` | `Product $product` | Yes |
-| `Cart\Events` | `CartCompleted` | `Cart $cart` | No |
+| `Cart\Events` | `CartCompleted` | `Cart $cart`, `Order $order` | No |
 | `Cart\Events` | `CouponApplied` | `Cart $cart`, `string $code` | No |
-| `Cart\Events` | `CouponRemoved` | `Cart $cart`, `string $code` | No |
+| `Cart\Events` | `CouponRemoved` | `Cart $cart` | No |

@@ -21,19 +21,19 @@ The relationship works like this:
 A variant's identity is the combination of its attribute values. The variant "Blue / Large" is defined by two values: Color = Blue and Size = Large. Shopper stores this through a pivot table that links variants to attribute values, so the system can look up which variant matches a customer's selection.
 
 <Note>
-  The parent product itself has no price or stock when it uses variants. All pricing and inventory queries go through the variants.
+  Read prices and stock from the variants, not from the parent product. Shopper does not prevent a price or stock on the parent: the admin hides the parent's Pricing tab for variant products, but its Inventory tab is still there.
 </Note>
 
 ## Model
 
 The model used is `Shopper\Models\ProductVariant`, which extends `Shopper\Core\Models\ProductVariant`. The core model provides the business logic, relationships, stock management, and pricing. The admin model adds media collections and conversions through Spatie MediaLibrary.
 
-The core model implements `Shopper\Core\Contracts\Priceable` and `Shopper\Core\Models\Contracts\ProductVariant`, and uses the following traits:
+The core model implements `Shopper\Core\Contracts\Priceable`, `Shopper\Core\Models\Contracts\ProductVariant` and `Shopper\Core\Contracts\Media\HasMedia`, and uses the following traits:
 
 | Trait | Purpose |
 |-------|---------|
-| `HasDimensions` | Weight, height, width, depth, volume with unit enums |
-| `HasMediaCollections` | Variant-specific images via Spatie MediaLibrary |
+| `HasDimensions` | Formatted `weight`, `height`, `width`, `depth` and `volume` accessors over the value and unit columns |
+| `HasMediaCollections` | Declares the gallery and thumbnail collections, which the admin model registers with Spatie MediaLibrary |
 | `HasPrices` | Multi-currency pricing through a polymorphic `prices` relationship |
 | `HasStock` | Inventory management through `inventory_histories` mutations |
 
@@ -63,6 +63,8 @@ Shopper resolves the variant class through this config key, so all internal quer
 
 ## Database Schema
 
+Table names take the `shopper.core.table_prefix` prefix (`sh_` by default), so the tables below are `sh_product_variants` and `sh_attribute_value_product_variant` on a default install.
+
 ### Product Variants Table
 
 | Column | Type | Nullable | Default | Description |
@@ -75,17 +77,17 @@ Shopper resolves the variant class through this config key, so all internal quer
 | `upc` | string | yes | null | Universal Product Code (unique) |
 | `allow_backorder` | boolean | no | false | Whether customers can order when out of stock |
 | `position` | integer | no | 1 | Display order among siblings |
-| `product_id` | bigint | no | - | Foreign key to the parent product |
+| `product_id` | bigint | yes | null | Foreign key to the parent product, set to null if the product row is deleted |
 | `weight_unit` | string | no | kg | Weight unit enum |
-| `weight_value` | decimal(10,2) | yes | null | Weight value |
+| `weight_value` | decimal(10,2) | yes | 0.00 | Weight value |
 | `height_unit` | string | no | cm | Height unit enum |
-| `height_value` | decimal(10,2) | yes | null | Height value |
+| `height_value` | decimal(10,2) | yes | 0.00 | Height value |
 | `width_unit` | string | no | cm | Width unit enum |
-| `width_value` | decimal(10,2) | yes | null | Width value |
+| `width_value` | decimal(10,2) | yes | 0.00 | Width value |
 | `depth_unit` | string | no | cm | Depth unit enum |
-| `depth_value` | decimal(10,2) | yes | null | Depth value |
+| `depth_value` | decimal(10,2) | yes | 0.00 | Depth value |
 | `volume_unit` | string | no | l | Volume unit enum |
-| `volume_value` | decimal(10,2) | yes | null | Volume value |
+| `volume_value` | decimal(10,2) | yes | 0.00 | Volume value |
 | `metadata` | json | yes | null | Additional custom data for your application |
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
@@ -101,6 +103,8 @@ This pivot table connects variants to their attribute values, defining which com
 | `id` | bigint | no | Primary key |
 | `value_id` | bigint | no | Foreign key to attribute value |
 | `variant_id` | bigint | no | Foreign key to variant |
+
+Both foreign keys cascade on delete: deleting a variant or an attribute value removes its pivot rows.
 
 ## Relationships
 
@@ -163,6 +167,13 @@ $variant->stockInventory($warehouseId);
 $variant->stockInventory($warehouseId, '2026-01-15');
 ```
 
+To check whether a quantity is available (one unit by default):
+
+```php
+$variant->inStock();
+$variant->inStock(3);
+```
+
 ### Modifying Stock
 
 To increase stock (for example, when receiving a shipment):
@@ -191,7 +202,7 @@ $variant->decreaseStock(
 );
 ```
 
-To set stock to an exact quantity (for example, after a physical inventory count). This calculates the delta from the current stock and creates a single mutation:
+To set stock to an exact quantity (for example, after a physical inventory count), use `setStock()`. It compares `newQuantity` with the variant's total stock across all locations, records the difference as a single mutation on the given location, and returns `null` when there is nothing to change. Use it for variants stocked in one location; with several locations, use `mutateStock()` or `decreaseStock()` instead.
 
 ```php
 $variant->setStock(
@@ -202,7 +213,7 @@ $variant->setStock(
 );
 ```
 
-To clear all stock history and optionally set a new starting quantity:
+To clear the stock history and optionally record a new starting quantity on one location (the new quantity is recorded only when you pass both `inventoryId` and `newQuantity`):
 
 ```php
 $variant->clearStock(
@@ -213,12 +224,12 @@ $variant->clearStock(
 ```
 
 <Warning>
-  `clearStock()` deletes all inventory history records for the variant. Use it only for resets or corrections, not for regular stock adjustments.
+  `clearStock()` deletes all inventory history records for the variant, on every location, even when you pass an `inventoryId`. Use it only for resets or corrections, not for regular stock adjustments.
 </Warning>
 
 ### Backorder
 
-The `allow_backorder` flag indicates whether customers can purchase this variant when it is out of stock. The `inStock()` method does not check this flag. It only checks whether quantity is available. Your storefront logic should combine both:
+The `allow_backorder` flag indicates whether customers can purchase this variant when it is out of stock. The `inStock()` method does not check this flag. It only checks whether quantity is available. The cart already skips its stock check for a variant with `allow_backorder` set (see [Stock Validation](/2.x/cart#stock-validation)). In your own storefront logic, combine both:
 
 ```php
 if ($variant->inStock() || $variant->allow_backorder) {
@@ -231,6 +242,7 @@ if ($variant->inStock() || $variant->allow_backorder) {
 When displaying a product page with multiple variants, accessing `$variant->stock` on each variant triggers an individual query. Use `loadCurrentStock()` to batch-load stock in a single query:
 
 ```php
+use Shopper\Models\Product;
 use Shopper\Models\ProductVariant;
 
 $product = Product::query()->with('variants')->find($id);
@@ -266,16 +278,16 @@ To get the price for the store's default currency:
 $price = $variant->getPrice();
 ```
 
-To get the price for a specific currency:
+To get the price for a specific currency code:
 
 ```php
 $price = $variant->getPrice('USD');
 ```
 
-The returned `Price` model contains three amount fields:
+`getPrice()` returns `null` when the variant has no price in that currency. The returned `Price` model contains three amount fields, stored as integers in cents (see [Money Storage Standard](/2.x/pricing#money-storage-standard)):
 
 ```php
-$price->amount;         // selling price, e.g. 2999
+$price->amount;         // selling price, e.g. 2999 for 29.99
 $price->compare_amount; // original/compare-at price, e.g. 3999
 $price->cost_amount;    // cost price for margin tracking, e.g. 1500
 ```
@@ -355,6 +367,14 @@ use Shopper\Core\Enum\Dimension\Volume;
 Volume::L    // l - Liters
 Volume::ML   // ml - Milliliters
 Volume::GAL  // gal - Gallons
+Volume::FLOZ // floz - Fluid ounces
+```
+
+Each dimension also has a formatted accessor that joins the value and the unit. It returns `null` when the value is `null`; a value left at its `0.00` default is still formatted, as `"0.00 kg"` for example:
+
+```php
+$variant->weight; // "250.00 g"
+$variant->height; // "70.00 cm"
 ```
 
 ## Creating Variants
@@ -370,16 +390,15 @@ $variant = app()->call(CreateNewVariant::class, ['data' => [
     'name' => 'Blue / Large',
     'sku' => 'TSHIRT-BLU-L',
     'product_id' => $product->id,
-    'position' => 1,
     'quantity' => 50,
     'values' => [$colorBlueValueId, $sizeLargeValueId],
     'prices' => [
-        ['amount' => 2999, 'currency_id' => $currencyId],
+        $currencyId => ['amount' => 2999, 'compare_amount' => 3999],
     ],
 ]]);
 ```
 
-This action wraps everything in a database transaction: it creates the variant, saves pricing, syncs attribute values, and sets initial stock on the default inventory location.
+This action wraps everything in a database transaction: it creates the variant after the product's last variant (any `position` you pass is replaced), saves one price per currency, syncs attribute values, and records `quantity` as initial stock on the [default inventory location](/2.x/locations#default-location). The `prices` array is keyed by currency ID, with amounts in cents. If no location is marked as default, the quantity is not recorded.
 
 ### Manual Creation
 
@@ -423,7 +442,7 @@ When a product has multiple options, you need to generate all possible combinati
 
 ### Permutation Helpers
 
-The `Arr` macro generates the cartesian product of option values:
+The `Shopper\Core\Macros\Arr` class (plain static methods, not a Laravel macro) generates the cartesian product of option values. `permutate()` throws an `InvalidArgumentException` when an option has no values:
 
 ```php
 use Shopper\Core\Macros\Arr;
@@ -451,7 +470,7 @@ $valueIds = Arr::getPermutationIds($permutations[0]);
 
 ### Bulk Save with SaveProductVariantsAction
 
-The `SaveProductVariantsAction` handles creating, updating, and deleting variants in a single transaction. Variants not present in the array are deleted, existing ones are updated, and new ones are created.
+The `SaveProductVariantsAction` handles creating, updating, and deleting variants in a single transaction. Variants not present in the array are deleted, existing ones are updated, and new ones are created. Every entry needs the `variant_id`, `name`, `sku`, `price` and `values` keys; `stock` is optional.
 
 ```php
 use Shopper\Actions\Store\Product\SaveProductVariantsAction;
@@ -461,7 +480,7 @@ $variants = [
         'variant_id' => null,
         'name' => 'Blue / Large',
         'sku' => 'TSHIRT-BLUE-LARGE',
-        'price' => 29.99,
+        'price' => 2999,
         'stock' => 100,
         'values' => [1, 5],
     ],
@@ -469,7 +488,7 @@ $variants = [
         'variant_id' => null,
         'name' => 'Blue / Medium',
         'sku' => 'TSHIRT-BLUE-MEDIUM',
-        'price' => 29.99,
+        'price' => 2999,
         'stock' => 50,
         'values' => [1, 4],
     ],
@@ -481,26 +500,37 @@ $savedVariants = app()->call(SaveProductVariantsAction::class, [
 ]);
 ```
 
-Pass an existing `variant_id` to update a variant instead of creating a new one. Any variant belonging to the product that is not in the array will be deleted.
+The action returns the same array with each `variant_id` filled in. The `price` is an amount in cents, saved for the store's default currency, and only when it is greater than 0.
+
+Pass an existing `variant_id` to update a variant instead of creating a new one: its price, stock and attribute values are updated, but its `name` and `sku` are kept. Any variant belonging to the product that is not in the array will be deleted, so an array without any `variant_id` deletes all the product's existing variants.
+
+<Warning>
+  A `stock` greater than 0 calls `clearStock()` on the variant, which deletes its stock history on every location, then records the quantity on the default inventory location.
+</Warning>
 
 ### MapProductOptions
 
-For products with existing attribute assignments, `MapProductOptions` builds the structured options array you can feed into `Arr::permutate()`:
+For products with existing attribute assignments, `MapProductOptions` builds the list of options and their values. Key it by option name to feed it into `Arr::permutate()`:
 
 ```php
+use Shopper\Core\Macros\Arr;
 use Shopper\Helpers\MapProductOptions;
 
-$options = MapProductOptions::generate($product);
+$options = collect(MapProductOptions::generate($product))
+    ->mapWithKeys(fn (array $option): array => [$option['name'] => $option['values']])
+    ->all();
+
+$permutations = Arr::permutate($options);
 ```
 
-This returns an array of options with their IDs, names, and available values based on the attributes already assigned to the product.
+`generate()` returns a list of options, each with its `id`, `key`, `name` and `values` (each value has an `id`, `key` and `value`), based on the attributes already assigned to the product. Attributes with a free-text type (text, number, rich text, date) are skipped.
 
 ## Retrieving Variants
 
-To get all variants for a product, ordered by position:
+To get all variants for a product, ordered by position (the `variants()` relationship already sorts by `position`):
 
 ```php
-$variants = $product->variants()->orderBy('position')->get();
+$variants = $product->variants;
 ```
 
 To find a variant by its SKU:
@@ -518,7 +548,6 @@ To load variants with their attribute values and parent attributes (for building
 ```php
 $variants = $product->variants()
     ->with('values.attribute')
-    ->orderBy('position')
     ->get();
 ```
 
@@ -529,26 +558,32 @@ $valueIds = [$colorBlueId, $sizeLargeId];
 
 $variant = $product->variants()
     ->whereHas('values', function ($q) use ($valueIds) {
-        $q->whereIn('id', $valueIds);
+        $q->whereKey($valueIds);
     }, '=', count($valueIds))
     ->first();
 ```
 
-To get the total stock across all variants for a product:
+Use `whereKey()` rather than `whereIn('id', ...)`: the query joins the pivot table, which also has an `id` column, so an unqualified `id` is ambiguous.
+
+To get the total stock across all variants for a product, batch-load the variants' stock first, otherwise `variants_stock` runs one stock query per variant:
 
 ```php
+use Shopper\Models\ProductVariant;
+
+ProductVariant::loadCurrentStock($product->variants);
+
 $product->variants_stock;
 ```
 
 ## Observer Behavior
 
-The `ProductVariantObserver` handles cascade cleanup when a variant is deleted. It removes all associated media files, prices, and inventory history records automatically.
+The `ProductVariantObserver` handles cascade cleanup when a variant is deleted. Together with Spatie MediaLibrary, which deletes the media files, it removes all associated media, prices, and inventory history records automatically. The database removes the attribute value pivot rows.
 
 ```php
 $variant->delete();
 ```
 
-You do not need to manually clean up related records before deleting a variant. If you extend the model and override the observer, call `parent::deleting()` to preserve this behavior.
+You do not need to manually clean up related records before deleting a variant. Shopper registers the observer on the class set in `shopper.models.variant`, so an extended model keeps this behavior. An observer you register on your own model runs alongside it.
 
 ## Components
 
@@ -574,9 +609,13 @@ return [
         'slide-overs.add-variant' => Livewire\SlideOvers\AddVariant::class,
         'slide-overs.update-variant' => Livewire\SlideOvers\UpdateVariant::class,
         'slide-overs.generate-variants' => Livewire\SlideOvers\GenerateVariants::class,
+        'products.pricing' => Components\Products\Pricing::class,
+        'slide-overs.manage-pricing' => Livewire\SlideOvers\ManagePricing::class,
     ],
 ];
 ```
+
+The variant edit page shares the `products.pricing` and `slide-overs.manage-pricing` components with products. The admin checks the [product variant permissions](/2.x/products#product-variants) before adding, editing, or deleting variants.
 
 ## Storefront Example
 
@@ -600,7 +639,6 @@ class ProductController extends Controller
 
         $variants = $product->variants()
             ->with(['values.attribute', 'media'])
-            ->orderBy('position')
             ->get();
 
         ProductVariant::loadCurrentStock($variants);
@@ -632,7 +670,7 @@ class ProductController extends Controller
 
         $variant = $product->variants()
             ->whereHas('values', function ($q) use ($valueIds) {
-                $q->whereIn('id', $valueIds);
+                $q->whereKey($valueIds);
             }, '=', count($valueIds))
             ->with('media')
             ->first();
@@ -645,10 +683,10 @@ class ProductController extends Controller
             'id' => $variant->id,
             'name' => $variant->name,
             'sku' => $variant->sku,
-            'price' => $variant->getPrice()?->amount,
+            'price' => $variant->getPrice()?->amount, // in cents
             'stock' => $variant->stock,
             'in_stock' => $variant->inStock(),
-            'image' => $variant->getFirstMediaUrl('images'),
+            'image' => $variant->getFirstMediaUrl(config('shopper.media.storage.thumbnail_collection')),
         ]);
     }
 }

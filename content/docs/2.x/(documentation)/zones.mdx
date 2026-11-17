@@ -1,13 +1,19 @@
 ---
 title: Zones
-description: "Define geographic zones for shipping, taxes, currencies, and payment methods."
+description: "Define geographic zones for shipping, currencies, and payment methods."
 ---
 
-Zones define geographic regions for your store. Each zone groups countries together and associates them with a [currency](/2.x/currencies), [carriers](/2.x/carriers), [payment methods](/2.x/payment-methods), and [tax rules](/2.x/taxes). When a customer checks out, Shopper resolves their zone from the shipping address and uses it to determine available shipping options, payment methods, and tax rates.
+Zones define geographic regions for your store. Each zone groups countries together and associates them with a [currency](/2.x/currencies), [carriers](/2.x/carriers) and [payment methods](/2.x/payment-methods). At checkout, your storefront finds the zone that contains the shipping address country, stores it on the cart, and passes it to the shipping and payment services to list the shipping options and payment methods available to the customer.
+
+Taxes do not use these zones. [Tax rules](/2.x/taxes) live on separate tax zones (`Shopper\Core\Models\TaxZone`), which Shopper resolves from the shipping address when it calculates the cart.
 
 ## Model
 
-The model used is `Shopper\Core\Models\Zone`. It uses the `HasSlug` trait for automatic slug generation. The model is not configurable via `config/shopper/models.php`.
+The model used is `Shopper\Core\Models\Zone`. The model is not configurable via `config/shopper/models.php`.
+
+It uses the `HasSlug` trait. When you set `slug`, the trait converts the value with `Str::slug()` and appends `-1`, `-2` and so on if another zone already uses it. The slug is not generated from the name when you leave it out, and the admin zones list uses it to identify each zone, so set one when you create zones in code. `Zone::findBySlug('europe')` returns the matching zone or throws a `ModelNotFoundException`.
+
+`$zone->isEnabled()` returns the value of `is_enabled`.
 
 ## Database Schema
 
@@ -15,10 +21,10 @@ The model used is `Shopper\Core\Models\Zone`. It uses the `HasSlug` trait for au
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
 | `name` | string | no | - | Zone name (unique) |
-| `slug` | string | yes | auto | URL-friendly identifier (unique) |
+| `slug` | string | yes | null | URL-friendly identifier (unique) |
 | `code` | string | yes | null | Short code identifier (unique) |
 | `is_enabled` | boolean | no | false | Zone visibility |
-| `currency_id` | bigint | yes | null | FK to currencies table |
+| `currency_id` | bigint | no | - | FK to currencies table (deleting the currency deletes the zone) |
 | `metadata` | jsonb | yes | null | Additional custom data |
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
@@ -33,26 +39,36 @@ The `zone_has_relations` pivot table connects zones to countries, carriers, paym
 | `zonable_type` | string | Morph type (Country, Carrier, PaymentMethod, Collection) |
 | `zonable_id` | bigint | FK to the related model |
 
+`zonable_type` holds the class name for countries, carriers and payment methods (for example `Shopper\Core\Models\Country`) and the `collection` morph alias for collections. Deleting a zone deletes its rows in this table.
+
 ## Relationships
+
+Discounts, orders and carts also have a nullable `zone_id` column and a `zone()` relation. Deleting a zone sets their `zone_id` to `null`.
 
 ### Currency
 
-Each zone is associated with one currency. This determines which currency is used for pricing and checkout in that zone.
+Each zone belongs to one currency, and `currency_id` is required. Shipping option prices in the zone and the amounts of discounts limited to the zone are in this currency. The cart does not take its currency from the zone: you set `currency_code` when you create the cart (see the [cart session helper](/2.x/cart#cart-session-helper)).
 
 ```php
 $zone->currency;       // Currency model
 $zone->currency_code;  // "EUR" (computed accessor)
+
+$currency->zone;       // a zone that uses this currency (HasOne)
 ```
+
+The `Currency` model has a global scope that hides disabled currencies. If you disable the currency of a zone, `$zone->currency` returns `null` and `$zone->currency_code` throws an error, so keep the currencies used by your zones enabled.
 
 ### Countries
 
-Zones group multiple countries together. When a customer enters a shipping address, Shopper resolves the zone by matching the country.
+Zones group multiple countries together. Shopper does not pick a zone on its own: your storefront matches the shipping address country to a zone (see [Retrieving Zones](/2.x/zones#retrieving-zones)).
 
 ```php
 $zone->countries;
 
 $zone->countries()->attach([$franceId, $germanyId, $belgiumId]);
 ```
+
+The zone form in the admin disables the countries that already belong to another zone, so each country belongs to one zone. The database does not enforce this rule: when you attach countries in code, keep each country in a single zone.
 
 ### Carriers
 
@@ -64,6 +80,8 @@ $zone->carriers;
 $zone->carriers()->attach([$colissimoId, $dhlId]);
 ```
 
+`CarrierRateService::getRatesForZone()` returns the rates of the enabled carriers of a zone (see [Getting Rates for a Zone](/2.x/carriers#getting-rates-for-a-zone)).
+
 ### Payment Methods
 
 Payment methods are scoped to zones. For example, iDEAL is only available in the Netherlands zone.
@@ -74,13 +92,17 @@ $zone->paymentMethods;
 $zone->paymentMethods()->attach([$stripeId, $idealId]);
 ```
 
+`PaymentProcessingService::getMethodsForZone()` returns the enabled payment methods of a zone whose driver is configured (see [Getting Available Payment Methods for a Zone](/2.x/payments#getting-available-payment-methods-for-a-zone)).
+
 ### Shipping Options
 
-Each zone has shipping options (carrier options with rates) available at checkout:
+Each zone has shipping options (`CarrierOption` records, each with a carrier and a price in cents) available at checkout:
 
 ```php
 $zone->shippingOptions;
 ```
+
+Delete the shipping options of a zone before you delete the zone: the `zone_id` foreign key on `carrier_options` has no cascade, so the database refuses to delete a zone that still has options.
 
 ### Collections
 
@@ -107,19 +129,21 @@ The Zone model provides computed attributes that return comma-separated names fo
 ```php
 $zone->countries_name;  // "France, Germany, Belgium"
 $zone->carriers_name;   // "Colissimo, DHL"
-$zone->payments_name;   // "Stripe, iDEAL"
+$zone->payments_name;   // "Stripe, PayPal"
 $zone->currency_code;   // "EUR"
 ```
 
+Country names come from the translation of the current locale. Each name goes through `ucwords()`, and an empty relation returns `N/A`. The three name attributes load their relation when you read them, so eager load `countries`, `carriers` and `paymentMethods` when you display them for a list of zones.
+
 ## HasZones Trait
 
-Models that can be scoped to zones use the `HasZones` trait. This is already applied to `PaymentMethod`, `Carrier`, and `Collection` models.
+Models that can be scoped to zones use the `HasZones` trait. This is already applied to the `Country`, `Carrier` and `PaymentMethod` models. The `Collection` model defines the same `zones()` relation itself.
 
 ```php
 use Shopper\Core\Models\Traits\HasZones;
 
-$model->zones;
-$model->zones()->attach([$zoneId1, $zoneId2]);
+$carrier->zones;
+$carrier->zones()->attach([$europeZoneId, $northAmericaZoneId]);
 ```
 
 ## Creating Zones
@@ -127,14 +151,18 @@ $model->zones()->attach([$zoneId1, $zoneId2]);
 To create a zone for the European market:
 
 ```php
-use Shopper\Core\Models\Zone;
 use Shopper\Core\Models\Country;
+use Shopper\Core\Models\Currency;
+use Shopper\Core\Models\Zone;
+
+$euro = Currency::query()->where('code', 'EUR')->firstOrFail();
 
 $zone = Zone::query()->create([
     'name' => 'Europe',
+    'slug' => 'europe',
     'code' => 'EU',
     'is_enabled' => true,
-    'currency_id' => $eurCurrency->id,
+    'currency_id' => $euro->id,
 ]);
 
 $countries = Country::query()
@@ -148,13 +176,17 @@ $zone->paymentMethods()->attach([$stripeId]);
 
 ## Retrieving Zones
 
-To find the zone for a customer's shipping address:
+To find the zone for the country of a customer's shipping address, then store it on the cart:
 
 ```php
+$countryId = $cart->shippingAddress()?->country_id;
+
 $zone = Zone::query()
     ->enabled()
     ->whereHas('countries', fn ($q) => $q->where('id', $countryId))
     ->first();
+
+$cart->update(['zone_id' => $zone?->id]);
 ```
 
 To get all enabled zones with their currencies:
@@ -186,6 +218,10 @@ return [
     'components' => [
         'settings.zones.detail' => Livewire\Components\Settings\Zones\Detail::class,
         'settings.zones.shipping-options' => Livewire\Components\Settings\Zones\ZoneShippingOptions::class,
+        'slide-overs.shipping-option-form' => Livewire\SlideOvers\ShippingOptionForm::class,
+        'slide-overs.zone-form' => Livewire\SlideOvers\ZoneForm::class,
     ],
 ];
 ```
+
+The zones page, the zone form and the shipping option actions require the `access_setting` permission.

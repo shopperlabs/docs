@@ -3,7 +3,7 @@ title: Dashboard
 description: Overview of the admin dashboard components, caching, access requirements, and customization options.
 ---
 
-The dashboard is the first screen after login. It shows store health at a glance: revenue trends, key metrics, recent orders, top products, and an onboarding guide that auto-dismisses once the store is configured.
+The dashboard is the first screen after login. It shows store health at a glance: revenue trends, key metrics, recent orders and top products. Until the store is configured, an onboarding guide takes the place of these widgets.
 
 <Frame>
   <img src="/images/v2/dashboard.png" alt="Shopper admin dashboard with stat cards, revenue chart, top products, and recent orders" />
@@ -13,13 +13,15 @@ The dashboard is the first screen after login. It shows store health at a glance
 
 ## Components
 
-The dashboard is composed of five Livewire components, each with independent caching and a focused responsibility.
+The dashboard is composed of five Livewire components, each with a focused responsibility. The four data widgets cache their data independently (see [Caching](#caching)).
+
+The revenue chart, the top selling products and the recent orders require the `browse_orders` permission: the dashboard does not render them for a user without it.
 
 ### RevenueChart
 
-Displays monthly revenue as a bar chart for the last 12 months. Data is grouped by month in a single aggregated query and cached with flexible TTL (fresh for 5 minutes, stale up to 30 minutes).
+Displays monthly revenue as a bar chart for the last 12 months, the current month included. Each bar is the sum of `price_amount` on paid orders in the selected currency, converted from cents for display (zero-decimal currencies such as XAF or JPY are shown as stored). Data is grouped by month in a single aggregated query and cached with flexible TTL (fresh for 5 minutes, stale up to 30 minutes). The component extends `ApexChartWidget` from the `leandrocfe/filament-apex-charts` package.
 
-The chart supports a currency filter. When you have multiple active currencies, a dropdown lets you switch between them. The Y-axis and tooltip are formatted using `Intl.NumberFormat` with the application locale, followed by the currency symbol.
+The chart supports a currency filter. It starts on the store default currency, and a dropdown lists the currencies enabled in your store settings to switch between them. The Y-axis and tooltip are formatted using `Intl.NumberFormat` with the application locale, followed by the currency symbol.
 
 The revenue query supports MySQL, PostgreSQL, and SQLite with database-specific date expressions.
 
@@ -29,24 +31,26 @@ Shows four summary cards comparing the current month to the previous month:
 
 | Card | Metric | Scope |
 |------|--------|-------|
-| Revenue | Sum of `price_amount` on paid orders | Current currency |
+| Revenue | Sum of `price_amount` on paid orders created this month | Store default currency |
 | Products | Total product count, monthly new products for trend | All types |
-| Orders | Count of paid orders, monthly count for trend | All currencies |
-| Customers | Count of users with the `user` role (the `customers` scope), monthly new customers for trend | All |
+| Orders | Total count of paid orders, monthly count for trend | All currencies |
+| Customers | Total count of users with the customer role (the `customers` scope, role name from `config('shopper.admin.roles.user')`, `user` by default), monthly new customers for trend | All |
 
-Each card shows the percentage change versus the previous month, with a green or red trend indicator. Cards link to their respective admin sections.
+Each card shows the percentage change versus the previous month, with a green or red trend indicator (gray at 0% when nothing changed, 100% when the previous month had nothing). Cards link to their respective admin sections.
+
+A card is shown only to users who can browse its section: `browse_orders` for Revenue and Orders, `browse_products` for Products, `browse_customers` for Customers.
 
 ### RecentOrders
 
-A table of the 7 most recent orders, excluding orders with Cancelled or Archived status. Each row shows the order number, first product with thumbnail, total amount, order status badge, and links to the order detail page.
+A table of the 7 most recent orders, whatever their payment status, excluding orders with Cancelled or Archived status. Each row shows the order number, first product with thumbnail (plus the count of other items), total amount, order status badge, and links to the order detail page.
 
 ### TopSellingProducts
 
-Ranks the top 6 products by total quantity sold across paid orders. Variant sales are aggregated back to the parent product. Each row shows the product thumbnail, name, total units sold, and average review score.
+Ranks the top 6 products by total quantity sold across all paid orders, with no date range. Variant sales are aggregated back to the parent product. Each row shows the product thumbnail, name, total units sold, and the average rating and count of its approved reviews.
 
 ### SetupGuide
 
-An interactive checklist that guides new stores through the essential configuration steps. It appears on first login and auto-detects completion by querying the database:
+An interactive checklist that guides new stores through the essential configuration steps. It takes the place of the dashboard widgets until it is completed or dismissed, and detects each step's completion by querying the database. A step is listed only for users who have its permission:
 
 <Frame>
   <img src="/images/v2/dashboard-setup-guide.png" alt="Shopper setup guide with progress bar and expandable steps" />
@@ -56,7 +60,7 @@ An interactive checklist that guides new stores through the essential configurat
 
 | Step | Completed when | Permission |
 |------|---------------|------------|
-| Add a product | At least one product exists | `add_products` |
+| Add your first product | At least one product exists | `add_products` |
 | Create a collection | At least one collection exists | `add_collections` |
 | Set up shipping zones | At least one enabled shipping zone exists | `access_setting` |
 | Set up payment methods | At least one enabled payment method exists | `access_setting` |
@@ -66,7 +70,7 @@ When all steps are complete, the guide saves a `setup_guide_done` setting and di
 
 ## Caching
 
-Each dashboard component caches its data independently. The cache keys and TTLs are:
+The four data widgets cache their data independently with Laravel's `Cache::flexible()`. During the fresh TTL the cached value is served as is. Between the fresh and the stale TTL, the cached value is still served and Laravel recomputes it after the response is sent. Past the stale TTL, the next request recomputes it. The setup guide is not cached. The cache keys and TTLs are:
 
 | Component | Cache key | Fresh TTL | Stale TTL |
 |-----------|-----------|-----------|-----------|
@@ -75,22 +79,26 @@ Each dashboard component caches its data independently. The cache keys and TTLs 
 | RecentOrders | `dashboard.orders:recent-ids` | 1 min | 5 min |
 | TopSellingProducts | `dashboard.products:top-selling` | 5 min | 30 min |
 
+RecentOrders caches only the order IDs: the orders themselves are loaded fresh on each render.
+
 To clear the dashboard cache manually (for example after a data import), flush the keys:
 
 ```php
 use Illuminate\Support\Facades\Cache;
 
-Cache::forget('dashboard:revenue:USD');
-Cache::forget('dashboard:stat-cards:en');
+Cache::forget('dashboard:revenue:'.shopper_currency());
+Cache::forget('dashboard:stat-cards:'.app()->getLocale());
 Cache::forget('dashboard.orders:recent-ids');
 Cache::forget('dashboard.products:top-selling');
 ```
 
+The revenue chart keeps one entry per currency shown in its filter, and the stat cards one entry per admin locale: forget the key of each currency and locale your team uses.
+
 ## Access Requirements
 
-The dashboard middleware checks two conditions before rendering the page. The user must be an administrator, a manager, or have the `access_dashboard` permission. The store must have the `email` and `street_address` settings configured (these are set during the initial store setup).
+The dashboard middleware (`Shopper\Http\Middleware\Dashboard`) checks two conditions before rendering the page. The user must have the administrator or manager role (role names from `config('shopper.admin.roles.admin')` and `config('shopper.admin.roles.manager')`), or the `access_dashboard` permission. The store must have the `email` and `street_address` settings configured (these are set during the initial store setup).
 
-The middleware runs on every page of the admin panel, not only the dashboard. If the settings are missing, it redirects to the store initialization page. If the user lacks permission, Shopper redirects to its forbidden page.
+The middleware runs on every authenticated page of the admin panel, not only the dashboard: your custom routes (`config('shopper.routes.custom_file')`) and add-on routes included. Only the initialization and forbidden pages skip it. If the user lacks permission, Shopper redirects to its forbidden page. If the settings are missing, it redirects to the store initialization page.
 
 ## Customizing the Dashboard
 
@@ -146,11 +154,24 @@ final class Dashboard extends Component
 }
 ```
 
+You can also extend `Shopper\Livewire\Pages\AbstractPageComponent`, which already sets this layout, and only pass the title with `->title()`.
+
 ### Overriding Individual Components
 
-If you want to replace a single widget (for example, swap the revenue chart for a custom report), override the dashboard Blade view.
+To replace a single widget (for example, swap the revenue chart for a custom report), map its Livewire alias to your own component in the `components` key of `config/shopper/components/dashboard.php`. Shopper registers the entries of this file after its built-in widgets, so your class wins:
 
-Shopper has no publish tag for its views. Copy `vendor/shopper/framework/resources/views/livewire/pages/dashboard.blade.php` to `resources/views/vendor/shopper/livewire/pages/dashboard.blade.php`: Laravel loads your copy instead of the package view. The view shows the setup guide until it is completed, then renders each widget with a Livewire tag that you can replace:
+```php
+'components' => [
+    'locale-switcher' => Components\LocaleSwitcher::class,
+    'dashboard.revenue-chart' => App\Livewire\Dashboard\SalesReport::class,
+],
+```
+
+The widget aliases are `setup-guide`, `dashboard.stat-cards`, `dashboard.revenue-chart`, `dashboard.top-selling-products` and `dashboard.recent-orders`.
+
+To change the layout or remove a widget, override the dashboard Blade view.
+
+Shopper has no publish tag for its views. Copy `vendor/shopper/framework/resources/views/livewire/pages/dashboard.blade.php` to `resources/views/vendor/shopper/livewire/pages/dashboard.blade.php`: Laravel loads your copy instead of the package view. The view shows the setup guide until it is completed or dismissed, then renders each widget with a Livewire tag that you can replace (simplified below: the file also holds the grid markup and the two dashboard render hooks):
 
 ```blade
 @if ($this->showSetupGuide)

@@ -3,7 +3,7 @@ title: Products
 description: Complete reference for the Product model, types, relationships, stock, pricing, and media.
 ---
 
-Products are the core of your e-commerce catalog. Each product has a type that determines its capabilities: a Standard product is a simple physical item, a Variant product has multiple options like size and color, a Virtual product is a digital download, and an External product links to an external URL.
+Products are the core of your e-commerce catalog. Each product has a type that determines its capabilities: a Standard product is a simple physical item, a Variant product has multiple options like size and color, a Virtual product is a digital download, and an External product is sourced from another supplier.
 
 ## How Products Work
 
@@ -13,16 +13,16 @@ Shopper uses a type-driven product system. When you create a product, you choose
 |------|----------|----------|------------|-------|----------|
 | Standard | Yes | No | Yes | On the product itself | A book, a poster, a mug |
 | Variant | Yes | Yes | Yes | On each variant | A t-shirt with sizes and colors |
-| Virtual | No | No | Yes | On the product itself | An ebook, a software license, a course |
-| External | No | No | No | No | An affiliate product hosted on another site |
+| Virtual | No | No | Yes | Not tracked | An ebook, a software license, a course |
+| External | No | No | No | Not tracked | A product sourced from a supplier, identified by the supplier's reference |
 
 **Standard** products hold their own price, stock, and media. They are the simplest product type and work for anything that does not need size/color options.
 
 **Variant** products are parents that hold the product description, images, and categories, but delegate pricing and stock to their child variants. Each variant represents a specific combination of options (e.g., "Blue / Large"). See the [Product Variants](/2.x/product-variants) documentation for details.
 
-**Virtual** products behave like Standard products except they skip shipping. The `files` media collection lets you attach downloadable files that customers receive after purchase.
+**Virtual** products behave like Standard products except they skip shipping and the cart does not check their stock. The `files` media collection holds the downloadable files your storefront delivers to customers after purchase.
 
-**External** products store a URL to an external site. They have no stock, no shipping, and no checkout flow in Shopper.
+**External** products are sourced from another supplier. The admin form asks for the supplier's identifier for the product, stored in `external_id`, and for the supplier when the supplier feature is enabled. They have no shipping and no attributes, and the cart does not check their stock.
 
 You can check a product's type and capabilities using the following methods:
 
@@ -35,13 +35,16 @@ $product->isExternal();
 $product->canUseShipping();
 $product->canUseAttributes();
 $product->canUseVariants();
+$product->tracksInventory();
 ```
+
+`tracksInventory()` returns `true` for Standard and Variant products only. For Virtual and External products, the cart skips the stock check and order creation does not reserve stock. You can still record stock movements on them.
 
 ## Model
 
-The model used is `Shopper\Models\Product`, which extends `Shopper\Core\Models\Product`. The core model provides the business logic, relationships, scopes, stock management, pricing, and reviews. The admin model adds media collections and conversions through Spatie MediaLibrary.
+The model used is `Shopper\Models\Product`, which extends `Shopper\Core\Models\Product`. The core model provides the business logic, relationships, scopes, stock management, pricing, and reviews, and declares the media collections. The admin model registers those collections and the image conversions with Spatie MediaLibrary.
 
-The product model uses `SoftDeletes`. Deleted products remain in the database and are excluded from queries automatically. The `publish()` scope filters by visibility and publication date, so storefront queries do not need to handle soft deletes manually.
+The product model uses `SoftDeletes`. A deleted product row stays in the database and Eloquent excludes it from queries automatically, so storefront queries do not need to filter soft-deleted products. When a product is deleted, the `ProductObserver` also permanently deletes its media records, its prices and its stock history.
 
 ### Extending the Model
 
@@ -71,7 +74,7 @@ return [
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
 | `name` | string | no | - | Product name |
-| `slug` | string | yes | auto | URL-friendly identifier (unique, auto-generated) |
+| `slug` | string | yes | null | URL-friendly identifier (unique). Any value you set is slugified and suffixed (`-1`, `-2`) when taken. The admin form fills it from the name |
 | `sku` | string | yes | null | Stock Keeping Unit (unique) |
 | `barcode` | string | yes | null | Product barcode (unique) |
 | `description` | longtext | yes | null | Full product description (rich text) |
@@ -79,23 +82,23 @@ return [
 | `type` | string | yes | null | Product type enum value |
 | `is_visible` | boolean | no | false | Visibility on storefront |
 | `featured` | boolean | no | false | Featured product flag |
-| `allow_backorder` | boolean | no | false | Allow adding to cart when out of stock |
+| `allow_backorder` | boolean | no | false | Allow adding to cart when out of stock. The admin has no field for it on products, set it in code |
 | `security_stock` | integer | yes | 0 | Minimum stock alert threshold |
-| `published_at` | datetime | no | now() | Publication date (supports scheduling) |
+| `published_at` | datetimeTz | no | migration date | Publication date (supports scheduling). The column default is the date the migration ran, so set it when you create a product |
 | `seo_title` | string(60) | yes | null | SEO meta title |
 | `seo_description` | string(160) | yes | null | SEO meta description |
-| `weight_unit` | string | yes | kg | Weight unit (kg, g, lbs) |
+| `weight_unit` | string | no | kg | Weight unit (kg, g, lbs) |
 | `weight_value` | decimal(10,2) | yes | 0.00 | Weight value |
-| `height_unit` | string | yes | cm | Height unit (m, cm, mm, ft, in) |
+| `height_unit` | string | no | cm | Height unit (m, cm, mm, ft, in) |
 | `height_value` | decimal(10,2) | yes | 0.00 | Height value |
-| `width_unit` | string | yes | cm | Width unit |
+| `width_unit` | string | no | cm | Width unit |
 | `width_value` | decimal(10,2) | yes | 0.00 | Width value |
-| `depth_unit` | string | yes | cm | Depth unit |
+| `depth_unit` | string | no | cm | Depth unit |
 | `depth_value` | decimal(10,2) | yes | 0.00 | Depth value |
-| `volume_unit` | string | yes | l | Volume unit (l, ml, gal, floz) |
+| `volume_unit` | string | no | l | Volume unit (l, ml, gal, floz) |
 | `volume_value` | decimal(10,2) | yes | 0.00 | Volume value |
 | `external_id` | string | yes | null | External system reference |
-| `metadata` | json | yes | null | Additional custom data |
+| `metadata` | jsonb | yes | null | Additional custom data |
 | `brand_id` | bigint | yes | null | Foreign key to brands |
 | `supplier_id` | bigint | yes | null | Foreign key to suppliers |
 | `deleted_at` | timestamp | yes | null | Soft delete timestamp |
@@ -133,7 +136,7 @@ $product->categories()->sync([$categoryId1, $categoryId2]);
 
 ### Collections
 
-Products can belong to multiple collections. Collections can also be automatic (rule-based), in which case the `ProductObserver` dispatches a `SyncProductWithCollectionsJob` when a product is saved to evaluate collection rules.
+Products can belong to multiple collections. Collections can also be automatic (rule-based): every time a product is saved, the `ProductObserver` queues a `SyncProductWithCollectionsJob` that evaluates the collection rules.
 
 ```php
 $product->collections;
@@ -153,7 +156,7 @@ $product->channels()->attach($channelId);
 
 ### Variants
 
-For products with `type = ProductType::Variant`, the `variants()` relationship returns all child variants. Each variant has its own SKU, price, stock, and dimensions.
+For products with `type = ProductType::Variant`, the `variants()` relationship returns all child variants, ordered by `position`. Each variant has its own SKU, price, stock, and dimensions.
 
 ```php
 $product->variants;
@@ -164,9 +167,13 @@ $product->variants()->create([
 ]);
 ```
 
-The `variants_stock` computed attribute returns the total stock across all variants.
+The `variants_stock` computed attribute returns the total stock across all variants. It adds up the stock of each variant, so batch-load that stock first: otherwise each variant runs its own query, or throws a `LazyStockLoadingException` when `ProductVariant::preventLazyStockLoading()` is enabled (see [Avoiding N+1 Queries](/2.x/products#avoiding-n1-queries)).
 
 ```php
+use Shopper\Models\ProductVariant;
+
+ProductVariant::loadCurrentStock($product->variants);
+
 $product->variants_stock;
 ```
 
@@ -174,7 +181,7 @@ See the [Product Variants](/2.x/product-variants) documentation for the full var
 
 ### Tags
 
-Products can have multiple tags for cross-cutting organization. Unlike categories (hierarchical) or collections (rule-based), tags are simple flat labels.
+Products can have multiple tags for cross-cutting organization. Unlike categories (hierarchical) or collections (manual or rule-based), tags are simple flat labels.
 
 ```php
 $product->tags;
@@ -200,12 +207,15 @@ Product attributes are accessed via the `options()` relationship. The name `opti
 $product->options;
 ```
 
-The pivot table stores the selected attribute value and an optional custom value for freeform input.
+Each pivot row stores either a selected attribute value (`attribute_value_id`, for checkbox, color picker and select attributes) or a freeform custom value (`attribute_custom_value`, for text, number, rich text and date attributes), never both. A checkbox or color picker attribute gets one row per selected value.
 
 ```php
-$product->options()->attach($attributeId, [
-    'attribute_value_id' => $valueId,
-    'attribute_custom_value' => 'Custom engraving text',
+$product->options()->attach($colorAttributeId, [
+    'attribute_value_id' => $navyBlueValueId,
+]);
+
+$product->options()->attach($engravingAttributeId, [
+    'attribute_custom_value' => 'Happy birthday, Anna',
 ]);
 ```
 
@@ -233,7 +243,7 @@ See the [Discounts](/2.x/discounts) documentation for details on discount rules 
 
 ### Published Products
 
-The `publish()` scope filters products that are visible and have a `published_at` date in the past or present. This is the primary scope for storefront queries.
+The `publish()` scope filters products where `is_visible` is `true` and the `published_at` date is today or earlier. This is the primary scope for storefront queries. It compares the date only, not the time, so a product scheduled for 18:00 today is already included in the morning.
 
 ```php
 use Shopper\Models\Product;
@@ -243,17 +253,17 @@ Product::query()->publish()->get();
 
 ### Filter by Channel
 
-The `forChannel()` scope filters products assigned to one or more sales channels.
+The `forChannel()` scope filters products assigned to one or more sales channels. Pass a channel ID or an array of channel IDs.
 
 ```php
 Product::query()->forChannel($channelId)->get();
 
-Product::query()->forChannel([$channel1, $channel2])->get();
+Product::query()->forChannel([$webChannelId, $mobileChannelId])->get();
 ```
 
 ### Publication Check
 
-The `isPublished()` method checks if a specific product is currently visible on the storefront.
+The `isPublished()` method checks if a specific product is currently visible on the storefront. Unlike the `publish()` scope, it compares the full `published_at` timestamp with the current time.
 
 ```php
 $product->isPublished();
@@ -267,7 +277,7 @@ Products support three media collections through [Spatie MediaLibrary](https://s
 |------------|-----------|----------|-------------|
 | Default gallery | `shopper.media.storage.collection_name` | Multiple files | Product gallery images |
 | Thumbnail | `shopper.media.storage.thumbnail_collection` | Single file | Main product image for listings |
-| `files` | - | Multiple files | Downloadable files for virtual products |
+| `files` | - | Multiple files | Downloadable files for virtual products. Accepts the mime types listed in `shopper.media.accepts_file_types` |
 
 To add a product thumbnail:
 
@@ -285,7 +295,7 @@ $collection = config('shopper.media.storage.collection_name');
 $product->addMedia($file)->toMediaCollection($collection);
 ```
 
-To retrieve the thumbnail URL with a specific conversion:
+Image conversions are defined in `shopper.media.conversions` (`large` at 800x800 and `medium` at 500x500 by default). To retrieve the thumbnail URL with a specific conversion:
 
 ```php
 $collection = config('shopper.media.storage.thumbnail_collection');
@@ -295,7 +305,7 @@ $url = $product->getFirstMediaUrl($collection, 'medium');
 
 ### Downloadable Files
 
-For virtual products (ebooks, software, courses), the `files` collection stores the downloadable assets that customers receive after purchase. Unlike the thumbnail and gallery collections, the `files` collection name is not configurable.
+For virtual products (ebooks, software, courses), the `files` collection stores the downloadable assets you deliver to customers after purchase. Shopper does not send them: your storefront decides when and how a customer downloads them. Unlike the thumbnail and gallery collections, the `files` collection name is not configurable.
 
 ```php
 $product->addMedia($pdfPath)->toMediaCollection('files');
@@ -319,6 +329,8 @@ To get the price for a specific currency:
 $price = $product->getPrice('USD');
 ```
 
+`getPrice()` returns `null` when the product has no price in that currency. Without an argument, it uses the store's default currency.
+
 To format the price for display, use the `shopper_money_format` helper. Prices are stored in cents.
 
 ```php
@@ -341,13 +353,17 @@ To get the current total stock across all locations:
 $product->stock;
 ```
 
-For variant products, use `variants_stock` to get the combined stock across all variants:
+For variant products, use `variants_stock` to get the combined stock across all variants, after batch-loading the stock of the variants:
 
 ```php
+use Shopper\Models\ProductVariant;
+
+ProductVariant::loadCurrentStock($product->variants);
+
 $product->variants_stock;
 ```
 
-To get stock at a specific point in time, useful for reporting:
+To get stock at a specific point in time, useful for reporting. A date string is read as midnight at the start of that day:
 
 ```php
 $product->getStock('2026-01-15');
@@ -358,6 +374,12 @@ To get stock for a specific inventory location:
 
 ```php
 $product->stockInventory($warehouseId);
+```
+
+To check that a quantity is available (the stock is above zero and at least the requested quantity):
+
+```php
+$product->inStock(3);
 ```
 
 To check the stock alert threshold:
@@ -381,6 +403,8 @@ $product->mutateStock(
 );
 ```
 
+`mutateStock()` and `decreaseStock()` also accept a `userId` (who made the change) and a `reference` model (for example, the order that caused the movement). Both are stored on the history record.
+
 To decrease stock (for example, when fulfilling an order):
 
 ```php
@@ -392,7 +416,7 @@ $product->decreaseStock(
 );
 ```
 
-To set stock to an exact quantity (for example, after a physical inventory count). This calculates the delta from the current stock and creates a single mutation:
+To set the product's total stock to an exact quantity. This calculates the delta from `$product->stock`, which sums all locations, and records that delta on the given location as a single mutation. It returns `null` when the stock already matches. With several locations, the given location does not end up at `newQuantity`: use `mutateStock()` or `decreaseStock()` to correct one location after a physical count.
 
 ```php
 $product->setStock(
@@ -426,6 +450,7 @@ Accessing `$product->stock` triggers an individual `SUM(quantity)` query on the 
 Use `loadCurrentStock()` to batch-load stock for an entire collection in a single query:
 
 ```php
+use Illuminate\Database\Eloquent\Collection;
 use Shopper\Models\Product;
 use Shopper\Models\ProductVariant;
 
@@ -433,14 +458,16 @@ $products = Product::query()->with('variants')->get();
 
 Product::loadCurrentStock($products);
 
-$variants = $products
-    ->filter(fn ($p) => $p->canUseVariants())
-    ->flatMap->variants;
+$variants = Collection::make(
+    $products->filter(fn ($p) => $p->canUseVariants())->flatMap->variants
+);
 
 ProductVariant::loadCurrentStock($variants);
 ```
 
-You can also batch-load stock for a specific inventory location:
+`loadCurrentStock()` expects an Eloquent collection. `flatMap` returns a base collection, which is why the variants are wrapped in `Collection::make()`.
+
+You can also batch-load stock for a specific inventory location. After this call, `$product->stock` returns the stock at that location, not the total:
 
 ```php
 Product::loadStockForInventory($products, $inventoryId);
@@ -452,9 +479,13 @@ Following the same pattern as Laravel's `Model::preventLazyLoading()`, you can c
 
 ```php
 use Shopper\Models\Product;
+use Shopper\Models\ProductVariant;
 
 Product::preventLazyStockLoading(! app()->isProduction());
+ProductVariant::preventLazyStockLoading(! app()->isProduction());
 ```
+
+Call it in the `boot()` method of a service provider. The setting is kept per model class, so enabling it on `Product` does not cover `ProductVariant`.
 
 ## Dimensions
 
@@ -468,11 +499,11 @@ $product->depth;
 $product->volume;
 ```
 
-For a product with `weight_value = 1.50` and `weight_unit = Weight::KG`, `$product->weight` returns `"1.50 kg"`.
+For a product with `weight_value = 1.50` and `weight_unit = Weight::KG`, `$product->weight` returns `"1.50 kg"`. Each attribute returns `null` when its value column is `null`.
 
 ## Events
 
-Product lifecycle events are dispatched automatically:
+The admin panel dispatches these events when a product is created, updated or deleted from its pages. Saving a product with Eloquent in your own code (`Product::query()->create()`, `$product->update()`) does not dispatch them:
 
 ```php
 use Shopper\Core\Events\Products\ProductCreated;
@@ -480,7 +511,7 @@ use Shopper\Core\Events\Products\ProductUpdated;
 use Shopper\Core\Events\Products\ProductDeleted;
 ```
 
-The `ProductObserver` also dispatches a `SyncProductWithCollectionsJob` every time a product is saved, which evaluates automatic collection rules to add or remove the product from rule-based collections.
+The `ProductObserver` also dispatches a `SyncProductWithCollectionsJob` every time a product is saved, from the admin or from your code, which evaluates automatic collection rules to add or remove the product from rule-based collections. The job is queued and runs after the database transaction commits, so automatic collections update only when a queue worker processes it (or immediately with the `sync` queue driver).
 
 For the full events reference including payload details, see the [Events](/2.x/events#product-events) page.
 
@@ -494,6 +525,7 @@ use Shopper\Core\Enum\ProductType;
 
 $product = Product::query()->create([
     'name' => 'Classic T-Shirt',
+    'slug' => 'classic-t-shirt',
     'sku' => 'TSHIRT-001',
     'type' => ProductType::Standard,
     'description' => 'A comfortable cotton t-shirt available in multiple colors.',
