@@ -15,6 +15,21 @@
     "permanent": false
   },
   {
+    "source": "/v2/inertia-starter-kit",
+    "destination": "/2.x/starter-kits",
+    "permanent": true
+  },
+  {
+    "source": "/v2/user-guide/catalog/products",
+    "destination": "/2.x/user-guide/catalog/products/overview",
+    "permanent": true
+  },
+  {
+    "source": "/v2/user-guide/catalog/variants",
+    "destination": "/2.x/user-guide/catalog/products/variant-product",
+    "permanent": true
+  },
+  {
     "source": "/v2/:path*",
     "destination": "/2.x/:path*",
     "permanent": true
