@@ -105,7 +105,7 @@ function Card({
         data-card
         className={clsx(
           'block h-full border bg-fd-card p-4 text-fd-card-foreground transition-colors',
-          href && 'hover:bg-fd-accent/80',
+          href && 'hover:bg-zinc-50 dark:hover:bg-white/3',
         )}
       >
         <div className="not-prose flex items-center gap-2">
