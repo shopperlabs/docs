@@ -1,0 +1,781 @@
+---
+title: Products
+description: The Product model of Shopper 3.x, its four types, relationships, scopes, stock ledger and media, and how to query products for a storefront.
+---
+
+A product is an item of the catalog: a T-shirt, an ebook, a pair of sneakers sourced from a partner. Each product has a type that decides what it can do. A standard product carries its own price and stock, a variant product is sold through variants such as "Blue / Large", a virtual product needs no shipping, and an external product comes from a supplier and cannot be added to a cart.
+
+The product holds what its variants share: the name, the description, the images, the brand, the categories, the SEO fields and the channels it is sold on. Prices have their own table, described on the [Pricing](/3.x/pricing) page, and variants have their own model, described on the [Product Variants](/3.x/product-variants) page.
+
+## Model
+
+The model is `Shopper\Core\Models\Product`. It implements the `Shopper\Core\Models\Contracts\Product` contract, which extends `Shopper\Core\Models\Contracts\Stockable`. The class configured by default under the `product` key of `config/shopper/models.php` is `Shopper\Models\Product`, from the admin package: it extends the core model and registers the media collections with Spatie Media Library. The examples on this page use that class.
+
+The traits of the core model change what you can do with a product:
+
+- `HasSlug` turns the `slug` you assign into a URL-safe value and appends `-1`, `-2` and so on when it is already taken. The slug is not derived from the name: pass one when you create a product.
+- `HasPublicId` fills `public_id` with a ULID when the product is created, as described in [Public IDs](/3.x/models#public-ids).
+- `HasPrices` adds the `prices` relation and `getPrice()`, covered in [Pricing](#pricing).
+- `HasStock` adds the stock ledger, covered in [Stock Management](#stock-management).
+- `HasDimensions` adds the formatted `weight`, `height`, `width`, `depth` and `volume` attributes.
+- `HasDiscounts` adds the `discounts` relation, and `InteractsWithReviews` adds the `ratings` relation.
+- `Searchable` (`Shopper\Core\Models\Traits\Searchable`, built on Laravel Scout) sends the product to the search index once it is visible and its publication date has passed. The [Search](/3.x/search) page covers the index.
+- `SoftDeletes` keeps a deleted product in the table with a `deleted_at` date and leaves it out of every query.
+
+### Extending the Model
+
+To add your own methods, extend the admin model:
+
+```php title="app/Models/Product.php"
+namespace App\Models;
+
+use Shopper\Models\Product as ShopperProduct;
+
+class Product extends ShopperProduct
+{
+    public function isNewArrival(): bool
+    {
+        return $this->published_at->isAfter(now()->subDays(30));
+    }
+}
+```
+
+Then point the configuration to your class:
+
+```php title="config/shopper/models.php"
+'product' => App\Models\Product::class,
+```
+
+Shopper binds the contract to the configured class, so `resolve(Shopper\Core\Models\Contracts\Product::class)`, `$variant->product`, `$brand->products` and `$category->products` all return your model. The [Models](/3.x/models#swapping-a-model) page explains how swapping works.
+
+## Database Schema
+
+Products are stored in the `sh_products` table (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)):
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `name` | string | no | - | Product name |
+| `slug` | string | yes | null | URL identifier, unique |
+| `sku` | string | yes | null | Stock keeping unit, unique |
+| `barcode` | string | yes | null | Barcode such as an ISBN or a UPC, unique |
+| `summary` | text | yes | null | Short description for listings |
+| `description` | longtext | yes | null | Full description, HTML from the admin editor |
+| `type` | string | yes | null | A `Shopper\Core\Enum\ProductType` value |
+| `is_visible` | boolean | no | false | Whether the product can be shown on a storefront |
+| `featured` | boolean | no | false | Flag for your home page or a "featured" block |
+| `allow_backorder` | boolean | no | false | Whether the product can be sold when it is out of stock |
+| `security_stock` | integer | yes | 0 | Safety stock threshold, see [Querying Stock](#querying-stock) |
+| `published_at` | datetimeTz | no | time the migration ran | Publication date; a future date schedules the product |
+| `seo_title` | string(60) | yes | null | Title for search engines |
+| `seo_description` | string(160) | yes | null | Description for search engines |
+| `weight_unit` | string | no | kg | Weight unit: `kg`, `g`, `lbs` |
+| `weight_value` | decimal(10,2) | yes | 0.00 | Weight |
+| `height_unit` | string | no | cm | Height unit: `m`, `cm`, `mm`, `ft`, `in` |
+| `height_value` | decimal(10,2) | yes | 0.00 | Height |
+| `width_unit` | string | no | cm | Width unit |
+| `width_value` | decimal(10,2) | yes | 0.00 | Width |
+| `depth_unit` | string | no | cm | Depth unit |
+| `depth_value` | decimal(10,2) | yes | 0.00 | Depth |
+| `volume_unit` | string | no | l | Volume unit: `l`, `ml`, `gal`, `floz` |
+| `volume_value` | decimal(10,2) | yes | 0.00 | Volume |
+| `external_id` | string | yes | null | Identifier of an external product at its supplier |
+| `metadata` | jsonb | yes | null | Your own data, cast to an array |
+| `brand_id` | bigint | yes | null | Brand, set to `null` when the brand is deleted |
+| `supplier_id` | bigint | yes | null | Supplier, set to `null` when the supplier is deleted |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+| `deleted_at` | timestamp | yes | null | Soft delete timestamp |
+
+The table has a composite index on `is_visible` and `published_at`, the two columns the `publish` scope filters on. The stock is not a column of this table: it lives in the stock ledger described in [Stock Management](#stock-management).
+
+## Relationships
+
+A product belongs to a brand and a supplier, has many variants, prices and reviews, and is linked to its categories, collections, channels, tags and related products through one polymorphic pivot table, `sh_product_has_relations`.
+
+### Brand
+
+Each product can belong to one brand through `brand_id`:
+
+```php
+$product->brand;
+```
+
+To list the products of a brand, use the `byBrand` scope, which takes brand slugs or public IDs and skips disabled brands:
+
+```php
+use Shopper\Models\Product;
+
+$products = Product::query()->publish()->byBrand('nike')->get();
+```
+
+The [Brands](/3.x/brands) page covers the brand model.
+
+### Categories
+
+Products and categories are linked through `sh_product_has_relations`. A product can be in several categories:
+
+```php
+$product->categories;
+
+$product->categories()->attach([$menswear->id, $tShirts->id]);
+$product->categories()->sync([$tShirts->id]);
+```
+
+The `category` and `categoryTree` scopes described in [Filtering the Catalog](#filtering-the-catalog) query products by category. The [Categories](/3.x/categories) page covers the category tree.
+
+### Collections
+
+Products are added to manual collections by hand and to automatic collections by their rules:
+
+```php
+$product->collections;
+
+$product->collections()->attach($summerSale->id);
+```
+
+Every time a product is saved, the `Shopper\Core\Observers\ProductObserver` queues a `SyncProductWithCollectionsJob` once the transaction commits. The job checks the product against the rules of every automatic collection, attaches it where it matches and detaches it where it no longer does. The [Collections](/3.x/collections) page covers the rules.
+
+### Channels
+
+A product is sold on the channels it is attached to:
+
+```php
+$product->channels;
+
+$product->channels()->attach($webStore->id);
+```
+
+A product attached to no channel is hidden from the Store API as soon as a request resolves a channel. The [Channels](/3.x/channels#assigning-products-to-channels) page covers the assignment and its effect on the catalog.
+
+### Variants
+
+For a product of the `Variant` type, `variants()` returns its variants, ordered by their `position` column. Each variant has its own SKU, prices, stock and media:
+
+```php
+$product->variants;
+
+$product->variants_stock;
+```
+
+The `variants_stock` attribute adds up the stock of every variant. The [Product Variants](/3.x/product-variants) page covers variants, their options and their generation.
+
+### Tags
+
+Tags are flat labels, stored in the `Shopper\Core\Models\ProductTag` model and linked through `sh_product_has_relations`:
+
+```php
+$product->tags;
+
+$product->tags()->attach([$organicCotton->id, $bestSeller->id]);
+```
+
+The [Product Tags](/3.x/product-tags) page covers tags.
+
+### Supplier
+
+A product can be linked to one supplier through `supplier_id`. External products use it to record where they come from:
+
+```php
+$product->supplier;
+```
+
+Suppliers are disabled on a fresh install. The [Suppliers](/3.x/suppliers) page covers the model and its feature flag.
+
+### Attributes (Options)
+
+The attributes of a product, such as the material of a T-shirt, are read through `options()`. The name `options` avoids a collision with the `$attributes` property of Eloquent models. The `sh_attribute_product` pivot table stores the selected attribute value, or a custom value for a free-text attribute:
+
+```php
+$product->options;
+
+$product->options()->attach($material->id, [
+    'attribute_value_id' => $cotton->id,
+]);
+
+$product->options()->attach($careInstructions->id, [
+    'attribute_custom_value' => 'Machine wash at 30 degrees',
+]);
+```
+
+The same rows are available as `Shopper\Models\AttributeProduct` models through `attributeProducts()`. Standard, variant and virtual products can have attributes; external products cannot. The [Attributes](/3.x/attributes) page covers attribute types and values.
+
+### Related Products
+
+Related products are other products you suggest next to this one, for cross-selling:
+
+```php
+$product->relatedProducts;
+
+$product->relatedProducts()->attach([$hoodie->id, $cap->id]);
+```
+
+The relation goes one way: attaching the hoodie to the T-shirt does not attach the T-shirt to the hoodie.
+
+### Discounts
+
+A discount can target specific products through the `sh_discountables` table:
+
+```php
+$product->discounts;
+```
+
+The [Discounts](/3.x/discounts) page covers discount rules and conditions.
+
+### Reviews
+
+Customer reviews are attached to the product through the polymorphic `reviewrateable` columns of the reviews table, and read through `ratings()`:
+
+```php
+$approved = $product->ratings()
+    ->where('approved', true)
+    ->latest()
+    ->get();
+```
+
+The [Reviews](/3.x/reviews) page covers ratings, approval and the rating helpers.
+
+## Query Scopes
+
+The model has scopes for the storefront: one for the publication state, one for channels, and a set of catalog filters that the Store API also uses.
+
+### Published Products
+
+The `publish` scope keeps the products whose `is_visible` flag is on and whose `published_at` date is in the past. This is the starting point of every storefront query:
+
+```php
+use Shopper\Models\Product;
+
+$products = Product::query()->publish()->get();
+```
+
+To schedule a product, set `published_at` to a future date: it stays out of the `publish` scope until that date. To hide a product without changing its date, turn `is_visible` off.
+
+### Filter by Channel
+
+The `channel` scope keeps the products attached to one channel, or to any of several channels. It takes channel IDs:
+
+```php
+use Shopper\Models\Product;
+
+$products = Product::query()
+    ->publish()
+    ->channel([$webStore->id, $mobileApp->id])
+    ->get();
+```
+
+### Publication Check
+
+The `isPublished()` method applies the same rule as the `publish` scope to a product you already loaded:
+
+```php
+if (! $product->isPublished()) {
+    abort(404);
+}
+```
+
+### Filtering the Catalog
+
+The following scopes back the filters of the Store API, and work the same in your own queries. The first five take one or more slugs or public IDs, and `option` takes the `key` or the `value` of attribute values. Each matches a product that has any of the values:
+
+| Scope | Keeps the products |
+|-------|--------------------|
+| `category(...)` | In one of these categories, skipping disabled categories and the categories under them |
+| `categoryTree(...)` | In one of these categories or in any enabled category below them |
+| `collection(...)` | In one of these collections, if the collection is published |
+| `byBrand(...)` | Of one of these brands, if the brand is enabled |
+| `tag(...)` | With one of these tags |
+| `option(...)` | With an attribute value, or a variant option value, whose `key` or `value` matches |
+| `availability($value = true)` | That can be bought now: in stock, on backorder or external. Pass `false` for the others |
+| `matching($term)` | Whose name, description or SKU contains the term, ignoring case |
+
+The scopes combine with each other:
+
+```php
+use Shopper\Models\Product;
+
+$products = Product::query()
+    ->publish()
+    ->categoryTree('menswear')
+    ->byBrand('nike', 'adidas')
+    ->option('blue')
+    ->availability()
+    ->paginate(24);
+```
+
+`matching` runs a `LIKE` query on the database. For a search engine with typo tolerance and facets, use the search index described on the [Search](/3.x/search) page.
+
+## How Products Work
+
+The `type` column holds a `Shopper\Core\Enum\ProductType` case, chosen when the product is created. The type decides which sections of the admin panel apply to the product and how the cart and the Store API treat it:
+
+| Type | Value | Shipping | Variants | Attributes | Stock checked at checkout | Use case |
+|------|-------|----------|----------|------------|---------------------------|----------|
+| Standard | `standard` | Yes | No | Yes | On the product | A book, a poster, a mug |
+| Variant | `variant` | Yes | Yes | Yes | On each variant | A T-shirt in several sizes and colors |
+| Virtual | `virtual` | No | No | Yes | No | An ebook, a software license |
+| External | `external` | No | No | No | No | A product sourced from another supplier |
+
+A standard product holds its own price, stock and media. It suits anything sold in a single version.
+
+A variant product holds the description, the images and the categories, and leaves prices and stock to its variants. The Store API refuses to add the product itself to a cart: the customer picks a variant. See [Product Variants](/3.x/product-variants).
+
+A virtual product skips shipping, and the cart sells it without checking stock. The admin panel adds a **Files** section to it, described in [Downloadable Files](#downloadable-files).
+
+An external product comes from a supplier. The admin panel asks for its `external_id`, the identifier of the product at the supplier, and for the supplier when the `supplier` feature is enabled. The Store API lists it as always in stock, and refuses to add it to a cart.
+
+The model has a method for each type, and one for each capability:
+
+```php
+$product->isStandard();
+$product->isVariant();
+$product->isVirtual();
+$product->isExternal();
+
+$product->canUseShipping();
+$product->canUseAttributes();
+$product->canUseVariants();
+$product->tracksInventory();
+```
+
+`canUseShipping()` and `tracksInventory()` are true for standard and variant products, `canUseAttributes()` for every type except external, and `canUseVariants()` for variant products only. The cart reads `tracksInventory()` to decide whether to check the stock.
+
+The admin panel can skip the type choice in the Add product form: the "Set as default product type" toggle stores the type in the `default_product_type` setting, listed in [Setting Keys](/3.x/settings#setting-keys).
+
+## Media
+
+Products have three media collections. The core model declares them, and `Shopper\Models\Product` registers them with Spatie Media Library, so `addMedia()`, `getMedia()` and `getFirstMediaUrl()` are available on that class and on any class that extends it. The core `Shopper\Core\Models\Product` class has no media methods.
+
+| Collection | Name | Files | Accepted types |
+|------------|------|-------|----------------|
+| Gallery | `shopper.media.storage.collection_name`, `uploads` by default | Several | `shopper.media.accepts_mime_types` |
+| Thumbnail | `shopper.media.storage.thumbnail_collection`, `thumbnail` by default | One | `shopper.media.accepts_mime_types` |
+| Files | `files`, not configurable | Several | `shopper.media.accepts_file_types` |
+
+Every collection is stored on the disk named in `shopper.media.storage.disk_name`, `public` by default. Each image gets the resized copies listed under `shopper.media.conversions`: `large` (800 by 800) and `medium` (500 by 500) by default.
+
+To add images, read the collection name from the configuration:
+
+```php
+$product->addMedia($request->file('image'))
+    ->toMediaCollection(config('shopper.media.storage.collection_name'));
+
+$product->addMediaFromUrl('https://cdn.example.com/classic-t-shirt-front.jpg')
+    ->toMediaCollection(config('shopper.media.storage.thumbnail_collection'));
+```
+
+Adding an image to the thumbnail collection replaces the previous one. To display the thumbnail, `getThumbnailUrl()` takes a conversion name. It returns the thumbnail, or the first gallery image when the product has no thumbnail, or the fallback image of `shopper_fallback_url()` when it has neither:
+
+```blade title="resources/views/products/_card.blade.php"
+<img src="{{ $product->getThumbnailUrl('medium') }}" alt="{{ $product->name }}">
+```
+
+Load the `media` relation with your products to avoid one query per product in a listing.
+
+### Downloadable Files
+
+The `files` collection holds the files of a virtual product: an ebook in PDF, a ZIP of fonts, a spreadsheet template. The admin panel shows the **Files** section on virtual products only. The accepted types come from `shopper.media.accepts_file_types`, which leaves out HTML, SVG and JavaScript so an uploaded file cannot run a script on your domain.
+
+```php
+$product->addMedia(storage_path('app/ebooks/sneaker-care-guide.pdf'))
+    ->toMediaCollection('files');
+
+$product->getMedia('files');
+```
+
+<Warning>
+  Shopper does not deliver these files after a purchase. They are stored on the media disk like the images, and the Store API returns their URLs in the `files` attribute of every virtual product, to any visitor. Keep content that customers pay for out of this collection, and serve it from your own code after checking the order.
+</Warning>
+
+## Pricing
+
+Products use the `HasPrices` trait. Prices are stored in the `sh_prices` table through the polymorphic `priceable` columns, with one price per currency. `getPrice()` returns the `Shopper\Core\Models\Price` of a currency, or of the store default currency when you pass none, and `null` when the product has no price in it:
+
+```php
+$price = $product->getPrice('USD');
+
+echo shopper_money_format($price->amount, $price->currency_code);
+```
+
+Amounts are stored in cents, as described on the [Money](/3.x/money) page. A variant product has no price of its own: each variant carries its prices. The [Pricing](/3.x/pricing) page covers compare-at and cost amounts and `resolvePrice()`.
+
+## Stock Management
+
+Products use the `HasStock` trait. Stock is not a column of the products table. Each stock movement is a row of `sh_inventory_histories`, the ledger, with the quantity added or removed, the location, the event label, the user and an optional reference such as an order. The `sh_stock_levels` table keeps the running quantity of each product at each location, and is updated in the same transaction as the ledger.
+
+Every movement belongs to an inventory location, so every method that writes stock takes an `inventoryId`. How a store spreads its stock over several locations is covered on the [Locations](/3.x/locations) page.
+
+Only standard and variant products track stock (`tracksInventory()`). When a customer adds one to a cart, the cart checks the stock unless the product allows backorders. For a variant product, stock is kept on each variant: see [Product Variants](/3.x/product-variants).
+
+### Querying Stock
+
+The `stock` attribute returns the current quantity across every location, read from `sh_stock_levels`:
+
+```php
+$product->stock;
+
+$product->inStock(2);
+```
+
+`inStock()` takes the quantity a customer wants, `1` by default, and returns `true` when the stock covers it. It ignores `allow_backorder`: check that flag yourself when you sell on backorder.
+
+To read the stock at one location, or at a past date, pass the location ID or the date. A date replays the ledger up to that moment, which is useful for reports:
+
+```php
+$product->stockInventory($warehouse->id);
+
+$product->getStock('2026-01-15');
+$product->getStock(now()->subDays(7));
+$product->stockInventory($warehouse->id, '2026-01-15');
+```
+
+The ledger itself is the `inventoryHistories` relation:
+
+```php
+$movements = $product->inventoryHistories()
+    ->with('inventory')
+    ->latest()
+    ->take(20)
+    ->get();
+```
+
+The `security_stock` column holds the safety stock set in the admin panel. Shopper stores it and sends no alert when the stock falls below it: compare it in your own code, such as a scheduled command that emails the team.
+
+### Modifying Stock
+
+To add stock, for example when a shipment arrives at the warehouse, use `mutateStock()`:
+
+```php
+use Shopper\Core\Models\Inventory;
+
+$warehouse = Inventory::query()->default()->first();
+
+$product->mutateStock(
+    inventoryId: $warehouse->id,
+    quantity: 50,
+    event: 'Shipment received',
+    description: 'Purchase order 12345, spring restock',
+    userId: auth()->id(),
+);
+```
+
+To remove stock, use `decreaseStock()`. It always records a negative quantity, whatever the sign you pass. The `reference` argument links the movement to the model that caused it:
+
+```php
+$product->decreaseStock(
+    inventoryId: $warehouse->id,
+    quantity: 2,
+    event: 'Damaged in storage',
+    reference: $order,
+);
+```
+
+To set the stock to an exact quantity after a physical count, use `setStock()`. It compares the new quantity with the total stock of the product across every location, and writes the difference to the location you pass. It returns `null` and writes nothing when the quantities are equal:
+
+```php
+$product->setStock(
+    newQuantity: 75,
+    inventoryId: $warehouse->id,
+    event: 'Inventory count',
+);
+```
+
+On a store with several locations, the result of `setStock()` is the total you pass, not the quantity at that location. Use `mutateStock()` with the difference you computed from `stockInventory()` to correct a single location.
+
+To erase the ledger and start again, optionally with a new quantity at one location, use `clearStock()`:
+
+```php
+$product->clearStock(
+    inventoryId: $warehouse->id,
+    newQuantity: 100,
+    event: 'Stock reset',
+);
+```
+
+<Warning>
+  `clearStock()` deletes every ledger row and every stock level of the product, at every location. Use it for resets and corrections, never for regular adjustments.
+</Warning>
+
+### Avoiding N+1 Queries
+
+Reading `$product->stock` runs one query. In a loop over a listing, that is one query per product. `loadCurrentStock()` loads the stock of a whole collection in one query:
+
+```php
+use Shopper\Models\Product;
+
+$products = Product::query()->publish()->get();
+
+Product::loadCurrentStock($products);
+```
+
+Both methods take an Eloquent collection, and variants have the same methods. To load the stock of one location instead of the total, use `loadStockForInventory()`:
+
+```php
+Product::loadStockForInventory($products, $warehouse->id);
+```
+
+### Preventing Lazy Stock Loading
+
+Following the pattern of Laravel's `Model::preventLazyLoading()`, you can make every unplanned stock read fail during development. Once enabled, reading `$product->stock` on a product whose stock was not loaded in bulk throws a `Shopper\Core\Exceptions\LazyStockLoadingException`:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Shopper\Models\Product;
+
+public function boot(): void
+{
+    Product::preventLazyStockLoading(! app()->isProduction());
+}
+```
+
+## Dimensions
+
+The `*_value` columns hold the dimensions used for shipping, and the `*_unit` columns hold their unit, cast to the `Weight`, `Length` and `Volume` enums of the `Shopper\Core\Enum\Dimension` namespace. The `HasDimensions` trait adds one attribute per dimension that returns the value and its unit as a string, or `null` when the value is empty:
+
+```php
+$product->weight;
+$product->height;
+$product->width;
+$product->depth;
+$product->volume;
+```
+
+For a product with `weight_value` set to `1.50` and `weight_unit` set to `kg`, `$product->weight` returns `"1.50 kg"`. The admin panel shows the **Shipping** section, where these fields are edited, on standard and variant products only.
+
+## SEO Fields
+
+The `seo_title` and `seo_description` columns hold the title and the description a storefront puts in the page head. They are limited to 60 and 160 characters, the lengths search engines display. The admin panel edits them, with the `metadata` key-value pairs, in the **SEO** section of the product. Fall back to the name and the summary when they are empty:
+
+```blade title="resources/views/products/show.blade.php"
+<title>{{ $product->seo_title ?? $product->name }}</title>
+<meta name="description" content="{{ $product->seo_description ?? $product->summary }}">
+```
+
+## Configuration
+
+Products have no feature flag: the products section of the admin panel is always on. The flags of `config/shopper/features.php` hide the matching fields and sections of the product editor: `brand`, `category`, `collection`, `tag`, `attribute` and `supplier`, the only one disabled on a fresh install. See [Feature Flags](/3.x/configuration#feature-flags).
+
+The model is swapped through the `product` key of `config/shopper/models.php`, as shown in [Extending the Model](#extending-the-model).
+
+Media settings live in `config/shopper/media.php`:
+
+| Key | Default | Used for |
+|-----|---------|----------|
+| `storage.collection_name` | `uploads` | Name of the gallery collection |
+| `storage.thumbnail_collection` | `thumbnail` | Name of the thumbnail collection |
+| `storage.disk_name` | `public` | Disk of every product media, files included |
+| `accepts_mime_types` | JPEG, PNG, WebP, AVIF | Images accepted in the gallery and the thumbnail |
+| `accepts_file_types` | PDF, ZIP, RAR, 7z, Word, Excel, text, CSV | Files accepted in the `files` collection |
+| `max_size.thumbnail` | `1024` | Maximum size of a thumbnail upload in the admin panel, in kilobytes |
+| `max_size.images` | `2048` | Maximum size of a gallery image upload in the admin panel, in kilobytes |
+| `conversions` | `large`, `medium` | Resized copies generated for each image |
+
+The pages and sections of the product editor are Livewire components you can replace. `php artisan shopper:component:publish product` creates `config/shopper/components/product.php`, as described in [Components](/3.x/configuration#components).
+
+## Creating Products
+
+Create the product, then attach what the admin panel would attach. This creates a standard Classic T-Shirt with a price, a category and a channel:
+
+```php
+use Shopper\Core\Enum\ProductType;
+use Shopper\Core\Models\Channel;
+use Shopper\Core\Models\Currency;
+use Shopper\Models\Product;
+
+$product = Product::query()->create([
+    'name' => 'Classic T-Shirt',
+    'slug' => 'classic-t-shirt',
+    'sku' => 'TSHIRT-001',
+    'type' => ProductType::Standard,
+    'summary' => 'A heavyweight cotton T-shirt.',
+    'is_visible' => true,
+    'published_at' => now(),
+    'brand_id' => $nike->id,
+]);
+
+$product->prices()->create([
+    'amount' => 2999,
+    'currency_id' => Currency::query()->where('code', 'USD')->value('id'),
+]);
+
+$product->categories()->attach($tShirts->id);
+
+$product->channels()->attach(Channel::query()->default()->value('id'));
+```
+
+Then add its first stock and its thumbnail:
+
+```php
+use Shopper\Core\Models\Inventory;
+
+$product->mutateStock(
+    inventoryId: Inventory::query()->default()->value('id'),
+    quantity: 100,
+    event: 'Initial stock',
+);
+
+$product->addMediaFromUrl('https://cdn.example.com/classic-t-shirt.jpg')
+    ->toMediaCollection(config('shopper.media.storage.thumbnail_collection'));
+```
+
+A product created in code differs from one created in the admin panel in four ways:
+
+- `is_visible` is `false` unless you set it, and `published_at` takes the column default, the time the migration ran. Set both.
+- The product is attached to no channel unless you attach it, and disappears from a Store API catalog that resolves a channel.
+- The slug stays `null` unless you pass one, and the Store API finds products by slug.
+- No `ProductCreated` event is dispatched. See [Events](#events).
+
+Scout indexes the product on save once it is visible and its publication date has passed, and the observer queues the automatic collection sync. For many products at once, the CSV import of the admin panel creates them with their prices, stock and images, as described on the [Import](/3.x/import) page.
+
+## Retrieving Products
+
+A storefront starts from the `publish` scope, adds the filters of the page, and loads the relations it displays. This controller lists the products of a category and of its subcategories:
+
+```php title="app/Http/Controllers/CategoryController.php"
+namespace App\Http\Controllers;
+
+use Illuminate\Contracts\View\View;
+use Shopper\Models\Product;
+
+class CategoryController extends Controller
+{
+    public function show(string $slug): View
+    {
+        $products = Product::query()
+            ->publish()
+            ->categoryTree($slug)
+            ->with(['brand', 'media', 'prices.currency'])
+            ->latest('published_at')
+            ->paginate(24);
+
+        Product::loadCurrentStock($products->getCollection());
+
+        return view('categories.show', ['products' => $products]);
+    }
+}
+```
+
+To load the page of one product, filter on the slug after the `publish` scope, so an unpublished product answers 404:
+
+```php
+$product = Product::query()
+    ->publish()
+    ->where('slug', 'classic-t-shirt')
+    ->with([
+        'brand',
+        'categories',
+        'variants.prices.currency',
+        'relatedProducts' => fn ($query) => $query->publish(),
+    ])
+    ->firstOrFail();
+```
+
+`Product::findBySlug('classic-t-shirt')` also throws a `ModelNotFoundException` when no product matches, but it ignores the publication state: keep it for back-office code.
+
+To fill a home page block with featured products:
+
+```php
+$featured = Product::query()
+    ->publish()
+    ->where('featured', true)
+    ->latest('published_at')
+    ->take(8)
+    ->get();
+```
+
+Code that must honor a swapped model, such as a package or a shared action, resolves the class from the contract, as described in [Resolving Models in Your Code](/3.x/models#resolving-models-in-your-code):
+
+```php
+use Shopper\Core\Models\Contracts\Product;
+
+$product = resolve(Product::class)::query()
+    ->publish()
+    ->where('slug', 'classic-t-shirt')
+    ->firstOrFail();
+```
+
+## Updating Products
+
+Update the columns with `update()` and the links with the relations:
+
+```php
+$product->update([
+    'summary' => 'A heavyweight organic cotton T-shirt.',
+    'published_at' => now()->addWeek(),
+]);
+
+$product->categories()->sync([$tShirts->id, $organic->id]);
+$product->channels()->syncWithoutDetaching([$mobileApp->id]);
+```
+
+Each save updates the search index for a visible, published product and queues the automatic collection sync. Like `create()`, `update()` dispatches no event: the admin panel dispatches `ProductUpdated` from the Overview form of the product editor only.
+
+## Deleting Products
+
+Products are soft deleted: `delete()` sets `deleted_at`, and `restore()` brings the row back.
+
+```php
+$product->delete();
+```
+
+<Warning>
+  Deleting a product runs the `deleting` hook of `ProductObserver`, which deletes its media and its prices and clears its stock ledger at every location, even though the product row is only soft deleted. `restore()` brings the product back without them.
+</Warning>
+
+## Events
+
+Product events live in `Shopper\Core\Events\Products`: `ProductCreated`, `ProductUpdated`, `ProductDeleted` and `ProductImportCompleted`. The first three are dispatched after the database transaction commits. The admin panel and the CSV import dispatch them; no observer does, so `Product::create()` in your own code dispatches nothing.
+
+When your code creates products that listeners or webhooks must see, dispatch the event yourself:
+
+```php
+use Shopper\Core\Events\Products\ProductCreated;
+
+event(new ProductCreated($product));
+```
+
+The [Events](/3.x/events#product-events) page lists when each event fires and what it carries. The events are also sent as the `product.created`, `product.updated` and `product.deleted` [webhooks](/3.x/webhooks).
+
+## Permissions
+
+The admin panel checks these permissions on the product pages:
+
+| Permission | Checked for |
+|------------|-------------|
+| `products.browse` | The product list |
+| `products.create` | The Add product form and the CSV import |
+| `products.edit` | Every section of the product editor |
+| `products.delete` | Deleting a product |
+
+`products.read` is seeded and not checked by the admin panel. Variants have their own `products.variants.*` permissions, removing an attribute from a product needs `attributes.delete`, and the "Set as default product type" toggle needs `system.settings`. The [Access Control](/3.x/acl#access-by-section) page lists every permission by section.
+
+## In the Admin
+
+The **Products** page lists the products with their thumbnail, type, SKU, brand, stock, visibility and publication date, and filters them by name, type, visibility, sales channel and publication date. The **Add product** form walks through the type, the general information, the brand, categories, channels and collections, the images, and the SKU, barcode and initial quantity, which goes to the default location. The product editor has an **Overview**, **Media**, **Stock & Inventory**, **SEO** and **Related Products** section for every product, plus **Attributes**, **Variants**, **Pricing**, **Shipping** and **Files** depending on the type. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API exposes products read-only, and only published products:
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /store/products` | The published products, paginated |
+| `GET /store/products/{slug}` | One published product, or a 404 |
+| `GET /store/products/{slug}/reviews` | The approved reviews of the product |
+
+A product resource has the `products` type and its public ID as `id`. Its attributes are the name, slug, SKU, barcode, summary, description, `featured`, type, publication date, SEO fields, metadata, images, thumbnail, prices in every enabled currency and calculated price in the request currency (none for a variant product), and the stock: `stock` and `in_stock` for a standard or virtual product, `in_stock` alone for a variant or external product. A virtual product adds its `files`, an external product its `external_id`.
+
+The list endpoint accepts these parameters. The filters, sorts and includes other than `currency`, `price_min` and `price_max` are set under `resources.product` in `config/shopper/api.php`, so you can add or remove them:
+
+| Parameter | Values |
+|-----------|--------|
+| `filter[...]` | `name`, `sku`, `q` (the `matching` scope), `featured`, `in_stock` (the `availability` scope), `category`, `category_tree`, `collection`, `brand`, `tag`, `option`, `currency`, `price_min`, `price_max` |
+| `sort` | `name`, `created_at`, `published_at`, `price` (prefix with `-` for descending) |
+| `include` | `brand`, `variants`, `categories`, `collections`, `options`, `tags`, `relatedProducts`, `rating`, `price_range` |
+
+```bash
+curl "https://example.com/store/products?filter[category_tree]=menswear&filter[in_stock]=true&sort=-published_at&include=brand" \
+  -H "X-Shopper-Channel: web-store"
+```
+
+The `X-Shopper-Channel` header limits the catalog to the products of that channel, as described in [The Store API](/3.x/channels#the-store-api) section of the channels page. A `price` sort or a price filter needs a currency: `filter[currency]`, the currency of the customer's zone, or the store default. The [Storefront](/3.x/storefront) section covers the Store API.

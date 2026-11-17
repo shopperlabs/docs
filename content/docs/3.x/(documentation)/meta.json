@@ -21,6 +21,18 @@
     "channels",
     "acl",
     "events",
-    "settings"
+    "settings",
+    "---Catalog---",
+    "products",
+    "product-variants",
+    "pricing",
+    "product-tags",
+    "brands",
+    "categories",
+    "collections",
+    "attributes",
+    "reviews",
+    "suppliers",
+    "search"
   ]
 }

@@ -1,0 +1,626 @@
+---
+title: Categories
+description: The Category model in Shopper, the category tree and its visibility rules, media and SEO, and querying a category with its products and descendants.
+---
+
+Categories organize the catalog into a tree that customers browse: Electronics, then Computers, then Laptops. A category can have a parent and any number of children, with no depth limit, and a product can belong to several categories at once. A storefront builds its navigation menu, its category pages and its breadcrumbs from this tree.
+
+## Model
+
+The model configured for categories is `Shopper\Models\Category`. It extends `Shopper\Core\Models\Category` and implements the `Shopper\Core\Models\Contracts\Category` contract. The core class holds the columns, the tree and the scopes; the admin class adds the media collections and image conversions, as described in [Core Models and Admin Models](/3.x/models#core-models-and-admin-models).
+
+Five traits of the core class change what you can do with a category:
+
+- `HasRecursiveRelationships`, from the [laravel-adjacency-list](https://github.com/staudenmeir/laravel-adjacency-list) package, adds the tree relationships and scopes listed in [Available Tree Methods](#available-tree-methods).
+- `HasSlug` turns the `slug` you assign into a URL-safe value and appends `-1`, `-2` and so on when it is already taken. Child categories follow an extra rule, described in [Custom Paths & Slug Behavior](#custom-paths--slug-behavior).
+- `HasPublicId` fills `public_id` with a ULID when the category is created. The Store API returns it as the category `id`.
+- `HasMediaCollections` declares the image collections described in [Media](#media).
+- `Searchable` sends visible categories to the search index. The [Search](/3.x/search) page covers indexing.
+
+### Extending the Model
+
+To add your own methods, extend the admin class:
+
+```php title="app/Models/Category.php"
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Models\Category as ShopperCategory;
+
+class Category extends ShopperCategory
+{
+    #[Scope]
+    protected function featured(Builder $query): void
+    {
+        $query->where('metadata->featured_on_homepage', true);
+    }
+}
+```
+
+Then point the `category` key of the configuration to your class:
+
+```php title="config/shopper/models.php"
+'category' => App\Models\Category::class,
+```
+
+The [Models](/3.x/models#swapping-a-model) page explains how swapping works.
+
+## Database Schema
+
+Categories are stored in the `sh_categories` table (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)):
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `name` | string | no | - | Category name |
+| `slug` | string | yes | null | URL identifier, unique across all categories |
+| `description` | longtext | yes | null | Category description, HTML from the admin rich editor |
+| `position` | smallint (unsigned) | no | 0 | Order among the categories of the same parent |
+| `is_enabled` | boolean | no | false | Whether the category is shown on the storefront |
+| `seo_title` | string(60) | yes | null | Title for search engines |
+| `seo_description` | string(160) | yes | null | Description for search engines |
+| `metadata` | jsonb | yes | null | Your own data, cast to an array |
+| `parent_id` | bigint | yes | null | Parent category. Deleting the parent sets it to `null` |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+The slug of a top-level category is not derived from the name in code. The admin form fills it from the name when the field is left empty; when you create a top-level category in your own code, pass a slug, because the Store API finds categories by their slug.
+
+## Hierarchical Structure
+
+Each category stores the ID of its parent in `parent_id`, and a category without a parent sits at the top of the tree. Nothing limits the depth:
+
+```text
+Electronics
+    Computers
+        Laptops
+        Desktops
+    Phones
+        Smartphones
+    Audio
+```
+
+Products are attached to any category of the tree, at any depth. Shopper does not copy a product to the parents of its category: browsing Electronics returns the products of Laptops only when you query the whole branch, as shown in [Working with Products](#working-with-products).
+
+### Visibility and Depth
+
+A category is visible to customers when it is enabled and every one of its ancestors is enabled too. Disabling Computers hides Laptops and Desktops from the storefront, even though both stay enabled in the admin panel.
+
+`Shopper\Core\Queries\CategoryTree` applies this rule. It reads the `id`, `parent_id` and `is_enabled` columns of every category, then keeps the depth of each visible category (0 for a top-level category) and the list of hidden ones. The Store API, the `category` and `categoryTree` product scopes and the search index all read it, so a hidden category is never returned, filtered on or indexed:
+
+```php
+use Shopper\Core\Queries\CategoryTree;
+
+$tree = resolve(CategoryTree::class);
+
+$tree->depth($laptops->id);
+$tree->hiddenIds();
+```
+
+`depth()` returns `null` for a hidden category. `enabledSubtreeIds()`, on the model, returns the IDs of a category and of its visible descendants, or an empty collection when the category itself is hidden:
+
+```php
+$ids = $electronics->enabledSubtreeIds();
+```
+
+Shopper caches this data, as described in [Tree Cache](#tree-cache).
+
+### Ordering
+
+The `position` column orders the categories that share a parent. The reorder panel of the admin panel numbers them from 1 under each parent, and the Store API returns the tree in that order. Add `orderBy('position')` to your own queries for the same order.
+
+### Moving Categories
+
+To move a category, change its `parent_id`. Set it to `null` to make the category top-level:
+
+```php
+$laptops->update(['parent_id' => $electronics->id]);
+```
+
+A category cannot move under itself or under one of its descendants: the update throws a `RuntimeException` with the message "A category cannot be moved under one of its own descendants." Moving a category also changes its slug when the new parent is a category, as described in [Custom Paths & Slug Behavior](#custom-paths--slug-behavior).
+
+Deleting a category makes its direct children top-level. Its products stay, and no longer list it among their categories.
+
+## Media
+
+Categories have the same two media collections as brands, named in `config/shopper/media.php`:
+
+| Collection | Config key | Default name | Files | Use |
+|------------|------------|--------------|-------|-----|
+| Images | `shopper.media.storage.collection_name` | `uploads` | Several | Extra category images |
+| Thumbnail | `shopper.media.storage.thumbnail_collection` | `thumbnail` | One | The image shown in menus and category listings |
+
+The admin form uploads the image to the thumbnail collection, up to `shopper.media.max_size.thumbnail` kilobytes (1024 by default). Both collections accept the MIME types listed in `shopper.media.accepts_mime_types`: JPEG, PNG, WebP and AVIF. Each upload gets the conversions of `shopper.media.conversions`, `large` (800x800) and `medium` (500x500) by default.
+
+```php
+$laptops->addMedia($request->file('image'))
+    ->toMediaCollection(config('shopper.media.storage.thumbnail_collection'));
+
+$imageUrl = $laptops->getThumbnailUrl('medium');
+```
+
+`getThumbnailUrl()` falls back to the first image of the images collection, then to the placeholder image of the admin panel. When the conversion you ask for has not been generated yet, it returns the original. The [Media](/3.x/media) page covers storage disks, conversions and the placeholder image.
+
+## Relationships
+
+The tree relationships come from the adjacency list package and return your category class after a swap. The products relationship reads the product class from `config('shopper.models.product')`.
+
+### Parent Category
+
+`parent` returns the category one level up, or `null` for a top-level category. For a breadcrumb, load the `ancestors` ordered by depth, which starts at the top of the tree:
+
+```php
+$laptops->parent;
+
+$breadcrumb = $laptops->ancestors()->orderBy('depth')->get();
+```
+
+### Child Categories
+
+`children` returns the categories one level down. Constrain it like any relationship to keep the enabled ones in their order:
+
+```php
+$subcategories = $electronics->children()
+    ->enabled()
+    ->orderBy('position')
+    ->get();
+```
+
+### Descendant Categories
+
+`descendants` returns every category below a category, at any depth, and `descendantsAndSelf` adds the category itself:
+
+```php
+$electronics->descendants;
+$electronics->descendants()->count();
+$electronics->descendantsAndSelf()->pluck('id');
+```
+
+These relationships ignore visibility. To keep the visible branch only, use `enabledSubtreeIds()`, described in [Visibility and Depth](#visibility-and-depth).
+
+<Warning>
+`descendantCategories()`, declared on the contract, does not return the descendants of a category: it matches every category that has a parent. Use `descendants()`.
+</Warning>
+
+### Products
+
+`products()` is a polymorphic many-to-many relation through the `sh_product_has_relations` table. It returns the products attached to this category only, without those of its descendants:
+
+```php
+$laptops->products;
+$laptops->products()->publish()->count();
+```
+
+From the product side, `categories()` returns the categories of a product. Attach a product to one or several categories with `attach()` or `sync()`:
+
+```php
+$product->categories()->sync([$laptops->id, $computers->id]);
+```
+
+## Available Tree Methods
+
+The adjacency list package adds these relationships to the model:
+
+| Method | Returns |
+|--------|---------|
+| `ancestors()` | The parents of the category, up to the top of the tree |
+| `ancestorsAndSelf()` | The ancestors and the category itself |
+| `bloodline()` | The ancestors, the descendants and the category itself |
+| `children()` | The direct children |
+| `childrenAndSelf()` | The direct children and the category itself |
+| `descendants()` | Every category below, at any depth |
+| `descendantsAndSelf()` | The descendants and the category itself |
+| `parent()` | The direct parent |
+| `parentAndSelf()` | The direct parent and the category itself |
+| `rootAncestor()` | The top-level ancestor |
+| `rootAncestorOrSelf()` | The top-level ancestor, or the category itself when it is top-level |
+| `siblings()` | The other children of the same parent |
+| `siblingsAndSelf()` | Every child of the same parent |
+
+The package also adds query scopes. `tree()` loads every category with a `depth` column, starting from the top-level categories; pass a number to stop at a depth, such as `tree(1)` for the top-level categories and their children. `isRoot()` and `isLeaf()` keep the categories without a parent or without children, `hasChildren()` the ones with children, and `whereDepth()` filters a `tree()` query by depth. On a collection, `toTree()` nests each category under its parent in a `children` relation.
+
+```php
+use Shopper\Core\Models\Contracts\Category;
+
+$firstTwoLevels = resolve(Category::class)::query()
+    ->tree(1)
+    ->orderBy('position')
+    ->get()
+    ->toTree();
+```
+
+## Query Scopes
+
+The model has one scope of its own; the adjacency list package and the traits add the others.
+
+### Enabled Categories
+
+The `enabled` scope keeps the categories whose `is_enabled` column is `true`. It checks the category itself, not its ancestors: use the [category tree](#visibility-and-depth) when a disabled parent must hide its children.
+
+```php
+use Shopper\Core\Models\Contracts\Category;
+
+$categories = resolve(Category::class)::query()
+    ->enabled()
+    ->orderBy('position')
+    ->get();
+```
+
+### Root Categories
+
+The `isRoot` scope keeps the top-level categories:
+
+```php
+$topLevel = resolve(Category::class)::query()
+    ->isRoot()
+    ->enabled()
+    ->orderBy('position')
+    ->get();
+```
+
+## Custom Paths & Slug Behavior
+
+The model declares a custom path named `slug_path`, which joins the slugs of a category and its ancestors with `/`. The path is built by the tree query, so it exists on the rows loaded with `tree()`; a category loaded with `find()` or `where()` has no `slug_path`.
+
+When a category has a parent, `Shopper\Core\Observers\CategoryObserver` replaces its slug, on every create and update, with the slug of the parent followed by the category name. Because the slug of the parent already carries its own parent, slugs grow with each level:
+
+| Category | Parent | Slug | `slug_path` |
+|----------|--------|------|-------------|
+| Electronics | none | `electronics` | `electronics` |
+| Computers | Electronics | `electronics-computers` | `electronics/electronics-computers` |
+| Laptops | Computers | `electronics-computers-laptops` | `electronics/electronics-computers/electronics-computers-laptops` |
+
+This rule has three consequences for your code:
+
+- The slug you pass when you create or update a child category is replaced. Only top-level categories keep the slug you choose.
+- Moving a category under another parent changes its slug, and so its storefront URL. Its children keep their slugs until they are saved again.
+- A category moved to the top level keeps the slug it had under its former parent.
+
+Slugs are unique across all categories, so the slug alone identifies a category. Build category URLs from it, such as `/categories/electronics-computers-laptops`, the way the Store API looks categories up.
+
+## Methods & Helpers
+
+The model adds three helpers to the relationships and scopes.
+
+### Find by Slug
+
+`findBySlug()` returns the category with that slug, and throws a `ModelNotFoundException` when there is none:
+
+```php
+use Shopper\Core\Models\Contracts\Category;
+
+$laptops = resolve(Category::class)::findBySlug('electronics-computers-laptops');
+```
+
+It does not check visibility. `findByPublicId()` looks a category up by its public ID and returns `null` when there is none.
+
+### Label with Path
+
+`getLabelOptionName()` returns the names of the ancestors and of the category, separated by ` / `. For Laptops, it returns `Electronics / Computers / Laptops`. The admin panel uses it in the parent select of the category form:
+
+```php
+$laptops->getLabelOptionName();
+```
+
+### Status Management
+
+`updateStatus()` enables a category, or disables it when you pass `false`. It saves the change immediately:
+
+```php
+$computers->updateStatus();
+$computers->updateStatus(false);
+```
+
+Disabling a category hides its whole branch from the storefront, as described in [Visibility and Depth](#visibility-and-depth). Once the change is committed, Shopper updates the search index for the category, its descendants and their products. The products of a hidden category stay published and reachable through their other categories.
+
+## Configuration
+
+Categories are on by default. Their settings are the feature flag, the tree cache, the model key and the admin components.
+
+### Disabling Category Feature
+
+If your store does not use categories, disable the feature in `config/shopper/features.php`:
+
+```php title="config/shopper/features.php"
+'category' => Shopper\Enum\FeatureState::Disabled,
+```
+
+The categories page is no longer registered, the Categories item leaves the sidebar, and the categories field of the product forms is hidden. The flag only changes the admin panel: the model, the product relation and the Store API category endpoints stay available. The [Configuration](/3.x/configuration#feature-flags) page lists every feature flag.
+
+### Tree Cache
+
+The data of `CategoryTree` is cached for the number of seconds set in `config/shopper/core.php`:
+
+```php title="config/shopper/core.php"
+'cache' => [
+    'category_tree' => 3600,
+],
+```
+
+Saving or deleting a category through the model refreshes the cache, so the duration only matters for changes made another way, such as a `DB::table()` update or an import that writes to the table directly. Call `Shopper\Core\Queries\CategoryTree::flush()` after such a change, or set the value to `null` to read the tree from the database on every request.
+
+### Components
+
+The categories section of the admin panel is made of one page, the category form and the reorder panel. To replace one with your own Livewire component, publish the component file of the section:
+
+```bash
+php artisan shopper:component:publish category
+```
+
+The command creates `config/shopper/components/category.php`:
+
+```php title="config/shopper/components/category.php"
+use Shopper\Livewire;
+
+return [
+    'pages' => [
+        'category-index' => Livewire\Pages\Category\Index::class,
+    ],
+    'components' => [
+        'slide-overs.category-form' => Livewire\SlideOvers\CategoryForm::class,
+        'slide-overs.re-order-categories' => Livewire\SlideOvers\ReOrderCategories::class,
+    ],
+];
+```
+
+The [Configuration](/3.x/configuration#components) page explains how component overriding works.
+
+## Usage
+
+The examples below resolve the category class from its contract, so they keep working after you swap the model.
+
+### Creating Categories
+
+Create a top-level category with its slug, then its children with a `parent_id`:
+
+```php
+use Shopper\Core\Models\Contracts\Category;
+
+$electronics = resolve(Category::class)::query()->create([
+    'name' => 'Electronics',
+    'slug' => 'electronics',
+    'position' => 1,
+    'is_enabled' => true,
+    'seo_title' => 'Electronics: computers, phones and audio',
+]);
+
+$computers = resolve(Category::class)::query()->create([
+    'name' => 'Computers',
+    'parent_id' => $electronics->id,
+    'position' => 1,
+    'is_enabled' => true,
+]);
+```
+
+The slug of Computers is `electronics-computers`, built from its parent as described in [Custom Paths & Slug Behavior](#custom-paths--slug-behavior).
+
+### Retrieving Categories
+
+For a navigation menu, load the tree, keep the enabled categories and nest them. `toTree()` drops a category whose parent is not in the collection, so a disabled category takes its whole branch out of the menu:
+
+```php
+use Shopper\Core\Models\Contracts\Category;
+
+$menu = resolve(Category::class)::query()
+    ->tree()
+    ->enabled()
+    ->orderBy('position')
+    ->get()
+    ->toTree();
+```
+
+For a category page, exclude the hidden categories, then load the breadcrumb and the visible subcategories:
+
+```php
+use Shopper\Core\Models\Contracts\Category;
+use Shopper\Core\Queries\CategoryTree;
+
+$category = resolve(Category::class)::query()
+    ->whereKeyNot(resolve(CategoryTree::class)->hiddenIds())
+    ->where('slug', 'electronics-computers')
+    ->firstOrFail();
+
+$breadcrumb = $category->ancestors()->orderBy('depth')->get();
+
+$subcategories = $category->children()
+    ->enabled()
+    ->orderBy('position')
+    ->get();
+```
+
+### Updating Categories
+
+Update a category like any Eloquent model. Changing `parent_id` moves it, with the rules of [Moving Categories](#moving-categories):
+
+```php
+$computers->update([
+    'seo_title' => 'Laptops and desktop computers',
+    'seo_description' => 'Shop laptops, desktops and computer accessories.',
+]);
+```
+
+### Working with Products
+
+The product model has two scopes for categories. Both take slugs or public IDs and ignore hidden categories. `category` matches the products attached to the given categories, and `categoryTree` matches the products of the given categories and of all their visible descendants:
+
+```php
+use Shopper\Core\Models\Contracts\Product;
+
+$laptopsOnly = resolve(Product::class)::query()
+    ->publish()
+    ->category('electronics-computers-laptops')
+    ->get();
+
+$wholeBranch = resolve(Product::class)::query()
+    ->publish()
+    ->categoryTree('electronics')
+    ->latest('published_at')
+    ->paginate(24);
+```
+
+Use `categoryTree` for a category page that lists the products of its subcategories: browsing Electronics then returns the products of Computers, Laptops and Phones.
+
+### Metadata
+
+The `metadata` column stores data that has no column of its own, cast to an array. The admin form edits it as a list of keys and values:
+
+```php
+$electronics->update([
+    'metadata' => [
+        'banner_color' => '#FF6B35',
+        'featured_on_homepage' => true,
+    ],
+]);
+
+$color = $electronics->metadata['banner_color'] ?? null;
+```
+
+The Store API returns `metadata` with the category, so keep data the customers must not see out of it.
+
+### Storefront Example
+
+A controller for the category menu and a category page. The page lists the products of the whole branch, so browsing Electronics also shows the laptops:
+
+```php title="app/Http/Controllers/CategoryController.php"
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\View\View;
+use Shopper\Core\Models\Contracts\Category;
+use Shopper\Core\Models\Contracts\Product;
+use Shopper\Core\Queries\CategoryTree;
+
+class CategoryController extends Controller
+{
+    public function index(): View
+    {
+        $categories = resolve(Category::class)::query()
+            ->tree()
+            ->enabled()
+            ->orderBy('position')
+            ->get()
+            ->toTree();
+
+        return view('categories.index', ['categories' => $categories]);
+    }
+
+    public function show(string $slug): View
+    {
+        $category = resolve(Category::class)::query()
+            ->whereKeyNot(resolve(CategoryTree::class)->hiddenIds())
+            ->where('slug', $slug)
+            ->firstOrFail();
+
+        $products = resolve(Product::class)::query()
+            ->publish()
+            ->categoryTree($category->slug)
+            ->latest('published_at')
+            ->paginate(12);
+
+        return view('categories.show', [
+            'category' => $category,
+            'breadcrumb' => $category->ancestors()->orderBy('depth')->get(),
+            'products' => $products,
+        ]);
+    }
+}
+```
+
+A store that sells on several channels adds the `channel` scope to the product query, as shown in [Channels](/3.x/channels).
+
+## Events
+
+Shopper dispatches no category event of its own. Listen to the Eloquent model events instead. They are dispatched under the core class name as well, so a listener registered on `Shopper\Core\Models\Category` keeps firing after you swap the model:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Illuminate\Support\Facades\Cache;
+use Shopper\Core\Models\Category;
+
+public function boot(): void
+{
+    Category::saved(fn () => Cache::forget('storefront.menu'));
+    Category::deleted(fn () => Cache::forget('storefront.menu'));
+}
+```
+
+Shopper registers `Shopper\Core\Observers\CategoryObserver` on the category model. It sets the slug of child categories, refuses a move under a descendant, refreshes the tree cache, and once the transaction is committed updates the search index of the category, its descendants and their products when the name, the status or the parent changes, or when the category is deleted.
+
+The reorder panel of the admin panel saves a position change within the same parent without firing model events. A listener on `saved` runs only when a category moves to another parent. The [Events](/3.x/events#listening-to-events) page covers listeners and queues.
+
+## Permissions
+
+The admin panel checks four permissions of the `categories` resource, in the Catalog group:
+
+| Permission | Allows |
+|------------|--------|
+| `categories.browse` | Opening the categories page and seeing the Categories sidebar item |
+| `categories.create` | Opening and saving the form for a new category |
+| `categories.edit` | Editing a category, enabling and disabling categories in bulk, opening the reorder panel and saving the new order |
+| `categories.delete` | Deleting a category, one at a time or in bulk |
+
+`categories.read` is seeded with the others, but the admin panel never checks it. Shopper 2.x named these permissions `browse_categories`, `add_categories` and so on; the [Access Control](/3.x/acl#upgrading-from-2x) page explains how the upgrade renames them.
+
+## In the Admin
+
+Merchants manage categories under Catalog, Categories. The page lists each category with its image, name, slug, visibility and last update, and filters by visibility. Bulk actions enable, disable or delete the selected categories. The Reorder button opens a panel where merchants drag categories to change their order and their parent. The category form opens in a slide-over with four sections: General (name, slug, parent, visibility, description), Media, SEO and Metadata. The parent select lists enabled categories only. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API exposes the visible categories under the `store` prefix, set by `SHOPPER_API_PREFIX`. A category hidden by a disabled ancestor is left out of every response:
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /store/categories` | The visible categories, paginated. Filter with `filter[name]` (partial match), sort with `sort=name` or `sort=position` |
+| `GET /store/categories/tree` | The whole visible tree in one response, ordered by position, without pagination |
+| `GET /store/categories/{slug}` | One visible category |
+
+A category resource has the type `categories` and carries `name`, `slug`, `description`, `position`, `parent_id` (the public ID of the parent), `is_enabled`, `depth`, `seo_title`, `seo_description`, `metadata`, `thumbnail`, `created_at` and `updated_at`. The listing and the single category accept these includes:
+
+| Include | Returns |
+|---------|---------|
+| `parent` | The parent, when it is enabled |
+| `children` | The enabled children |
+| `ancestors` | The enabled ancestors, starting at the top of the tree, for a breadcrumb |
+| `products` | The products attached to the category itself, published on the channel of the request |
+| `products_count` | A `products_count` attribute: the published products of the category and its visible descendants on the channel, each counted once |
+
+The tree endpoint returns plain JSON rather than JSON:API resources, so a menu loads in one call. Each node has `id`, `name`, `slug`, `position` and `children`:
+
+```bash
+curl "https://example.com/store/categories/tree"
+```
+
+```json
+{
+    "data": [
+        {
+            "id": "01JZ8Q2M4T6V8X0Z2B4D6F8H0K",
+            "name": "Electronics",
+            "slug": "electronics",
+            "position": 1,
+            "children": [
+                {
+                    "id": "01JZ8Q2M4T6V8X0Z2B4D6F8H0M",
+                    "name": "Computers",
+                    "slug": "electronics-computers",
+                    "position": 1,
+                    "children": []
+                }
+            ]
+        }
+    ]
+}
+```
+
+On the products endpoint, `filter[category]` matches the products of the given categories and `filter[category_tree]` adds the products of their descendants, like the scopes of the same name. Both accept slugs or public IDs separated by commas, and `include=categories` returns the visible categories of each product:
+
+```bash
+curl "https://example.com/store/products?filter[category_tree]=electronics&include=categories"
+```
+
+The products and the counts follow the channel of the request, as described in [Channels](/3.x/channels#the-store-api); the categories themselves are not filtered by channel. The [Storefront](/3.x/storefront) section documents the Store API.

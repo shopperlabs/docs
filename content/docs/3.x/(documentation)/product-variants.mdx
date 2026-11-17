@@ -1,0 +1,692 @@
+---
+title: Product Variants
+sidebarTitle: Variants
+description: The ProductVariant model in Shopper, options from attributes, variant generation, SKU, stock and media per variant, and variants in carts and orders.
+---
+
+A product variant is one version of a product that a customer can buy. A Classic T-Shirt sold in Blue and Red, in sizes S, M and L, has six variants: Blue / S, Blue / M, Blue / L, Red / S, Red / M and Red / L. The product holds what they share (name, description, images, brand, categories, channels), and each variant holds its own SKU, barcode, prices, stock, images and shipping dimensions.
+
+Customers buy variants. A cart line, an order item and a stock movement point to the variant, and the product groups the variants on the storefront.
+
+## How Variants Work
+
+A product has variants when its type is `variant` (`Shopper\Core\Enum\ProductType::Variant`). `$product->canUseVariants()` returns `true` for that type only, and the admin panel shows the Variants section of the product editor for it. Each level holds its own data:
+
+| Level | Example | What it holds |
+|-------|---------|---------------|
+| Product | Classic T-Shirt | Name, description, images, brand, categories, channels, SEO fields |
+| Option | Color, Size | The attributes attached to the product |
+| Option value | Blue, Red, S, M, L | The attribute values selected on the product |
+| Variant | Blue / M | SKU, barcode, prices, stock, images, dimensions, and one value per option |
+
+Options are attributes. The values selected on a product for its Checkbox, ColorPicker and Select attributes, stored in `sh_attribute_product`, are the options of its variants. Text, Number, RichText and DatePicker attributes never take part in the combinations. The [Attributes](/3.x/attributes) page covers field types and attaching attributes to a product.
+
+A variant knows its combination through `sh_attribute_value_product_variant`, a pivot that links it to one attribute value per option: Blue / M is the variant linked to Color = Blue and Size = M. A storefront reads that pivot to find the variant matching what a customer selects, as shown in [Retrieving Variants](#retrieving-variants).
+
+<Note>
+  Prices and stock live on each variant. The Store API refuses to add a variant product itself to a cart and answers with the `variant_required` error code.
+</Note>
+
+## Model
+
+The model configured for variants is `Shopper\Models\ProductVariant`. It extends `Shopper\Core\Models\ProductVariant`, which implements the `Shopper\Core\Models\Contracts\ProductVariant` contract. The contract extends `Shopper\Core\Models\Contracts\Stockable`, and the core class also implements `Shopper\Core\Contracts\Priceable`, which is what lets a cart hold a variant. The core class holds the columns, the relationships, stock, prices and dimensions; the admin class adds the Spatie Media Library methods and the image conversions, as described in [Core Models and Admin Models](/3.x/models#core-models-and-admin-models).
+
+Five traits of the core class change what you can do with a variant:
+
+- `HasStock` gives each variant its own stock at each inventory location, described in [Stock Management](#stock-management).
+- `HasPrices` attaches one price per currency, described in [Pricing](#pricing).
+- `HasMediaCollections` declares the image and thumbnail collections described in [Media](#media).
+- `HasDimensions` formats the weight and the sizes used for shipping, described in [Dimensions](#dimensions).
+- `HasPublicId` fills `public_id` with a ULID when the variant is created. The Store API returns it as the variant `id`, and a cart line takes it as `purchasable_id`.
+
+The morph alias of the model is `variant`. Cart lines, order items, prices and stock movements store `variant` in their type column, as described in [Morph Map](/3.x/models#morph-map).
+
+### Extending the Model
+
+To add your own methods, extend the admin class:
+
+```php title="app/Models/ProductVariant.php"
+<?php
+
+namespace App\Models;
+
+use Shopper\Models\ProductVariant as ShopperProductVariant;
+
+class ProductVariant extends ShopperProductVariant
+{
+    public function displayName(): string
+    {
+        return $this->product->name.' / '.$this->name;
+    }
+}
+```
+
+Then point the `variant` key of the configuration to your class:
+
+```php title="config/shopper/models.php"
+'variant' => App\Models\ProductVariant::class,
+```
+
+Extend the admin class `Shopper\Models\ProductVariant`: the admin panel reads the variant images through its media methods, and `ProductVariantObserver` calls `media()` when a variant is deleted. The [Models](/3.x/models#swapping-a-model) page explains how swapping works.
+
+## Database Schema
+
+Variants use two tables: `sh_product_variants` for the variants and `sh_attribute_value_product_variant` for their option values (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)).
+
+### Product Variants Table
+
+The `sh_product_variants` table holds one row per variant:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `name` | string | no | - | Variant name, such as `Blue / M`, indexed |
+| `sku` | string | yes | null | Stock keeping unit, unique within the product |
+| `barcode` | string | yes | null | Barcode, unique |
+| `ean` | string | yes | null | European Article Number, unique |
+| `upc` | string | yes | null | Universal Product Code, unique |
+| `allow_backorder` | boolean | no | `false` | Accept orders when the stock does not cover the quantity |
+| `position` | unsigned integer | no | `1` | Order among the variants of the product |
+| `product_id` | bigint | yes | null | Parent product, set to null when the product row is deleted |
+| `weight_unit` | string | no | `kg` | Weight unit |
+| `weight_value` | decimal(10,2) | yes | `0.00` | Weight |
+| `height_unit` | string | no | `cm` | Height unit |
+| `height_value` | decimal(10,2) | yes | `0.00` | Height |
+| `width_unit` | string | no | `cm` | Width unit |
+| `width_value` | decimal(10,2) | yes | `0.00` | Width |
+| `depth_unit` | string | no | `cm` | Depth unit |
+| `depth_value` | decimal(10,2) | yes | `0.00` | Depth |
+| `volume_unit` | string | no | `l` | Volume unit |
+| `volume_value` | decimal(10,2) | yes | `0.00` | Volume |
+| `metadata` | json | yes | null | Custom key-value data |
+| `created_at` | timestamp | yes | null | Creation date |
+| `updated_at` | timestamp | yes | null | Last update |
+
+The SKU is unique per product, through a unique index on the `product_id` and `sku` pair, so two products can each have a `BLUE-M` variant. `barcode`, `ean` and `upc` are unique across the whole table.
+
+Products are soft deleted, so deleting a product keeps its variants. A force delete removes the product row and the foreign key sets `product_id` to null on its variants, which stay in the table with their prices and stock. Delete the variants first when you force delete a product.
+
+### Attribute Value Pivot Table
+
+The `sh_attribute_value_product_variant` table links a variant to its option values:
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | no | Primary key |
+| `value_id` | bigint | no | The attribute value (`sh_attribute_values`) |
+| `variant_id` | bigint | no | The variant |
+
+Both foreign keys cascade: deleting a variant or an attribute value deletes its pivot rows. The table has no unique index on the pair, so write it with `sync()`: `attach()` adds a second row for a value that is already linked.
+
+## Relationships
+
+A variant belongs to one product and to one attribute value per option.
+
+### Product
+
+`product()` returns the parent product, from the class configured under `shopper.models.product`:
+
+```php
+$variant->product->name;
+```
+
+The inverse, `$product->variants`, returns the variants of a product ordered by `position`.
+
+### Attribute Values
+
+`values()` returns the `Shopper\Core\Models\AttributeValue` records of the variant. Load their attribute to show the option names:
+
+```php
+use Shopper\Core\Models\AttributeValue;
+
+$variant->load('values.attribute');
+
+$options = $variant->values->mapWithKeys(
+    fn (AttributeValue $value): array => [$value->attribute->name => $value->value],
+);
+```
+
+For the Blue / M variant, `$options` holds `['Color' => 'Blue', 'Size' => 'M']`. To change the combination of a variant, sync its values:
+
+```php
+$variant->values()->sync([$blue->id, $medium->id]);
+```
+
+## Stock Management
+
+Each variant has its own stock through the `HasStock` trait, and `tracksInventory()` always returns `true` for a variant. Stock works as on a product: each movement is a row of the `sh_inventory_histories` ledger, and `sh_stock_levels` keeps the current quantity at each location. The [Products](/3.x/products) page describes every stock method, and the [Locations](/3.x/locations) page covers stock spread over several locations.
+
+### Querying Stock
+
+The `stock` attribute returns the quantity across every location. `inStock()` takes the quantity a customer wants, `1` by default:
+
+```php
+$variant->stock;
+
+$variant->inStock(3);
+
+$variant->stockInventory($warehouse->id);
+
+$variant->getStock('2026-01-15');
+```
+
+`stockInventory()` returns the stock at one location, and `getStock()` with a date replays the ledger up to that date. On the product, `$product->variants_stock` adds up the stock of every variant.
+
+### Modifying Stock
+
+Every write takes the location it applies to. `mutateStock()` adds stock and `decreaseStock()` removes it:
+
+```php
+use Shopper\Core\Models\Contracts\Inventory;
+use Shopper\Core\Models\Contracts\Product;
+
+$product = resolve(Product::class)::query()
+    ->where('slug', 'classic-t-shirt')
+    ->firstOrFail();
+
+$variant = $product->variants()->where('sku', 'TS-BLUE-M')->firstOrFail();
+
+$warehouse = resolve(Inventory::class)::query()->default()->firstOrFail();
+
+$variant->mutateStock(
+    inventoryId: $warehouse->id,
+    quantity: 40,
+    event: 'Shipment received',
+);
+
+$variant->decreaseStock(
+    inventoryId: $warehouse->id,
+    quantity: 2,
+    event: 'Damaged in storage',
+);
+```
+
+`setStock()` compares the quantity you pass with the total stock of the variant across every location, and writes the difference to the location you pass. On a store with one location, that sets the stock; on a store with several, use `mutateStock()` with a difference computed from `stockInventory()`. `clearStock()` deletes every ledger row and every stock level of the variant, at every location.
+
+### Backorder
+
+`allow_backorder` lets customers order a variant whose stock does not cover the quantity. `inStock()` ignores the flag, while the cart skips its stock check for a variant that allows backorders and the Store API reports `in_stock: true` for it. Check both in your own code:
+
+```php
+$canBuy = $variant->allow_backorder || $variant->inStock($quantity);
+```
+
+When the order is placed, a backordered quantity is taken from a single location, the first one returned by the inventory resolver, and the stock there can go below zero.
+
+### Avoiding N+1 Queries
+
+Reading `$variant->stock` runs one query, so a product page that shows the stock of each variant runs one query per variant, and so does `variants_stock`. `loadCurrentStock()` loads the stock of a whole collection in one query:
+
+```php
+use Shopper\Core\Models\Contracts\ProductVariant;
+
+resolve(ProductVariant::class)::loadCurrentStock($product->variants);
+
+$product->variants_stock;
+```
+
+`loadStockForInventory($variants, $warehouse->id)` does the same for one location. The `preventLazyStockLoading()` switch that the Products page describes is set per model: `Product::preventLazyStockLoading()` does not cover variants. Turn it on for variants only while you profile a page, because the cart reads the stock of the variant it adds without loading it in bulk, and `CartManager::add()` then throws `Shopper\Core\Exceptions\LazyStockLoadingException`.
+
+## Pricing
+
+Each variant has its own prices through the `HasPrices` trait, one row of `sh_prices` per currency, with amounts in cents as described in [Amounts in Cents](/3.x/money#amounts-in-cents):
+
+```php
+use Shopper\Core\Models\Currency;
+
+$variant->prices()->updateOrCreate(
+    ['currency_id' => Currency::query()->where('code', 'USD')->value('id')],
+    ['amount' => 2999, 'compare_amount' => 3499],
+);
+
+$variant->getPrice()?->amount;
+
+$variant->getPrice('EUR')?->amount;
+```
+
+`getPrice()` without a code reads the store currency, and `resolvePrice()` returns the price the cart charges, as computed by the price resolver. The [Pricing](/3.x/pricing) page covers the price columns, multi-currency pricing and the price resolver.
+
+## Media
+
+Each variant has its own images, in two collections declared by the core class. The collection names come from the media configuration:
+
+| Collection | Config key | Default name | Files | Use |
+|------------|------------|--------------|-------|-----|
+| Images | `shopper.media.storage.collection_name` | `uploads` | Several | The gallery of the variant |
+| Thumbnail | `shopper.media.storage.thumbnail_collection` | `thumbnail` | One | The main image of the variant |
+
+Both collections use the disk set by `shopper.media.storage.disk_name` (`public` by default) and accept the MIME types of `shopper.media.accepts_mime_types`. Each image gets the conversions of `shopper.media.conversions`: `large` (800 by 800) and `medium` (500 by 500).
+
+```php
+$variant->addMedia($request->file('image'))
+    ->toMediaCollection(config('shopper.media.storage.collection_name'));
+
+$variant->addMedia(storage_path('app/imports/classic-t-shirt-blue.jpg'))
+    ->toMediaCollection(config('shopper.media.storage.thumbnail_collection'));
+
+$variant->getThumbnailUrl('medium');
+
+$variant->getMedia(config('shopper.media.storage.collection_name'));
+```
+
+`getThumbnailUrl()` returns the thumbnail, or else the first image of the gallery, or else the placeholder image of the admin panel. It never falls back to the images of the product: when a variant has no image of its own, read `$variant->product->getThumbnailUrl('medium')` instead. The [Media](/3.x/media) page covers storage and conversions.
+
+## Dimensions
+
+Each variant has its own weight, height, width, depth and volume, stored as a value and a unit, so a carrier can rate a Red / L heavier than a Blue / S. The `weight`, `height`, `width`, `depth` and `volume` attributes return the value and the unit as one string:
+
+```php
+$variant->weight;
+```
+
+A variant with a `weight_value` of 250 and a `weight_unit` of `g` returns `250.00 g`. The attributes return null only when the value column is null; a variant created without dimensions holds the `0.00` defaults and returns `0.00 kg`. Compare `weight_value` with zero to know whether a weight was entered.
+
+### Dimension Enums
+
+The unit columns are cast to enums:
+
+| Enum | Columns | Cases |
+|------|---------|-------|
+| `Shopper\Core\Enum\Dimension\Weight` | `weight_unit` | `KG` (`kg`), `G` (`g`), `LBS` (`lbs`) |
+| `Shopper\Core\Enum\Dimension\Length` | `height_unit`, `width_unit`, `depth_unit` | `M` (`m`), `CM` (`cm`), `MM` (`mm`), `FT` (`ft`), `IN` (`in`) |
+| `Shopper\Core\Enum\Dimension\Volume` | `volume_unit` | `L` (`l`), `ML` (`ml`), `GAL` (`gal`), `FLOZ` (`floz`) |
+
+```php
+use Shopper\Core\Enum\Dimension\Weight;
+
+$variant->update([
+    'weight_unit' => Weight::LBS,
+    'weight_value' => 0.55,
+]);
+```
+
+## SKU and Barcode
+
+A variant carries four identifiers. The `sku` is your own reference, unique within its product. The `barcode`, `ean` and `upc` are unique across every variant of the store. The admin panel edits the SKU and the barcode, from the Add variant slide-over and from the variant page: it refuses a SKU used by another variant of the same product, and accepts letters, digits and hyphens in a barcode. It has no field for `ean` and `upc`; set them in code or through a CSV [import](/3.x/import).
+
+The variant generator proposes a SKU for each new combination: the product SKU followed by the option values in upper case, joined by hyphens. A Classic T-Shirt with the SKU `TS` gets `TS-BLUE-M` for its Blue / M variant, and a product without a SKU gets `BLUE-M`.
+
+The variant page draws the barcode with the `milon/barcode` package, in the symbology set by `shopper.core.barcode_type`: `C128` (Code 128) by default. Set it to `EAN13` or `UPCA` when your barcodes follow those standards:
+
+```php title="config/shopper/core.php"
+'barcode_type' => 'EAN13',
+```
+
+The search index stores the SKUs of the variants with their product, in the `skus` field, so a search for `TS-BLUE-M` finds the Classic T-Shirt. Shopper reindexes the product when a variant is created or deleted, or when its SKU changes. The [Search](/3.x/search) page covers indexing.
+
+## Generating Variant Combinations
+
+A product with three colors and three sizes needs nine variants. The Generate variants slide-over of the admin panel builds every combination of the option values selected on the product. It reads the options with `MapProductOptions`, builds the combinations with `Arr::permutate()`, matches each combination with the existing variant that holds its values, and lists them with an editable name, SKU, price and stock. Merchants remove the combinations they do not sell, then save the list with `SaveProductVariantsAction`.
+
+- A combination held by an existing variant keeps that variant, with its SKU, price and stock.
+- A new combination gets a name made of its values, such as `Blue / M`, and the SKU described in [SKU and Barcode](#sku-and-barcode).
+- A variant whose combination is removed from the list is deleted on save.
+- When you add an option to a product that already has variants, each variant keeps its ID and takes the first new combination that contains its values. The other combinations become new variants.
+
+The price field takes an amount in cents and saves it in the store default currency. The Generate button appears once the product has at least one attribute, of any type.
+
+### Permutation Helpers
+
+`Shopper\Core\Macros\Arr` builds the combinations of option values. Each option is a list of values, keyed by the option name:
+
+```php
+use Shopper\Core\Macros\Arr;
+
+$options = [
+    'Color' => [
+        ['id' => 1, 'value' => 'Blue'],
+        ['id' => 2, 'value' => 'Red'],
+    ],
+    'Size' => [
+        ['id' => 4, 'value' => 'M'],
+        ['id' => 5, 'value' => 'L'],
+    ],
+];
+
+$combinations = Arr::permutate($options);
+
+$name = Arr::performPermutationIntoWord($combinations[0], 'value');
+
+$valueIds = Arr::getPermutationIds($combinations[0]);
+```
+
+`permutate()` returns the four combinations Blue / M, Blue / L, Red / M and Red / L, each keyed by option name: the first one is `['Color' => ['id' => 1, 'value' => 'Blue'], 'Size' => ['id' => 4, 'value' => 'M']]`. `performPermutationIntoWord()` joins one field of a combination into `Blue / M`, and takes the separator as a third argument (`'-'` gives `Blue-M`). `getPermutationIds()` returns `[1, 4]`, the attribute value IDs to sync on the variant. `permutate()` returns an empty array when there is no option, and throws an `InvalidArgumentException` when an option has no values.
+
+### Bulk Save with SaveProductVariantsAction
+
+`Shopper\Actions\Store\Product\SaveProductVariantsAction` saves the whole list of variants of a product in one transaction, then reindexes the product. Each entry takes the keys `variant_id`, `name`, `sku`, `price` (in cents, in the store default currency), `stock` and `values` (the attribute value IDs):
+
+```php
+use Shopper\Actions\Store\Product\SaveProductVariantsAction;
+
+$variants = app()->call(SaveProductVariantsAction::class, [
+    'product' => $product,
+    'variants' => [
+        [
+            'variant_id' => null,
+            'name' => 'Blue / M',
+            'sku' => 'TS-BLUE-M',
+            'price' => 2999,
+            'stock' => 50,
+            'values' => [1, 4],
+        ],
+        [
+            'variant_id' => null,
+            'name' => 'Blue / L',
+            'sku' => 'TS-BLUE-L',
+            'price' => 2999,
+            'stock' => 30,
+            'values' => [1, 5],
+        ],
+    ],
+]);
+```
+
+The action returns the list with `variant_id` filled in. It deletes every variant of the product whose ID is not in the list, so a list without any `variant_id` replaces all the variants. An entry with a `variant_id` keeps the name and the SKU of that variant; the action only writes its price, stock and values. A price of 0 leaves the prices untouched, and a price above 0 keeps the existing compare price only when it is higher than the new price.
+
+<Warning>
+  For each entry with a `stock` above 0, the action calls `clearStock()` on the variant, which deletes its stock history and its stock at every location, then records the quantity at the default location. Pass a `stock` of 0 for the existing variants whose stock must not change.
+</Warning>
+
+### MapProductOptions
+
+`Shopper\Helpers\MapProductOptions::generate()` returns the options of a product with the values selected on it, and skips the attributes with a free-value type. Each option has the shape `['id' => 3, 'key' => 'attribute_3', 'name' => 'Color', 'values' => [...]]`, and each value `['id' => 1, 'key' => 'value_1', 'value' => 'Blue']`. Key the options by name to feed them to `Arr::permutate()`:
+
+```php
+use Shopper\Core\Macros\Arr;
+use Shopper\Helpers\MapProductOptions;
+
+$options = collect(MapProductOptions::generate($product))
+    ->mapWithKeys(fn (array $option): array => [$option['name'] => $option['values']])
+    ->all();
+
+$combinations = Arr::permutate($options);
+```
+
+## Variants in Carts and Orders
+
+A cart line holds a variant through its `purchasable_type` (`variant`) and `purchasable_id` columns. Add a variant with `CartManager`:
+
+```php
+use Shopper\Cart\CartManager;
+use Shopper\Cart\Facades\Cart;
+
+$cart = Cart::current() ?? Cart::create();
+
+$line = resolve(CartManager::class)->add($cart, $variant, quantity: 2);
+```
+
+Adding the same variant again raises the quantity of its line. The cart checks the stock of the variant unless it allows backorders, and throws `Shopper\Cart\Exceptions\InsufficientStockException` when the stock is short. The pricing context that the cart passes to the price resolver counts the lines of every variant of a product together: with two Blue / M and three Red / L in the cart, `productQuantity()` returns 5 on both lines. The default resolver ignores it; a custom resolver uses it for quantity tiers on the whole product, as the [Pricing](/3.x/pricing) page shows. `CartManager` does not check that the parent product is published, and it accepts a variant product itself; the Store API checks both before it calls the cart. The [Cart](/3.x/cart) page covers carts.
+
+When the cart becomes an order, each line becomes an order item that keeps a copy of the variant at that moment:
+
+- `name` joins the product name and the variant name: `Classic T-Shirt / Blue / M`.
+- `sku` copies the variant SKU.
+- `product_type` holds `variant` and `product_id` the variant ID, so `$item->product` returns the variant.
+
+The order then reserves the stock of each variant, across the locations that hold it, with ledger rows labeled "Reserved for order" that reference the order. When a variant without backorders no longer has the stock, the order is not created and `InsufficientStockException` is thrown. The [Orders](/3.x/orders) page covers order items.
+
+## Configuration
+
+Variants have no feature flag in `features.php`: the Variants section appears on every product of the `variant` type. Options come from attributes, so the `attribute` feature must stay enabled for merchants to choose options in the admin panel. The model is swapped with the `variant` key of `config/shopper/models.php`, as shown in [Extending the Model](#extending-the-model), and the images follow the media keys listed in [Media](#media). The barcode symbology is set by `shopper.core.barcode_type`.
+
+### Components
+
+The variant screens of the admin panel belong to the product section. To replace one with your own Livewire component, publish the component file of the section:
+
+```bash
+php artisan shopper:component:publish product
+```
+
+The command creates `config/shopper/components/product.php`. These are its variant entries:
+
+```php title="config/shopper/components/product.php"
+use Shopper\Livewire;
+use Shopper\Livewire\Components;
+use Shopper\Navigation\Product\Sections;
+
+return [
+    'sections' => [
+        Sections\VariantsSection::class => true,
+    ],
+    'pages' => [
+        'product-variants' => Livewire\Pages\Product\Variants::class,
+        'variant-edit' => Livewire\Pages\Product\Variant::class,
+    ],
+    'components' => [
+        'products.variant-stock' => Components\Products\VariantStock::class,
+        'slide-overs.add-variant' => Livewire\SlideOvers\AddVariant::class,
+        'slide-overs.update-variant' => Livewire\SlideOvers\UpdateVariant::class,
+        'slide-overs.generate-variants' => Livewire\SlideOvers\GenerateVariants::class,
+    ],
+];
+```
+
+Set `Sections\VariantsSection::class` to `false` to hide the Variants section from the product editor. The [Configuration](/3.x/configuration#components) page explains how component overriding works.
+
+## Usage
+
+The examples below resolve the variant class from its contract, so they keep working after you swap the model.
+
+### Creating Variants
+
+Create a single variant with the `CreateNewVariant` action, or step by step on the model. The [Generating Variant Combinations](#generating-variant-combinations) section covers creating every combination at once.
+
+#### Single Variant
+
+`Shopper\Actions\Store\Product\CreateNewVariant` creates the variant, its prices, its option values and its initial stock in one transaction:
+
+```php
+use Shopper\Actions\Store\Product\CreateNewVariant;
+use Shopper\Core\Models\Currency;
+
+$usd = Currency::query()->where('code', 'USD')->value('id');
+
+$variant = app()->call(CreateNewVariant::class, ['data' => [
+    'product_id' => $product->id,
+    'name' => 'Blue / L',
+    'sku' => 'TS-BLUE-L',
+    'values' => [$blue->id, $large->id],
+    'prices' => [
+        $usd => ['amount' => 2999, 'compare_amount' => 3499],
+    ],
+    'quantity' => 50,
+]]);
+```
+
+`prices` is keyed by currency ID, with amounts in cents, and a currency without an `amount` is skipped. The action sets `position` after the last variant of the product, and records `quantity` at the default location; when no location is the default one, the quantity is not recorded.
+
+#### Manual Creation
+
+For full control, create the variant through the contract and write its values, prices and stock yourself:
+
+```php
+use Shopper\Core\Enum\Dimension\Length;
+use Shopper\Core\Enum\Dimension\Weight;
+use Shopper\Core\Models\Contracts\Inventory;
+use Shopper\Core\Models\Contracts\ProductVariant;
+use Shopper\Core\Models\Currency;
+
+$variant = resolve(ProductVariant::class)::query()->create([
+    'product_id' => $product->id,
+    'name' => 'Red / L',
+    'sku' => 'TS-RED-L',
+    'position' => $product->variants()->max('position') + 1,
+    'weight_unit' => Weight::G,
+    'weight_value' => 250,
+    'height_unit' => Length::CM,
+    'height_value' => 74,
+    'width_unit' => Length::CM,
+    'width_value' => 56,
+]);
+
+$variant->values()->sync([$red->id, $large->id]);
+
+$variant->prices()->updateOrCreate(
+    ['currency_id' => Currency::query()->where('code', 'USD')->value('id')],
+    ['amount' => 2999],
+);
+
+$variant->mutateStock(
+    inventoryId: resolve(Inventory::class)::query()->default()->value('id'),
+    quantity: 50,
+    event: 'Initial stock',
+);
+```
+
+### Retrieving Variants
+
+`$product->variants` returns the variants ordered by `position`. To find a variant by its SKU, query the variants of its product, since a SKU is unique per product only:
+
+```php
+$variant = $product->variants()->where('sku', 'TS-BLUE-L')->first();
+```
+
+To build an option picker, load the variants with their values and the attribute of each value:
+
+```php
+$variants = $product->variants()->with('values.attribute')->get();
+```
+
+To find the variant matching a selection, such as Color = Blue and Size = L, count the matching values:
+
+```php
+use Illuminate\Database\Eloquent\Builder;
+
+$valueIds = [$blue->id, $large->id];
+
+$variant = $product->variants()
+    ->whereHas('values', fn (Builder $query) => $query->whereKey($valueIds), '=', count($valueIds))
+    ->first();
+```
+
+`whereKey()` qualifies the `id` column with the table name, which the query needs because the pivot table has an `id` column too.
+
+### Storefront Example
+
+This controller shows a product page with its option picker, and answers the request the page sends when a customer changes the selection:
+
+```php title="app/Http/Controllers/ProductController.php"
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Shopper\Core\Models\AttributeValue;
+use Shopper\Core\Models\Contracts\Product;
+use Shopper\Core\Models\Contracts\ProductVariant;
+
+class ProductController extends Controller
+{
+    public function show(string $slug): View
+    {
+        $product = resolve(Product::class)::query()
+            ->publish()
+            ->where('slug', $slug)
+            ->with(['variants.values.attribute', 'variants.prices.currency', 'variants.media'])
+            ->firstOrFail();
+
+        resolve(ProductVariant::class)::loadCurrentStock($product->variants);
+
+        $options = $product->variants
+            ->flatMap->values
+            ->unique('id')
+            ->groupBy(fn (AttributeValue $value): string => $value->attribute->name);
+
+        return view('products.show', [
+            'product' => $product,
+            'options' => $options,
+        ]);
+    }
+
+    public function variant(Request $request, string $slug): JsonResponse
+    {
+        $valueIds = $request->validate([
+            'values' => ['required', 'array'],
+            'values.*' => ['integer'],
+        ])['values'];
+
+        $variant = resolve(Product::class)::query()
+            ->publish()
+            ->where('slug', $slug)
+            ->firstOrFail()
+            ->variants()
+            ->whereHas('values', fn (Builder $query) => $query->whereKey($valueIds), '=', count($valueIds))
+            ->firstOrFail();
+
+        return response()->json([
+            'id' => $variant->public_id,
+            'name' => $variant->name,
+            'sku' => $variant->sku,
+            'price' => $variant->getPrice()?->amount,
+            'stock' => $variant->stock,
+            'in_stock' => $variant->allow_backorder || $variant->inStock(),
+            'image' => $variant->getThumbnailUrl('medium'),
+        ]);
+    }
+}
+```
+
+`$options` groups the values by option name, `['Color' => [Blue, Red], 'Size' => [S, M, L]]`, for the picker. The price is in cents: format it as described on the [Money](/3.x/money) page.
+
+## Events
+
+Shopper dispatches no variant event of its own. Saving the variants of a product from the admin panel dispatches no product event either, as described in [Product Events](/3.x/events#product-events). Listen to the Eloquent model events instead. They are dispatched under the core class name as well, so a listener registered on `Shopper\Core\Models\ProductVariant` keeps firing after you swap the model:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Illuminate\Support\Facades\Cache;
+use Shopper\Core\Models\ProductVariant;
+
+public function boot(): void
+{
+    ProductVariant::saved(fn (ProductVariant $variant) => Cache::forget("storefront.product.{$variant->product_id}"));
+}
+```
+
+The [Events](/3.x/events#listening-to-events) page covers listeners and queues.
+
+### Observer Behavior
+
+Shopper registers `Shopper\Core\Observers\ProductVariantObserver` on the variant model. Before a variant is deleted, it deletes its media, its prices and its stock history and stock levels, and the database deletes its pivot rows, so `$variant->delete()` needs no cleanup beforehand. When a variant is created or deleted, or when its SKU changes, it reindexes the parent product once the transaction is committed.
+
+## Permissions
+
+The admin panel checks three permissions of the `products.variants` resource, in the Products group:
+
+| Permission | Allows |
+|------------|--------|
+| `products.variants.create` | Saving a variant from the Add variant slide-over, and saving new combinations from the generator |
+| `products.variants.edit` | Opening the generator, editing a variant, its SKU and barcode, its media, its prices and its stock, and reordering the variants |
+| `products.variants.delete` | Deleting a variant, one at a time or in bulk, and saving a generator list that drops existing variants |
+
+The variants list and the variant page sit behind `products.edit`, like every section of the product editor. `products.variants.browse` and `products.variants.read` are seeded with the others, but the admin panel never checks them. The [Access Control](/3.x/acl#access-by-section) page lists the permissions of each section.
+
+## In the Admin
+
+Merchants manage variants in the Variants section of a variant product. The table lists each variant with its thumbnail, name, SKU, position and stock, lets merchants drag rows to reorder them, and deletes variants one at a time or in bulk. Add variant opens a four-step slide-over: General (name, SKU, option values), Media (thumbnail and images), Pricing (one price per currency) and Inventories (barcode and initial quantity). Generate variants opens the generator described in [Generating Variant Combinations](#generating-variant-combinations). The variant page edits the name, option values, backorder setting and dimensions, the SKU and barcode, the images, the prices and the stock at each location. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API exposes variants inside their product, under the `store` prefix set by `SHOPPER_API_PREFIX`. It has no variant endpoint of its own:
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /store/products/{slug}?include=variants` | The product with its variants, their prices and their option values |
+| `GET /store/products?filter[option]=blue,large` | The products with a variant, or a product attribute, whose value or value key matches one of the given values |
+| `POST /store/carts/{cartId}/lines` | Adds a variant to a cart |
+
+A variant resource has the type `variants`, its `public_id` as `id`, and carries `name`, `sku`, `barcode`, `ean`, `upc`, `position`, `allow_backorder`, `stock`, `in_stock`, `metadata`, `prices`, the calculated price, `values` (each with `value`, `key`, `attribute` and `attribute_slug`), `images`, `thumbnail`, `created_at` and `updated_at`, and a `product` relationship. `in_stock` is `true` when the stock is above 0 or the variant allows backorders.
+
+To add a variant to a cart, send its public ID with the `variant` type:
+
+```bash
+curl -X POST "https://example.com/store/carts/01JD8Z3K4M5N6P7Q8R9S0T1V2W/lines" \
+  -H "Content-Type: application/json" \
+  -d '{"purchasable_type": "variant", "purchasable_id": "01JD8Z9X7Y6W5V4T3S2R1Q0P9N", "quantity": 2}'
+```
+
+The API answers with the `variant_required` error code when the request names a variant product instead of one of its variants, `purchasable_unavailable` when the variant does not exist or its product is not published, `price_missing` when the variant has no price in the cart currency, and `stock_insufficient` when the stock is short. The [Storefront](/3.x/storefront) section documents the Store API, the [Pricing](/3.x/pricing) page the price fields and the [Cart](/3.x/cart) page the cart endpoints.

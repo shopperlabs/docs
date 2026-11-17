@@ -1,0 +1,256 @@
+---
+title: Product Tags
+sidebarTitle: Tags
+description: Flat labels on products, from the ProductTag model and its pivot table to the tag scope and the tag filter of the Store API.
+---
+
+Tags are flat labels you attach to products: a season such as "Summer 2026", a campaign such as "Flash Sale", or a storefront badge such as "New Arrival" or "Best Seller". [Categories](/3.x/categories) form a tree and [collections](/3.x/collections) group products by hand or by rules. A tag has no parent and no rule, and a merchant can create one from the product form without leaving the product.
+
+A storefront uses tags to filter a listing, to show a badge on a product card, or to build a landing page for a campaign. A product can carry any number of tags.
+
+## Model
+
+The model is `Shopper\Core\Models\ProductTag`. It has no contract and no key in `config/shopper/models.php`, so it cannot be swapped: [Models You Cannot Swap](/3.x/models#models-you-cannot-swap) shows how to add a relationship to it. Its morph alias is `product_tag`. Two traits change how you create and find tags:
+
+- `HasSlug` turns the `slug` you assign into a URL-safe, unique value, as described in [Slug Generation](#slug-generation).
+- `HasPublicId` fills the `public_id` column, the identifier the Store API returns, as described in [Public IDs](/3.x/models#public-ids).
+
+## Database Schema
+
+Tags live in their own table and reach products through the pivot table that products share with categories, collections, channels and related products. The table names below leave out the `sh_` [table prefix](/3.x/configuration#database-table-prefix).
+
+### Tags Table
+
+The `product_tags` table holds one row per tag:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | auto | Public identifier, unique |
+| `name` | string | no | | Tag name shown to customers |
+| `slug` | string | yes | null | URL-safe identifier, unique |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+### Pivot Table
+
+Tags use the polymorphic `product_has_relations` table. A row links a product to a tag, a category, a collection, a channel or a related product, told apart by `productable_type`:
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `product_id` | bigint | no | Foreign key to `products`, deleted with the product |
+| `productable_type` | string | no | Morph alias of the related model, `product_tag` for a tag |
+| `productable_id` | bigint | no | ID of the tag |
+
+The table has no unique constraint: `attach()` called twice with the same tag adds a second row. Use `sync()` or `syncWithoutDetaching()` to attach tags. Deleting a tag removes its row from `product_tags` but leaves its rows in `product_has_relations`; detach the products first if you delete tags from code.
+
+## Slug Generation
+
+`HasSlug` runs the value you assign to `slug` through `Str::slug()`, then appends `-1`, `-2` and so on while another tag already uses it. The tag being updated is left out of that check, so saving a tag with its own slug keeps it. The slug is not derived from the name: pass one when you create a tag, or the column stays `null`: `findBySlug()` cannot find the tag and the `tag` scope finds it only by its public ID.
+
+```php
+use Shopper\Core\Models\ProductTag;
+
+$first = ProductTag::query()->create(['name' => 'New Arrival', 'slug' => 'New Arrival']);
+$second = ProductTag::query()->create(['name' => 'New Arrivals', 'slug' => 'new-arrival']);
+
+$first->slug;
+$second->slug;
+```
+
+The first tag gets `new-arrival` and the second `new-arrival-1`. `ProductTag::findBySlug()` returns the tag with a given slug and throws a `ModelNotFoundException` when there is none, which Laravel turns into a 404:
+
+```php
+$tag = ProductTag::findBySlug('summer-2026');
+```
+
+## Relationships
+
+A tag and a product are linked in both directions through `product_has_relations`.
+
+### Products
+
+`products()` on a tag is a `morphToMany` relationship to the product model set in `config('shopper.models.product')`, so a swapped product model is returned. `tags()` on a product is the inverse `morphedByMany` relationship:
+
+```php
+$tag->products;
+$tag->products()->count();
+$tag->products()->syncWithoutDetaching([$classicTee->id, $runningShorts->id]);
+$tag->products()->detach($classicTee->id);
+
+$product->tags;
+$product->tags()->sync([$summerTag->id, $newArrivalTag->id]);
+```
+
+`sync()` replaces every tag of the product with the given IDs, and `syncWithoutDetaching()` adds the given tags and keeps the others.
+
+## Configuration
+
+Tags have no config key and no model to swap. The `tag` feature flag turns their admin screens on and off.
+
+### Disabling Tags
+
+Tags are enabled by default. To remove them from the admin panel, set the `tag` flag to disabled in `config/shopper/features.php`:
+
+```php title="config/shopper/features.php"
+use Shopper\Enum\FeatureState;
+
+return [
+    'tag' => FeatureState::Disabled,
+];
+```
+
+When the flag is disabled, the Tags item leaves the sidebar, the `shopper.tags.index` route is not registered, and the Tags field leaves the product form. The flag only affects the admin panel: the `ProductTag` model, the `tag` scope and the Store API keep working, so a storefront still lists tags and filters products by tag.
+
+## Creating Tags
+
+Create a tag with a name and a slug, then attach it to products:
+
+```php title="database/seeders/CatalogSeeder.php"
+use Shopper\Core\Models\ProductTag;
+
+$tag = ProductTag::query()->create([
+    'name' => 'Summer 2026',
+    'slug' => 'summer-2026',
+]);
+
+$tag->products()->syncWithoutDetaching([$classicTee->id, $linenShirt->id]);
+```
+
+Merchants can also create a tag from the Tags field of the product form, without leaving the product. A [CSV import](/3.x/import) reads a `tags` column with comma-separated tag names: it attaches the tag with the same name when one exists, creates the others with a slug made from the name, and keeps the tags the product already has.
+
+## Retrieving Tags
+
+List tags in alphabetical order with the number of published products in each:
+
+```php
+use Shopper\Core\Models\ProductTag;
+
+$tags = ProductTag::query()
+    ->withCount(['products' => fn ($query) => $query->publish()])
+    ->orderBy('name')
+    ->get();
+```
+
+Find a tag by its slug and page through its published products:
+
+```php
+$tag = ProductTag::findBySlug('summer-2026');
+
+$products = $tag->products()
+    ->publish()
+    ->with('prices.currency')
+    ->paginate(12);
+```
+
+On a product listing, eager-load `tags` so each product card can show its badges without a query per product:
+
+```php
+use Shopper\Core\Models\Contracts\Product;
+
+$products = resolve(Product::class)::query()
+    ->publish()
+    ->with('tags')
+    ->paginate(12);
+```
+
+## Storefront Example
+
+This controller serves a page that lists the tags of the store and a page per tag with its published products:
+
+```php title="app/Http/Controllers/TagController.php"
+namespace App\Http\Controllers;
+
+use Illuminate\Contracts\View\View;
+use Shopper\Core\Models\ProductTag;
+
+final class TagController extends Controller
+{
+    public function index(): View
+    {
+        $tags = ProductTag::query()
+            ->withCount(['products' => fn ($query) => $query->publish()])
+            ->orderBy('name')
+            ->get();
+
+        return view('tags.index', ['tags' => $tags]);
+    }
+
+    public function show(string $slug): View
+    {
+        $tag = ProductTag::findBySlug($slug);
+
+        $products = $tag->products()
+            ->publish()
+            ->with('prices.currency')
+            ->paginate(12);
+
+        return view('tags.show', ['tag' => $tag, 'products' => $products]);
+    }
+}
+```
+
+### Filtering Products by Tags
+
+The `tag` scope of the product model keeps the products that carry at least one of the given tags. It accepts slugs or public IDs, as one value, several arguments or an array:
+
+```php
+use Shopper\Core\Models\Contracts\Product;
+
+$summer = resolve(Product::class)::query()
+    ->publish()
+    ->tag('summer-2026')
+    ->get();
+
+$highlights = resolve(Product::class)::query()
+    ->publish()
+    ->tag(['new-arrival', 'best-seller'])
+    ->paginate(12);
+```
+
+Each call to the scope adds its own condition, so chaining two calls keeps the products that carry both tags:
+
+```php
+$products = resolve(Product::class)::query()
+    ->publish()
+    ->tag('summer-2026')
+    ->tag('best-seller')
+    ->get();
+```
+
+## Events
+
+Creating, renaming or deleting a tag dispatches no event. Saving the main product form, where the tags of a product change, dispatches `ProductUpdated`, as listed in [Product Events](/3.x/events#product-events). The event is dispatched before the form saves the tags, so a listener that runs during the request reads the previous tags.
+
+## Permissions
+
+The seeder creates `tags.browse`, `tags.read`, `tags.create`, `tags.edit` and `tags.delete` in the Products group. The tag list checks `tags.browse`, and its actions check `tags.create`, `tags.edit` and `tags.delete`. The admin panel never checks `tags.read`.
+
+The Tags item of the sidebar shows to users with `products.browse` or `tags.browse`, while the page itself requires `tags.browse`. Creating a tag from the product form needs only `products.edit`, the permission of the product form. The [Permissions](/3.x/acl#access-by-section) page lists the permissions of each section.
+
+## In the Admin
+
+The Tags page sits under Products in the sidebar. It lists tags with their name, slug and creation date, searches by name and slug, and creates or edits a tag in a modal with a slug generated from the name. The product form has a Tags field that selects existing tags and creates new ones. The page is the `tag-index` key of `config/shopper/components/product.php`, which `php artisan shopper:component:publish product` copies to your application. The [User Guide](/3.x/user-guide) shows how merchants manage tags.
+
+## From a Storefront
+
+`GET /store/tags` returns a paginated list of the tags of the store with their `name`, `slug`, `created_at` and `updated_at`, and their public ID as `id`. It filters by name with `filter[name]` (a partial match), sorts with `sort=name`, and with `include=products` returns the published products of each tag, restricted to the channel of the request when one is resolved. The JavaScript SDK calls it with `tag.list()`. There is no endpoint for a single tag.
+
+```json
+{
+  "data": [
+    {
+      "id": "01JD3XS4B6D8F0H2K4M6P8R0T2",
+      "type": "tags",
+      "attributes": {
+        "name": "Summer 2026",
+        "slug": "summer-2026",
+        "created_at": "2026-05-02T09:14:00+00:00",
+        "updated_at": "2026-05-02T09:14:00+00:00"
+      }
+    }
+  ]
+}
+```
+
+To list the products of a tag, call `GET /store/products?filter[tag]=summer-2026`. The filter uses the `tag` scope, so it takes a slug or a public ID, and a comma-separated list keeps the products that carry any of them. `include=tags` on `GET /store/products` and `GET /store/products/{slug}` returns the tags of each product. The [Storefront](/3.x/storefront) section covers the Store API, its pagination and its includes.

@@ -41,9 +41,9 @@ Order statuses follow a state machine: an order moves only to the statuses allow
 ## Catalog
 
 - A CSV import wizard creates and updates products from a file, with a progress view and a notification at the end. Custom import sources register with `resolve(ImportManager::class)->extend()`.
-- Product search runs on Laravel Scout, so a store can move from the database driver to Meilisearch, Typesense or Algolia.
+- Product search runs on Laravel Scout. The default `collection` driver needs no search server, and a store moves to Meilisearch, Typesense or Algolia through configuration. See [Search](/3.x/search).
 - Sales channels have drivers and a settings page. See [Channels](/3.x/channels).
-- A product's attribute values can carry a swatch image, uploaded from the product's Attributes page and exposed in the Store API as `swatch_url`.
+- A product's attribute values can carry a swatch image, uploaded from the product's Attributes page and exposed in the Store API as `swatch_url`. See [Attributes](/3.x/attributes).
 - Stock levels are stored per inventory location, and `php artisan shopper:stock:reconcile` checks them against the stock movements.
 - Store API resources use a public ULID (`public_id`) as their id instead of the numeric key. See [Public IDs](/3.x/models#public-ids).
 

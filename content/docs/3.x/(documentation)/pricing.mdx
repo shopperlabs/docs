@@ -1,0 +1,346 @@
+---
+title: Pricing
+description: Prices per currency on products and variants, the Price model, the HasPrices trait, the price resolver, and the prices the Store API returns.
+---
+
+Shopper sets prices per currency on [products](/3.x/products) and [product variants](/3.x/product-variants). Each price is a row of the `prices` table, attached to its product or variant through a polymorphic relationship, with at most one row per currency. Shopper never converts a price from one currency to another: a store that sells in US dollars and euros sets a USD price and an EUR price on each Classic T-Shirt.
+
+Amounts are integers in cents. The [Money](/3.x/money) page covers that convention, zero-decimal currencies and formatting; this page covers where prices live, how to read and write them, and how Shopper decides the price a customer pays.
+
+The price stored on a product is the catalog price. The cart, the checkout and the Store API never read it directly: they ask a price resolver, which returns the catalog price by default. Replacing the resolver gives you customer group prices, B2B price lists or quantity tiers without changing the cart.
+
+## Price Model
+
+The model is `Shopper\Core\Models\Price`. It implements the `Shopper\Core\Models\Contracts\Price` contract and has no key in `config/shopper/models.php`, so it cannot be swapped: [Models You Cannot Swap](/3.x/models#models-you-cannot-swap) shows how to add a relationship to it. It uses `HasPublicId`, which fills the `public_id` column described in [Public IDs](/3.x/models#public-ids).
+
+### Database Schema
+
+Prices live in the `prices` table, `sh_prices` with the default [table prefix](/3.x/configuration#database-table-prefix):
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | auto | Public identifier, unique |
+| `priceable_type` | string | no | | Morph alias of the owner: `product` or `variant` |
+| `priceable_id` | bigint | no | | ID of the product or variant |
+| `amount` | integer, unsigned | yes | null | Selling price in cents, indexed |
+| `compare_amount` | integer, unsigned | yes | null | Compare-at price in cents |
+| `cost_amount` | integer, unsigned | yes | null | Cost price in cents |
+| `currency_id` | bigint | no | | Foreign key to `currencies`, deleted with the currency |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+A unique index on `priceable_type`, `priceable_id` and `currency_id` allows one price per currency for each product or variant. Write prices with `updateOrCreate()` keyed on the currency, as shown in [Creating Prices](#creating-prices): a second `create()` for the same currency fails on that index. When you upgrade from 2.x, the migration that adds the index first deletes duplicate rows and keeps the one with the highest `id`.
+
+### Price Fields
+
+Each price holds three amounts, all in the currency of the price:
+
+| Field | What it represents | Shown to customers | Example |
+|-------|--------------------|--------------------|---------|
+| `amount` | The selling price | Yes | `1999` for $19.99 |
+| `compare_amount` | The price before a sale, shown struck through next to the selling price | Yes, as a strikethrough | `2999` for $29.99 |
+| `cost_amount` | What the store paid its supplier, for margin reports | No | `850` for $8.50 |
+
+A Classic T-Shirt on sale for the Summer Sale has all three: a cost of `850`, a selling price of `1999` and a compare-at price of `2999`. The storefront shows $19.99 next to a struck-through $29.99, and the margin is $11.49. The Store API never returns `cost_amount`.
+
+### Relationships
+
+`priceable()` returns the product or variant that owns the price, and `currency()` returns its `Shopper\Core\Models\Currency`. The currency relationship ignores the global scope that hides disabled currencies, so a price in a disabled currency still loads its currency. The `currency_code` attribute reads the code from that relationship:
+
+```php
+$price->priceable;
+$price->currency;
+$price->currency_code;
+```
+
+The [Currencies](/3.x/currencies) page covers the Currency model, enabled and disabled currencies, and the currencies a store sells in.
+
+### Price Helper
+
+`amountPrice()`, `compareAmountPrice()` and `costAmountPrice()` wrap one of the three amounts in a `Shopper\Core\Helpers\Price` object, which carries the `amount`, the `currency` and the `formatted` string. They return `null` when the amount is `null` or `0`.
+
+These methods do not pass the currency of the price to the helper, so the object is formatted in the store default currency. For a price in another currency, build the helper with the currency code of the price, as described in [Formatting Amounts](/3.x/money#formatting-amounts):
+
+```php
+use Shopper\Core\Helpers\Price as PriceHelper;
+
+$selling = PriceHelper::from($price->amount, $price->currency_code);
+
+$selling->formatted;
+```
+
+## HasPrices Trait
+
+`Shopper\Core\Models\Product` and `Shopper\Core\Models\ProductVariant` implement the `Shopper\Core\Contracts\Priceable` contract with the `Shopper\Core\Models\Traits\HasPrices` trait. The trait gives a model three methods:
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `prices()` | `MorphMany` | Every price of the model, one per currency |
+| `getPrice(?string $currencyCode = null)` | `?Price` | The catalog price in a currency, the store default currency when no code is given |
+| `resolvePrice(?PricingContext $context = null)` | `?ResolvedPrice` | The price a customer pays, from the price resolver described in [Resolving Prices](#resolving-prices) |
+
+`getPrice()` reads the loaded `prices` relationship when there is one and filters it in memory, so eager-loading `prices.currency` on a listing avoids one query per product. Without a loaded relationship, it runs a query. It matches a price in a disabled currency too.
+
+Any model of yours can be priced the same way: implement `Priceable`, use `HasPrices`, and register a morph alias for it, as described in [Morph Map](/3.x/models#morph-map).
+
+## Products and Variants
+
+Which model holds the prices depends on the product type. A product of the `variant` type is sold through its variants: each variant has its own prices, and the prices of the product itself are not used. Every other type (`standard`, `virtual`, `external`) holds its prices on the product.
+
+The admin panel follows the same rule. It hides the Pricing tab of a variant product and shows a pricing table on each variant page instead. The Store API returns an empty `prices` array for a variant product and prices each variant, and sorting, price filters and price ranges on a variant product read the prices of its variants. The variant generator sets the price of each new variant in the store default currency; [Product Variants](/3.x/product-variants) covers variants.
+
+## Resolving Prices
+
+`resolvePrice()` returns the price a customer pays as a `Shopper\Core\Pricing\ResolvedPrice`, or `null` when the model has no price for the request. It asks the `Shopper\Core\Contracts\PriceResolver` bound in the container, and passes it a `Shopper\Core\Pricing\PricingContext` that describes the purchase:
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `currencyCode` | `?string` | null | Currency to price in. `currency()` returns it, or the store default currency when it is null. |
+| `customerId` | `?int` | null | The customer buying, when known |
+| `quantity` | `int` | 1 | Quantity of the cart line |
+| `channelId` | `?int` | null | The sales channel of the request, as described in [Channels](/3.x/channels) |
+| `zoneId` | `?int` | null | The zone of the request |
+| `productQuantity` | `?int` | null | Quantity of the same product across every line of the cart. `productQuantity()` returns it, or `quantity` when it is null. |
+
+```php title="app/Http/Controllers/ProductController.php"
+use Shopper\Core\Models\Contracts\Product;
+use Shopper\Core\Pricing\PricingContext;
+
+$product = resolve(Product::class)::query()
+    ->publish()
+    ->where('slug', 'classic-t-shirt')
+    ->firstOrFail();
+
+$price = $product->resolvePrice(new PricingContext(
+    currencyCode: 'EUR',
+    customerId: auth()->id(),
+));
+```
+
+The `ResolvedPrice` carries the result:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `amount` | `int` | Unit price to charge, in cents |
+| `currencyCode` | `string` | Currency of the amount |
+| `compareAmount` | `?int` | Compare-at price to show struck through |
+| `originalAmount` | `?int` | Price before the resolver changed it, for a resolver that applies its own reduction |
+| `meta` | `array` | Data the resolver attaches to the price |
+
+The default resolver, `Shopper\Core\Pricing\CatalogPriceResolver`, calls `getPrice()` with the currency of the context and returns its `amount` and `compare_amount`. It ignores the customer, the quantity, the channel and the zone.
+
+The cart resolves the price of a line each time the line or the cart changes, with a context built from the cart: its currency, customer, channel and zone, the line quantity and the quantity of the product across the cart. It stores the result on the line and checks it again when the order is placed, as described on the [Cart](/3.x/cart) page.
+
+### Custom Price Resolver
+
+A custom resolver implements `PriceResolver`. This one gives 10% off from 10 units of the same product in the cart, on top of the catalog price:
+
+```php title="app/Pricing/VolumePriceResolver.php"
+namespace App\Pricing;
+
+use Illuminate\Database\Eloquent\Model;
+use Shopper\Core\Contracts\Priceable;
+use Shopper\Core\Contracts\PriceResolver;
+use Shopper\Core\Pricing\CatalogPriceResolver;
+use Shopper\Core\Pricing\PricingContext;
+use Shopper\Core\Pricing\ResolvedPrice;
+
+final class VolumePriceResolver implements PriceResolver
+{
+    public function __construct(
+        private CatalogPriceResolver $catalog,
+    ) {}
+
+    public function resolve(Priceable&Model $priceable, PricingContext $context): ?ResolvedPrice
+    {
+        $price = $this->catalog->resolve($priceable, $context);
+
+        if ($price === null || $context->productQuantity() < 10) {
+            return $price;
+        }
+
+        return new ResolvedPrice(
+            amount: (int) round($price->amount * 0.9),
+            currencyCode: $price->currencyCode,
+            compareAmount: $price->compareAmount,
+            originalAmount: $price->amount,
+            meta: ['public' => ['tier' => '10+']],
+        );
+    }
+}
+```
+
+Bind it in the `register()` method of a service provider. Shopper binds its own resolver as a singleton, and your binding replaces it:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Pricing\VolumePriceResolver;
+use Shopper\Core\Contracts\PriceResolver;
+
+public function register(): void
+{
+    $this->app->singleton(PriceResolver::class, VolumePriceResolver::class);
+}
+```
+
+The cart stores the `meta` array on the cart line, in its `pricing` column. The Store API returns only the `public` key of `meta`, so keep anything a customer should not see outside that key.
+
+A resolver that queries the database for each product can implement `Shopper\Core\Contracts\PreloadsPrices` as well. Its `preload(iterable $priceables, PricingContext $context)` method receives every priceable of a cart or a Store API listing before the first `resolve()` call, so the resolver can load their prices in one query.
+
+### Quantity Rules
+
+A `Shopper\Core\Contracts\QuantityRuleResolver` returns the quantities a customer may buy, as a `Shopper\Core\Pricing\QuantityRule` with a `minimum`, an optional `maximum` and an `increment`. A rule of `new QuantityRule(minimum: 6, increment: 6)` sells wine by the case of 6. The constructor throws an `InvalidArgumentException` when the minimum or the increment is below 1, the minimum is not a multiple of the increment, or the maximum is below the minimum.
+
+The default `Shopper\Core\Pricing\DefaultQuantityRuleResolver` returns no rule. The cart refuses a quantity the rule does not allow with a `Shopper\Cart\Exceptions\QuantityRuleViolationException`, and the Store API returns the rule of each product. Bind your resolver the same way as a price resolver.
+
+### Price Index
+
+Sorting by price, price filters and price ranges run in SQL, so they cannot call the resolver for each product. They use a `Shopper\Core\Contracts\ProductPriceIndex` instead: `minPriceExpression()` returns the SQL expression of the lowest price of a product in a currency, and `ranges()` returns the lowest and highest price of each product of a list.
+
+The default `Shopper\Core\Pricing\CatalogProductPriceIndex` reads the catalog prices and skips prices without an amount. A custom resolver that changes prices does not change the index: when listings must sort and filter on the resolved prices, bind your own `ProductPriceIndex` as well.
+
+## Configuration
+
+Pricing has no feature flag and no config key. Shopper binds its three pricing services as singletons in `Shopper\Core\CoreServiceProvider`:
+
+| Contract | Default implementation |
+|----------|------------------------|
+| `Shopper\Core\Contracts\PriceResolver` | `Shopper\Core\Pricing\CatalogPriceResolver` |
+| `Shopper\Core\Contracts\QuantityRuleResolver` | `Shopper\Core\Pricing\DefaultQuantityRuleResolver` |
+| `Shopper\Core\Contracts\ProductPriceIndex` | `Shopper\Core\Pricing\CatalogProductPriceIndex` |
+
+Two store settings decide which currencies a merchant prices in: `currencies` lists the currencies of the store, and the admin price form shows one row for each; `default_currency_id` is the store default currency that `getPrice()` and `PricingContext` fall back to. The [Settings](/3.x/settings) page lists both keys.
+
+## Creating Prices
+
+Create or update a price through the `prices()` relationship of a product or a variant, keyed on the currency so a second call updates the row instead of failing on the unique index:
+
+```php title="database/seeders/CatalogSeeder.php"
+use Shopper\Core\Models\Contracts\Product;
+use Shopper\Core\Models\Currency;
+
+$product = resolve(Product::class)::query()
+    ->where('slug', 'classic-t-shirt')
+    ->firstOrFail();
+
+$product->prices()->updateOrCreate(
+    ['currency_id' => Currency::query()->where('code', 'USD')->value('id')],
+    [
+        'amount' => 1999,
+        'compare_amount' => 2999,
+        'cost_amount' => 850,
+    ],
+);
+```
+
+### Multi-Currency Pricing
+
+To set prices in several currencies at once, call `Shopper\Actions\Store\Product\SavePricingAction`, the action the admin price form uses. It takes an array keyed by currency ID and runs `updateOrCreate()` for each entry:
+
+```php
+use Shopper\Actions\Store\Product\SavePricingAction;
+
+app()->call(SavePricingAction::class, [
+    'model' => $product,
+    'pricing' => [
+        $usdCurrencyId => [
+            'amount' => 2999,
+            'compare_amount' => 3999,
+            'cost_amount' => 850,
+        ],
+        $eurCurrencyId => [
+            'amount' => 2799,
+            'compare_amount' => 3799,
+            'cost_amount' => 800,
+        ],
+    ],
+]);
+```
+
+The action skips an entry whose `amount` is empty or `0`, and never deletes a price: to remove the EUR price of a product, delete its row with `$product->prices()->where('currency_id', $eurCurrencyId)->delete()`. The action ships with the admin panel package, `shopper/framework`.
+
+A [CSV import](/3.x/import) sets prices too, from the `price`, `compare_at_price`, `cost_per_item` and `currency` columns of each row.
+
+## Retrieving Prices
+
+`getPrice()` returns the catalog price of a product in the store default currency, or in the currency you pass. Format its amounts with the currency of the price:
+
+```blade title="resources/views/products/show.blade.php"
+@php($price = $product->getPrice('EUR'))
+
+@if ($price)
+    <p>
+        {{ shopper_money_format($price->amount, $price->currency_code) }}
+
+        @if ($price->compare_amount)
+            <del>{{ shopper_money_format($price->compare_amount, $price->currency_code) }}</del>
+        @endif
+    </p>
+@endif
+```
+
+On a listing, eager-load the prices with their currency, so `getPrice()` filters the loaded rows without a query per product:
+
+```php title="app/Http/Controllers/ProductController.php"
+use Shopper\Core\Models\Contracts\Product;
+
+$products = resolve(Product::class)::query()
+    ->publish()
+    ->with('prices.currency')
+    ->paginate(12);
+```
+
+`getPrice()` returns the price the merchant entered. To show the price the cart will charge, call `resolvePrice()` with the context of the customer, as described in [Resolving Prices](#resolving-prices).
+
+## Events
+
+Prices dispatch no event. Saving prices from the admin panel or generating variants writes the `prices` table without an event. A CSV import dispatches `ProductCreated` for each product it creates, once the transaction that also writes its prices is committed, as listed in [Product Events](/3.x/events#product-events).
+
+## Permissions
+
+The Pricing tab of a product and its actions check `products.edit`. Adding, editing or deleting the prices of a variant checks `products.edit` and `products.variants.edit`. The [Permissions](/3.x/acl#access-by-section) page lists the permissions of each section.
+
+## In the Admin
+
+The Pricing tab of a product, and the pricing table of each variant page, list one price per currency with its amount, compare-at price and cost. The form shows one row per store currency when you add prices, only the row's currency when you edit one, and saves through `SavePricingAction`. The tab is the `product-pricing` page, the table the `products.pricing` component and the form the `slide-overs.manage-pricing` component of `config/shopper/components/product.php`, which `php artisan shopper:component:publish product` copies to your application. The [User Guide](/3.x/user-guide) shows how merchants set prices, and [Admin Forms and Tables](/3.x/money#admin-forms-and-tables) the money fields and columns.
+
+## From a Storefront
+
+The Store API returns the prices of a product on `GET /store/products` and `GET /store/products/{slug}`, and the prices of each variant when the request includes `variants`. Every price-aware value of a response uses one currency: the `filter[currency]` parameter of the request, then the currency of the zone of the request, then the store default currency. The response repeats that code in `meta.currency`. An unknown or disabled currency in `filter[currency]` answers `422` with the `currency_unknown` code.
+
+```json
+{
+  "data": {
+    "id": "01JD3XQ5Z8K2M4N6P8R0T2V4W6",
+    "type": "products",
+    "attributes": {
+      "name": "Classic T-Shirt",
+      "price_range": { "currency_code": "EUR", "min": 2499, "max": 2499 },
+      "prices": [
+        { "public_id": "01JD3XR2A4C6E8G0J2L4N6Q8S0", "amount": 2999, "compare_amount": 3999, "currency_code": "USD" },
+        { "public_id": "01JD3XR2A4C6E8G0J2L4N6Q8S1", "amount": 2499, "compare_amount": null, "currency_code": "EUR" }
+      ],
+      "calculated_price": {
+        "amount": 2499,
+        "compare_amount": null,
+        "original_amount": null,
+        "currency_code": "EUR",
+        "meta": null
+      },
+      "quantity_rule": null
+    }
+  },
+  "meta": { "currency": "EUR" }
+}
+```
+
+| Attribute | Content |
+|-----------|---------|
+| `prices` | Every catalog price in an enabled currency, without `cost_amount`. Empty on a variant product. |
+| `calculated_price` | The `ResolvedPrice` from the price resolver in the request currency, with the `public` key of its `meta`. Null when the product has no price in that currency. Absent on a variant product, whose variants carry it on `GET /store/products/{slug}?include=variants`. |
+| `quantity_rule` | The `minimum`, `maximum` and `increment` from the quantity rule resolver, or null |
+| `price_range` | The lowest and highest price of the product in the request currency, from its variants for a variant product |
+
+Listings sort with `sort=price` or `sort=-price` and filter with `filter[price_min]` and `filter[price_max]`, in cents of the request currency. Both leave out products without a price in that currency. `include=price_range` adds `meta.price_range`, the lowest and highest price of the whole listing. When no currency resolves, a price sort or filter answers `422` with the `currency_required` code.
+
+The resolver receives the customer of the bearer token, so a response with calculated prices carries `Vary: Authorization`. [Amounts in the Store API](/3.x/money#amounts-in-the-store-api) covers the amounts of the other resources, and [Storefront](/3.x/storefront) the Store API itself.

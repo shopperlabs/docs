@@ -1,0 +1,601 @@
+---
+title: Attributes
+description: The Attribute model in Shopper, field types, attribute values, product attributes and variant options, and the searchable and filterable flags.
+---
+
+Attributes describe the characteristics of a product: the color and size of a T-shirt, the material of a jacket, the care instructions of a sweater. An attribute such as "Color" holds a list of values ("Navy", "White", "Heather Grey") that products pick from, or takes a free value typed for each product, such as "100% organic cotton".
+
+The same attributes serve two purposes. On any product, they are specifications that a storefront displays and filters on. On a variant product, the values picked from an attribute become the options of its variants: a "Classic T-Shirt" with three colors and four sizes has twelve variants, each linked to one color and one size.
+
+## Models
+
+Shopper uses three models for attributes:
+
+| Model | Table | Purpose |
+|-------|-------|---------|
+| `Shopper\Core\Models\Attribute` | `sh_attributes` | The attribute definition: Color, Size, Material |
+| `Shopper\Core\Models\AttributeValue` | `sh_attribute_values` | A value an attribute offers: Navy, Large |
+| `Shopper\Models\AttributeProduct` | `sh_attribute_product` | One row per value a product has, or its free value |
+
+Each model implements the contract of the same name in `Shopper\Core\Models\Contracts`. Two traits of the `Attribute` model change what you can do with it:
+
+- `HasSlug` turns the `slug` you assign into a URL-safe value and appends `-1`, `-2` and so on when it is already taken. The slug is not derived from the name: the admin form fills it from the name, and your code passes one.
+- `HasPublicId` fills `public_id` with a ULID when the attribute is created. The Store API returns it as the attribute `id`.
+
+`Attribute` and `AttributeValue` have no configuration key, so they are always loaded with their own class, as described in [Models You Cannot Swap](/3.x/models#models-you-cannot-swap). Query them with `Attribute::query()` and `AttributeValue::query()`.
+
+The pivot model is swappable through the `attribute_product` key of `config/shopper/models.php`. Its default, `Shopper\Models\AttributeProduct`, extends `Shopper\Core\Models\AttributeProduct` and adds the Spatie Media Library methods that store the swatch image of a value. To add your own methods, extend the admin class:
+
+```php title="app/Models/AttributeProduct.php"
+<?php
+
+namespace App\Models;
+
+use Shopper\Models\AttributeProduct as ShopperAttributeProduct;
+
+class AttributeProduct extends ShopperAttributeProduct
+{
+    public function isColor(): bool
+    {
+        return $this->attribute->slug === 'color';
+    }
+}
+```
+
+Then point the key to your class:
+
+```php title="config/shopper/models.php"
+'attribute_product' => App\Models\AttributeProduct::class,
+```
+
+The [Models](/3.x/models#swapping-a-model) page explains how swapping works.
+
+## Database Schema
+
+Attributes use four tables. The names below use `sh_`, the default [table prefix](/3.x/configuration#database-table-prefix).
+
+### Attribute Table
+
+The `sh_attributes` table holds one row per attribute:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `name` | string | no | - | Attribute name |
+| `slug` | string | yes | null | URL identifier, unique |
+| `description` | string | yes | null | Short description, 100 characters in the admin form |
+| `type` | string | no | - | Field type, cast to `FieldType` |
+| `icon` | string | yes | null | Icon name, shown in the admin panel and returned by the Store API |
+| `is_enabled` | boolean | no | `false` | Offered when attributes are chosen for a product, and exposed by the Store API |
+| `is_searchable` | boolean | no | `false` | Marks the attribute as searchable, see [Searchable and Filterable Attributes](#searchable-and-filterable-attributes) |
+| `is_filterable` | boolean | no | `false` | Marks the attribute as a storefront filter |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+### AttributeValue Table
+
+The `sh_attribute_values` table holds the values of the attributes that offer a list. It has no timestamps:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `value` | string(50) | no | - | Label shown to customers, indexed |
+| `key` | string | no | - | Identifier, unique within the attribute. A hex code such as `#1e3a8a` for a color |
+| `position` | smallint | yes | `1` | Display order |
+| `attribute_id` | bigint | no | - | Attribute, deleted with it |
+
+The `key` is unique per attribute: a "Size" and a "Shoe Size" attribute can both have a `large` value.
+
+### AttributeProduct Table (Pivot)
+
+The `sh_attribute_product` table links a product to its attributes. It has no timestamps:
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | no | Primary key |
+| `attribute_id` | bigint | no | Attribute, row deleted with it |
+| `product_id` | bigint | no | Product, row deleted with it |
+| `attribute_value_id` | bigint | yes | Selected value, row deleted with it |
+| `attribute_custom_value` | longtext | yes | Free value of a text, number, date or rich text attribute |
+
+A product with three colors has three rows for the "Color" attribute, one per value. A free-text attribute has one row, with `attribute_value_id` left empty.
+
+### Variant Value Table (Pivot)
+
+The `sh_attribute_value_product_variant` table links each variant to its option values, with a `value_id` and a `variant_id` column. Both foreign keys cascade: deleting a value or a variant deletes the link.
+
+## Field Types
+
+The `type` column is cast to the `Shopper\Core\Enum\FieldType` enum. The type decides whether the attribute offers a list of values or takes a free value per product, and which input the admin panel shows:
+
+| Case | Value | Admin label | Values | Per product |
+|------|-------|-------------|--------|-------------|
+| `FieldType::Checkbox` | `checkbox` | Checkbox | List | One or more values |
+| `FieldType::ColorPicker` | `colorpicker` | Color picker | List, with a hex code as key | One or more values |
+| `FieldType::Select` | `select` | Select | List | One value |
+| `FieldType::Text` | `text` | Text field (input) | Free | A line of text |
+| `FieldType::Number` | `number` | Text field (number) | Free | A number, stored as text |
+| `FieldType::DatePicker` | `datepicker` | Date picker | Free | A date, stored as text |
+| `FieldType::RichText` | `richtext` | Rich text | Free | HTML |
+
+The admin panel lets you change the type of an existing attribute, but its values and product rows stay as they were. Choose the type before you assign the attribute to products.
+
+### Type Checking Methods
+
+Four methods group the types by behavior:
+
+```php
+use Shopper\Core\Models\Attribute;
+
+$attribute->hasMultipleValues();
+$attribute->hasSingleValue();
+$attribute->hasTextValue();
+
+Attribute::fieldsWithValues();
+```
+
+`hasMultipleValues()` returns `true` for Checkbox and ColorPicker, `hasSingleValue()` for Select, and `hasTextValue()` for Text, Number, RichText and DatePicker. The static `fieldsWithValues()` returns the three types that offer a list of values: `[FieldType::Checkbox, FieldType::ColorPicker, FieldType::Select]`.
+
+## Relationships
+
+An attribute has many values and belongs to many products. A value belongs to one attribute and to many variants.
+
+### Values
+
+The `values()` relationship returns the `AttributeValue` models of the attribute:
+
+```php
+$attribute->values;
+
+$attribute->values()->create([
+    'value' => 'Navy',
+    'key' => '#1e3a8a',
+    'position' => 1,
+]);
+```
+
+To add several values at once:
+
+```php
+$size->values()->createMany([
+    ['value' => 'Small', 'key' => 'small', 'position' => 1],
+    ['value' => 'Medium', 'key' => 'medium', 'position' => 2],
+    ['value' => 'Large', 'key' => 'large', 'position' => 3],
+]);
+```
+
+The admin panel stores keys in lowercase and does not set the position, so values added there keep a position of `1`. The `options` include of the Store API sorts the values of a product by position, then by ID, while `GET /store/attributes` returns them in database order. `$value->attribute` returns the attribute of a value.
+
+### Products
+
+The `products()` relationship returns the products that use the attribute, with the `attribute_value_id` and `attribute_custom_value` pivot columns. It reads the product class from `config('shopper.models.product')`:
+
+```php
+$attribute->products;
+
+$color->products()->attach($product->id, [
+    'attribute_value_id' => $navy->id,
+]);
+
+$material->products()->attach($product->id, [
+    'attribute_custom_value' => '100% organic cotton',
+]);
+```
+
+From the product side, the same rows are read through `options()` and `attributeProducts()`, as shown in [Assigning Attributes to Products](#assigning-attributes-to-products).
+
+### Variants (AttributeValue)
+
+The `variants()` relationship of a value returns the variants that carry it, read from `config('shopper.models.variant')`. Its inverse is `values()` on the variant:
+
+```php
+$navy->variants;
+
+$variant->values;
+$variant->values()->attach([$navy->id, $large->id]);
+```
+
+The admin panel creates these links when it generates the variants of a product. The [Product Variants](/3.x/product-variants) page covers variant generation.
+
+## Slug & Lookup
+
+`findBySlug()` returns the attribute with that slug and throws a `ModelNotFoundException` when none matches. `findByPublicId()` returns `null` instead:
+
+```php
+use Shopper\Core\Models\Attribute;
+
+$color = Attribute::findBySlug('color');
+
+$color = Attribute::findByPublicId('01JBX3M5D7R8K2C9P4W6Y0T1QE');
+```
+
+Neither method checks whether the attribute is enabled.
+
+## Query Scopes
+
+Three scopes filter attributes by their flags:
+
+```php
+use Shopper\Core\Models\Attribute;
+
+Attribute::query()->enabled()->get();
+Attribute::query()->isFilterable()->get();
+Attribute::query()->isSearchable()->get();
+```
+
+Scopes can be combined:
+
+```php
+Attribute::query()
+    ->enabled()
+    ->isFilterable()
+    ->with('values')
+    ->get();
+```
+
+## Status Management
+
+`updateStatus()` enables or disables an attribute. It saves the `is_enabled` column right away:
+
+```php
+$attribute->updateStatus();
+$attribute->updateStatus(false);
+```
+
+The status argument defaults to `true`. The Enable and Disable bulk actions of the admin panel call the same method.
+
+## Display Helpers
+
+`type_formatted` returns the translated label of the attribute type, such as "Color picker". The static `typesFields()` returns every type label keyed by its value, which is what the admin form offers in its type select:
+
+```php
+use Shopper\Core\Models\Attribute;
+
+$attribute->type_formatted;
+
+Attribute::typesFields();
+```
+
+## Working with AttributeProduct
+
+`attributeProducts()` on a product returns its pivot rows as models of the configured `AttributeProduct` class. Each row has its `attribute`, `product` and `value` relationships, and a `real_value` accessor that returns the free value when the row has one, or the label of the selected value:
+
+```php
+use Shopper\Core\Models\Contracts\Product;
+
+$product = resolve(Product::class)::query()
+    ->where('slug', 'classic-t-shirt')
+    ->firstOrFail();
+
+$specifications = $product->attributeProducts()
+    ->with(['attribute', 'value'])
+    ->get()
+    ->mapToGroups(fn ($row): array => [$row->attribute->name => $row->real_value]);
+```
+
+For a T-shirt in two colors, `$specifications` holds `['Color' => ['Navy', 'White'], 'Material' => ['100% organic cotton']]`.
+
+Each row can also hold a swatch: an image shown in place of the color, such as a photo of the fabric, that belongs to this product only. It is stored in the `swatch` media collection, which keeps a single JPEG, PNG, WebP or AVIF file on the media disk. The admin panel uploads it from the Swatch image action of the product attributes table:
+
+```php
+$swatchUrl = $row->getFirstMediaUrl('swatch');
+```
+
+The [Media](/3.x/media) page covers disks and conversions.
+
+## Product Attributes and Variant Options
+
+Standard, variant and virtual products can have attributes; external products cannot. `canUseAttributes()` on the product tells which. The attributes of a product are read through two relationships over the same `sh_attribute_product` rows:
+
+- `options()` returns `Attribute` models with the `attribute_value_id` and `attribute_custom_value` pivot columns. An attribute with three selected values appears three times.
+- `attributeProducts()` returns the rows themselves, as described in [Working with AttributeProduct](#working-with-attributeproduct).
+
+On a standard or virtual product, these rows are specifications. A storefront lists them on the product page and filters the catalog on their values.
+
+On a variant product, the values picked from the Checkbox, ColorPicker and Select attributes are also the options of its variants. The admin panel builds the variant combinations from them: a T-shirt with Navy and White for "Color" and Medium and Large for "Size" gets four combinations, and each variant is linked to one value per attribute through `sh_attribute_value_product_variant`. Free-value attributes, such as a "Care Instructions" rich text, never take part in the combinations. Every value attribute attached to a variant product does, even with a single value, so give descriptive attributes of a variant product a free-value type. The Generate button of the Variants section only appears once the product has attributes. The [Product Variants](/3.x/product-variants) page covers generation, SKUs and stock per variant.
+
+The `option` scope of the product model finds the products that carry a value, among the attribute rows of the product or the values of its variants. It matches the `key` or the `value` of the attribute value, in any attribute. Values passed to one call match any of them, and chained calls must all match:
+
+```php
+use Shopper\Core\Models\Contracts\Product;
+
+$products = resolve(Product::class)::query()
+    ->publish()
+    ->option('#1e3a8a')
+    ->option('medium', 'large')
+    ->paginate(12);
+```
+
+The [Products](/3.x/products) page lists the other catalog scopes.
+
+## Searchable and Filterable Attributes
+
+An attribute has three flags. Each one is read in specific places, and none of them changes the data already attached to products:
+
+| Flag | Read by |
+|------|---------|
+| `is_enabled` | The admin panel only offers enabled attributes when attributes are chosen for a product. The Store API only returns enabled attributes, in `GET /store/attributes` and in the `options` of a product |
+| `is_filterable` | `GET /store/attributes` lists the enabled, filterable attributes that offer values, so a storefront can build its filter menu from it. Your own code reads it with the `isFilterable()` scope |
+| `is_searchable` | Nothing in Shopper. The product search index does not contain attribute values. Use the `isSearchable()` scope to pick the attributes your own indexer sends, as described in [Search](/3.x/search) |
+
+Disabling an attribute keeps it on the products that already have it: the product editor still lists it, the variant generator still uses its values, and the `option` scope still matches them. The `option` scope and the `filter[option]` parameter of the Store API ignore `is_filterable` as well.
+
+## Configuration
+
+Attributes have a feature flag and a set of admin components. The only swappable model is the pivot, as described in [Models](#models).
+
+### Disabling Attribute Feature
+
+Attributes are enabled on a fresh install. To turn them off, set the `attribute` key of the feature flags:
+
+```php title="config/shopper/features.php"
+use Shopper\Enum\FeatureState;
+
+return [
+    'attribute' => FeatureState::Disabled,
+];
+```
+
+When the flag is disabled, the admin panel hides the Attributes item of the Products menu, the attributes page and the Attributes section of the product editor. Without that section, a merchant cannot add attributes to a variant product, and therefore cannot generate its variants: keep the flag on if you sell variant products. The Store API keeps serving attributes. See [Feature Flags](/3.x/configuration#feature-flags).
+
+### Components
+
+The attribute screens belong to the product components of the admin panel. To replace one of them with your own Livewire component, publish the product component file:
+
+```bash
+php artisan shopper:component:publish product
+```
+
+The command creates `config/shopper/components/product.php`. The keys for attributes are the Attributes section of the product editor, its page, the attributes list and three slide-overs:
+
+```php title="config/shopper/components/product.php"
+use Shopper\Livewire;
+use Shopper\Navigation\Product\Sections;
+
+return [
+    'sections' => [
+        Sections\AttributesSection::class => true,
+    ],
+    'pages' => [
+        'product-attributes' => Livewire\Pages\Product\Attributes::class,
+        'attribute-index' => Livewire\Pages\Attribute\Browse::class,
+    ],
+    'components' => [
+        'slide-overs.attribute-form' => Livewire\SlideOvers\AttributeForm::class,
+        'slide-overs.choose-product-attributes' => Livewire\SlideOvers\ChooseProductAttributes::class,
+        'slide-overs.attribute-values' => Livewire\SlideOvers\AttributeValues::class,
+    ],
+];
+```
+
+The published file keeps every other product key. The [Configuration](/3.x/configuration#components) page covers component files.
+
+## Usage
+
+The examples below set up a T-shirt catalog: a Color and a Size attribute that drive variants and filters, and free-value attributes for product specifications.
+
+### Creating Attributes
+
+Pass the type as a `FieldType` case and a slug, then add the values.
+
+#### Attribute with Predefined Values
+
+A color attribute stores the hex code of each color as its key:
+
+```php
+use Shopper\Core\Enum\FieldType;
+use Shopper\Core\Models\Attribute;
+
+$color = Attribute::query()->create([
+    'name' => 'Color',
+    'slug' => 'color',
+    'type' => FieldType::ColorPicker,
+    'is_enabled' => true,
+    'is_filterable' => true,
+]);
+
+$color->values()->createMany([
+    ['value' => 'Navy', 'key' => '#1e3a8a', 'position' => 1],
+    ['value' => 'White', 'key' => '#ffffff', 'position' => 2],
+    ['value' => 'Heather Grey', 'key' => '#9ca3af', 'position' => 3],
+]);
+```
+
+Keep each `value` within 50 characters, the size of the column.
+
+#### Attribute with Free Text
+
+A free-value attribute needs no values:
+
+```php
+$careInstructions = Attribute::query()->create([
+    'name' => 'Care Instructions',
+    'slug' => 'care-instructions',
+    'type' => FieldType::RichText,
+    'is_enabled' => true,
+]);
+```
+
+### Assigning Attributes to Products
+
+Attach an attribute through the `options()` relationship of the product, once per value. A free-value attribute takes its value in `attribute_custom_value`:
+
+```php
+use Shopper\Core\Models\Contracts\Product;
+
+$product = resolve(Product::class)::query()
+    ->where('slug', 'classic-t-shirt')
+    ->firstOrFail();
+
+$navy = $color->values()->where('key', '#1e3a8a')->first();
+$white = $color->values()->where('key', '#ffffff')->first();
+
+$product->options()->attach([
+    $color->id => ['attribute_value_id' => $navy->id],
+]);
+
+$product->options()->attach($color->id, ['attribute_value_id' => $white->id]);
+
+$product->options()->attach($careInstructions->id, [
+    'attribute_custom_value' => '<p>Machine wash at 30 degrees.</p>',
+]);
+```
+
+The admin panel allows one value for a Select attribute and several for Checkbox and ColorPicker. The model does not check it, so your code decides how many values it attaches.
+
+Each attribute of `$product->options` carries its row in `pivot`:
+
+```php
+foreach ($product->options as $attribute) {
+    $valueId = $attribute->pivot->attribute_value_id;
+    $customValue = $attribute->pivot->attribute_custom_value;
+}
+```
+
+To remove one value, delete its row through `attributeProducts()`, one model at a time so its swatch image is deleted with it (a query delete leaves the file behind). On a variant product, also detach the value from the variants that carry it, as the admin panel does:
+
+```php
+$product->attributeProducts()
+    ->where('attribute_value_id', $white->id)
+    ->get()
+    ->each
+    ->delete();
+
+$product->variants->each(fn ($variant) => $variant->values()->detach($white->id));
+```
+
+### Retrieving Attributes
+
+Load the values with the attributes, and sort them by position where the order matters:
+
+```php
+use Shopper\Core\Models\Attribute;
+
+$attributes = Attribute::query()
+    ->enabled()
+    ->with('values')
+    ->get();
+
+$filters = Attribute::query()
+    ->enabled()
+    ->isFilterable()
+    ->whereIn('type', Attribute::fieldsWithValues())
+    ->with(['values' => fn ($query) => $query->orderBy('position')])
+    ->get();
+
+$size = Attribute::findBySlug('size')->load('values');
+```
+
+### Storefront Example
+
+A catalog page builds its filter menu from the filterable attributes, then narrows the products with one `option()` call per attribute, so a T-shirt must match every chosen attribute and any chosen value within one:
+
+```php title="app/Http/Controllers/ProductFilterController.php"
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Contracts\View\View;
+use Illuminate\Http\Request;
+use Shopper\Core\Models\Attribute;
+use Shopper\Core\Models\Contracts\Product;
+
+class ProductFilterController extends Controller
+{
+    public function index(Request $request): View
+    {
+        $filters = Attribute::query()
+            ->enabled()
+            ->isFilterable()
+            ->whereIn('type', Attribute::fieldsWithValues())
+            ->with(['values' => fn ($query) => $query->orderBy('position')])
+            ->get();
+
+        $products = resolve(Product::class)::query()->publish();
+
+        foreach ((array) $request->input('filters', []) as $keys) {
+            $products->option($keys);
+        }
+
+        return view('products.index', [
+            'filters' => $filters,
+            'products' => $products->paginate(12)->withQueryString(),
+        ]);
+    }
+}
+```
+
+The form of the filter menu sends the keys of the checked values per attribute slug, such as `filters[size][]=medium&filters[size][]=large`.
+
+### Use Cases
+
+Each field type fits a kind of product information:
+
+| Field type | Example | Use case |
+|------------|---------|----------|
+| Checkbox | Size | Sizes of a clothing product, one variant per size |
+| ColorPicker | Color | Colors with a swatch, one variant per color |
+| Select | Fit | One value per product, such as Slim or Regular, used as a filter |
+| Text | Country of Origin | A line of text per product |
+| Number | Thread Count | A numeric specification per product |
+| DatePicker | Release Date | The launch date of a sneaker drop |
+| RichText | Care Instructions | Formatted washing and care instructions |
+
+## Events
+
+Shopper dispatches no attribute event of its own. Listen to the Eloquent events of `Shopper\Core\Models\Attribute` and `Shopper\Core\Models\AttributeValue`, for example to clear a cached filter menu:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Illuminate\Support\Facades\Cache;
+use Shopper\Core\Models\Attribute;
+
+public function boot(): void
+{
+    Attribute::saved(fn () => Cache::forget('storefront.filters'));
+    Attribute::deleted(fn () => Cache::forget('storefront.filters'));
+}
+```
+
+Adding or removing the attributes of a product does not dispatch `ProductUpdated`, as noted on the [Events](/3.x/events) page.
+
+### Observer Behavior
+
+`Shopper\Core\Observers\AttributeObserver` runs when an attribute is deleted. It detaches the attribute from every product, then deletes its values with a single query, so no `deleted` event fires for each value:
+
+```php
+$color->delete();
+```
+
+The foreign keys finish the cleanup: deleting a value removes it from every product and every variant that carried it. Deleting the "Color" attribute of a variant product leaves its variants without a color, so regenerate them or delete them afterwards.
+
+## Permissions
+
+The admin panel checks four permissions of the `attributes` resource, which the role editor lists in the Products group:
+
+| Permission | Allows |
+|------------|--------|
+| `attributes.browse` | Opening the attributes page |
+| `attributes.create` | Creating an attribute |
+| `attributes.edit` | Editing an attribute, enabling and disabling attributes, adding and editing values |
+| `attributes.delete` | Deleting attributes and values, and removing an attribute from a product |
+
+The Attributes item of the sidebar shows for a user with `products.browse` or `attributes.browse`. Choosing the attributes of a product needs `products.edit`. `attributes.read` is seeded with the others, but the admin panel never checks it. Shopper 2.x named these permissions `browse_attributes`, `add_attributes` and so on; the [Access Control](/3.x/acl#upgrading-from-2x) page explains how the upgrade renames them.
+
+## In the Admin
+
+Merchants manage attributes under Products, Attributes. The list shows each attribute with its icon, name, type, its enabled, searchable and filterable flags, and its last update, and filters on the three flags. The form opens in a slide-over: name, slug, type, icon, description, the Enable toggle and the searchable and filterable checkboxes. Attributes that offer a list have a Values button that opens their values, with a color picker for the key of a color. In the product editor, the Attributes section picks enabled attributes and their values in two steps, lists them grouped by attribute, and sets the swatch image of each value. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API exposes attributes under the `store` prefix, set by `SHOPPER_API_PREFIX`. `GET /store/attributes` returns the enabled, filterable attributes of the Checkbox, ColorPicker and Select types, paginated, each with its values. Filter it with `filter[name]` (partial match) and sort it with `sort=name`. There is no endpoint for a single attribute.
+
+An attribute resource has the type `attributes`, its public ID as `id`, and carries `name`, `slug`, `description`, `type`, `icon` and `values`, a list of `key`, `value` and `position`.
+
+The products endpoint filters and includes by attribute value. `filter[option]` accepts value keys or labels, separated by commas, and keeps the products that carry any of them:
+
+```bash
+curl "https://example.com/store/products?filter[option]=medium,large&include=options"
+```
+
+`include=options` adds an `options` list to each product that can have attributes: the enabled attributes of the product with `name`, `slug`, `description`, `type`, `icon`, `custom_value` for a free-value attribute, and the values the product uses, each with `key`, `value`, `position` and `swatch_url`. `include=variants` returns the option values of each variant in its `values` attribute, with the attribute name and slug. The Store API serves attributes even when the `attribute` feature flag is disabled. The [Storefront](/3.x/storefront) section documents the Store API.

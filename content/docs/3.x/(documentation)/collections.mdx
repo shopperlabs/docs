@@ -1,0 +1,744 @@
+---
+title: Collections
+description: The Collection model in Shopper, manual and automatic collections, collection rules, and how automatic collections stay in sync with the catalog.
+---
+
+A collection groups products for merchandising: a "Summer Sale" page, "New Arrivals", "Best Sellers", an "Editor's Picks" block on the home page. Categories organize the catalog into one tree; collections cut across it, and a product can belong to any number of them.
+
+A collection is either manual or automatic. The merchant picks the products of a manual collection one by one. An automatic collection holds the products that match its rules, such as "price less than 50.00" or "more than 10 units sold", and Shopper keeps that list up to date with a queued job and an Artisan command.
+
+## Model
+
+The model configured for collections is `Shopper\Models\Collection`. It extends `Shopper\Core\Models\Collection` and implements the `Shopper\Core\Models\Contracts\Collection` contract. The core class holds the columns, the relationships, the scopes and the rule evaluation; the admin class adds the media collections and image conversions, as described in [Core Models and Admin Models](/3.x/models#core-models-and-admin-models).
+
+Four traits of the core class change what you can do with a collection:
+
+- `HasSlug` turns the `slug` you assign into a URL-safe value and appends `-1`, `-2` and so on when it is already taken. The slug is not derived from the name: pass one, because storefronts and the Store API find collections by their slug.
+- `HasPublicId` fills `public_id` with a ULID when the collection is created. The Store API returns it as the collection `id`.
+- `HasMediaCollections` declares the image and cover collections described in [Media](#media).
+- `Searchable` sends published collections to the search index. The [Search](/3.x/search) page covers indexing.
+
+The rules of an automatic collection are `Shopper\Core\Models\CollectionRule` models. That model has no configuration key, so it is always loaded with its own class.
+
+### Extending the Model
+
+To add your own methods, extend the admin class:
+
+```php title="app/Models/Collection.php"
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Models\Collection as ShopperCollection;
+
+class Collection extends ShopperCollection
+{
+    #[Scope]
+    protected function inZone(Builder $query, int $zoneId): void
+    {
+        $query->whereHas('zones', fn (Builder $zones) => $zones->whereKey($zoneId));
+    }
+}
+```
+
+Then point the `collection` key of the configuration to your class:
+
+```php title="config/shopper/models.php"
+'collection' => App\Models\Collection::class,
+```
+
+Extend `Shopper\Models\Collection` rather than the core class: the admin panel uploads and reads the collection cover through the media methods of the admin class. The [Models](/3.x/models#swapping-a-model) page explains how swapping works.
+
+## Database Schema
+
+Collections and their rules are stored in two tables, `sh_collections` and `sh_collection_rules` (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)).
+
+### Collection Table
+
+The `sh_collections` table holds one row per collection:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `name` | string | no | - | Collection name |
+| `slug` | string | yes | null | URL identifier, unique |
+| `description` | longtext | yes | null | Collection description, HTML from the admin editor |
+| `type` | string | no | - | `manual` or `auto`, cast to `CollectionType` |
+| `sort` | string | yes | null | Stored for your own code, Shopper does not read it |
+| `match_conditions` | string | yes | null | `all` or `any`, see [Match Conditions](#match-conditions) |
+| `published_at` | datetime (with time zone) | no | migration date | Publication date |
+| `seo_title` | string(60) | yes | null | SEO meta title |
+| `seo_description` | string(160) | yes | null | SEO meta description |
+| `metadata` | jsonb | yes | null | Your own data, cast to an array |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+The database default of `published_at` is the date the migration ran, so always pass a publication date when you create a collection.
+
+### CollectionRule Table
+
+The `sh_collection_rules` table holds the rules of automatic collections:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `rule` | string | no | - | Product property to compare, cast to `Rule` |
+| `operator` | string | no | - | Comparison, cast to `Operator` |
+| `value` | string | no | - | Value to compare with |
+| `collection_id` | bigint | no | - | Foreign key to the collection, rules are deleted with it |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+## Collection Types
+
+The `type` column is cast to the `Shopper\Core\Enum\CollectionType` enum:
+
+| Case | Value | Admin label | Products come from |
+|------|-------|-------------|--------------------|
+| `CollectionType::Manual` | `manual` | Manual | The products attached to the collection |
+| `CollectionType::Auto` | `auto` | Automatic | The products that match the collection rules |
+
+The admin panel sets the type when the collection is created and has no field to change it afterwards.
+
+### Type Checking
+
+Two methods tell the types apart:
+
+```php
+$collection->isManual();
+$collection->isAutomatic();
+```
+
+## Relationships
+
+A collection is linked to its products and zones through polymorphic pivot tables, and an automatic collection owns its rules.
+
+### Products
+
+Collections and products are linked through the polymorphic `sh_product_has_relations` table, which also links products to categories, channels and tags. For a manual collection, attach and detach products with the usual Eloquent methods:
+
+```php
+$collection->products;
+$collection->products()->attach([$classicTShirt->id, $linenShorts->id]);
+$collection->products()->detach($linenShorts->id);
+$collection->products()->sync($productIds);
+
+$classicTShirt->collections;
+```
+
+For an automatic collection, the same table holds the result of the last [synchronization](#automatic-synchronization). The next sync replaces it with the products that match the rules, so products you attach or detach by hand do not stay.
+
+### Zones
+
+A collection can be linked to [zones](/3.x/zones) through the `sh_zone_has_relations` table, to record the markets a promotion runs in. The collections list of the admin panel has a zones column, hidden by default, and filters by zone. The models and the Store API do not filter collections by zone: apply the filter in your storefront if your markets need it.
+
+```php
+use Shopper\Core\Models\Zone;
+
+$collection->zones;
+$collection->zones()->sync($zoneIds);
+
+$europe = Zone::query()->where('slug', 'europe')->first();
+
+$europe->collections;
+```
+
+### Rules (Automatic Collections)
+
+The `rules()` relation returns the `CollectionRule` models of the collection. Each rule compares one product property with a value:
+
+```php
+use Shopper\Core\Enum\Operator;
+use Shopper\Core\Enum\Rule;
+
+$collection->rules;
+
+$collection->rules()->create([
+    'rule' => Rule::ProductTitle,
+    'operator' => Operator::Contains,
+    'value' => 'summer',
+]);
+```
+
+Creating, changing or deleting a rule in code does not update the products of the collection. Run a sync afterwards, as shown in [Updating Collections](#updating-collections).
+
+## Slug & Lookup
+
+The `HasSlug` trait adds a `findBySlug()` static method, which throws a `ModelNotFoundException` when no collection matches. `findByPublicId()` returns `null` instead:
+
+```php
+use Shopper\Core\Models\Contracts\Collection;
+
+$summerSale = resolve(Collection::class)::findBySlug('summer-sale');
+
+$summerSale = resolve(Collection::class)::findByPublicId('01JBX3M5D7R8K2C9P4W6Y0T1QE');
+```
+
+Neither method checks the publication date. In a storefront, query with the `published` scope, as in the [Storefront Example](#storefront-example).
+
+## Query Scopes
+
+The model has three scopes. `manual` and `automatic` filter by type, and `published` keeps the collections whose `published_at` date is set and not in the future:
+
+```php
+use Shopper\Core\Models\Contracts\Collection;
+
+$collections = resolve(Collection::class)::query()->manual()->get();
+
+$collections = resolve(Collection::class)::query()
+    ->automatic()
+    ->with('rules')
+    ->get();
+
+$collections = resolve(Collection::class)::query()->published()->get();
+```
+
+## Collection Rules
+
+An automatic collection holds one or more rules. Each rule names a product property (`rule`), a comparison (`operator`) and a value (`value`), and the `match_conditions` column of the collection decides whether a product must match all the rules or one of them.
+
+### Rule Types
+
+The `rule` column is cast to the `Shopper\Core\Enum\Rule` enum:
+
+| Case | Value | Matches against |
+|------|-------|-----------------|
+| `Rule::ProductTitle` | `product_title` | The product `name` |
+| `Rule::ProductBrand` | `product_brand` | The name of the product brand |
+| `Rule::ProductCategory` | `product_category` | The names of the product categories |
+| `Rule::ProductPrice` | `product_price` | The price `amount`, in cents |
+| `Rule::CompareAtPrice` | `compare_at_price` | The price `compare_amount`, in cents |
+| `Rule::InventoryStock` | `inventory_stock` | The stock of the product, summed from its inventory history |
+| `Rule::ProductCreatedAt` | `product_created_at` | The date the product was created |
+| `Rule::ProductFeatured` | `product_featured` | The `featured` flag, `1` or `0` |
+| `Rule::ProductRating` | `product_rating` | The average rating of the approved reviews |
+| `Rule::ProductSalesCount` | `product_sales_count` | The units sold in paid orders |
+
+The `value` column is a string for every rule: pass `'5000'` rather than `5000`. The enum also has `isPrice()`, `isNumeric()`, `isDate()` and `isBoolean()` helpers, which the admin panel uses to pick the input for each rule.
+
+### Operators
+
+The `operator` column is cast to the `Shopper\Core\Enum\Operator` enum:
+
+| Case | Value | Admin label |
+|------|-------|-------------|
+| `Operator::EqualsTo` | `equals_to` | Equals to |
+| `Operator::NotEqualTo` | `not_equal_to` | Not equals to |
+| `Operator::LessThan` | `less_than` | Less than |
+| `Operator::GreaterThan` | `greater_than` | Greater than |
+| `Operator::StartsWith` | `starts_with` | Starts with |
+| `Operator::EndsWith` | `ends_with` | End with |
+| `Operator::Contains` | `contains` | Contains |
+| `Operator::NotContains` | `not_contains` | Not contains |
+
+Each rule accepts a subset of these operators, returned by the `allowedOperators()` method of its case, such as `Rule::ProductPrice->allowedOperators()`:
+
+| Rules | Operators |
+|-------|-----------|
+| `ProductTitle`, `ProductBrand`, `ProductCategory` | `contains`, `not_contains`, `starts_with`, `ends_with`, `equals_to`, `not_equal_to` |
+| `ProductPrice`, `CompareAtPrice`, `InventoryStock`, `ProductRating`, `ProductSalesCount` | `equals_to`, `not_equal_to`, `less_than`, `greater_than` |
+| `ProductCreatedAt` | `equals_to`, `less_than`, `greater_than` |
+| `ProductFeatured` | `equals_to` |
+
+The admin panel only offers these combinations. The model does not validate them, so check them yourself when you save rules from code or from an import: a text rule with `less_than` adds no comparison, so a title rule matches every product and a brand or category rule every product that has one, and a numeric rule with `contains` compares with "equals".
+
+### Match Conditions
+
+When a collection has several rules, `match_conditions` decides how they combine. With `all`, a product must match every rule. With `any`, one matching rule is enough. A collection with no value in `match_conditions` behaves as `any`.
+
+```php
+$collection->update(['match_conditions' => 'all']);
+```
+
+An automatic collection without rules contains no products.
+
+### Price Rules
+
+`ProductPrice` and `CompareAtPrice` rules store their value in cents, as a string: `'5000'` is 50.00 in a two-decimal currency. They compare it with the product prices in the store default currency, the `default_currency_id` [setting](/3.x/settings). The [Money](/3.x/money) page explains cents and currencies without decimals.
+
+The rules slide-over of the admin panel converts the value for the merchant. It shows the stored cents divided by 100, and multiplies the amount the merchant types by 100 before saving it. For a [zero-decimal currency](/3.x/money#zero-decimal-currencies) such as XAF or JPY, it shows and stores the whole amount as typed. Code that saves price rules from a decimal input converts it the way [Converting Input](/3.x/money#converting-input) shows.
+
+Price, compare-at price, stock and sales count rules read values stored on the product itself. A product of the variant type keeps its prices, its stock and its sales on its variants (the admin panel has no product-level price for it), so these four rules ignore its variants and match it only on values stored on the product itself.
+
+## Display Helpers
+
+The `firstRule()` method returns a readable summary of the rules of an automatic collection, made of the first rule and the number of other rules, such as `Product price Less than $50.00 + 1 other(s)`. The admin panel shows it in the collections list. It returns `null` for a manual collection, and expects an automatic collection to have at least one rule.
+
+```php
+$collection->firstRule();
+```
+
+A rule formats itself with `getFormattedRule()`, `getFormattedOperator()` and `getFormattedValue()`. The value of a price rule is formatted as money in the store currency, and the value of the featured rule as "Yes" or "No":
+
+```php
+foreach ($collection->rules as $rule) {
+    echo $rule->getFormattedRule().' '.$rule->getFormattedOperator().' '.$rule->getFormattedValue();
+}
+```
+
+## Retrieving Products
+
+A collection gives two ways to read its products. `getProducts()` and `productsQuery()` compute the list when you call them. The `products` relation reads the pivot table, which for an automatic collection holds the result of the last [synchronization](#automatic-synchronization).
+
+### Basic Usage
+
+`getProducts()` returns an Eloquent collection of products. `productsQuery()` returns a query builder, to paginate, eager load or add your own conditions:
+
+```php
+use Shopper\Core\Models\Contracts\Collection;
+
+$summerSale = resolve(Collection::class)::findBySlug('summer-sale');
+
+$products = $summerSale->getProducts();
+
+$products = $summerSale->productsQuery()
+    ->with(['brand', 'prices.currency'])
+    ->orderBy('name')
+    ->paginate(12);
+```
+
+### How It Works
+
+For a manual collection, both methods return the attached products that are published: `published_at` in the past and `is_visible` set. For an automatic collection, they start from all published products and add one condition per rule, joined with `AND` when `match_conditions` is `all` and with `OR` otherwise.
+
+Both methods run through `Shopper\Core\Queries\CollectionProductsQuery`, which you can also call directly. Its `matches()` method tells whether one product matches the rules of an automatic collection:
+
+```php
+use Shopper\Core\Queries\CollectionProductsQuery;
+
+$query = new CollectionProductsQuery;
+
+$products = $query->query($summerSale)->with('brand')->paginate(12);
+
+$isInSale = $query->matches($summerSale, $classicTShirt);
+```
+
+The `products` relation returns every attached product, published or not. Add the product `publish` scope when you read it for a storefront: `$collection->products()->publish()->get()`.
+
+### Rule Evaluation
+
+Each rule becomes one condition on the products query:
+
+| Rule | Condition |
+|------|-----------|
+| `ProductTitle` | `name` compared with the value, `LIKE` for the text operators |
+| `ProductBrand` | The product has a brand whose `name` matches |
+| `ProductCategory` | The product has a category whose `name` matches. For `not_equal_to` and `not_contains`, the product has no category whose `name` passes the negated test: only products whose categories all equal (or all contain) the value, and products with no category, match |
+| `ProductPrice` | The product has a price in the default currency whose `amount` matches |
+| `CompareAtPrice` | The product has a price in the default currency whose `compare_amount` matches |
+| `InventoryStock` | The sum of the `quantity` column of the product inventory history matches. A product with no history does not match |
+| `ProductCreatedAt` | The date part of `created_at` is equal to, before or after the value, a date such as `2026-09-01` |
+| `ProductFeatured` | `featured` equals the value, whatever the operator |
+| `ProductRating` | The average `rating` of the approved reviews of the product matches. A product with no approved review does not match |
+| `ProductSalesCount` | The sum of the `quantity` of the order items of the product matches, counting orders with the `processing` or `completed` status and the `paid` payment status. A product never sold does not match |
+
+## Automatic Synchronization
+
+Reading an automatic collection through `productsQuery()` runs every rule on each call. A rule on sales or ratings adds an aggregate subquery over orders or reviews. To keep storefront pages and the Store API fast, Shopper stores the matching products in the pivot table and refreshes it at set moments.
+
+### How Sync Works
+
+Three things refresh the products of automatic collections:
+
+| Trigger | What runs |
+|---------|-----------|
+| A product is created or updated | `SyncProductWithCollectionsJob`, queued once the database transaction commits. It adds the product to every automatic collection whose rules it matches, and removes it from the others |
+| A merchant saves the conditions in the rules slide-over of the admin panel | `SyncCollectionProductsJob` for that collection |
+| `php artisan shopper:collections:sync` runs | `SyncCollectionProductsAction` for each automatic collection |
+
+Nothing else starts a sync. A collection created in code, a rule added or changed in code, a new price, a stock movement, a paid order, an approved review, a renamed brand or category, and a product reaching its publication date all leave the pivot table as it was until the next product save or the next run of the command. [Schedule the command](#scheduling-the-sync) to pick these changes up.
+
+### Manual Sync Command
+
+The `shopper:collections:sync` command syncs every automatic collection and prints the number of products of each one. The `--collection` option syncs one collection by its ID:
+
+```bash
+php artisan shopper:collections:sync
+
+php artisan shopper:collections:sync --collection=12
+```
+
+The command fails when the ID does not exist, and skips a manual collection with a warning. It runs the sync in the same process, without the queue.
+
+### Scheduling the Sync
+
+Shopper does not schedule the command. Add it to the scheduler of your application, at the frequency your rules need:
+
+```php title="routes/console.php"
+use Illuminate\Support\Facades\Schedule;
+
+Schedule::command('shopper:collections:sync')
+    ->hourly()
+    ->withoutOverlapping();
+```
+
+The scheduler runs only when `php artisan schedule:run` is called every minute, from cron or from `php artisan schedule:work`. The [Laravel scheduling documentation](https://laravel.com/docs/scheduling) covers the setup.
+
+### Sync Action
+
+`Shopper\Core\Actions\SyncCollectionProductsAction` syncs one collection in the current process. It replaces the attached products with the published products that match the rules and returns their number. It returns `0` and changes nothing for a manual collection:
+
+```php
+use Shopper\Core\Actions\SyncCollectionProductsAction;
+
+$count = (new SyncCollectionProductsAction)->execute($summerSale);
+```
+
+### Background Jobs
+
+Both jobs implement `ShouldQueue` and live in the `Shopper\Core\Jobs` namespace:
+
+- `SyncCollectionProductsJob` takes a collection and runs the sync action for it.
+- `SyncProductWithCollectionsJob` takes a product and checks it against every automatic collection.
+
+Dispatch `SyncCollectionProductsJob` after you change rules in code:
+
+```php
+use Shopper\Core\Jobs\SyncCollectionProductsJob;
+
+SyncCollectionProductsJob::dispatch($summerSale);
+```
+
+The jobs go to the default queue connection. With a `sync` connection they run during the request; with any other connection a queue worker must run, or automatic collections stop updating:
+
+```bash
+php artisan queue:work
+```
+
+## Media
+
+Collections have two media collections, named in `config/shopper/media.php`:
+
+| Collection | Config key | Default name | Files | Use |
+|------------|------------|--------------|-------|-----|
+| Images | `shopper.media.storage.collection_name` | `uploads` | Several | Extra collection images |
+| Thumbnail | `shopper.media.storage.thumbnail_collection` | `thumbnail` | One | The collection cover |
+
+The admin forms upload the cover to the thumbnail collection, up to `shopper.media.max_size.thumbnail` kilobytes. Add a cover from code and read its URL with `getThumbnailUrl()`, which takes an optional conversion name:
+
+```php
+$summerSale->addMedia($request->file('cover'))
+    ->toMediaCollection(config('shopper.media.storage.thumbnail_collection'));
+
+$coverUrl = $summerSale->getThumbnailUrl('large');
+```
+
+The [Media](/3.x/media) page covers storage disks, conversions and the placeholder image.
+
+## Configuration
+
+Collections are on by default. Their settings are the feature flag, the model key and the admin components.
+
+### Disabling Collections
+
+If your store does not use collections, disable the feature in `config/shopper/features.php`:
+
+```php title="config/shopper/features.php"
+use Shopper\Enum\FeatureState;
+
+return [
+    'collection' => FeatureState::Disabled,
+];
+```
+
+The collection pages are no longer registered, the Collections item leaves the sidebar, and the collections field of the product forms is hidden. The flag only changes the admin panel: the models, the product observer, the sync command and the Store API collection endpoints stay available. The [Configuration](/3.x/configuration#feature-flags) page lists every feature flag.
+
+### Components
+
+The collections section of the admin panel is made of two pages, a products table and three slide-overs. To replace any of them with your own Livewire component, publish the component file of the section:
+
+```bash
+php artisan shopper:component:publish collection
+```
+
+The command creates `config/shopper/components/collection.php`:
+
+```php title="config/shopper/components/collection.php"
+use Shopper\Livewire;
+
+return [
+    'pages' => [
+        'collection-index' => Livewire\Pages\Collection\Index::class,
+        'collection-edit' => Livewire\Pages\Collection\Edit::class,
+    ],
+    'components' => [
+        'collections.products' => Livewire\Components\Collection\CollectionProducts::class,
+
+        'slide-overs.collection-rules' => Livewire\SlideOvers\CollectionRules::class,
+        'slide-overs.add-collection-form' => Livewire\SlideOvers\AddCollectionForm::class,
+        'slide-overs.collection-products-list' => Livewire\SlideOvers\CollectionProductsList::class,
+    ],
+];
+```
+
+The rules slide-over converts price values and dispatches the sync job, as described above. A replacement component must do both. The [Configuration](/3.x/configuration#components) page explains how component overriding works.
+
+## Usage
+
+The examples below resolve the collection class from its contract, so they keep working after you swap the model.
+
+### Creating Collections
+
+The model accepts every column through `create()`. Pass a slug and a publication date with the name and the type.
+
+#### Manual Collection
+
+Create the collection, then attach the products the merchant picked:
+
+```php
+use Shopper\Core\Enum\CollectionType;
+use Shopper\Core\Models\Contracts\Collection;
+use Shopper\Core\Models\Contracts\Product;
+
+$editorsPicks = resolve(Collection::class)::query()->create([
+    'name' => "Editor's Picks",
+    'slug' => 'editors-picks',
+    'type' => CollectionType::Manual,
+    'published_at' => now(),
+]);
+
+$productIds = resolve(Product::class)::query()
+    ->whereIn('slug', ['classic-t-shirt', 'linen-shorts', 'canvas-sneakers'])
+    ->pluck('id');
+
+$editorsPicks->products()->attach($productIds);
+```
+
+#### Automatic Collection
+
+Create the collection, add its rules, then dispatch the sync job so the pivot table holds the matching products. This collection holds the t-shirts that cost less than 50.00:
+
+```php
+use Shopper\Core\Enum\CollectionType;
+use Shopper\Core\Enum\Operator;
+use Shopper\Core\Enum\Rule;
+use Shopper\Core\Jobs\SyncCollectionProductsJob;
+use Shopper\Core\Models\Contracts\Collection;
+
+$tShirtsUnder50 = resolve(Collection::class)::query()->create([
+    'name' => 'T-Shirts Under 50',
+    'slug' => 't-shirts-under-50',
+    'type' => CollectionType::Auto,
+    'match_conditions' => 'all',
+    'published_at' => now(),
+]);
+
+$tShirtsUnder50->rules()->createMany([
+    ['rule' => Rule::ProductPrice, 'operator' => Operator::LessThan, 'value' => '5000'],
+    ['rule' => Rule::ProductCategory, 'operator' => Operator::EqualsTo, 'value' => 'T-Shirts'],
+]);
+
+SyncCollectionProductsJob::dispatch($tShirtsUnder50);
+```
+
+#### Best Sellers Collection
+
+A collection of the products sold more than 10 times in paid orders:
+
+```php
+$bestSellers = resolve(Collection::class)::query()->create([
+    'name' => 'Best Sellers',
+    'slug' => 'best-sellers',
+    'type' => CollectionType::Auto,
+    'match_conditions' => 'all',
+    'published_at' => now(),
+]);
+
+$bestSellers->rules()->create([
+    'rule' => Rule::ProductSalesCount,
+    'operator' => Operator::GreaterThan,
+    'value' => '10',
+]);
+
+SyncCollectionProductsJob::dispatch($bestSellers);
+```
+
+Sales change with every paid order, and no order triggers a sync: a best sellers collection needs the [scheduled command](#scheduling-the-sync).
+
+#### Top Rated Collection
+
+A collection of the products whose approved reviews average more than 4 stars:
+
+```php
+$topRated = resolve(Collection::class)::query()->create([
+    'name' => 'Top Rated',
+    'slug' => 'top-rated',
+    'type' => CollectionType::Auto,
+    'match_conditions' => 'all',
+    'published_at' => now(),
+]);
+
+$topRated->rules()->create([
+    'rule' => Rule::ProductRating,
+    'operator' => Operator::GreaterThan,
+    'value' => '4',
+]);
+
+SyncCollectionProductsJob::dispatch($topRated);
+```
+
+### Retrieving Collections
+
+Query published collections with the `published` scope, and eager load the media when you show covers:
+
+```php
+use Shopper\Core\Models\Contracts\Collection;
+
+$collections = resolve(Collection::class)::query()
+    ->published()
+    ->with('media')
+    ->orderBy('name')
+    ->get();
+
+$summerSale = resolve(Collection::class)::query()
+    ->published()
+    ->where('slug', 'summer-sale')
+    ->firstOrFail();
+```
+
+The Product model has a `collection` scope that reads the pivot table. It takes collection slugs or public IDs and only looks at published collections:
+
+```php
+use Shopper\Core\Models\Contracts\Product;
+
+$products = resolve(Product::class)::query()
+    ->publish()
+    ->collection('summer-sale', 'best-sellers')
+    ->paginate(12);
+```
+
+### Updating Collections
+
+Update the collection columns with `update()`. When you change the rules or the match conditions of an automatic collection, dispatch the sync job afterwards:
+
+```php
+use Shopper\Core\Enum\Rule;
+use Shopper\Core\Jobs\SyncCollectionProductsJob;
+
+$tShirtsUnder50->update(['match_conditions' => 'any']);
+
+$tShirtsUnder50->rules()
+    ->where('rule', Rule::ProductPrice)
+    ->update(['value' => '4000']);
+
+SyncCollectionProductsJob::dispatch($tShirtsUnder50);
+```
+
+### Storefront Example
+
+A controller that lists the published collections and shows one with its products. `productsQuery()` returns the current products of both types; for an automatic collection it runs the rules on each request:
+
+```php title="app/Http/Controllers/CollectionController.php"
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\View\View;
+use Shopper\Core\Models\Contracts\Collection;
+
+class CollectionController extends Controller
+{
+    public function index(): View
+    {
+        $collections = resolve(Collection::class)::query()
+            ->published()
+            ->with('media')
+            ->orderBy('name')
+            ->get();
+
+        return view('collections.index', ['collections' => $collections]);
+    }
+
+    public function show(string $slug): View
+    {
+        $collection = resolve(Collection::class)::query()
+            ->published()
+            ->where('slug', $slug)
+            ->firstOrFail();
+
+        $products = $collection->productsQuery()
+            ->with(['brand', 'prices.currency', 'media'])
+            ->paginate(12);
+
+        return view('collections.show', [
+            'collection' => $collection,
+            'products' => $products,
+        ]);
+    }
+}
+```
+
+For collections with sales or rating rules on a large catalog, read the synced products instead, as the Store API does: `$collection->products()->publish()->with(['brand', 'prices.currency', 'media'])->paginate(12)`.
+
+### Use Cases
+
+Common collections and the rules behind them:
+
+| Type | Example | Rules |
+|------|---------|-------|
+| Manual | Gift Guide | Products picked by the merchant |
+| Manual | Editor's Picks | Products picked by the merchant |
+| Automatic | New Arrivals | `ProductCreatedAt` greater than a fixed date, such as `2026-09-01`, that you move forward |
+| Automatic | Sale Items | `CompareAtPrice` greater than `0` |
+| Automatic | Low Stock | `InventoryStock` less than `5` |
+| Automatic | Featured | `ProductFeatured` equals `1` |
+| Automatic | Best Sellers | `ProductSalesCount` greater than `10` |
+| Automatic | Top Rated | `ProductRating` greater than `4` |
+
+The date rule compares with a fixed date: "created in the last 30 days" needs your own scheduled code that updates the rule value, then syncs the collection.
+
+## Events
+
+Shopper dispatches no collection event of its own and registers no observer on the collection or rule models. Listen to the Eloquent model events instead. They are dispatched under the core class name as well, so a listener registered on `Shopper\Core\Models\Collection` keeps firing after you swap the model:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Illuminate\Support\Facades\Cache;
+use Shopper\Core\Models\Collection;
+
+public function boot(): void
+{
+    Collection::saved(fn () => Cache::forget('storefront.collections'));
+    Collection::deleted(fn () => Cache::forget('storefront.collections'));
+}
+```
+
+The product observer, `Shopper\Core\Observers\ProductObserver`, dispatches `SyncProductWithCollectionsJob` each time a product is saved, as described in [How Sync Works](#how-sync-works). The [Events](/3.x/events#listening-to-events) page covers listeners and queues.
+
+## Permissions
+
+The admin panel checks four permissions of the `collections` resource, in the Catalog group:
+
+| Permission | Allows |
+|------------|--------|
+| `collections.browse` | Opening the collections page and seeing the Collections sidebar item |
+| `collections.create` | Opening the form for a new collection |
+| `collections.edit` | Opening the edit page, saving the rules, adding and removing products |
+| `collections.delete` | Deleting a collection, one at a time or in bulk |
+
+`collections.read` is seeded with the others, but the admin panel never checks it. Shopper 2.x named these permissions `browse_collections`, `add_collections` and so on; the [Access Control](/3.x/acl#upgrading-from-2x) page explains how the upgrade renames them.
+
+## In the Admin
+
+Merchants manage collections under Catalog, Collections. The list shows each collection with its cover, name, type, the summary of its conditions, its zones (a column hidden by default) and its last update, and filters by type and zone. The creation form opens in a slide-over (name, slug, availability date, type, zones, description, cover, SEO and metadata), then leads to the edit page. There, a manual collection has a Browse button to add products, and an automatic collection has a Conditions button that opens the rules slide-over and syncs the collection when it is saved. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API exposes the published collections under the `store` prefix, set by `SHOPPER_API_PREFIX`:
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /store/collections` | The published collections, paginated. Filter with `filter[name]` (partial match), sort with `sort=name` |
+| `GET /store/collections/{slug}` | One published collection |
+
+Add `include=products` to either endpoint to get the published products of each collection. The include reads the pivot table, so an automatic collection returns the products of its last sync. A collection resource has the type `collections` and carries `name`, `slug`, `description`, `type`, `published_at`, `seo_title`, `seo_description`, `metadata`, `thumbnail` (the cover with its conversion URLs), `created_at` and `updated_at`.
+
+The products endpoint filters and includes by collection. `filter[collection]` accepts collection slugs or public IDs, separated by commas:
+
+```bash
+curl "https://example.com/store/products?filter[collection]=summer-sale&include=collections"
+```
+
+The `products` include and the product listing follow the channel of the request, as described in [Channels](/3.x/channels#the-store-api); the collections themselves are not filtered by channel or zone. The Store API serves collections even when the `collection` feature flag is disabled. The [Storefront](/3.x/storefront) section documents the Store API.

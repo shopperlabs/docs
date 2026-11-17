@@ -1,0 +1,346 @@
+---
+title: Search
+description: How Shopper indexes products, brands, categories, collections, orders and customers with Laravel Scout, and how to choose a search engine per model.
+---
+
+Shopper indexes its catalog with [Laravel Scout](https://laravel.com/docs/scout). Products, brands, categories, collections, orders and your `User` model are searchable models: Scout sends a document to the search index each time one of them is saved, and removes it when the record is deleted. Shopper decides what each document holds through indexer classes, keeps the product documents up to date when a brand, a category or a variant changes, and lets you choose the search engine of each model.
+
+`shopper/core` requires `laravel/scout`, so Scout is installed with Shopper. Its default `collection` driver needs no search server: it reads the database and matches the records in PHP. Moving to Typesense, Meilisearch or Algolia is a change of configuration followed by an import.
+
+The index serves your own code. The tables of the admin panel and the product filter of the Store API search the database with SQL, as described in [In the Admin](#in-the-admin) and [From a Storefront](#from-a-storefront).
+
+## Searchable Models
+
+Shopper models use the `Shopper\Core\Models\Traits\Searchable` trait. It wraps Scout's `Laravel\Scout\Searchable` trait and hands the index name, the decision to index a record and the content of its document to an indexer class from the `Shopper\Core\Search` namespace. The `InteractsWithShopper` trait of your `User` model uses it too.
+
+| Model | Indexer | Index | Indexed when |
+|-------|---------|-------|--------------|
+| Product | `ProductIndexer` | `products` | `is_visible` is `true` and `published_at` is in the past |
+| Brand | `BrandIndexer` | `brands` | `is_enabled` is `true` |
+| Category | `CategoryIndexer` | `categories` | The category and all its parents are enabled |
+| Collection | `CollectionIndexer` | `collections` | `published_at` is in the past |
+| Order | `OrderIndexer` | `orders` | Always |
+| User | `CustomerIndexer` | `users` | Always |
+
+The index name is the table of the model without the Shopper table prefix, so `sh_products` becomes `products`. Scout's `prefix` option, set by `SCOUT_PREFIX`, goes in front of it: with `SCOUT_PREFIX=shop_`, products go to the `shop_products` index. Set a prefix when several stores, or the staging and production copies of one store, share a search server.
+
+Documents are identified by the [public ID](/3.x/models#public-ids) of the record. The Scout key of every model with a `public_id` column is that ULID, and the `id` field of the document holds the same value, so the auto-increment IDs of your tables never reach the search engine.
+
+The `CustomerIndexer` does not appear in `config/shopper/search.php`. Shopper registers it when the application boots, for the class in `config('auth.providers.users.model')`, unless the `indexers` array already lists that class.
+
+## Indexed Fields
+
+Each indexer builds the document of a record in its `toSearchableArray()` method. Dates are sent as Unix timestamps, so an engine can sort and filter on them as numbers, and HTML tags are stripped from descriptions.
+
+### Products
+
+The product document holds what a storefront search needs to match and filter a product without loading its relations:
+
+| Field | Content |
+|-------|---------|
+| `id` | The public ID of the product |
+| `name`, `slug`, `sku` | The columns of the same name |
+| `skus` | The SKUs of its variants |
+| `description`, `summary` | The text of the columns, without HTML |
+| `type` | The product type: `standard`, `variant`, `virtual` or `external` |
+| `brand` | The name of its brand, or `null` when the brand is disabled |
+| `categories` | The names of its categories, without the hidden ones |
+| `channels` | The public IDs of its [channels](/3.x/channels) |
+| `published_at`, `created_at` | Timestamps |
+
+A category is hidden when it, or one of its parents, is disabled. A search for "Nike" finds the Air Max sneakers through their brand, and a search for a variant SKU such as `TSHIRT-WHITE-M` finds the Classic T-Shirt.
+
+### Brands, Categories and Collections
+
+Their documents hold `id`, `name`, `slug`, `description` and `created_at`. The collection document adds `published_at`.
+
+### Orders and Customers
+
+The order document holds `id`, `number`, `email`, `status` (the value of the `OrderStatus` enum, such as `processing`), `customer` (the full name of the customer), `total` (the `price_amount` column, in [cents](/3.x/money)), `currency_code` and `created_at`. The user document holds `id`, `name` (the first and last names), `email` and `created_at`.
+
+Both documents carry email addresses. With a hosted engine such as Algolia, those addresses are stored by the engine provider. To keep them in your database, leave orders and users on the `collection` driver with [`engine_map`](#choosing-an-engine-per-model), or register an indexer that leaves the email out.
+
+### Field Lists
+
+Each indexer also declares the fields an engine should search, filter and sort on, through its `getSearchableFields()`, `getFilterableFields()` and `getSortableFields()` methods. The Shopper packages do not read these lists themselves: the `shopper/search` add-on uses them to build Typesense collection schemas. Keep them in line with `toSearchableArray()` when you write your own indexer.
+
+| Indexer | Searchable | Filterable | Sortable |
+|---------|------------|------------|----------|
+| `ProductIndexer` | `name`, `sku`, `skus`, `description`, `brand`, `categories` | `brand`, `categories`, `channels`, `type` | `created_at`, `published_at` |
+| `BrandIndexer`, `CategoryIndexer`, `CollectionIndexer` | `name`, `description` | none | `created_at`, `updated_at` |
+| `OrderIndexer` | `number`, `email`, `customer` | `status` | `created_at`, `total` |
+| `CustomerIndexer` | `name`, `email` | none | `created_at`, `updated_at` |
+
+## Configuration
+
+Search settings live in `config/shopper/search.php`, which the installer publishes with the other [configuration files](/3.x/configuration). It has three keys: `engine_map`, `indexers` and `facets`.
+
+Scout keeps its own settings, the driver, the queue and the credentials of each engine, in `config/scout.php`. Shopper does not publish that file. Publish it when you need more than the environment variables:
+
+```bash
+php artisan vendor:publish --provider="Laravel\Scout\ScoutServiceProvider"
+```
+
+### Choosing a Driver
+
+As in any Scout application, the `SCOUT_DRIVER` environment variable selects the engine, and it defaults to `collection`. To move every searchable model to Meilisearch, install its client and point Scout to your server:
+
+```bash
+composer require meilisearch/meilisearch-php http-interop/http-factory-guzzle
+```
+
+```bash title=".env"
+SCOUT_DRIVER=meilisearch
+MEILISEARCH_HOST=http://127.0.0.1:7700
+MEILISEARCH_KEY=your-master-key
+```
+
+Typesense takes `typesense/typesense-php`, `SCOUT_DRIVER=typesense`, `TYPESENSE_HOST` and `TYPESENSE_API_KEY`. Algolia takes `algolia/algoliasearch-client-php`, `SCOUT_DRIVER=algolia`, `ALGOLIA_APP_ID` and `ALGOLIA_SECRET`. The [Scout documentation](https://laravel.com/docs/scout) covers the setup of each engine. A new engine starts with empty indexes: [import](#importing-existing-records) your records once it is configured.
+
+### Collection and Database Drivers
+
+The `collection` driver suits development and small catalogs. On each search, it loads every row of the table, builds the document of each record with its indexer, and keeps the records whose document contains the search term. Searches match every field of the document, so "nike" finds products by their brand name, and hidden or unpublished products never appear. The cost grows with the table: a product search builds a document for every product, with its brand, categories, channels and variants.
+
+With this driver, the `where()` and `whereIn()` constraints of a search run as SQL on the table of the model. They take real columns, such as `brand_id`, and cannot filter on document fields such as `channels`.
+
+The `database` driver does not work with Shopper's indexers. To find the columns to search, it builds a document from an empty model, and the indexers read dates and relations that an empty model does not have: searching products, brands, categories, collections or orders throws an `Error`, and searching users throws a `QueryException` on a `name` column that does not exist. Use the `collection` driver until you run a search engine.
+
+### Choosing an Engine per Model
+
+The `engine_map` key sends a model to another driver than `SCOUT_DRIVER`. A store can search its products on Typesense while orders, customers and the rest of the catalog stay on the `collection` driver:
+
+```php title="config/shopper/search.php"
+'engine_map' => [
+    Product::class => 'typesense',
+],
+```
+
+The file imports the core model classes at its top. A key written with a core class also covers the class configured for that model in `config/shopper/models.php`, such as `Shopper\Models\Product` or your own `App\Models\Product`. The mapped engine handles everything Scout does for the model: indexing on save, `scout:import`, `scout:flush` and searches. It still needs its client package and its credentials in `config/scout.php`.
+
+### Index Settings
+
+An engine has to know which fields to search, filter and sort on. Scout reads these settings from `config/scout.php`. Typesense needs a collection schema for each model, looked up by the class Scout indexes, which is the class configured for the model: `Shopper\Models\Product` unless you [swapped it](/3.x/models#swapping-a-model). Add a `model-settings` entry to the `typesense` array of `config/scout.php`:
+
+```php title="config/scout.php"
+'model-settings' => [
+    Shopper\Models\Product::class => [
+        'collection-schema' => [
+            'fields' => [
+                ['name' => 'id', 'type' => 'string'],
+                ['name' => 'name', 'type' => 'string'],
+                ['name' => 'slug', 'type' => 'string'],
+                ['name' => 'sku', 'type' => 'string', 'optional' => true],
+                ['name' => 'skus', 'type' => 'string[]'],
+                ['name' => 'description', 'type' => 'string'],
+                ['name' => 'summary', 'type' => 'string', 'optional' => true],
+                ['name' => 'type', 'type' => 'string', 'optional' => true, 'facet' => true],
+                ['name' => 'brand', 'type' => 'string', 'optional' => true, 'facet' => true],
+                ['name' => 'categories', 'type' => 'string[]', 'facet' => true],
+                ['name' => 'channels', 'type' => 'string[]'],
+                ['name' => 'published_at', 'type' => 'int64'],
+                ['name' => 'created_at', 'type' => 'int64'],
+            ],
+            'default_sorting_field' => 'published_at',
+        ],
+        'search-parameters' => [
+            'query_by' => 'name,sku,skus,brand,categories,description',
+        ],
+    ],
+],
+```
+
+The `shopper/search` add-on generates these Typesense settings from the field lists of the indexers, for every model that has no `model-settings` entry of its own.
+
+Meilisearch and Algolia read an `index-settings` array, keyed by index name or model class. For Meilisearch, declare the filterable and sortable fields of the products index:
+
+```php title="config/scout.php"
+'meilisearch' => [
+    'host' => env('MEILISEARCH_HOST', 'http://localhost:7700'),
+    'key' => env('MEILISEARCH_KEY'),
+    'index-settings' => [
+        'products' => [
+            'filterableAttributes' => ['brand', 'categories', 'channels', 'type'],
+            'sortableAttributes' => ['created_at', 'published_at'],
+        ],
+    ],
+],
+```
+
+Then send the settings to the engine. The command adds `SCOUT_PREFIX` to the index name. Pass `--driver` when Meilisearch serves only the models of `engine_map` and `SCOUT_DRIVER` names another driver:
+
+```bash
+php artisan scout:sync-index-settings --driver=meilisearch
+```
+
+### Custom Indexers
+
+To change the document of a model, extend its indexer and register your class under `indexers`. This indexer adds the tags of each product, so a search for "organic cotton" finds the products tagged with it:
+
+```php title="app/Search/ProductIndexer.php"
+<?php
+
+namespace App\Search;
+
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Model;
+use Shopper\Core\Search\ProductIndexer as ShopperProductIndexer;
+
+class ProductIndexer extends ShopperProductIndexer
+{
+    public function makeAllSearchableUsing(Builder $query): Builder
+    {
+        return parent::makeAllSearchableUsing($query)->with('tags');
+    }
+
+    public function getSearchableFields(): array
+    {
+        return [...parent::getSearchableFields(), 'tags'];
+    }
+
+    public function toSearchableArray(Model $model): array
+    {
+        return [
+            ...parent::toSearchableArray($model),
+            'tags' => $model->tags->pluck('name')->all(),
+        ];
+    }
+}
+```
+
+```php title="config/shopper/search.php"
+'indexers' => [
+    Brand::class => BrandIndexer::class,
+    Category::class => CategoryIndexer::class,
+    Collection::class => CollectionIndexer::class,
+    Order::class => OrderIndexer::class,
+    Product::class => App\Search\ProductIndexer::class,
+],
+```
+
+`makeAllSearchableUsing()` loads the relations of the document when Scout indexes records in bulk, during an import. `shouldBeSearchable()` decides whether a record belongs in the index: override it to keep, for example, the products of a disabled brand out of search. A new field that holds a list or a number needs its own entry in the index settings of the engine. After the change, import the model again so the existing documents get the new field.
+
+The `CustomerIndexer` indexes every user, including the members of your team. An indexer registered for the class in `auth.providers.users.model` replaces it, for example to leave administrators and managers out of the `users` index:
+
+```php title="app/Search/CustomerIndexer.php"
+<?php
+
+namespace App\Search;
+
+use Illuminate\Database\Eloquent\Model;
+use Shopper\Core\Search\CustomerIndexer as ShopperCustomerIndexer;
+
+class CustomerIndexer extends ShopperCustomerIndexer
+{
+    public function shouldBeSearchable(Model $model): bool
+    {
+        return ! $model->isAdmin() && ! $model->isManager();
+    }
+}
+```
+
+```php title="config/shopper/search.php"
+'indexers' => [
+    Brand::class => BrandIndexer::class,
+    Category::class => CategoryIndexer::class,
+    Collection::class => CollectionIndexer::class,
+    Order::class => OrderIndexer::class,
+    Product::class => ProductIndexer::class,
+    App\Models\User::class => App\Search\CustomerIndexer::class,
+],
+```
+
+### Facets
+
+The `facets` key lists, per model, the fields the `shopper/search` add-on returns as facets, with the label of each one. The Shopper packages do not read it. By default, products have a `brand` facet and a `categories` facet.
+
+## Keeping the Index in Sync
+
+Scout's model observer updates the document of a record each time it is saved, and removes it when the record is deleted or no longer passes the `shouldBeSearchable()` check of its indexer: a brand saved as disabled leaves the `brands` index. Shopper adds the cases where a product document depends on another model:
+
+- Renaming, enabling, disabling or deleting a brand reindexes its products.
+- Renaming, moving, enabling, disabling or deleting a category reindexes the category, its descendants and their products. Descendants that became hidden leave the `categories` index.
+- Creating or deleting a variant, or changing its SKU, reindexes its product.
+
+These updates run once the database transaction commits. Set `SCOUT_QUEUE=true` to have Scout send the documents from your queue workers instead of during the request.
+
+### Importing Existing Records
+
+Records saved before a model had an engine, such as the catalog of a store that moves to Typesense, are added with Scout's `scout:import` command. Pass the class configured in `config/shopper/models.php`, so the import uses the same class, and the same Typesense settings, as the rest of Shopper:
+
+```bash
+php artisan scout:import "Shopper\Models\Product"
+php artisan scout:import "Shopper\Models\Brand"
+php artisan scout:import "Shopper\Models\Category"
+php artisan scout:import "Shopper\Models\Collection"
+php artisan scout:import "Shopper\Core\Models\Order"
+php artisan scout:import "App\Models\User"
+```
+
+The import loads the relations each document needs and skips the records the indexer rejects, such as hidden products. It does not remove documents that should no longer be in the index: add `--fresh` to empty the index before importing. `scout:flush` empties the index of a model without importing anything.
+
+### Scheduled Publications
+
+A product or a collection whose `published_at` is in the future is not indexed when it is saved, and nothing saves it again when that date comes. It stays out of the index until its next save or import.
+
+<Warning>
+  If you schedule publications, schedule the import of products and collections as well, as often as your publication times require.
+</Warning>
+
+```php title="routes/console.php"
+use Illuminate\Support\Facades\Schedule;
+
+Schedule::command('scout:import', ['Shopper\Models\Product'])->hourly();
+Schedule::command('scout:import', ['Shopper\Models\Collection'])->hourly();
+```
+
+## Usage
+
+Search a model with Scout's `search()` method. In code that must honor a swapped model, resolve the product class from its contract, as recommended in [Resolving Models in Your Code](/3.x/models#resolving-models-in-your-code):
+
+```php
+use Shopper\Core\Models\Contracts\Product;
+
+$products = resolve(Product::class)::search('running shoes')->paginate(12);
+```
+
+The results are Eloquent models, loaded from the database in the order the engine ranked them. The product indexer keeps hidden, unpublished and scheduled products out of the index, with one exception described in [In the Admin](#in-the-admin). To eager load relations on the results, pass a callback to `query()`:
+
+```php
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Core\Models\Contracts\Product;
+
+$products = resolve(Product::class)::search('classic t-shirt')
+    ->query(fn (Builder $query) => $query->with(['brand', 'prices']))
+    ->paginate(12);
+```
+
+On an engine that indexes them as filterable, `where()` filters on the fields of the document. A storefront that sells on several channels keeps the products of its own channel, here the Nike products of the Web Store:
+
+```php
+use Shopper\Core\Models\Channel;
+use Shopper\Core\Models\Contracts\Product;
+
+$channel = Channel::findBySlug('web-store');
+
+$products = resolve(Product::class)::search('air max')
+    ->where('channels', $channel->public_id)
+    ->where('brand', 'Nike')
+    ->paginate(12);
+```
+
+On the `collection` driver, `where()` reads the columns of the products table instead, as described in [Collection and Database Drivers](#collection-and-database-drivers).
+
+## In the Admin
+
+The admin panel does not query the search index. The tables of products, variants, orders, customers, brands, categories and collections search their own columns with SQL, through Filament's searchable columns, and the admin panel has no global search. Merchants change the index by editing records: the product pages save a product, its variants and its prices, then send the product to the index once. That step only adds or updates documents: a product hidden, or given a future publication date, on the product page keeps its document in the index, until a save outside the product page or an [import](#importing-existing-records) with `--fresh` removes it. The [User Guide](/3.x/user-guide) shows the admin screens.
+
+## From a Storefront
+
+The Store API does not use Scout. `GET /store/products` takes a `filter[q]` parameter that runs the `matching` scope of the product model: a case-insensitive `LIKE` on the name, description and SKU of the product, combined with the channel of the request and its other filters. It does not match brand names, category names or variant SKUs.
+
+```bash
+curl "https://example.com/store/products?filter[q]=t-shirt" \
+  -H "X-Shopper-Channel: web-store"
+```
+
+The `shopper/search` add-on adds search endpoints backed by Scout to the Store API: `GET /store/search`, with facets on Typesense, and `GET /store/search/suggest`, which searches products, brands, categories and collections at once. The [Storefront](/3.x/storefront) page covers the Store API.

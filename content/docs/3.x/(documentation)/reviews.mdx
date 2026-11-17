@@ -1,0 +1,531 @@
+---
+title: Reviews
+description: Product reviews in Shopper, from the Review model and its ratings to approval, the admin moderation page and the Store API review endpoints.
+---
+
+Customers rate the products they bought and tell other customers what they think: a star rating from 1 to 5, an optional title and text, and whether they recommend the product. Each review is a row of the `reviews` table, linked to the product it rates and to the customer who wrote it.
+
+A new review is pending until a merchant approves it. Only approved reviews reach the storefront: the Store API, the average rating on the dashboard and the rating rule of automatic collections all ignore pending reviews. Shopper stores and moderates reviews; collecting them on your storefront is up to your code, as shown in [Review Submission](#review-submission).
+
+## Model
+
+The model is `Shopper\Core\Models\Review`. It implements the `Shopper\Core\Models\Contracts\Review` contract. It has no key in `config/shopper/models.php`, so it cannot be swapped: to add a relationship to it, use `resolveRelationUsing()` as described in [Models You Cannot Swap](/3.x/models#models-you-cannot-swap).
+
+The `HasPublicId` trait fills `public_id` with a ULID when a review is created, and adds `findByPublicId()` and the `wherePublicId` scope. The Store API returns it as the `id` of each review. The model casts `approved` and `is_recommended` to booleans and has an `approved` scope.
+
+Products receive reviews through the `Shopper\Core\Models\Traits\InteractsWithReviews` trait, described in [HasReviews Contract](#hasreviews-contract).
+
+## Database Schema
+
+Reviews are stored in the `sh_reviews` table (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)):
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `is_recommended` | boolean | no | false | Whether the customer recommends the product |
+| `rating` | integer | no | - | Star rating |
+| `title` | text | yes | null | Review title |
+| `content` | text | yes | null | Review text |
+| `approved` | boolean | no | false | Whether the review is published |
+| `reviewrateable_type` | string | no | - | Morph type of the reviewed model, `product` for a product |
+| `reviewrateable_id` | bigint | no | - | ID of the reviewed model |
+| `author_type` | string | no | - | Morph type of the author |
+| `author_id` | bigint | no | - | ID of the author |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+The `rating` column accepts any integer. The admin panel and the Store API count ratings from 1 to 5, so validate that range when you create a review. An index on `reviewrateable_type`, `reviewrateable_id`, `approved` and `created_at` serves the list of approved reviews of a product, newest first.
+
+The reviewed model and the author are polymorphic columns without foreign keys. Deleting a product or a customer leaves their reviews in the table.
+
+## Relationships
+
+A review belongs to the model it rates and to the customer who wrote it. Both relationships are polymorphic.
+
+### Reviewrateable (Product)
+
+`reviewrateable` returns the reviewed product. A product review stores the `product` alias in `reviewrateable_type`, so the relationship returns an instance of the class configured for the `product` key, as explained in [Morph Map](/3.x/models#morph-map):
+
+```php
+$product = $review->reviewrateable;
+```
+
+### Author (User)
+
+`author` returns the customer, an instance of your `User` model. Shopper registers no morph alias for the `User` model, so `author_type` stores its class name, such as `App\Models\User`:
+
+```php
+$customer = $review->author;
+
+$name = $review->author?->full_name;
+```
+
+The author is `null` when the customer was deleted. To list the reviews of a customer, compare `author_type` with the value of `getMorphClass()`, as shown in [Retrieving Reviews](#retrieving-reviews).
+
+## HasReviews Contract
+
+The product model implements the `Shopper\Core\Contracts\HasReviews` contract with the `InteractsWithReviews` trait. The trait adds a `ratings` relationship, which returns every review of the product, pending ones included, and the rating methods below.
+
+Product variants have no reviews of their own: a customer reviews the product. The trait works on any model, but the admin page and the Store API only read product reviews.
+
+## Rating Methods
+
+The trait adds methods to read, count and average the reviews of a product. Several of them count pending reviews unless you ask otherwise, so check each one before you display its result to customers.
+
+### Getting Ratings
+
+The `ratings` relationship is the most direct way to read the reviews of a product. Combine it with the `approved` scope for the storefront:
+
+```php
+$reviews = $product->ratings()
+    ->approved()
+    ->with('author')
+    ->latest()
+    ->get();
+```
+
+The trait also has helpers that take an ID and return a collection of reviews ordered by `created_at`, newest first by default:
+
+```php
+$product->getAllRatings($product->id);
+
+$product->getApprovedRatings($product->id);
+
+$product->getNotApprovedRatings($product->id);
+
+$product->getRecentRatings($product->id, limit: 5);
+
+$product->getRecentUserRatings($customer->id, limit: 5, approved: true);
+```
+
+`getRecentRatings()` returns approved reviews only. `getRecentUserRatings()` takes the ID of a customer and returns their reviews on every product. These helpers filter on `reviewrateable_id` or `author_id` without the morph type, so they mix models once a second model receives reviews. The `ratings` relationship has no such limit.
+
+### Rating Counts
+
+`countRating()` returns the number of reviews of the product, pending ones included. `sumRating()` returns the sum of the ratings, wrapped in a collection:
+
+```php
+$all = $product->countRating();
+
+$published = $product->ratings()->approved()->count();
+
+$sum = $product->sumRating(onlyApproved: true)->first();
+```
+
+### Average Ratings
+
+`averageRating()` returns the average rating wrapped in a collection. Pass `round` to round it in the query and `onlyApproved` to leave out pending reviews, which it counts by default:
+
+```php
+$average = $product->averageRating(round: 1, onlyApproved: true)->first();
+```
+
+The value is `null` when the product has no review. On a product list, load the count and the average with the products instead of calling these methods once per product:
+
+```php
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Core\Models\Contracts\Product;
+
+$products = resolve(Product::class)::query()
+    ->publish()
+    ->withCount(['ratings as reviews_count' => fn (Builder $query) => $query->approved()])
+    ->withAvg(['ratings as average_rating' => fn (Builder $query) => $query->approved()], 'rating')
+    ->paginate(12);
+```
+
+### Rating Percentage
+
+`ratingPercent()` returns the share of reviews with exactly the given rating, as a percentage rounded to one decimal. It counts pending reviews:
+
+```php
+$fiveStars = $product->ratingPercent(5);
+```
+
+For the rating distribution of a product page, group the approved reviews by rating in one query:
+
+```php
+$distribution = $product->ratings()
+    ->approved()
+    ->selectRaw('rating, COUNT(*) as total')
+    ->groupBy('rating')
+    ->pluck('total', 'rating');
+```
+
+The contract also declares `averageCustomerServiceRating()`, `averageQualityRating()`, `averageFriendlyRating()`, `averagePricingRating()` and the matching `count*Rating()` methods. They read columns that the `reviews` table does not have, and throw a `QueryException`: do not call them.
+
+## Configuration
+
+Reviews are on by default. Their settings are the feature flag, the admin components and the Store API options described in [From a Storefront](#from-a-storefront).
+
+### Disabling Reviews
+
+If your store does not collect reviews, disable the feature in `config/shopper/features.php`:
+
+```php title="config/shopper/features.php"
+use Shopper\Enum\FeatureState;
+
+return [
+    'review' => FeatureState::Disabled,
+];
+```
+
+The reviews page is no longer registered and the Reviews item leaves the sidebar. The flag only changes these two: the Store API review endpoints, the rating of the Top Selling Products widget on the [Dashboard](/3.x/dashboard#top-selling-products) and the rating rule of automatic collections keep reading the reviews already stored. The [Configuration](/3.x/configuration#feature-flags) page lists every feature flag.
+
+### Components
+
+The reviews section of the admin panel is made of one page and one slide-over. To replace either with your own Livewire component, publish the component file of the section:
+
+```bash
+php artisan shopper:component:publish review
+```
+
+The command creates `config/shopper/components/review.php`:
+
+```php title="config/shopper/components/review.php"
+use Shopper\Livewire;
+
+return [
+    'pages' => [
+        'review-index' => Livewire\Pages\Reviews\Index::class,
+    ],
+    'components' => [
+        'slide-overs.review-detail' => Livewire\SlideOvers\ReviewDetail::class,
+    ],
+];
+```
+
+To add content above or below the reviews table without replacing the page, register a view on the `REVIEWS_TABLE_BEFORE` or `REVIEWS_TABLE_AFTER` render hook of `Shopper\View\CatalogRenderHook`. The [Configuration](/3.x/configuration#components) page explains how component overriding works.
+
+## Usage
+
+The examples below read products through the product contract, so they keep working after you swap the product model.
+
+### Creating Reviews
+
+A review is created pending, because the `approved` column defaults to `false`. The model has no `$fillable` list: pass only validated fields, or a request that sends `approved` publishes its own review.
+
+#### Via Product Model
+
+`rating()` creates a review of the product, with the customer as its author:
+
+```php
+use Shopper\Core\Models\Contracts\Product;
+
+$product = resolve(Product::class)::query()
+    ->where('slug', 'classic-t-shirt')
+    ->firstOrFail();
+
+$review = $product->rating([
+    'rating' => 5,
+    'title' => 'Fits perfectly',
+    'content' => 'Soft cotton, true to size, and it kept its shape after ten washes.',
+    'is_recommended' => true,
+], $customer);
+```
+
+#### Via Review Model
+
+`createRating()` does the same from the review model, with the product as its first argument:
+
+```php
+use Shopper\Core\Models\Review;
+
+$review = (new Review)->createRating($product, [
+    'rating' => 4,
+    'title' => 'Good quality',
+    'content' => 'Nice fabric, the color is a little darker than on the photos.',
+    'is_recommended' => true,
+], $customer);
+```
+
+#### Direct Creation
+
+Through the `ratings` relationship, Eloquent fills `reviewrateable_type` and `reviewrateable_id`. Fill the author columns yourself, with the morph class of the customer:
+
+```php
+$review = $product->ratings()->create([
+    'rating' => 5,
+    'title' => 'Best purchase this year',
+    'is_recommended' => true,
+    'author_type' => $customer->getMorphClass(),
+    'author_id' => $customer->getKey(),
+]);
+```
+
+Do not write `get_class($product)` in `reviewrateable_type`: the product stores its `product` alias, and the Store API and the admin panel look reviews up by that alias.
+
+### Updating Reviews
+
+Update a review like any Eloquent model. `updateRating()` on the product finds the review by its ID and updates it:
+
+```php
+$review->update([
+    'rating' => 4,
+    'content' => 'Still great after six months, one seam came loose.',
+]);
+
+$product->updateRating($review->id, ['title' => 'Great, with one flaw']);
+```
+
+### Approval Management
+
+`updatedApproved()` publishes or unpublishes a review. The `approved` scope keeps the published ones:
+
+```php
+use Shopper\Core\Models\Review;
+
+$review->updatedApproved(true);
+
+$review->updatedApproved(false);
+
+$published = Review::query()->approved()->count();
+```
+
+The Approve, Reject and Mark as spam actions of the admin panel call the same method: approving sets `approved` to `true`, and both rejecting and marking as spam set it to `false`. A rejected review stays in the table, and a merchant can approve it later.
+
+### Deleting Reviews
+
+Reviews are deleted for good, the model has no soft deletes. Delete a review directly, or through the product with its ID:
+
+```php
+$review->delete();
+
+$product->deleteRating($review->id);
+```
+
+### Retrieving Reviews
+
+Query the `Review` model for reviews across products, such as the moderation queue or the reviews of one customer:
+
+```php
+use Shopper\Core\Models\Review;
+
+$pending = Review::query()
+    ->where('approved', false)
+    ->with(['author', 'reviewrateable'])
+    ->oldest()
+    ->get();
+
+$customerReviews = Review::query()
+    ->where('author_type', $customer->getMorphClass())
+    ->where('author_id', $customer->getKey())
+    ->with('reviewrateable')
+    ->latest()
+    ->get();
+
+$review = Review::findByPublicId('01JZ8Q4X7M2N3P5R6S7T8V9W0Y');
+```
+
+### Storefront Example
+
+A storefront built in the same Laravel application reads and creates reviews with the model. The examples below show a product page and a review form.
+
+#### Review Display
+
+The product page loads the count and the average of the approved reviews with the product, then paginates the reviews:
+
+```php title="app/Http/Controllers/ProductController.php"
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\View\View;
+use Shopper\Core\Models\Contracts\Product;
+
+class ProductController extends Controller
+{
+    public function show(string $slug): View
+    {
+        $product = resolve(Product::class)::query()
+            ->publish()
+            ->where('slug', $slug)
+            ->withCount(['ratings as reviews_count' => fn (Builder $query) => $query->approved()])
+            ->withAvg(['ratings as average_rating' => fn (Builder $query) => $query->approved()], 'rating')
+            ->firstOrFail();
+
+        $reviews = $product->ratings()
+            ->approved()
+            ->with('author')
+            ->latest()
+            ->paginate(10);
+
+        return view('products.show', ['product' => $product, 'reviews' => $reviews]);
+    }
+}
+```
+
+The view shows the summary, then each review:
+
+```blade title="resources/views/products/show.blade.php"
+<p>{{ number_format((float) $product->average_rating, 1) }} out of 5, from {{ $product->reviews_count }} reviews</p>
+
+@foreach ($reviews as $review)
+    <article>
+        <h3>{{ $review->title }}</h3>
+        <p>{{ $review->rating }}/5 by {{ $review->author?->first_name }}, {{ $review->created_at->diffForHumans() }}</p>
+        <p>{{ $review->content }}</p>
+
+        @if ($review->is_recommended)
+            <p>Recommends this product</p>
+        @endif
+    </article>
+@endforeach
+
+{{ $reviews->links() }}
+```
+
+#### Review Submission
+
+The review form posts to a route of your application. The controller validates the fields, refuses a second review of the same product by the same customer, and creates the review pending:
+
+```php title="app/Http/Controllers/ProductReviewController.php"
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Shopper\Core\Models\Contracts\Product;
+
+class ProductReviewController extends Controller
+{
+    public function store(Request $request, string $slug): RedirectResponse
+    {
+        $product = resolve(Product::class)::query()
+            ->publish()
+            ->where('slug', $slug)
+            ->firstOrFail();
+
+        $validated = $request->validate([
+            'rating' => ['required', 'integer', 'between:1,5'],
+            'title' => ['nullable', 'string', 'max:255'],
+            'content' => ['nullable', 'string', 'max:2000'],
+            'is_recommended' => ['boolean'],
+        ]);
+
+        $customer = $request->user();
+
+        $alreadyReviewed = $product->ratings()
+            ->where('author_type', $customer->getMorphClass())
+            ->where('author_id', $customer->getKey())
+            ->exists();
+
+        if ($alreadyReviewed) {
+            return back()->withErrors(['rating' => 'You have already reviewed this product.']);
+        }
+
+        $product->rating($validated, $customer);
+
+        return back()->with('status', 'Thank you, your review will appear once it is approved.');
+    }
+}
+```
+
+Register the route behind the `auth` middleware, so every review has a customer:
+
+```php title="routes/web.php"
+use App\Http\Controllers\ProductReviewController;
+
+Route::post('/products/{slug}/reviews', [ProductReviewController::class, 'store'])
+    ->middleware('auth')
+    ->name('products.reviews.store');
+```
+
+## Events
+
+Shopper dispatches no review event of its own. Listen to the Eloquent model events instead. The admin panel approves and rejects reviews with `update()`, so the `updated` event fires on each moderation. This listener emails the customer when their review is published:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Notifications\ReviewPublished;
+use Shopper\Core\Models\Review;
+
+public function boot(): void
+{
+    Review::updated(function (Review $review): void {
+        if ($review->wasChanged('approved') && $review->approved) {
+            $review->author?->notify(new ReviewPublished($review));
+        }
+    });
+}
+```
+
+The [Events](/3.x/events#listening-to-events) page covers listeners and queues.
+
+## Permissions
+
+The admin panel checks three permissions of the `reviews` resource, in the Products group:
+
+| Permission | Allows |
+|------------|--------|
+| `reviews.browse` | Opening the reviews page and a review |
+| `reviews.edit` | Approving and rejecting a review |
+| `reviews.delete` | Deleting a review, one at a time or in bulk, and marking a review as spam |
+
+The Reviews sidebar item is shown to users who have `products.browse`, while the page itself checks `reviews.browse`. `reviews.read` and `reviews.create` are seeded with the others, but the admin panel never checks them. Shopper 2.x named these permissions `browse_reviews`, `edit_reviews` and so on; the [Access Control](/3.x/acl#upgrading-from-2x) page explains how the upgrade renames them.
+
+## In the Admin
+
+Merchants moderate reviews under Customers, Reviews. The page opens with the average rating, the number of reviews and how many arrived in the last 30 days, the share of 5-star reviews and the number of reviews pending moderation, then a breakdown by rating and the share of customers who recommend the product. The table has All, Pending and Approved tabs, lists the customer, product, rating, status and date of each review, and filters by rating, product, customer and recommendation. A review opens in a slide-over with the Approve, Reject and Mark as spam actions. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API exposes the approved reviews under the `store` prefix, set by `SHOPPER_API_PREFIX`. There is no endpoint to submit a review: a storefront that collects reviews posts them to a route of its own Laravel application, as in [Review Submission](#review-submission).
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /store/products/{slug}/reviews` | The approved reviews of a published product, paginated, newest first. Filter with `filter[rating]=5`, sort with `sort=rating` or `sort=-created_at` |
+| `GET /store/reviews` | The latest approved reviews across the store, for a testimonials block. Not paginated, capped at `latest_limit` |
+
+A review resource has the type `reviews` and carries `title`, `content`, `rating`, `is_recommended`, `created_at` and an `author` object. The author is reduced to a display name, the first name and the initial of the last name such as `Sarah K.`, and an `avatar` picture URL. The author's ID and full last name never leave the API.
+
+The product reviews endpoint adds the aggregates of the approved reviews to `meta`, so a product page needs one request:
+
+```json
+{
+    "meta": {
+        "reviews_count": 5,
+        "average_rating": 4.2,
+        "rating_distribution": { "1": 0, "2": 1, "3": 0, "4": 1, "5": 3 }
+    }
+}
+```
+
+On the products endpoints, `include=rating` adds `rating`, the average of the approved reviews rounded to one decimal, and `reviews_count` to each product:
+
+```bash
+curl "https://example.com/store/products?include=rating"
+```
+
+The `review` entry of `config/shopper/api.php` sets the allowed filters and sorts of the reviews endpoint and the `latest_limit` of `/store/reviews`, 20 by default:
+
+```php title="config/shopper/api.php"
+'resources' => [
+    'review' => [
+        'filters' => ['rating' => 'exact'],
+        'sorts' => ['created_at', 'rating'],
+        'includes' => [],
+        'latest_limit' => 20,
+    ],
+],
+```
+
+The review endpoints are not filtered by the channel of the request, as noted in [Channels](/3.x/channels#what-the-channel-changes), and they do not read the `review` feature flag: they keep answering after you disable reviews in the admin panel.
+
+The JavaScript SDK wraps both endpoints:
+
+```ts
+import Shopper from '@shopperlabs/shopper-sdk'
+
+const sdk = new Shopper({ baseUrl: 'https://example.com' })
+
+const { data, meta } = await sdk.store.product.reviews('classic-t-shirt', {
+    filter: { rating: 5 },
+    page: { size: 10 },
+})
+
+const testimonials = await sdk.store.review.latest()
+```
+
+The [Storefront](/3.x/storefront) section documents the Store API.

@@ -1,0 +1,431 @@
+---
+title: Brands
+description: The Brand model in Shopper, its columns, logo and SEO fields, enabling a brand, and querying products by brand in code and through the Store API.
+---
+
+A brand is the manufacturer or label of a product: Nike, Adidas, Apple. Each product belongs to at most one brand, through the `brand_id` column of the products table. A storefront uses brands for a "Shop by Brand" page, a brand page listing its products, and a brand filter on the catalog.
+
+## Model
+
+The model configured for brands is `Shopper\Models\Brand`. It extends `Shopper\Core\Models\Brand` and implements the `Shopper\Core\Models\Contracts\Brand` contract. The core class holds the columns, the relationship to products and the scopes; the admin class adds the media collections and image conversions, as described in [Core Models and Admin Models](/3.x/models#core-models-and-admin-models).
+
+Four traits of the core class change what you can do with a brand:
+
+- `HasSlug` turns the `slug` you assign into a URL-safe value and appends `-1`, `-2` and so on when it is already taken, as described in [Slug Generation](#slug-generation).
+- `HasPublicId` fills `public_id` with a ULID when the brand is created. The Store API returns it as the brand `id`.
+- `HasMediaCollections` declares the logo and image collections described in [Media](#media).
+- `Searchable` sends enabled brands to the search index. The [Search](/3.x/search) page covers indexing.
+
+### Extending the Model
+
+To add your own methods, extend the admin class:
+
+```php title="app/Models/Brand.php"
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Models\Brand as ShopperBrand;
+
+class Brand extends ShopperBrand
+{
+    #[Scope]
+    protected function withPublishedProducts(Builder $query): void
+    {
+        $query->whereHas('products', fn (Builder $products) => $products->publish());
+    }
+}
+```
+
+Then point the `brand` key of the configuration to your class:
+
+```php title="config/shopper/models.php"
+'brand' => App\Models\Brand::class,
+```
+
+Extend the admin class `Shopper\Models\Brand`: the admin panel reads the brand logo through its media methods. The [Models](/3.x/models#swapping-a-model) page explains how swapping works.
+
+## Database Schema
+
+Brands are stored in the `sh_brands` table (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)):
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `name` | string | no | - | Brand name |
+| `slug` | string | yes | null | URL identifier, unique |
+| `website` | string | yes | null | Official website of the brand |
+| `description` | longtext | yes | null | Brand description, HTML from the admin rich editor |
+| `position` | smallint (unsigned) | no | 0 | Display order |
+| `is_enabled` | boolean | no | false | Whether the brand is shown on the storefront |
+| `seo_title` | string(60) | yes | null | Title for search engines |
+| `seo_description` | string(160) | yes | null | Description for search engines |
+| `metadata` | jsonb | yes | null | Your own data, cast to an array |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+A new brand is disabled by default. Set `is_enabled` to `true` when you create one that the storefront must show.
+
+## Slug Generation
+
+The `HasSlug` trait runs every slug you assign through `Str::slug()`, so `Nike Running` becomes `nike-running`. When another brand already has that slug, it appends a counter: `nike-running-1`, then `nike-running-2`. A value that produces an empty slug, such as a string of symbols, is replaced with five random characters.
+
+The slug is not derived from the name in code. The admin form fills it from the name when the field is left empty; when you create a brand in your own code, pass a slug, because the Store API finds brands by their slug.
+
+The trait also adds `findBySlug()`, which throws a `ModelNotFoundException` when no brand matches:
+
+```php
+use Shopper\Core\Models\Contracts\Brand;
+
+$nike = resolve(Brand::class)::findBySlug('nike');
+```
+
+## Relationships
+
+A brand has many products. The relation reads the product class from `config('shopper.models.product')`, so it returns your product model after a swap.
+
+### Products
+
+`products()` is a `HasMany` relation on the `brand_id` column of the products table. Deleting a brand sets `brand_id` to `null` on its products; the products themselves stay:
+
+```php
+use Shopper\Core\Models\Contracts\Brand;
+
+$nike = resolve(Brand::class)::findBySlug('nike');
+
+$nike->products;
+$nike->products()->publish()->count();
+```
+
+From the product side, `brand()` is a `BelongsTo` relation. Assign a brand to a product with `associate()`:
+
+```php
+$product->brand()->associate($nike);
+$product->save();
+
+$product->brand->name;
+```
+
+To list the published products of one or several brands, use the `byBrand` scope of the product model. It matches brands by slug or by public ID, and ignores disabled brands:
+
+```php
+use Shopper\Core\Models\Contracts\Product;
+
+$products = resolve(Product::class)::query()
+    ->publish()
+    ->byBrand('nike', 'adidas')
+    ->latest('published_at')
+    ->paginate(24);
+```
+
+## Query Scopes
+
+The model has one scope of its own, and the traits add lookups by slug and by public ID.
+
+### Enabled Brands
+
+The `enabled` scope keeps the brands whose `is_enabled` column is `true`. Use it on every storefront query:
+
+```php
+use Shopper\Core\Models\Contracts\Brand;
+
+$brands = resolve(Brand::class)::query()
+    ->enabled()
+    ->orderBy('position')
+    ->get();
+```
+
+`findByPublicId()` returns `null` when no brand matches, and the `wherePublicId` scope filters a query by public ID. The [Models](/3.x/models#public-ids) page describes public IDs.
+
+## Status Management
+
+`updateStatus()` enables a brand, or disables it when you pass `false`. It saves the change immediately:
+
+```php
+$nike->updateStatus();
+$nike->updateStatus(false);
+```
+
+Disabling a brand hides it everywhere a customer could see it, without touching its products:
+
+- The Store API stops returning it: `GET /store/brands` leaves it out, `GET /store/brands/{slug}` answers 404, the `brand` include of a product returns nothing and `filter[brand]` no longer matches it.
+- The `byBrand` scope ignores it, and the brand is removed from the search index.
+- The product forms of the admin panel only offer enabled brands.
+
+The products of a disabled brand stay published. Once the change is committed, Shopper reindexes them, because the product index carries the brand name only while the brand is enabled.
+
+## Media
+
+Brands have two media collections, named in `config/shopper/media.php`:
+
+| Collection | Config key | Default name | Files | Use |
+|------------|------------|--------------|-------|-----|
+| Images | `shopper.media.storage.collection_name` | `uploads` | Several | Extra brand images |
+| Thumbnail | `shopper.media.storage.thumbnail_collection` | `thumbnail` | One | The brand logo |
+
+The admin form uploads the logo to the thumbnail collection, up to `shopper.media.max_size.thumbnail` kilobytes (1024 by default). Both collections accept the MIME types listed in `shopper.media.accepts_mime_types`: JPEG, PNG, WebP and AVIF. Each upload gets the conversions of `shopper.media.conversions`, `large` (800x800) and `medium` (500x500) by default.
+
+Add a logo from an upload or from a URL:
+
+```php
+$nike->addMedia($request->file('logo'))
+    ->toMediaCollection(config('shopper.media.storage.thumbnail_collection'));
+
+$nike->addMediaFromUrl('https://cdn.example.com/brands/nike.png')
+    ->toMediaCollection(config('shopper.media.storage.thumbnail_collection'));
+```
+
+`getThumbnailUrl()` returns the logo URL. It falls back to the first image of the images collection, then to the placeholder image of the admin panel. Pass a conversion name to get the resized file; when that conversion has not been generated yet, it returns the original:
+
+```php
+$logoUrl = $nike->getThumbnailUrl('medium');
+```
+
+The [Media](/3.x/media) page covers storage disks, conversions and the placeholder image.
+
+## Configuration
+
+Brands are on by default. Their settings are the feature flag, the model key and the admin components.
+
+### Disabling Brands
+
+If your store does not use brands, disable the feature in `config/shopper/features.php`:
+
+```php title="config/shopper/features.php"
+'brand' => Shopper\Enum\FeatureState::Disabled,
+```
+
+The brands page is no longer registered, the Brands item leaves the sidebar, and the brand column of the products list and the brand field of the product forms are hidden. The flag only changes the admin panel: the model, the `brand_id` column and the Store API brand endpoints stay available. The [Configuration](/3.x/configuration#feature-flags) page lists every feature flag.
+
+### Components
+
+The brands section of the admin panel is made of one page and one form. To replace either with your own Livewire component, publish the component file of the section:
+
+```bash
+php artisan shopper:component:publish brand
+```
+
+The command creates `config/shopper/components/brand.php`:
+
+```php title="config/shopper/components/brand.php"
+use Shopper\Livewire;
+
+return [
+    'pages' => [
+        'brand-index' => Livewire\Pages\Brand\Index::class,
+    ],
+    'components' => [
+        'slide-overs.brand-form' => Livewire\SlideOvers\BrandForm::class,
+    ],
+];
+```
+
+The [Configuration](/3.x/configuration#components) page explains how component overriding works.
+
+## Usage
+
+The examples below resolve the brand class from its contract, so they keep working after you swap the model.
+
+### Creating Brands
+
+The model accepts every column through `create()`. Pass the slug the storefront will use in its URLs, and enable the brand:
+
+```php
+use Shopper\Core\Models\Contracts\Brand;
+
+$nike = resolve(Brand::class)::query()->create([
+    'name' => 'Nike',
+    'slug' => 'nike',
+    'website' => 'https://www.nike.com',
+    'description' => '<p>Running shoes, sneakers and sportswear.</p>',
+    'position' => 1,
+    'is_enabled' => true,
+    'seo_title' => 'Nike shoes and sportswear',
+    'seo_description' => 'Shop Nike running shoes, sneakers and sportswear.',
+]);
+
+$nike->addMedia($request->file('logo'))
+    ->toMediaCollection(config('shopper.media.storage.thumbnail_collection'));
+```
+
+### Retrieving Brands
+
+For a brand list or a filter dropdown, load the enabled brands that have published products, with their count:
+
+```php
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Core\Models\Contracts\Brand;
+
+$brands = resolve(Brand::class)::query()
+    ->enabled()
+    ->whereHas('products', fn (Builder $query) => $query->publish())
+    ->withCount(['products' => fn (Builder $query) => $query->publish()])
+    ->orderBy('position')
+    ->get(['id', 'name', 'slug']);
+```
+
+### Updating Brands
+
+Update a brand like any Eloquent model. A slug you change goes through the same slug rules as on creation:
+
+```php
+$nike->update([
+    'website' => 'https://about.nike.com',
+    'seo_title' => 'Nike running shoes',
+]);
+```
+
+### Metadata
+
+The `metadata` column stores data that has no column of its own, cast to an array. The admin form edits it as a list of keys and values:
+
+```php
+$nike->update([
+    'metadata' => [
+        'country_of_origin' => 'United States',
+        'founded_year' => 1964,
+    ],
+]);
+
+$country = $nike->metadata['country_of_origin'] ?? null;
+```
+
+The Store API returns `metadata` with the brand, so keep data the customers must not see out of it.
+
+### Storefront Example
+
+A brand listing page and a brand page with its published products:
+
+```php title="app/Http/Controllers/BrandController.php"
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\View\View;
+use Shopper\Core\Models\Contracts\Brand;
+
+class BrandController extends Controller
+{
+    public function index(): View
+    {
+        $brands = resolve(Brand::class)::query()
+            ->enabled()
+            ->withCount(['products' => fn (Builder $query) => $query->publish()])
+            ->orderBy('position')
+            ->get();
+
+        return view('brands.index', ['brands' => $brands]);
+    }
+
+    public function show(string $slug): View
+    {
+        $brand = resolve(Brand::class)::query()
+            ->enabled()
+            ->where('slug', $slug)
+            ->firstOrFail();
+
+        $products = $brand->products()
+            ->publish()
+            ->latest('published_at')
+            ->paginate(12);
+
+        return view('brands.show', ['brand' => $brand, 'products' => $products]);
+    }
+}
+```
+
+A store that sells on several channels adds the `channel` scope to the product query, as shown in [Channels](/3.x/channels).
+
+### View Composer
+
+When the same brand list appears in several views, such as the header menu and the catalog filters, share it through a view composer:
+
+```php title="app/View/Composers/BrandsComposer.php"
+<?php
+
+namespace App\View\Composers;
+
+use Illuminate\View\View;
+use Shopper\Core\Models\Contracts\Brand;
+
+class BrandsComposer
+{
+    public function compose(View $view): void
+    {
+        $view->with('brands', resolve(Brand::class)::query()
+            ->enabled()
+            ->orderBy('position')
+            ->take(12)
+            ->get(['id', 'name', 'slug']));
+    }
+}
+```
+
+Register it in the `boot()` method of a service provider:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\View\Composers\BrandsComposer;
+use Illuminate\Support\Facades\View;
+
+public function boot(): void
+{
+    View::composer(['partials.header', 'catalog.filters'], BrandsComposer::class);
+}
+```
+
+## Events
+
+Shopper dispatches no brand event of its own. Listen to the Eloquent model events instead. They are dispatched under the core class name as well, so a listener registered on `Shopper\Core\Models\Brand` keeps firing after you swap the model:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Illuminate\Support\Facades\Cache;
+use Shopper\Core\Models\Brand;
+
+public function boot(): void
+{
+    Brand::saved(fn () => Cache::forget('storefront.brands'));
+    Brand::deleted(fn () => Cache::forget('storefront.brands'));
+}
+```
+
+Shopper registers `Shopper\Core\Observers\BrandObserver` on the brand model. When the name or the status of a brand changes, or when a brand is deleted, it reindexes the brand's products once the transaction is committed. The [Events](/3.x/events#listening-to-events) page covers listeners and queues.
+
+## Permissions
+
+The admin panel checks four permissions of the `brands` resource, in the Catalog group:
+
+| Permission | Allows |
+|------------|--------|
+| `brands.browse` | Opening the brands page and seeing the Brands sidebar item |
+| `brands.create` | Opening and saving the form for a new brand |
+| `brands.edit` | Editing a brand, reordering the list, enabling and disabling brands in bulk |
+| `brands.delete` | Deleting a brand, one at a time or in bulk |
+
+`brands.read` is seeded with the others, but the admin panel never checks it. Shopper 2.x named these permissions `browse_brands`, `add_brands` and so on; the [Access Control](/3.x/acl#upgrading-from-2x) page explains how the upgrade renames them.
+
+## In the Admin
+
+Merchants manage brands under Catalog, Brands. The page lists each brand with its logo, name, website, visibility and last update, filters by visibility, and lets merchants drag rows to change their position. Bulk actions enable, disable or delete the selected brands. The brand form opens in a slide-over with four sections: General (name, slug, website, visibility, description), Media (the logo), SEO and Metadata. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API exposes the enabled brands under the `store` prefix, set by `SHOPPER_API_PREFIX`:
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /store/brands` | The enabled brands, paginated. Filter with `filter[name]` (partial match), sort with `sort=name` or `sort=position` |
+| `GET /store/brands/{slug}` | One enabled brand. Add `include=products` for its products published on the channel of the request |
+
+A brand resource has the type `brands` and carries `name`, `slug`, `website`, `description`, `seo_title`, `seo_description`, `metadata`, `thumbnail` (the logo with its conversion URLs), `created_at` and `updated_at`.
+
+The products endpoint filters and includes by brand. `filter[brand]` accepts brand slugs or public IDs, separated by commas:
+
+```bash
+curl "https://example.com/store/products?filter[brand]=nike,adidas&include=brand"
+```
+
+The `products` include and the product listing follow the channel of the request, as described in [Channels](/3.x/channels#the-store-api); the brands themselves are not filtered by channel. The [Storefront](/3.x/storefront) section documents the Store API.

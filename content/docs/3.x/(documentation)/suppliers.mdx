@@ -1,0 +1,415 @@
+---
+title: Suppliers
+description: The Supplier model in Shopper, its columns and feature flag, linking products to a supplier, and forwarding order items for dropshipping.
+---
+
+A supplier is the vendor or manufacturer that ships a product for you. Shopper uses suppliers for dropshipping: the merchant links an External product to its supplier, forwards the order to that supplier once the customer has paid, and the supplier ships the parcel to the customer. The store never holds stock of that product.
+
+Shopper stores the supplier, the link between a product and its supplier, and the fulfillment status of each order item. It does not contact the supplier: placing the order with the supplier and reading its tracking number are up to your code, as shown in [Dropshipping Workflow](#dropshipping-workflow).
+
+<Note>
+Suppliers are disabled on a fresh install. Enable them in `config/shopper/features.php`, as shown in [Feature Flag](#feature-flag).
+</Note>
+
+## Model
+
+The model is `Shopper\Core\Models\Supplier`. It implements the `Shopper\Core\Models\Contracts\Supplier` contract, which declares the `products` relationship, and it is registered under the `supplier` key of `config/shopper/models.php`, so you can swap it.
+
+Two traits change what you can do with a supplier. `HasSlug` cleans every slug you assign and adds `findBySlug()`, as described in [Creating Suppliers](#creating-suppliers). `HasPublicId` fills `public_id` with a ULID when a supplier is created, and adds `findByPublicId()` and the `wherePublicId` scope, as described in [Public IDs](/3.x/models#public-ids).
+
+The model casts `is_enabled` to a boolean and `metadata` to an array.
+
+### Extending the Model
+
+To add relationships or methods, extend the core class:
+
+```php title="app/Models/Supplier.php"
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Shopper\Core\Models\Supplier as ShopperSupplier;
+
+class Supplier extends ShopperSupplier
+{
+    public function purchaseOrders(): HasMany
+    {
+        return $this->hasMany(PurchaseOrder::class);
+    }
+}
+```
+
+Then register your class in `config/shopper/models.php`:
+
+```php title="config/shopper/models.php"
+return [
+    'supplier' => App\Models\Supplier::class,
+];
+```
+
+Run `php artisan config:cache` in production after the change. The [Models](/3.x/models#swapping-a-model) page explains what follows your class once it is registered.
+
+## Database Schema
+
+Suppliers are stored in the `sh_suppliers` table (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)):
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `name` | string | no | - | Supplier name |
+| `slug` | string | yes | null | URL-friendly identifier, unique |
+| `email` | string | yes | null | Contact email |
+| `phone` | string | yes | null | Contact phone |
+| `contact_name` | string | yes | null | Name of the person you deal with |
+| `website` | string | yes | null | Supplier website URL |
+| `description` | longText | yes | null | Description of the supplier |
+| `notes` | longText | yes | null | Internal notes |
+| `is_enabled` | boolean | no | false | Whether the supplier can be linked to products |
+| `metadata` | jsonb | yes | null | Additional custom data |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+The products table holds the link in a nullable, indexed `supplier_id` column. Its foreign key sets it to `null` when the supplier is deleted, so deleting a supplier keeps its products.
+
+## Relationships
+
+A supplier has many products, and a product belongs to at most one supplier.
+
+### Products
+
+`products` returns the products linked to the supplier, as instances of the class configured for the `product` key:
+
+```php
+$catalog = $supplier->products()
+    ->publish()
+    ->orderBy('name')
+    ->get();
+
+$count = $supplier->products()->count();
+```
+
+### Product to Supplier [#product--supplier]
+
+`supplier` on a product returns its supplier, or `null` when the product has none:
+
+```php
+$supplier = $product->supplier;
+
+$isDropshipped = $product->supplier_id !== null;
+```
+
+## Query Scopes
+
+The `enabled` scope keeps the enabled suppliers. `findBySlug()` throws a `ModelNotFoundException` when no supplier matches, and `findByPublicId()` returns `null`:
+
+```php
+use Shopper\Core\Models\Contracts\Supplier;
+
+$suppliers = resolve(Supplier::class)::query()->enabled()->get();
+
+$techParts = resolve(Supplier::class)::findBySlug('techparts');
+```
+
+## Configuration
+
+Suppliers are off by default. Their settings are the feature flag, the model key described in [Extending the Model](#extending-the-model), and the admin components.
+
+### Feature Flag
+
+Enable suppliers in `config/shopper/features.php`:
+
+```php title="config/shopper/features.php"
+use Shopper\Enum\FeatureState;
+
+return [
+    'supplier' => FeatureState::Enabled,
+];
+```
+
+Once enabled, the suppliers page is registered at `/cpanel/products/suppliers`, a Suppliers item appears under Catalog, Products in the sidebar, and the product page of an External product shows a Supplier field. The flag only changes the admin panel: the model and the `supplier_id` column work whether it is on or off. The [Configuration](/3.x/configuration#feature-flags) page lists every feature flag.
+
+### Components
+
+The suppliers page and form belong to the product section of the admin panel. Publish its component file to replace either with your own Livewire component:
+
+```bash
+php artisan shopper:component:publish product
+```
+
+The command creates `config/shopper/components/product.php`. The supplier entries are these two:
+
+| Key | Group | Default class |
+|-----|-------|---------------|
+| `supplier-index` | `pages` | `Shopper\Livewire\Pages\Supplier\Index` |
+| `slide-overs.supplier-form` | `components` | `Shopper\Livewire\SlideOvers\SupplierForm` |
+
+To add content above or below the suppliers table without replacing the page, register a view on the `SUPPLIERS_TABLE_BEFORE` or `SUPPLIERS_TABLE_AFTER` render hook. They are constants of `Shopper\View\SalesRenderHook`. The [Configuration](/3.x/configuration#components) page explains how component overriding works.
+
+## Usage
+
+The examples below resolve the supplier class from its contract, so they keep working after you swap the model.
+
+### Creating Suppliers
+
+The model accepts every column through `create()`. Pass a slug: it is not derived from the name in code, only the admin form fills it from the name when the field is left empty.
+
+```php
+use Shopper\Core\Models\Contracts\Supplier;
+
+$techParts = resolve(Supplier::class)::query()->create([
+    'name' => 'TechParts Co., Ltd',
+    'slug' => 'techparts',
+    'email' => 'orders@techparts.com',
+    'phone' => '+86 755 1234 5678',
+    'contact_name' => 'Zhang Wei',
+    'website' => 'https://techparts.com',
+    'description' => '<p>Electronics components and accessories manufacturer based in Shenzhen.</p>',
+    'notes' => 'Minimum order: 50 units. Lead time: 5-7 days.',
+    'is_enabled' => true,
+]);
+```
+
+The `HasSlug` trait runs every slug through `Str::slug()` and appends a counter when another supplier has it already: `techparts-1`, then `techparts-2`.
+
+### Updating Status
+
+`updateStatus()` enables a supplier, or disables it when you pass `false`. The admin form only offers enabled suppliers on the product page:
+
+```php
+$techParts->updateStatus();
+
+$techParts->updateStatus(false);
+```
+
+### Retrieving Suppliers
+
+Load the enabled suppliers with the number of products linked to each, or search them by name and email:
+
+```php
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Core\Models\Contracts\Supplier;
+
+$suppliers = resolve(Supplier::class)::query()
+    ->enabled()
+    ->withCount('products')
+    ->orderBy('name')
+    ->get();
+
+$results = resolve(Supplier::class)::query()
+    ->enabled()
+    ->where(fn (Builder $query) => $query
+        ->where('name', 'like', "%{$search}%")
+        ->orWhere('email', 'like', "%{$search}%"))
+    ->get();
+```
+
+### Metadata
+
+The `metadata` column stores data that has no column of its own, cast to an array. The admin form edits it as a list of keys and values:
+
+```php
+$techParts->update([
+    'metadata' => [
+        'payment_terms' => 'net_30',
+        'currency' => 'USD',
+        'minimum_order' => 50,
+        'lead_time_days' => 7,
+    ],
+]);
+
+$leadTime = $techParts->metadata['lead_time_days'] ?? null;
+```
+
+The Store API does not return suppliers, so metadata stays internal to the store.
+
+### Linking Products to Suppliers
+
+In the admin panel, the link is made on the product page of an [External product](/3.x/products). When suppliers are enabled, that page shows two required fields: the External ID, the product's identifier in the supplier's catalog, unique across products, and the Supplier, chosen among the enabled suppliers. Products of the other types show no supplier field.
+
+In code, set `supplier_id` on the product. The column accepts any product type:
+
+```php
+use Shopper\Core\Enum\ProductType;
+use Shopper\Core\Models\Contracts\Product;
+
+$earbuds = resolve(Product::class)::query()->create([
+    'name' => 'Wireless Bluetooth Earbuds',
+    'slug' => 'wireless-bluetooth-earbuds',
+    'type' => ProductType::External,
+    'external_id' => 'TP-EB-2041',
+    'supplier_id' => $techParts->id,
+    'is_visible' => true,
+    'published_at' => now(),
+]);
+
+$earbuds->update(['supplier_id' => $otherSupplier->id]);
+
+$earbuds->update(['supplier_id' => null]);
+```
+
+<Warning>
+The Store API refuses External products in carts: adding one answers with the `purchasable_unavailable` error. A storefront built on the Store API can display a supplier's External products but cannot sell them. See [From a Storefront](#from-a-storefront).
+</Warning>
+
+## Dropshipping Workflow
+
+An order of a supplier's product follows the usual [order](/3.x/orders) and [fulfillment](/3.x/fulfillment) flow. What changes is who ships: you forward the items to the supplier, then record the shipment with the tracking number the supplier sends back.
+
+### 1. Setup
+
+Create the supplier and link its products, as shown in [Creating Suppliers](#creating-suppliers) and [Linking Products to Suppliers](#linking-products-to-suppliers):
+
+```php
+$earbuds->update(['supplier_id' => $techParts->id]);
+```
+
+### 2. Customer Places Order
+
+The order is created as any other. Each order item starts with the `Pending` fulfillment status and points to what the customer bought through its polymorphic `product` relationship: the product, or the variant for a product with variants.
+
+### 3. Forward to Supplier
+
+After the customer has paid, place the order with the supplier, using the shipping address of the order. Then mark the supplier's items as forwarded. Shopper never sets the `ForwardedToSupplier` status itself; your code does:
+
+```php
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Core\Enum\FulfillmentStatus;
+
+$order->items()
+    ->where('fulfillment_status', FulfillmentStatus::Pending)
+    ->whereHasMorph(
+        'product',
+        [config('shopper.models.product')],
+        fn (Builder $query) => $query->where('supplier_id', $techParts->id),
+    )
+    ->update(['fulfillment_status' => FulfillmentStatus::ForwardedToSupplier]);
+```
+
+Use `whereHasMorph()` with the product class. `whereHas()` on a polymorphic relationship queries the table of every type stored in `product_type`, and the variants table has no `supplier_id` column.
+
+### 4. Supplier Ships
+
+When the supplier sends its tracking number, create a shipment for the forwarded items with `CreateShipmentAction`. Pass the ID of a [carrier](/3.x/carriers) when the supplier ships with one you have set up, or `null`:
+
+```php
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Core\Actions\CreateShipmentAction;
+use Shopper\Core\Actions\RecordShipmentEventAction;
+use Shopper\Core\Enum\FulfillmentStatus;
+use Shopper\Core\Enum\ShipmentStatus;
+
+$itemIds = $order->items()
+    ->where('fulfillment_status', FulfillmentStatus::ForwardedToSupplier)
+    ->whereHasMorph(
+        'product',
+        [config('shopper.models.product')],
+        fn (Builder $query) => $query->where('supplier_id', $techParts->id),
+    )
+    ->pluck('id')
+    ->all();
+
+$shipment = resolve(CreateShipmentAction::class)->execute(
+    $order,
+    carrierId: null,
+    itemIds: $itemIds,
+    trackingNumber: 'YT2412345678901234',
+    trackingUrl: 'https://t.17track.net/en#nums=YT2412345678901234',
+);
+
+$shipment->items()->update(['fulfillment_status' => FulfillmentStatus::Shipped]);
+
+resolve(RecordShipmentEventAction::class)->execute($shipment, ShipmentStatus::PickedUp);
+```
+
+The shipment is created with the `Pending` status and takes only the items that are not in another shipment yet. Recording the pickup stamps `shipped_at`, moves a New order to Processing and updates the order's shipping status. The pickup moves `Pending` items to `Shipped` and leaves `ForwardedToSupplier` items as they are, which is why the example sets them to `Shipped` first.
+
+### 5. Delivery Confirmation
+
+When the supplier confirms the delivery, record it on the shipment. A manual event follows the allowed transitions, so a picked-up shipment goes out for delivery before it is delivered; `execute()` returns `null` and changes nothing when the transition is not allowed:
+
+```php
+resolve(RecordShipmentEventAction::class)->execute($shipment, ShipmentStatus::OutForDelivery);
+
+resolve(RecordShipmentEventAction::class)->execute($shipment, ShipmentStatus::Delivered);
+```
+
+The Delivered event stamps `received_at`, moves the shipment's items to `Delivered`, completes a paid order once all its items are delivered, and dispatches `OrderShipmentDelivered`. The [Events](/3.x/events#shipment-events) page lists the shipment events.
+
+## Querying by Supplier
+
+Order items carry no `supplier_id`: query them through their product. The first query lists the items still waiting on a supplier, with what you need to place the order; the second sums the delivered sales of a supplier, in cents as described in [Money](/3.x/money), before discounts, and before taxes unless the order's tax zone includes them in prices:
+
+```php
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\DB;
+use Shopper\Core\Enum\FulfillmentStatus;
+use Shopper\Core\Models\OrderItem;
+
+$waiting = OrderItem::query()
+    ->whereIn('fulfillment_status', [
+        FulfillmentStatus::Pending,
+        FulfillmentStatus::ForwardedToSupplier,
+    ])
+    ->whereHasMorph(
+        'product',
+        [config('shopper.models.product')],
+        fn (Builder $query) => $query->where('supplier_id', $techParts->id),
+    )
+    ->with(['order.customer', 'order.shippingAddress'])
+    ->get();
+
+$delivered = OrderItem::query()
+    ->where('fulfillment_status', FulfillmentStatus::Delivered)
+    ->whereHasMorph(
+        'product',
+        [config('shopper.models.product')],
+        fn (Builder $query) => $query->where('supplier_id', $techParts->id),
+    )
+    ->sum(DB::raw('unit_price_amount * quantity'));
+```
+
+These queries match the items of products linked to the supplier. External products have no variants. If you link a product with variants in code, its order items point to the variants: add `config('shopper.models.variant')` to the types and filter on the variant's `product` relationship.
+
+## Events
+
+Shopper dispatches no supplier event of its own. Listen to the Eloquent model events instead. They are dispatched under the core class name as well, so a listener registered on `Shopper\Core\Models\Supplier` keeps firing after you swap the model. A store that stops selling the products of a disabled supplier can hide them:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Shopper\Core\Models\Supplier;
+
+public function boot(): void
+{
+    Supplier::updated(function (Supplier $supplier): void {
+        if ($supplier->wasChanged('is_enabled') && ! $supplier->is_enabled) {
+            $supplier->products()->get()->each->update(['is_visible' => false]);
+        }
+    });
+}
+```
+
+Updating each product, instead of one query on the relationship, fires the product events that resync collections and the search index. The [Events](/3.x/events#listening-to-events) page covers listeners and queues.
+
+## Permissions
+
+The admin panel checks four permissions of the `suppliers` resource, in the Products group:
+
+| Permission | Allows |
+|------------|--------|
+| `suppliers.browse` | Opening the suppliers page and seeing the Suppliers sidebar item |
+| `suppliers.create` | Opening the form for a new supplier |
+| `suppliers.edit` | Editing a supplier, enabling and disabling suppliers in bulk |
+| `suppliers.delete` | Deleting a supplier, one at a time or in bulk |
+
+`suppliers.read` is seeded with the others, but the admin panel never checks it. Linking a product to a supplier happens on the product page, which requires `products.edit`. Shopper 2.x named these permissions `browse_suppliers`, `add_suppliers` and so on; the [Access Control](/3.x/acl#upgrading-from-2x) page explains how the upgrade renames them.
+
+## In the Admin
+
+Merchants manage suppliers under Catalog, Products, Suppliers, once the feature flag is on. The page lists each supplier with its name, email, contact, phone, visibility and last update, and filters by visibility. Bulk actions enable, disable or delete the selected suppliers. The supplier form opens in a slide-over with three sections: General (name, slug, email, phone, contact name, website, visibility), Description (description and internal notes) and Metadata. The Supplier field of an External product sits on its product page. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API does not expose suppliers: no endpoint lists them, and the product resource carries neither `supplier_id` nor a supplier relationship. An External product carries its `external_id`, and its `in_stock` is always `true`, because the supplier holds the stock.
+
+The cart endpoints refuse External products with the `purchasable_unavailable` error, so they cannot be bought through the Store API. The [Storefront](/3.x/storefront) section documents the Store API.
