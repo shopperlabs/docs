@@ -17,32 +17,33 @@ Collections are useful for:
 
 Click on **Collections** in the sidebar to access collection management.
 
-<Frame>
-  <img src="/images/v2/collections.png" alt="Collections List" />
-</Frame>
+<Screenshot src="/images/v2/collections.png" alt="Collections List" />
 
 ## Creating a Collection
 
 To create a new collection:
 
-1. Click the **Create** button
-2. Fill in the collection details
-3. Add products to the collection
-4. Click **Save**
+1. Click the **New collection** button
+2. Fill in the collection details and choose the **Collection Type**
+3. Click **Save**. The collection's edit page opens.
+4. Add products to the collection: click **Browse** above the product list for a manual collection, or **Conditions** for an automatic one (see [Automatic Collections](#automatic-collections))
 
-<Frame>
-  <img src="/images/v2/collection-create.png" alt="Create Collection" />
-</Frame>
+On the edit page, click **Update** to save changes to the collection details.
+
+<Screenshot src="/images/v2/collection-create.png" alt="Create Collection" />
 
 ### Collection Fields
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | **Name** | Yes | The collection name |
+| **Availability** | Yes | The date and time the collection becomes available on your store. Defaults to now; set a later date to schedule it. |
+| **Collection Type** | Yes | **Manual** or **Automatic** (condition-based). It cannot be changed after the collection is created. |
+| **Zones** | No | Limit the collection to the selected zones |
 | **Description** | No | Describe what this collection represents |
-| **Image** | No | A cover image for the collection |
-| **Type** | Yes | Manual or Automatic (rule-based) |
-| **Published** | No | Toggle to publish the collection |
+| **Image preview** | No | In the **Media** section, a cover image for the collection |
+| **Title** and **Description** | No | In the **SEO** section, how the collection page appears in search engine results |
+| **Metadata** | No | In the **Metadata** section, extra key and value pairs your developer can use on the storefront |
 
 ## Collection Types
 
@@ -56,47 +57,51 @@ Manually select which products belong to the collection:
 
 ### Automatic Collections
 
-Use rules to automatically include products:
+Use conditions to include products automatically. On the collection's edit page, click **Conditions** above the product list to open the **Product conditions** panel:
 
-<Frame>
-  <img src="/images/v2/collection-rules.png" alt="Collection Rules" />
-</Frame>
+1. Under **Products must match**, choose **All conditions** or **Any condition**
+2. For each condition, pick a rule in **Choose a rule**, an operator in **Select operator**, then fill in the **Value**
+3. Click **Add condition** to add another one
+4. Click **Save**
 
-Available rule conditions include:
+<Screenshot src="/images/v2/collection-rules.png" alt="Collection Rules" />
 
-| Condition | Example |
-|-----------|---------|
+Available rules:
+
+| Rule | Example |
+|------|---------|
 | **Product title** | Contains "organic" |
-| **Product type** | Equals "T-Shirt" |
-| **Price** | Greater than $50 |
-| **Brand** | Is "Nike" |
-| **Tag** | Contains "sale" |
+| **Product brand** | Equals to "Nike" |
+| **Product category** | Contains "Shoes" |
+| **Product price** | Greater than 50 |
+| **Compare at price** | Greater than 0 (products shown with a former price) |
+| **Inventory stock** | Greater than 5 |
+| **Product created date** | Greater than a date you pick |
+| **Product featured** | Equals to Yes |
+| **Product rating** | Greater than 3 |
+| **Product sales count** | Greater than 100 |
 
 <Tip>
-Automatic collections update dynamically. When a product matches the rules, it's automatically added. When it no longer matches, it's removed.
+The product list of an automatic collection is filled when you save its conditions. Products you add or change afterwards join or leave the list the next time you click **Save** in the **Product conditions** panel. On the starter kits, the collection page checks the conditions each time it loads, so matching products show there right away.
 </Tip>
 
 ## Collection Preview
 
-Preview how your collection will appear to customers:
+On the starter kits, each collection has its own page with a breadcrumb, the collection title and description, then its products. The page is available once the **Availability** date has passed.
 
-<Frame>
-  <img src="/images/v2/collection-preview.png" alt="Collection Preview" />
-</Frame>
+<Screenshot src="/images/v2/collection-preview.png" alt="Collection Preview" />
 
 ## Collections on Storefront
 
-Customers can browse your collections on the storefront:
+The starter kit home page has a **Shop by Collections** section that shows three collections, the ones with the most products, each linking to its collection page. There is no page listing all collections.
 
-<Frame>
-  <img src="/images/v2/starterkit-collections.png" alt="Storefront Collections" />
-</Frame>
+<Screenshot src="/images/v2/starterkit-collections.png" alt="Storefront Collections" />
 
 ## Use Cases
 
 <CardGroup cols={2}>
   <Card title="New Arrivals" icon="sparkles">
-    Create an automatic collection for products added in the last 30 days.
+    Create an automatic collection with a **Product created date** condition, Greater than the date your new season starts.
   </Card>
   <Card title="Sale Items" icon="tag">
     Group all discounted products for easy customer access.

@@ -16,40 +16,37 @@ Categories create a hierarchical structure for your products. You can create:
 
 Click on **Categories** in the sidebar to access the category management page.
 
-<Frame>
-  <img src="/images/v2/categories.png" alt="Categories List" />
-</Frame>
+<Screenshot src="/images/v2/categories.png" alt="Categories List" />
 
 ## Creating a Category
 
 To add a new category:
 
-1. Click the **Create** button on the Categories page
+1. Click the **New category** button on the Categories page
 2. Fill in the category details
 3. Click **Save** to create the category
 
-<Frame>
-  <img src="/images/v2/category-create.png" alt="Create Category" />
-</Frame>
+<Screenshot src="/images/v2/category-create.png" alt="Create Category" />
 
 ### Category Fields
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | **Name** | Yes | The category name displayed to customers |
-| **Parent category** | No | Select a parent to create a subcategory |
+| **Parent** | No | Select a parent to create a subcategory. Only visible categories are listed. Leave it empty for a top-level category. |
+| **Visibility** | No | Toggle to show or hide the category. Off by default. |
 | **Description** | No | Detailed description of the category |
-| **Image** | No | A representative image for the category |
-| **Enabled** | No | Toggle to show/hide the category |
+| **Image preview** | No | In the **Media** section, a representative image for the category |
+| **Metadata** | No | In the **Metadata** section, extra key and value pairs your developer can use on the storefront |
 
 ### SEO Settings
 
-Improve your category pages visibility in search engines:
+Improve your category pages visibility in search engines in the **SEO** section:
 
 | Field | Description |
 |-------|-------------|
-| **SEO Title** | Custom title for search results |
-| **SEO Description** | Meta description for the category page |
+| **Title** | Custom title for search results |
+| **Description** | Meta description for the category page (max 160 characters) |
 
 ## Category Hierarchy
 
@@ -71,20 +68,23 @@ Electronics
 To create a subcategory:
 
 1. Create a new category
-2. Select the parent category from the dropdown
+2. Select the parent category in the **Parent** field
 3. Save the category
 
 ## Managing Category Order
 
 Categories can be reordered to control how they appear in navigation:
 
-- Use drag-and-drop to reorder categories
-- Position determines the display order on your storefront
+1. Click the **Reorder** button above the category list
+2. In the **Reorder** panel, drag categories by their handle into the order you want. Dropping a category inside another one also changes its parent.
+3. Each move is saved as soon as you drop it. Click **Close** when you are done.
+
+Position determines the display order on your storefront.
 
 ## Category States
 
-- **Enabled** - Visible to customers and appears in navigation
-- **Disabled** - Hidden from customers but products remain categorized
+- **Visibility** on - Visible to customers and appears in navigation
+- **Visibility** off - Hidden from customers, and no longer offered in the product **Categories** field or the **Parent** field. Products already in the category stay categorized.
 
 <Tip>
 Create a clear and logical category structure from the start. Reorganizing categories later may affect URLs and SEO.

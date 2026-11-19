@@ -1,0 +1,139 @@
+---
+title: 'Overview'
+description: 'The Blade and Filament components Shopper ships for the admin panel, and how to style and override them.'
+---
+
+Shopper ships Blade components for the views of the admin panel and Filament fields and columns for its forms and tables. Use them in the pages, slide-overs and add-ons you build: your screens then look like the rest of the admin panel and follow the active theme, in light and dark mode.
+
+## Available Components
+
+Each page shows a component, its props and slots, and the view Shopper renders for it.
+
+<CardGroup cols={2}>
+  <Card title="Card" icon="square" href="/3.x/extending/components/card">
+    Container with an optional title, description and footer.
+  </Card>
+  <Card title="Alert" icon="bell" href="/3.x/extending/components/alert">
+    Colored message box for information, success, warnings and errors.
+  </Card>
+  <Card title="Heading" icon="heading" href="/3.x/extending/components/heading">
+    Page title with an action slot for buttons.
+  </Card>
+  <Card title="Section Heading" icon="align-left" href="/3.x/extending/components/section-heading">
+    Section title with an optional description.
+  </Card>
+  <Card title="Empty State" icon="inbox" href="/3.x/extending/components/empty-state">
+    Illustration, message and call to action for a list with no records.
+  </Card>
+  <Card title="Empty Card" icon="square-dashed" href="/3.x/extending/components/empty-card">
+    Compact empty state for a card or a panel.
+  </Card>
+  <Card title="Stock Badge" icon="package" href="/3.x/extending/components/stock-badge">
+    Stock quantity in red below 10 units, in green from 10.
+  </Card>
+  <Card title="Loader" icon="loader" href="/3.x/extending/components/loader">
+    Spinning indicator for loading states.
+  </Card>
+  <Card title="Label" icon="tag" href="/3.x/extending/components/label">
+    Form field label with a required marker.
+  </Card>
+  <Card title="Utility Components" icon="wrench" href="/3.x/extending/components/utilities">
+    Container, link, separator, breadcrumb, validation errors, dropdown link and form slide-over.
+  </Card>
+  <Card title="Filament Components" icon="layers" href="/3.x/extending/components/filament">
+    Filament fields and table columns from the `Shopper\Components` namespace.
+  </Card>
+</CardGroup>
+
+## Usage
+
+Blade components take the `x-shopper::` prefix and work in any view rendered inside the admin panel:
+
+```blade
+<x-shopper::card title="Loyalty Points" description="Points your customers earn on each order.">
+    <x-shopper::empty-card heading="No points earned yet" icon="untitledui-package" />
+</x-shopper::card>
+```
+
+Each component is an anonymous Blade component: `x-shopper::card` renders the view `shopper::components.card`, the file `resources/views/components/card.blade.php` of the `shopper/framework` package. A dot in the name is a folder, so `x-shopper::breadcrumb.link` renders `components/breadcrumb/link.blade.php`.
+
+The Filament components are PHP classes, used in the `form()` or `table()` method of a Livewire component like any Filament field or column. [Filament Components](/3.x/extending/components/filament) lists them.
+
+## Styling
+
+The components read their colors from the active theme. Their views use Tailwind classes built on Shopper's design tokens: `bg-sh-surface`, `bg-sh-card`, `bg-sh-muted`, `text-sh-fg`, `text-sh-fg-secondary`, `text-sh-fg-muted`, `ring-sh-border` and the other `sh-*` colors, plus the `primary-50` to `primary-950` ramp. Each token reads a CSS custom property of the theme (`--color-sh-surface` reads `--theme-sh-surface`), and each theme sets these properties for light and dark mode, as described in [How a Theme Works](/3.x/themes#how-a-theme-works). Use the same classes in your own markup and it follows the theme and dark mode without `dark:` variants.
+
+Shopper's stylesheet is compiled from Shopper's own views, so it only holds the classes those views use. A class that only appears in your views is missing from it. Compile a stylesheet for your views with Tailwind CSS and map the tokens to the theme properties, as Shopper and its add-ons do:
+
+```css title="resources/css/admin.css"
+@layer theme, base, components, utilities;
+
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' layer(utilities);
+
+@source '../views';
+
+@variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+    --color-sh-header: var(--theme-sh-header);
+    --color-sh-header-border: var(--theme-sh-header-border);
+    --color-sh-header-fg: var(--theme-sh-header-fg);
+    --color-sh-header-fg-muted: var(--theme-sh-header-fg-muted);
+    --color-sh-header-hover: var(--theme-sh-header-hover);
+    --color-sh-body: var(--theme-sh-body);
+    --color-sh-sidebar: var(--theme-sh-sidebar);
+    --color-sh-sidebar-hover: var(--theme-sh-sidebar-hover);
+    --color-sh-sidebar-active: var(--theme-sh-sidebar-active, var(--theme-sh-sidebar-hover));
+    --color-sh-settings-sidebar-hover: var(--theme-sh-settings-sidebar-hover, var(--theme-sh-sidebar-hover));
+    --color-sh-surface: var(--theme-sh-surface);
+    --color-sh-muted: var(--theme-sh-muted);
+    --color-sh-muted-strong: var(--theme-sh-muted-strong);
+    --color-sh-border: var(--theme-sh-border);
+    --color-sh-fg: var(--theme-sh-fg);
+    --color-sh-fg-secondary: var(--theme-sh-fg-secondary);
+    --color-sh-fg-muted: var(--theme-sh-fg-muted);
+    --color-sh-accent: var(--theme-sh-accent);
+    --color-sh-accent-fg: var(--theme-sh-accent-fg);
+    --color-sh-card: var(--theme-sh-card);
+    --color-sh-table-header: var(--theme-sh-table-header);
+    --color-sh-skeleton: var(--theme-sh-skeleton);
+
+    --color-primary-50: var(--primary-50);
+    --color-primary-100: var(--primary-100);
+    --color-primary-200: var(--primary-200);
+    --color-primary-300: var(--primary-300);
+    --color-primary-400: var(--primary-400);
+    --color-primary-500: var(--primary-500);
+    --color-primary-600: var(--primary-600);
+    --color-primary-700: var(--primary-700);
+    --color-primary-800: var(--primary-800);
+    --color-primary-900: var(--primary-900);
+    --color-primary-950: var(--primary-950);
+}
+```
+
+The stylesheet leaves out Tailwind's preflight, which the admin panel already loads. Compile it with the Tailwind CLI:
+
+```bash
+npx @tailwindcss/cli -i resources/css/admin.css -o public/css/admin.css --minify
+```
+
+Then load the output on the admin pages: an application registers it with `Shopper::styles()`, as shown in [Adding CSS and JS Assets](/3.x/extending/control-panel#adding-css-and-js-assets), and an add-on with `addonStyles()`, as shown in [Styles and Scripts](/3.x/addons/admin-panel#styles-and-scripts).
+
+## Customization
+
+Most components pass the attributes you give them to their root element. The `class` attribute goes through `twMerge()`, so a class you pass replaces the default class it conflicts with: `<x-shopper::card class="p-2">` replaces the card's `p-0.5`. Named slots, like the `action` slot of the heading, take your own markup.
+
+To change the markup of a component everywhere in the admin panel, override its view. Shopper has no publish tag for its views: copy the view from the package to the same path under `resources/views/vendor/shopper` in your application. Laravel looks in that folder before the package's views:
+
+```bash
+mkdir -p resources/views/vendor/shopper/components
+cp vendor/shopper/framework/resources/views/components/card.blade.php resources/views/vendor/shopper/components/card.blade.php
+```
+
+A nested component keeps its folder: `breadcrumb/link.blade.php` goes to `resources/views/vendor/shopper/components/breadcrumb/link.blade.php`. Several views start with a `@blaze` directive, sometimes with options like `@blaze(memo: true)`: it lets Blaze compile the component ahead of rendering. Keep it in your copy. Run `php artisan view:clear` after adding or removing an override, so that views compiled before it pick up the change.
+
+<Note>
+  A copied view no longer gets the changes Shopper makes to that component in later releases. Keep the props and slots of the original: Shopper's own views pass them.
+</Note>

@@ -6,7 +6,7 @@ description: "Add and manage product suppliers for dropshipping and external sou
 Suppliers represent external vendors or manufacturers who provide products for your store. This is primarily used in **dropshipping** scenarios where products are shipped directly from the supplier to the customer, without you handling inventory yourself.
 
 <Note>
-The supplier feature must be enabled by your developer before it appears in the admin panel. If you don't see "Suppliers" in the sidebar, ask your developer to enable it in the configuration.
+The supplier feature must be enabled by your developer before it appears in the admin panel. If you don't see "Suppliers" in the sidebar, ask your developer to enable it (see [Feature Flag](/2.x/suppliers#feature-flag)).
 </Note>
 
 ## Accessing Suppliers
@@ -16,34 +16,31 @@ When the feature is enabled, suppliers appear under the Products section:
 1. Click on **Products** in the sidebar
 2. Select **Suppliers** from the submenu
 
-<Frame>
-  <img src="/images/v2/suppliers-list.png" alt="Suppliers list page" />
-</Frame>
+<Screenshot src="/images/v2/suppliers-list.png" alt="Suppliers list page" />
 
 ## Adding a Supplier
 
 To add a new supplier:
 
-1. Click the **Add supplier** button
+1. Click the **New supplier** button
 2. Fill in the supplier details
 3. Click **Save**
 
-<Frame>
-  <img src="/images/v2/suppliers-create.png" alt="Add supplier form" />
-</Frame>
+<Screenshot src="/images/v2/suppliers-create.png" alt="Add supplier form" />
 
 ### Supplier Fields
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | **Name** | Yes | The supplier's company name |
-| **Email** | No | Contact email for placing orders |
-| **Phone** | No | Contact phone number |
-| **Contact Name** | No | Primary contact person at the supplier |
+| **Email address** | No | Contact email for placing orders |
+| **Phone number** | No | Contact phone number |
+| **Contact** | No | Primary contact person at the supplier |
 | **Website** | No | Supplier's website URL |
-| **Description** | No | Details about the supplier and their products |
-| **Notes** | No | Internal notes (not visible to customers) |
-| **Status** | No | Whether the supplier is active |
+| **Visibility** | No | Whether the supplier is active and can be picked on products. Off by default. |
+| **Description** | No | In the **Description** section, details about the supplier and their products |
+| **Notes** | No | In the **Description** section, internal notes (not visible to customers) |
+| **Metadata** | No | In the **Metadata** section, extra key and value pairs your developer can use |
 
 ## Editing a Supplier
 
@@ -55,24 +52,21 @@ To update a supplier's information:
 
 ## Enabling or Disabling a Supplier
 
-Toggle the **Status** switch in the list to quickly enable or disable a supplier. Disabled suppliers are still linked to their products but are marked as inactive.
+The **Visibility** column in the list shows whether each supplier is active; it cannot be clicked. To change it, edit the supplier and switch **Visibility**, or select several suppliers in the list and use the **Enable** or **Disable** bulk action. Disabled suppliers stay linked to their products but no longer appear in the product **Supplier** dropdown.
 
 ## Linking Products to Suppliers
 
-Products are linked to suppliers from the product edit form. When creating or editing an **External** product:
+Products are linked to suppliers from the product edit form, once the product is created: the creation wizard has no supplier field. When editing an **External** product:
 
 1. Go to the product's edit page
-2. Find the **Supplier** dropdown
-3. Select the supplier
-4. Click **Save**
+2. In the **Overview** tab, find the **Supplier** dropdown in the **Product information** section, next to **Product external Id**
+3. Select the supplier. Only enabled suppliers are listed
+4. Fill in **Product external Id**, the identifier of the product at your supplier. Both fields are required
+5. Click **Update**
 
-<Frame>
-  <img src="/images/v2/suppliers-product.png" alt="Supplier field on product form" />
-</Frame>
+The **Supplier** dropdown, like the **Suppliers** menu, only appears when the supplier feature is enabled.
 
-{/* SCREENSHOT NEEDED: The product edit form for an External product type showing
-    the Supplier dropdown with "TechParts Co., Ltd" selected. Show the field
-    within the product form context. */}
+<Screenshot src="/images/v2/suppliers-product.png" alt="Supplier field on product form" />
 
 <Tip>
 Only **External** products can be linked to suppliers. Standard, variant, and virtual products are managed from your own inventory.

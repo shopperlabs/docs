@@ -5,11 +5,7 @@ description: Overview of the admin dashboard components, caching, access require
 
 The dashboard is the first screen after login. It shows store health at a glance: revenue trends, key metrics, recent orders and top products. Until the store is configured, an onboarding guide takes the place of these widgets.
 
-<Frame>
-  <img src="/images/v2/dashboard.png" alt="Shopper admin dashboard with stat cards, revenue chart, top products, and recent orders" />
-</Frame>
-
-{/* SCREENSHOT NEEDED: The full dashboard page after the setup guide is dismissed. Show all 4 stat cards at the top (Revenue, Products, Orders, Customers with trend indicators), the revenue bar chart on the left, the top selling products table on the right, and the recent orders table below. Use the demo store data so the charts have realistic numbers. */}
+<Screenshot src="/images/v2/dashboard.png" alt="Shopper admin dashboard with stat cards, revenue chart, top products, and recent orders" />
 
 ## Components
 
@@ -52,11 +48,7 @@ Ranks the top 6 products by total quantity sold across all paid orders, with no 
 
 An interactive checklist that guides new stores through the essential configuration steps. It takes the place of the dashboard widgets until it is completed or dismissed, and detects each step's completion by querying the database. A step is listed only for users who have its permission:
 
-<Frame>
-  <img src="/images/v2/dashboard-setup-guide.png" alt="Shopper setup guide with progress bar and expandable steps" />
-</Frame>
-
-{/* SCREENSHOT NEEDED: The setup guide as it appears on a fresh install. Show the welcome message at the top, the progress bar showing "1 of 5 completed" (the seeders create the cash on delivery payment method), and the 5 expandable steps listed below. Expand one step (e.g. "Add a product") to show the description and action button. The "Extend your store" section with Stripe and Shipping cards should be visible at the bottom. */}
+<Screenshot src="/images/v2/dashboard-setup-guide.png" alt="Shopper setup guide with progress bar and expandable steps" />
 
 | Step | Completed when | Permission |
 |------|---------------|------------|

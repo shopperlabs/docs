@@ -47,10 +47,11 @@ You can customize components by:
 
 1. **Passing attributes**: Most components accept standard HTML attributes via `$attributes`
 2. **Using slots**: Many components support named slots for flexible content placement
-3. **Publishing views**: Override component views by publishing them to your application
+3. **Overriding views**: Copy a component view to `resources/views/vendor/shopper/components/` in your application. Laravel loads your copy instead of the package view
 
 ```bash
-php artisan vendor:publish --tag=shopper-views
+mkdir -p resources/views/vendor/shopper/components
+cp vendor/shopper/framework/resources/views/components/card.blade.php resources/views/vendor/shopper/components/card.blade.php
 ```
 
 <Note>

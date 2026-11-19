@@ -15,14 +15,7 @@ Shopper supports two types of carriers:
 1. Click on **Settings** in the sidebar
 2. Select **Carriers** from the settings menu
 
-<Frame>
-  <img src="/images/v2/carriers-list.png" alt="Carriers list page" />
-</Frame>
-
-{/* SCREENSHOT NEEDED: The Settings > Carriers page showing a table of carriers.
-    Show 2-3 carriers: "UPS" with driver badge "UPS" in green, "Local Delivery" with
-    driver badge "Manual" in gray, and "FedEx" with driver badge "FedEx" in orange
-    (not configured). Include columns: Logo, Name, Driver, Status toggle, Updated date. */}
+<Screenshot src="/images/v2/carriers-list.png" alt="Carriers list page" />
 
 The carriers list shows all your configured carriers with their driver type, status, and last update date. You can enable or disable a carrier directly from the list using the status toggle.
 
@@ -34,16 +27,14 @@ To add a new shipping carrier:
 2. Fill in the carrier details
 3. Click **Save**
 
-<Frame>
-  <img src="/images/v2/carriers-create.png" alt="Add carrier form" />
-</Frame>
+<Screenshot src="/images/v2/carriers-create.png" alt="Add carrier form" />
 
 ### Carrier Fields
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| **Name** | Yes | The carrier's name (e.g., "UPS", "Local Delivery", "Colissimo") |
-| **Driver** | Yes | How rates are calculated. Choose **Manual** for flat rates, or a provider like **UPS** for real-time rates |
+| **Carrier name** | Yes | The carrier's name (e.g., "UPS", "Local Delivery", "Colissimo") |
+| **Driver** | Yes | How rates are calculated. Defaults to **Manual** (custom rates per zone). Choose a provider like **UPS** for real-time rates |
 | **Website** | No | The carrier's website URL |
 | **Description** | No | A short description of the carrier |
 
@@ -58,12 +49,10 @@ The driver determines how shipping rates are calculated:
 | **FedEx** | Rates are fetched from the FedEx API in real time | You have a FedEx account and want dynamic pricing |
 | **USPS** | Rates are fetched from the USPS API in real time | You ship within the United States |
 
-<Frame>
-  <img src="/images/v2/carriers-driver.png" alt="select carrier driver" />
-</Frame>
+<Screenshot src="/images/v2/carriers-driver.png" alt="select carrier driver" />
 
 <Note>
-API-connected drivers (UPS, FedEx, USPS) require API credentials to be configured by your developer. If a driver shows a "Not Configured" badge in the dropdown, the credentials have not been set up yet. See the [Carriers developer documentation](/2.x/carriers) for setup instructions.
+API-connected drivers (UPS, FedEx, USPS) require API credentials to be configured by your developer. If a driver shows a "Not configured" badge in the dropdown, the credentials have not been set up yet. See the [Carriers developer documentation](/2.x/carriers) for setup instructions.
 </Note>
 
 ## Managing Carriers
@@ -72,9 +61,9 @@ API-connected drivers (UPS, FedEx, USPS) require API credentials to be configure
 
 To update a carrier's information:
 
-1. Click the **Edit** icon next to the carrier you want to modify
+1. Click the pencil icon next to the carrier you want to modify
 2. Update the fields you want to change
-3. Click **Save**
+3. Click **Save changes**
 
 ### Enabling or Disabling a Carrier
 
@@ -84,11 +73,11 @@ You can quickly enable or disable a carrier without editing it by toggling the *
 
 To remove a carrier:
 
-1. Click the **Delete** icon next to the carrier
+1. Click the trash icon next to the carrier
 2. Confirm the deletion
 
 <Warning>
-Deleting a carrier also removes all its delivery options. If you have active orders using this carrier's shipping, consider disabling it instead of deleting it.
+Deleting a carrier does not remove its delivery options, and a carrier that still has delivery options cannot be deleted. Remove its options from each zone first. If you have active orders using this carrier's shipping, consider disabling it instead of deleting it.
 </Warning>
 
 ## Setting Up Delivery Options
@@ -99,23 +88,22 @@ To add a delivery option:
 
 1. Go to **Settings > Zones**
 2. Select the zone where you want to add shipping options
-3. In the **Shipping Options** section, click **Add shipping option**
-4. Select the carrier and fill in the delivery details
+3. In the **Shipping Options** section, click **Add Option**
+4. In the panel that opens (for example "Shipping Option for the Europe zone"), fill in the delivery details and select the carrier. The **Carriers** list only shows the carriers added to this zone
 5. Click **Save**
 
-<Frame>
-  <img src="/images/v2/zone-delivery-method-form.png" alt="Add delivery option form" />
-</Frame>
+<Screenshot src="/images/v2/zone-delivery-method-form.png" alt="Add delivery option form" />
 
 ### Delivery Option Fields
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| **Carrier** | Yes | Which carrier provides this delivery option |
-| **Name** | Yes | The option name shown at checkout (e.g., "Standard Delivery", "Express 24h") |
-| **Description** | No | Details about delivery time or conditions |
-| **Price** | Yes | The shipping price for this option in the zone's currency |
-| **Status** | No | Whether this option is available at checkout |
+| **Name** | Yes | The option name shown at checkout (e.g., "Standard Delivery", "Express 24h"). Each name can be used once per zone |
+| **Price** | Yes | The shipping price for this option in the zone's currency. Enter 0 for free delivery |
+| **Carriers** | Yes | The carrier that provides this delivery option, chosen among the carriers added to the zone |
+| **Description** | No | Details about delivery time, up to 200 characters |
+| **Visibility** | No | Off by default. Turn it on to make the option available in your store |
+| **Metadata** | No | Optional key-value data for custom use |
 
 <Tip>
 Create multiple delivery options for the same carrier to offer different speed/price tiers. For example, a carrier could have "Standard (3-5 days)" at $5.99 and "Express (next day)" at $14.99.
@@ -123,15 +111,13 @@ Create multiple delivery options for the same carrier to offer different speed/p
 
 ### Viewing Delivery Options
 
-All delivery options for a zone are displayed in the zone's detail page under the **Shipping Options** section. Each option shows the carrier name, option name, price, and status.
+All delivery options for a zone are displayed in the zone's detail page under the **Shipping Options** section. Each option shows the carrier logo (when the carrier has one), the option name with an **Enabled** or **Disabled** badge, its description, and its price.
 
-<Frame>
-  <img src="/images/v2/zone-delivery-methods.png" alt="Zone shipping options list" />
-</Frame>
+<Screenshot src="/images/v2/zone-delivery-methods.png" alt="Zone shipping options list" />
 
 ### Editing or Removing Delivery Options
 
-To edit a delivery option, click the **Edit** icon next to it. To remove it, click the **Delete** icon and confirm.
+To edit a delivery option, click the pencil icon next to it. To remove it, click the trash icon and confirm.
 
 ## Common Setups
 
@@ -150,7 +136,7 @@ Here are typical carrier configurations for different store types:
 |---------|--------|-------|
 | Standard Shipping | 5-7 business days | $5.99 |
 | Express Shipping | 2-3 business days | $12.99 |
-| Free Shipping | Orders over $50 | Free |
+| Free Shipping | Free delivery (5-7 business days) | Free |
 
 ### International Store
 
@@ -158,15 +144,19 @@ Here are typical carrier configurations for different store types:
 |---------|--------|-------|
 | UPS (API) | Ground, Express, Overnight | Real-time rates |
 | DHL | International Express | $24.99 |
-| Free Shipping | Orders over $100 (domestic only) | Free |
+| Free Shipping | Free delivery, added in the domestic zone only | Free |
 
 ## Free Shipping
 
 To offer free shipping:
 
 1. Create a carrier named "Free Shipping"
-2. Add a delivery option with a price of **0**
-3. In the description, specify any conditions (e.g., "Free on orders over $50")
+2. Add this carrier to the zone's **Carriers** (see [Shipping Zones](/2.x/user-guide/store-setup/zones))
+3. Add a delivery option with a **Price** of **0** and use the description to say what it includes (e.g., "Delivered in 5-7 business days")
+
+<Note>
+A delivery option has no minimum order amount: a free option is offered on every order in its zone. To limit free shipping to some regions, add the free option only in those zones.
+</Note>
 
 <Tip>
 You can combine free shipping with paid options. Customers see all available options at checkout and choose the one they prefer.

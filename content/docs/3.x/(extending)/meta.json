@@ -3,6 +3,31 @@
   "description": "Add pages and features to the admin panel and swap the parts Shopper ships.",
   "root": true,
   "pages": [
-    "extending"
+    "---Admin Panel---",
+    "extending/overview",
+    "extending/control-panel",
+    "extending/navigation",
+    "extending/controllers",
+    "extending/forms",
+    "extending/slideover",
+    "render-hooks",
+    "---Sidebar---",
+    "sidebar/overview",
+    "sidebar/shopper-extension",
+    "sidebar/standalone",
+    "sidebar/configuration",
+    "---Components---",
+    "extending/components/overview",
+    "extending/components/card",
+    "extending/components/alert",
+    "extending/components/heading",
+    "extending/components/section-heading",
+    "extending/components/empty-state",
+    "extending/components/empty-card",
+    "extending/components/stock-badge",
+    "extending/components/loader",
+    "extending/components/label",
+    "extending/components/filament",
+    "extending/components/utilities"
   ]
 }

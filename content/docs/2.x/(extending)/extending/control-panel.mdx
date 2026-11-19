@@ -3,8 +3,8 @@ title: 'Control Panel'
 description: 'Customize the Shopper control panel with your own assets, routes, and branding'
 ---
 
-The control panel may be customized in a number of different ways. You may add new pages, menus, a stylesheet, or maybe you just want to add some arbitrary Javascript.
-When you need to add features to your Shopper administration, you can first set up some configurations
+The control panel may be customized in a number of different ways. You may add new pages, menus, a stylesheet, or maybe you just want to add some arbitrary JavaScript.
+When you need to add features to your Shopper administration, you can first set up some configurations.
 
 ## Adding CSS and JS Assets
 
@@ -119,6 +119,10 @@ The simplest approach is to set the `brand` key in your `config/shopper/admin.ph
 
 This will load the image using the Laravel `asset()` helper function, so the file should be in your `public/` directory.
 
+In the sidebar header, the logo shows next to the name of the store:
+
+<Screenshot src="/images/v2/extending-brand-logo.png" alt="Sidebar header of the admin panel with a custom shopping bag logo next to the Shopper Labs store name" />
+
 #### Via service provider
 
 For more control, use the `brandLogo()` method on the Shopper facade. You can pass an HTML string, a closure that returns a string, or a closure that returns a `View` instance:
@@ -151,7 +155,7 @@ The priority order is: `Shopper::brandLogo()` > `config('shopper.admin.brand')` 
 Shopper allows you to render Blade content at specific points in the admin panel. This is useful for integrating third-party packages that require Blade components in the layout, such as [Flux UI](https://fluxui.dev), [Wire Elements Modal](https://github.com/wire-elements/modal), or [Laravel Notify](https://github.com/mckenziearts/laravel-notify), and for addons that need to inject content into specific pages.
 
 <Info>
-If you are familiar with [Filament's render hooks](https://filamentphp.com/docs/5.x/support/render-hooks), you already know how this works. Shopper's render hooks follow the same concept.
+If you are familiar with [Filament's render hooks](https://filamentphp.com/docs/4.x/advanced/render-hooks), you already know how this works. Shopper's render hooks follow the same concept.
 </Info>
 
 Render hooks are organized into scoped classes by business domain under the `Shopper\View` namespace:
@@ -222,7 +226,7 @@ Shopper::renderHook(
 | Constant | Class | Description |
 |----------|-------|-------------|
 | `HEAD_START` | `LayoutRenderHook` | After the meta tags, before Filament styles and Shopper theme |
-| `HEAD_END` | `LayoutRenderHook` | End of `<head>`, after all styles and scripts |
+| `HEAD_END` | `LayoutRenderHook` | In `<head>`, after the Shopper theme, scripts, and extra stylesheets |
 | `BODY_START` | `LayoutRenderHook` | Start of `<body>`, before any content |
 | `BODY_END` | `LayoutRenderHook` | End of `<body>`, after Filament scripts |
 | `HEADER_START` | `LayoutRenderHook` | Start of the header bar content area |

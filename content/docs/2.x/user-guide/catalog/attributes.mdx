@@ -16,49 +16,60 @@ Attributes describe product properties such as:
 
 ## Accessing Attributes
 
-Click on **Attributes** in the sidebar to access attribute management.
+1. Click on **Products** in the sidebar
+2. Select **Attributes** from the submenu
 
-<Frame caption="Attributes List">
-  <img src="/images/v2/attributes.png" alt="Attributes List" />
-</Frame>
+<Screenshot src="/images/v2/attributes.png" alt="Attributes List" caption="Attributes List" />
 
 ## Creating an Attribute
 
 To create a new attribute:
 
 1. Click the **Create** button
-2. Define the attribute details
-3. Add attribute values
-4. Click **Save**
+2. Fill in the attribute details in the **New attribute** panel
+3. Click **Save**
 
-<Frame caption="Create Attribute Form">
-  <img src="/images/v2/attribute-form.png" alt="Create Attribute" />
-</Frame>
+The form has no values. Once the attribute is saved, you add its values from the list (see [Attribute Values](#attribute-values)).
+
+<Screenshot src="/images/v2/attribute-form.png" alt="Create Attribute" caption="Create Attribute Form" />
 
 ### Attribute Fields
 
 | Field | Required | Description |
 |-------|----------|-------------|
-| **Name** | Yes | The attribute name (e.g., "Color", "Size") |
-| **Type** | Yes | How values are selected (dropdown, radio, etc.) |
-| **Description** | No | Explain what this attribute represents |
-| **Enabled** | No | Toggle to activate the attribute |
+| **Name** | Yes | The attribute name (e.g., "Color", "Size"), up to 75 characters |
+| **Slug** | Auto | Generated from the name. It cannot be edited. |
+| **Type** | Yes | The kind of field used to fill in the attribute (see below) |
+| **Icon** | No | An icon shown next to the attribute in the list |
+| **Description** | No | Explain what this attribute represents, up to 100 characters |
+| **Enable** | No | Toggle to make the attribute visible to customers |
+| **Is Searchable** | No | Use this attribute to search and filter products |
+| **Is Filterable** | No | Use this attribute as a filter on your storefront |
 
 ### Attribute Types
 
-Choose how customers will select attribute values:
+The type sets how the attribute is filled in on each product:
 
 | Type | Best For |
 |------|----------|
-| **Dropdown** | Many options (countries, sizes) |
-| **Radio buttons** | Few options with clear differences |
-| **Checkbox** | Multiple selections allowed |
-| **Color swatch** | Color selection with visual preview |
-| **Text** | Custom customer input |
+| **Select** | One value per product from a list you define (e.g., size) |
+| **Checkbox** | Several values per product from a list you define (e.g., features) |
+| **Color picker** | Several colors per product, each value picked with a color picker |
+| **Text field (input)** | A short text typed on each product |
+| **Text field (number)** | A number typed on each product (e.g., storage in GB) |
+| **Rich text** | Formatted text written on each product (e.g., care instructions) |
+| **Date picker** | A date picked on each product (e.g., release date) |
 
 ## Attribute Values
 
-After creating an attribute, add the possible values:
+Only **Select**, **Checkbox** and **Color picker** attributes have a list of values. After saving one of them:
+
+1. Click **Values** on the attribute's row in the list
+2. In the **Attribute values** panel, click **New Value**
+3. Fill in the **Key** (a short identifier in slug format; for a color, the color itself) and the **Value** (the name shown for this value)
+4. Repeat for each value
+
+Examples of values:
 
 | Attribute | Example Values |
 |-----------|----------------|
@@ -70,9 +81,7 @@ After creating an attribute, add the possible values:
 
 Once created, attributes can be assigned to products:
 
-<Frame>
-  <img src="/images/v2/product-attributes.png" alt="Product Attributes" />
-</Frame>
+<Screenshot src="/images/v2/product-attributes.png" alt="Product Attributes" />
 
 Attributes enable you to:
 

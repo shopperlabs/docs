@@ -132,7 +132,7 @@ Round before the cast: `(int) (19.99 * 100)` truncates `1998.9999999999998` to `
 
 ### Admin Forms and Tables
 
-Admin pages and slide-overs you add, as described in [Extending](/3.x/extending), get the same conversion from `MoneyInput`, the Filament field behind every price field of the admin panel. It shows the stored cents as a decimal, saves the decimal as cents, masks the input with the separators of the current locale and shows the currency code as a suffix. `currency()` sets the currency of the field, which uses the store default currency without it:
+Admin pages and slide-overs you add, as described in [Controllers](/3.x/extending/controllers) and [Slide-overs](/3.x/extending/slideover), get the same conversion from `MoneyInput`, the Filament field behind every price field of the admin panel. It shows the stored cents as a decimal, saves the decimal as cents, masks the input with the separators of the current locale and shows the currency code as a suffix. `currency()` sets the currency of the field, which uses the store default currency without it:
 
 ```php title="app/Livewire/Shopper/FreeShippingSettings.php"
 use Filament\Schemas\Schema;

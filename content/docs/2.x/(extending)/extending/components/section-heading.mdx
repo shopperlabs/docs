@@ -27,6 +27,8 @@ The Section Heading component is used to introduce sections within a page. It di
 
 ## Props
 
+<ApiTable name="x-shopper::section-heading" element="div">
+
 <ParamField path="title" type="string" required>
   The section title text.
 </ParamField>
@@ -34,6 +36,8 @@ The Section Heading component is used to introduce sections within a page. It di
 <ParamField path="description" type="string" default="null">
   Optional description text displayed below the title.
 </ParamField>
+
+</ApiTable>
 
 ## Examples
 
@@ -120,6 +124,8 @@ You can also use the section heading independently for custom layouts:
 The Section Heading component is located at `packages/admin/resources/views/components/section-heading.blade.php`:
 
 ```blade
+@blaze
+
 @props([
     'title',
     'description' => null,
@@ -131,7 +137,7 @@ The Section Heading component is located at `packages/admin/resources/views/comp
     </x-filament::section.heading>
 
     @if ($description)
-        <x-filament::section.description class="mt-1 text-sm text-gray-500 dark:text-gray-400 max-w-2xl">
+        <x-filament::section.description class="mt-1 max-w-2xl text-sm text-gray-500 dark:text-gray-400">
             {{ $description }}
         </x-filament::section.description>
     @endif

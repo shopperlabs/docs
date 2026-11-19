@@ -56,9 +56,7 @@ Cache::forget('shopper-setting.email');
 When you launch your store the first important thing to do is to fill in the information about this store.
 Your customers and the different services you might use need to know the information about your store.
 
-<Frame>
-  <img src="/images/v2/initialization-step-1.png" alt="Store information" />
-</Frame>
+<Screenshot src="/images/v2/initialization-step-1.png" alt="Store information" />
 
 The information stored in this section is available using the following keys:
 - `name` the store name (required, 100 characters at most)
@@ -76,9 +74,7 @@ define an address that will be set as the default location for your products.
 
 When you submit the wizard, Shopper creates your default inventory location from this step: the location takes the store name (and its slug as the location code), the store email, the street address, postal code, city, phone number and country. When you create a product or a variant in the admin with an initial quantity, that stock is recorded at the default location. See [Default Location](/2.x/locations#default-location).
 
-<Frame>
-  <img src="/images/v2/initialization-step-2.png" alt="Store address" />
-</Frame>
+<Screenshot src="/images/v2/initialization-step-2.png" alt="Store address" />
 
 The keys registered in database during this section: `street_address`, `postal_code` and `city` (required), `state` and `phone_number` (optional).
 
@@ -88,9 +84,7 @@ If you want your customers to find you easily on social networks, you can fill i
 
 This step is completely optional
 
-<Frame>
-  <img src="/images/v2/initialization-step-3.png" alt="Store social links" />
-</Frame>
+<Screenshot src="/images/v2/initialization-step-3.png" alt="Store social links" />
 
 The keys registered in the database during this section: `facebook_link`, `instagram_link` and `twitter_link`.
 
@@ -156,9 +150,7 @@ return [
 ];
 ```
 
-<Frame>
-  <img src="/images/v2/setting-general.png" alt="Update store setting" />
-</Frame>
+<Screenshot src="/images/v2/setting-general.png" alt="Update store setting" />
 
 In this interface you will update your store. Don't forget that the model used is the model `Shopper\Core\Models\Setting`.
 Point `pages.general` to your own Livewire component to change this view and the keys it stores in the database. To save settings the way Shopper does, use the `Shopper\Traits\SaveSettings` trait in your component: its `saveSettings()` method writes the keys and clears their cache.

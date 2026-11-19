@@ -28,6 +28,8 @@ The Empty Card component displays a centered empty state within card or panel ar
 
 ## Props
 
+<ApiTable name="x-shopper::empty-card" element="div">
+
 <ParamField path="heading" type="string" required>
   The main heading text.
 </ParamField>
@@ -43,6 +45,8 @@ The Empty Card component displays a centered empty state within card or panel ar
 <ParamField path="action" type="Slot" default="null">
   Optional slot for action buttons.
 </ParamField>
+
+</ApiTable>
 
 ## Examples
 
@@ -90,6 +94,8 @@ The Empty Card component displays a centered empty state within card or panel ar
 ## Blade Component Source
 
 ```blade
+@blaze
+
 @props([
     'heading',
     'description' => null,

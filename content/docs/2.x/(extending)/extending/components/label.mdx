@@ -24,6 +24,8 @@ The Label component provides a styled label for form fields with an optional req
 
 ## Props
 
+<ApiTable name="x-shopper::label" element="label">
+
 <ParamField path="value" type="string">
   The label text. Can also use the slot instead.
 </ParamField>
@@ -31,6 +33,8 @@ The Label component provides a styled label for form fields with an optional req
 <ParamField path="isRequired" type="bool" default="false">
   Shows a red asterisk (*) after the label text.
 </ParamField>
+
+</ApiTable>
 
 ## Examples
 
@@ -79,6 +83,8 @@ The Label component provides a styled label for form fields with an optional req
 ## Blade Component Source
 
 ```blade
+@blaze
+
 @props([
     'value',
     'isRequired' => false,

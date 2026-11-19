@@ -15,33 +15,38 @@ The access control system consists of:
 ## Accessing Roles & Permissions
 
 1. Click on **Settings** in the sidebar
-2. Navigate to the access control section
+2. Select **Staff & permissions**
+
+The page opens with the title **Administrators & roles**. Your roles appear as cards under **Administrator role available**, each with its number of accounts and a **View details** link that opens the role.
 
 ## Understanding Permissions
 
 Permissions control access to specific actions:
 
-<Frame>
-  <img src="/images/v2/permissions.png" alt="Permissions" />
-</Frame>
+<Screenshot src="/images/v2/permissions.png" alt="Permissions" />
 
 ### Permission Categories
 
+Permissions are sorted into groups. Most groups hold the same five permissions for one area of the admin: **Browse** (see the list), **Read** (open a record), **Edit**, **Add** and **Delete**.
+
 | Category | Examples |
 |----------|----------|
-| **Products** | View, create, edit, delete products |
-| **Orders** | View orders, process refunds |
-| **Customers** | View customer data, edit accounts |
-| **Settings** | Access configuration options |
-| **Staff** | Manage other administrators |
+| **System** | **Access Dashboard**; **Access Setting** (all store settings except staff, roles and permissions); **Views Users** (staff accounts, roles and permissions) |
+| **Brands** | Browse, read, edit, add and delete brands |
+| **Categories** | Browse, read, edit, add and delete categories |
+| **Collections** | Browse, read, edit, add and delete collections |
+| **Products** | Browse, read, edit, add and delete products, plus the same five permissions for inventories, attributes, reviews, product variants, suppliers and tags |
+| **Customers** | Browse, read, edit, add and delete customers |
+| **Orders** | Browse, read, edit, add and delete orders. There is no separate permission for refunds |
+| **Discounts** | Browse, read, edit, add and delete discounts |
+
+Permissions created without a group are listed under **Custom permission**.
 
 ### Browsing Permissions
 
-View all available permissions in the system:
+Open a role with **View details** and click the **Permissions** tab. Every permission is listed by group, with a checkbox that shows whether the role has it and the date it was created:
 
-<Frame>
-  <img src="/images/v2/permissions.png" alt="Browse Permissions" />
-</Frame>
+<Screenshot src="/images/v2/permissions.png" alt="Browse Permissions" />
 
 ## Managing Roles
 
@@ -49,41 +54,48 @@ View all available permissions in the system:
 
 To create a new role:
 
-1. Navigate to Roles
-2. Click **Create role**
-3. Enter a name and description
-4. Select permissions
-5. Click **Save**
+1. On the **Administrators & roles** page, click the **+** button next to **Administrator role available** (its tooltip reads **Add new role**)
+2. Enter the **Name (in lowercase)**, for example "manager"
+3. Enter the **Display name** shown in the admin, for example "Manager", and a **Description**
+4. Click **Save**
+5. Open the new role with **View details**, click the **Permissions** tab and check the permissions the role needs. Each checkbox is saved as soon as you click it
 
-<Frame>
-  <img src="/images/v2/add-role.png" alt="Add Role" />
-</Frame>
+<Screenshot src="/images/v2/add-role.png" alt="Add Role" />
 
 ### Role Fields
 
 | Field | Description |
 |-------|-------------|
-| **Name** | Role name (e.g., "Store Manager") |
+| **Name (in lowercase)** | Internal name of the role, unique (e.g., "store_manager") |
+| **Display name** | Name shown in the admin (e.g., "Store Manager") |
 | **Description** | What this role is for |
-| **Permissions** | List of allowed actions |
+
+Permissions are not part of this form: you check them on the role's **Permissions** tab once the role exists.
 
 ### Updating a Role
 
-Modify an existing role:
+Open the role with **View details**. The role page has three tabs:
 
-<Frame caption="Update Role">
-  <img src="/images/v2/update-role.png" alt="Update Role" />
-</Frame>
+- **Role**: change the **Name (in lowercase)**, **Display name** and **Description**, then click **Update**. Editing the name fills the display name for you. On the Administrator role, a warning reminds you that a wrong change could block your access to the dashboard
+- **Users**: the staff members who have this role
+- **Permissions**: check or uncheck the permissions of the role
+
+A role you created can be removed with the **Delete** button at the top of its page. The Administrator and Manager roles that Shopper installs cannot be deleted.
+
+<Screenshot src="/images/v2/update-role.png" alt="Update Role" caption="Update Role" />
 
 Changes apply immediately to all users with that role.
 
 ## Creating Permissions
 
-Add custom permissions for your specific needs:
+Add custom permissions for your specific needs from a role's page. Two buttons at the top of the page, shown to **Administrator** accounts only, create permissions and give them to that role straight away:
 
-<Frame caption="Add Permission Form">
-  <img src="/images/v2/add-permission.png" alt="Add Permission" />
-</Frame>
+- **Create permission** opens the **New permission** window. Pick a **Group name** (optional), enter the **Permission name (in lowercase)** (up to 30 characters, unique), the **Display name** (up to 75 characters) and a **Description**, then click **Save**
+- **Generate permissions** creates the five standard permissions (browse, read, edit, add and delete) for one area in one go. Enter the **Resource name**, for example "shipments", pick a **Group name** if you want, check the list under **Permissions that will be created**, then click **Generate permissions**
+
+A new permission only controls something once your developer checks it in the admin or in a custom screen. Creating it does not restrict anything on its own.
+
+<Screenshot src="/images/v2/add-permission.png" alt="Add Permission" caption="Add Permission Form" />
 
 <Note>
 Creating or deleting a permission requires an **Administrator** account. Other staff members can still grant existing permissions to roles, but only permissions they hold themselves, and they cannot modify the Administrator role.
@@ -91,11 +103,9 @@ Creating or deleting a permission requires an **Administrator** account. Other s
 
 ## Custom Permissions
 
-Create permissions tailored to your business:
+Create permissions tailored to your business. Permissions created without a group appear under **Custom permission** on the role's **Permissions** tab. A permission made with **Create permission** has a trash icon that lets an Administrator delete it; the permissions Shopper installs and those made with **Generate permissions** cannot be deleted.
 
-<Frame>
-  <img src="/images/v2/custom-permissions.png" alt="Custom Permissions" />
-</Frame>
+<Screenshot src="/images/v2/custom-permissions.png" alt="Custom Permissions" />
 
 ## Common Role Examples
 
@@ -105,7 +115,7 @@ Full operational access:
 - All product permissions
 - All order permissions
 - All customer permissions
-- Limited settings access
+- **Access Setting** only if they manage the store settings, as it opens all of them at once
 
 ### Content Editor
 
@@ -118,9 +128,9 @@ Focus on catalog management:
 ### Support Agent
 
 Customer service focus:
-- View orders
-- View customers
-- Limited edit capabilities
+- Browse and read orders
+- Browse and read customers
+- Edit orders only if they handle order changes
 - No product management
 
 ### Marketing
@@ -151,19 +161,20 @@ Promotional access:
 ## Permission Hierarchy
 
 <Tip>
-Some permissions may depend on others. For example, to edit a product, a user typically also needs permission to view products.
+Some permissions may depend on others. For example, to edit a product, a user typically also needs the **Browse** permission to reach the product list.
 </Tip>
 
 When assigning permissions, consider:
 
-1. **View** - Can see the information
-2. **Create** - Can add new items
-3. **Edit** - Can modify existing items
-4. **Delete** - Can remove items (most sensitive)
+1. **Browse** - Can see the list
+2. **Read** - Can open a record and see its details
+3. **Add** - Can add new items
+4. **Edit** - Can modify existing items
+5. **Delete** - Can remove items (most sensitive)
 
 ## Security Considerations
 
-- **Audit trails** - Track who changed what
+- **Know who has access** - The **Users** tab of each role lists its members. Shopper does not keep a history of who changed what
 - **Separation of duties** - Don't give one person all permissions
 - **Regular reviews** - Remove unnecessary access
 - **Test roles** - Verify permissions work as expected

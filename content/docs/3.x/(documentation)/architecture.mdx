@@ -67,7 +67,7 @@ With this single package, a store has its admin panel, its catalog, carts and or
 - `shopper/fedex`, `shopper/ups` and `shopper/usps`, for live carrier rates;
 - `shopper/upgrade`, to move a 2.x store to 3.x.
 
-The [Installation](/3.x/installation) page installs `shopper/framework` and the Store API, and the [Add-ons](/3.x/addons) tab covers the drivers.
+The [Installation](/3.x/installation) page installs `shopper/framework` and the Store API, and the [Payments](/3.x/payments) and [Carriers](/3.x/carriers) pages cover the drivers.
 
 ## Service Providers
 
@@ -91,7 +91,7 @@ Every Composer package registers one service provider through Laravel package di
 
 The providers of framework, core, cart and payment load their migrations from the package: `php artisan migrate` runs them from `vendor/`, and they are never published. The installers publish only the migrations of third-party packages: `shopper:install` the Spatie Media Library one, `shopper:api:install` the Laravel Sanctum one.
 
-Payment and carrier drivers plug into two Laravel managers. `Shopper\Payment\PaymentManager` and `Shopper\Shipping\ShippingManager` each provide a `manual` driver. `shopper/stripe` adds the `stripe` driver with `Payment::extend()`, and the carrier packages add `fedex`, `ups` and `usps` with `Shipping::extend()`. A driver of your own registers the same way, as the [Extending](/3.x/extending) section covers.
+Payment and carrier drivers plug into two Laravel managers. `Shopper\Payment\PaymentManager` and `Shopper\Shipping\ShippingManager` each provide a `manual` driver. `shopper/stripe` adds the `stripe` driver with `Payment::extend()`, and the carrier packages add `fedex`, `ups` and `usps` with `Shipping::extend()`. A driver of your own registers the same way, as [Custom Drivers](/3.x/payments#custom-drivers) and [Custom Shipping Drivers](/3.x/carriers#custom-shipping-drivers) show.
 
 ## Configuration Files
 

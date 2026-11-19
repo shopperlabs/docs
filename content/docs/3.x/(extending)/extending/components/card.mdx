@@ -1,0 +1,191 @@
+---
+title: 'Card'
+description: 'A container that groups related content, with an optional title, description and footer.'
+---
+
+import { ComponentPreview, PreviewCard } from '@/components/component-preview'
+
+The card is the main container of the admin panel: product forms, order details and settings pages group their content in cards. It draws an outer frame for the header and footer, and an inner panel for the content.
+
+## Preview
+
+The preview shows a card with a title, a description and some content.
+
+<ComponentPreview centered={false}>
+  <PreviewCard title="Inventory" description="Stock levels across your warehouses.">
+    <p className="text-gray-600 dark:text-gray-400">The product has 42 units in stock in the Paris warehouse.</p>
+  </PreviewCard>
+</ComponentPreview>
+
+## Usage
+
+Pass the title and description as attributes, and the content as the default slot:
+
+```blade
+<x-shopper::card title="Inventory" description="Stock levels across your warehouses.">
+    <p>The product has 42 units in stock in the Paris warehouse.</p>
+</x-shopper::card>
+```
+
+## Props
+
+The card takes three props. The header only renders when the title is not empty.
+
+<ApiTable name="x-shopper::card" element="div">
+
+<ParamField path="title" type="string | Slot" default="null">
+  The header title. A string is rendered with the [section heading](/3.x/extending/components/section-heading) component, along with the description. A slot is printed as is, so it brings its own markup.
+</ParamField>
+
+<ParamField path="description" type="string" default="null">
+  Text displayed below a string title. It is ignored when the title is a slot.
+</ParamField>
+
+<ParamField path="footer" type="Slot" default="null">
+  Content displayed below the inner panel. The card prints it without a wrapper, so give it its own padding.
+</ParamField>
+
+</ApiTable>
+
+## Examples
+
+The examples below cover the title variants, form content and the footer slot.
+
+### Basic Card
+
+Without a title, the card only renders the inner panel.
+
+<ComponentPreview centered={false}>
+  <PreviewCard>
+    <p className="text-gray-600 dark:text-gray-400">Free shipping applies to orders over $50.</p>
+  </PreviewCard>
+</ComponentPreview>
+
+```blade
+<x-shopper::card>
+    <p>Free shipping applies to orders over $50.</p>
+</x-shopper::card>
+```
+
+### Card with Title Only
+
+The description is optional.
+
+<ComponentPreview centered={false}>
+  <PreviewCard title="Product Information">
+    <p className="text-gray-600 dark:text-gray-400">Display product details in an organized manner.</p>
+  </PreviewCard>
+</ComponentPreview>
+
+```blade
+<x-shopper::card title="Product Information">
+    <p>Display product details in an organized manner.</p>
+</x-shopper::card>
+```
+
+### Card with Custom Title Slot
+
+Pass a `title` slot to add elements next to the title, like a link or a button. The slot replaces the section heading, so style the title yourself:
+
+```blade
+<x-shopper::card>
+    <x-slot:title>
+        <div class="flex items-center justify-between">
+            <h3 class="font-heading text-sh-fg font-semibold">Recent Orders</h3>
+            <x-filament::button tag="a" :href="route('shopper.orders.index')" color="gray" size="sm" wire:navigate>
+                View all
+            </x-filament::button>
+        </div>
+    </x-slot:title>
+
+    <p>Orders placed in the last 24 hours.</p>
+</x-shopper::card>
+```
+
+### Card with Form Content
+
+Cards hold the fields of most admin forms. The [label](/3.x/extending/components/label) and `x-shopper::forms.input` components match the admin panel's field styles:
+
+<ComponentPreview centered={false}>
+  <PreviewCard title="Supplier Details" description="The contact your purchasing team works with.">
+    <div className="space-y-4">
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Contact name</label>
+        <input type="text" placeholder="Marie Dupont" className="w-full rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-800 px-3 py-2 text-sm" />
+      </div>
+      <div>
+        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Email</label>
+        <input type="email" placeholder="orders@northwind.com" className="w-full rounded-lg border border-gray-300 dark:border-gray-700 dark:bg-gray-800 px-3 py-2 text-sm" />
+      </div>
+    </div>
+  </PreviewCard>
+</ComponentPreview>
+
+```blade
+<x-shopper::card title="Supplier Details" description="The contact your purchasing team works with.">
+    <div class="space-y-4">
+        <div>
+            <x-shopper::label for="contact_name">Contact name</x-shopper::label>
+            <x-shopper::forms.input id="contact_name" name="contact_name" placeholder="Marie Dupont" />
+        </div>
+        <div>
+            <x-shopper::label for="email">Email</x-shopper::label>
+            <x-shopper::forms.input id="email" type="email" name="email" placeholder="orders@northwind.com" />
+        </div>
+    </div>
+</x-shopper::card>
+```
+
+### Card with Footer
+
+The `footer` slot renders in the outer frame, below the inner panel. Add the padding the content needs:
+
+```blade
+<x-shopper::card title="Gift Card" description="The balance the customer can spend at checkout.">
+    <p>Remaining balance: $75.00</p>
+
+    <x-slot:footer>
+        <div class="flex justify-end px-2 py-3">
+            <x-filament::button wire:click="disableGiftCard" color="danger" size="sm">
+                Disable
+            </x-filament::button>
+        </div>
+    </x-slot:footer>
+</x-shopper::card>
+```
+
+## Blade Component Source
+
+The view is `resources/views/components/card.blade.php` in the `shopper/framework` package:
+
+```blade
+@blaze
+
+@props([
+    'title' => null,
+    'description' => null,
+    'footer' => null,
+])
+
+<div
+    {{ $attributes->twMerge(['class' => 'sh-card flex flex-col justify-bewteen bg-sh-card ring-sh-border overflow-hidden rounded-xl p-0.5 ring-1']) }}
+>
+    @if (mb_trim((string) $title) !== '')
+        <header class="sh-card-header px-2 py-3">
+            @if ($title instanceof \Illuminate\View\ComponentSlot)
+                {{ $title }}
+            @else
+                <x-shopper::section-heading :$title :$description />
+            @endif
+        </header>
+    @endif
+
+    <div class="sh-card-content bg-sh-surface ring-sh-border flex-1 overflow-hidden rounded-[10px] p-4 ring-1">
+        {{ $slot }}
+    </div>
+
+    @if ($footer)
+        {{ $footer }}
+    @endif
+</div>
+```

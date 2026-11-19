@@ -1,0 +1,183 @@
+---
+title: 'Filament Components'
+description: 'Filament fields, columns and schema components that Shopper adds for its admin forms and tables, and how to use them in yours.'
+---
+
+The admin panel builds its forms and tables with Filament, plus a few components of its own: fields for channels, countries, phone numbers, slugs, prices and social links, a header for form sections, and columns for ratings and users. They live in the `shopper/framework` package under the `Shopper\Components` namespace. Use them in the schemas and tables of the Livewire components you add to the admin panel; their views use the admin's `sh-*` classes, so they render as expected only there.
+
+## Section Header
+
+`Shopper\Components\SectionHeader` is a heading with an optional description and icon, placed among the fields of a schema. It looks like the header of a Filament section, without the box and without children. The product form opens with one, showing the product type with its icon:
+
+```php
+use Filament\Forms\Components\TextInput;
+use Filament\Support\Enums\IconSize;
+use Shopper\Components\SectionHeader;
+
+SectionHeader::make('Gift card')
+    ->description('The code and the balance customers spend at checkout.')
+    ->icon('untitledui-gift')
+    ->iconSize(IconSize::Large)
+    ->columnSpanFull(),
+TextInput::make('code')
+    ->required()
+```
+
+`make()` takes the heading. `description()`, `icon()`, `iconColor()` and `iconSize()` are optional; the icon is large unless you set another size.
+
+## Form Fields
+
+Each field below extends a Filament field, so it accepts that field's methods: `label()`, `required()`, `helperText()`, `relationship()` and the others.
+
+### Channel Toggles
+
+`Shopper\Components\Form\ChannelToggles` extends `CheckboxList`. It lists every sales channel with its logo and a switch, enabled channels first, and counts the selected ones below the list. A disabled channel shows a Disabled badge and its switch is locked, but it stays valid on save, so a record keeps the disabled channels it already had. The product form uses it for the Sales channels group:
+
+```php
+use Shopper\Components\Form\ChannelToggles;
+
+ChannelToggles::make('channels')
+    ->hiddenLabel()
+    ->relationship('channels', 'name')
+```
+
+The field reads the channels itself, so it needs no `options()`. Save the selection through a relationship or as a list of channel IDs.
+
+### Country Field
+
+`Shopper\Components\Form\CountryField` extends `Select`. It lists the countries of the `countries` table with their flag, grouped by region, and searches their names in the current locale. Its label is Country and its value is the ID of the country. The address forms, the shipping and tax zones, the general settings and the setup wizard use it.
+
+`only()` and `except()` take ISO 3166-1 alpha-2 codes, and `groupedByRegion(false)` lists the countries without regions. A pickup point form limited to four countries:
+
+```php
+use Shopper\Components\Form\CountryField;
+
+CountryField::make('country_id')
+    ->only(['FR', 'BE', 'CH', 'LU'])
+    ->groupedByRegion(false)
+    ->required()
+```
+
+The country list is cached for a day per locale.
+
+### Image Picker
+
+`Shopper\Components\Form\ImagePicker` extends `Radio` and shows its options as a grid of thumbnails, with a check mark on the selected one. Each option maps a value to an image URL. The product and variant pages use it to choose the thumbnail among the product images:
+
+```php
+use Shopper\Components\Form\ImagePicker;
+use Spatie\MediaLibrary\MediaCollections\Models\Media;
+
+ImagePicker::make('media_id')
+    ->label('Cover image')
+    ->required()
+    ->options(
+        fn (): array => $this->product->getMedia(config('shopper.media.storage.collection_name'))
+            ->mapWithKeys(fn (Media $media): array => [$media->id => $media->getUrl()])
+            ->all()
+    )
+```
+
+### Number Stepper
+
+`Shopper\Components\Form\NumberStepper` extends `TextInput`. It is a numeric input with a minus and a plus button, which add or remove one `step()` (1 by default) and stop at `minValue()` and `maxValue()`. The stock adjustment and the inventory priority fields use it. For the points a customer earns per order:
+
+```php
+use Shopper\Components\Form\NumberStepper;
+
+NumberStepper::make('points_per_order')
+    ->label('Points per order')
+    ->minValue(0)
+    ->maxValue(1000)
+    ->step(5)
+    ->default(10)
+    ->required()
+```
+
+### Phone Input
+
+`Shopper\Components\Form\PhoneInput` extends `TextInput`. It adds a country selector with flags and calling codes before the number, validates the number for the selected country with the `Shopper\Core\Rules\Phone` rule, and saves it in E.164 format, like `+33612345678`. Its label is Phone number. The address forms, the profile page and the team member form use it.
+
+The country selected by default is the store country set in the general settings. `defaultCountry()` takes another ISO 3166-1 alpha-2 code:
+
+```php
+use Shopper\Components\Form\PhoneInput;
+
+PhoneInput::make('phone_number')
+    ->defaultCountry('CA')
+```
+
+A saved number selects its own country when the form loads.
+
+### Slug Input
+
+`Shopper\Components\Form\SlugInput` extends `TextInput`. `from()` names the field the slug comes from: while you create a record, typing in that field fills the slug, until you edit the slug yourself. A button in the input generates the slug again from the source field. On save, the value goes through `Str::slug()`, and an empty slug is generated from the source field. Its label is Slug. The brand, supplier and collection forms use it:
+
+```php
+use Filament\Forms\Components\TextInput;
+use Shopper\Components\Form\SlugInput;
+
+TextInput::make('name')
+    ->required(),
+SlugInput::make('slug')
+    ->from('name')
+    ->prefix('/brands/')
+    ->required()
+```
+
+When the form is bound to a record that already exists, with `$schema->model($brand)` for instance, the slug no longer follows the source field, so that a published URL does not change by accident.
+
+### Social Links Field
+
+`Shopper\Components\Form\SocialLinksField` extends `Repeater`. Each row holds a platform and a URL, and the URL must belong to the platform, such as an `instagram.com` address for Instagram. A platform appears once at most, and the rows can be reordered. The platforms come from the `Shopper\Core\Enum\SocialPlatform` enum: Facebook, Instagram, X (Twitter), LinkedIn, YouTube, TikTok, Pinterest, Snapchat, WhatsApp, Telegram, GitHub and Website. The general settings use it for the store's social links.
+
+The field saves a list of `platform` and `url` pairs, so cast the column to an array:
+
+```php
+use Shopper\Components\Form\SocialLinksField;
+
+SocialLinksField::make('social_links')
+```
+
+### Money Input
+
+`Shopper\Components\Form\MoneyInput` is the field behind every price of the admin panel: it shows the stored cents as a decimal amount, saves the amount as cents and shows the currency code. [Admin Forms and Tables](/3.x/money#admin-forms-and-tables) on the Money page describes its methods.
+
+## Table Columns
+
+The two columns below extend Filament's `Column` and render their own view.
+
+### Rating Column
+
+`Shopper\Components\Tables\RatingColumn` shows a rating out of 5 as five stars, filled up to the value of the column. The reviews table uses it.
+
+### User Column
+
+`Shopper\Components\Tables\UserColumn` shows a user's profile picture next to their full name. It reads the `picture` and `full_name` attributes, which the `InteractsWithShopper` trait adds to your user model, as described in [Prepare Your User Model](/3.x/installation#prepare-your-user-model) and [Computed Attributes](/3.x/customers#computed-attributes).
+
+By default the column shows the record itself. `user()` takes a closure that returns another user, like the author of a review or the customer of an order, and `currentUserBadge()` adds a Me badge on the row of the logged-in administrator. A table of reviews waiting for approval:
+
+```php title="app/Livewire/Shopper/PendingReviews.php"
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
+use Shopper\Components\Tables\RatingColumn;
+use Shopper\Components\Tables\UserColumn;
+use Shopper\Core\Models\Review;
+
+public function table(Table $table): Table
+{
+    return $table
+        ->query(Review::query()->where('approved', false)->latest())
+        ->columns([
+            UserColumn::make('author.full_name')
+                ->label('Customer')
+                ->user(fn (Review $record) => $record->author),
+            RatingColumn::make('rating')
+                ->label('Rating'),
+            TextColumn::make('title')
+                ->limit(40),
+        ]);
+}
+```
+
+The column name only serves the search and the sort. `full_name` is computed, not stored: to search or sort the column, name it after a stored column, as the customers table does with `first_name`, or pass a query to `searchable()`, as the reviews table does.

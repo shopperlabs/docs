@@ -3,7 +3,7 @@ title: 'Navigation'
 description: 'Customize and extend the Shopper control panel navigation'
 ---
 
-The Control Panel navigation is highly customizable. You can add your own sections, pages, and subpages, as well as remove and modify existing ones.
+The Control Panel navigation is highly customizable. You can add your own groups, items, and sub-items to it.
 
 The navigation is controlled by the [shopper/sidebar](https://github.com/shopperlabs/sidebar) package. This package can be used both as a standalone sidebar builder for any Laravel application or to extend Shopper's admin panel.
 
@@ -62,8 +62,8 @@ class BlogSidebar extends AbstractAdminSidebar
                 $item->weight(1);
                 $item->setAuthorized();
                 $item->useSpa();
-                $item->route('shopper.blog.posts.index');
-                $item->setIcon('untitledui-file-02');
+                $item->route('shopper.posts.index');
+                $item->setIcon('phosphor-article');
             });
         });
 
@@ -90,8 +90,12 @@ class AppServiceProvider extends ServiceProvider
 }
 ```
 
+The **Blog** group then shows in the sidebar, and its **Posts** entry is selected on the page it links to. The `shopper.posts.index` route is the one registered in [Controllers](/2.x/extending/controllers#using-controllers):
+
+<Screenshot src="/images/v2/extending-navigation.png" alt="Admin sidebar with the Blog group and its Posts entry selected, next to the list of blog posts" />
+
 <Info>
-Make sure to register the listener in the `register()` method, not `boot()`, to ensure it's registered before the sidebar is built.
+Shopper registers its own sidebar listeners in the `register()` method of a service provider. The sidebar is built later, while the admin request runs, so a listener registered in `boot()` works too.
 </Info>
 
 ## API Reference

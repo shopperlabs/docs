@@ -5,7 +5,7 @@ description: Inject custom HTML, Livewire components, or Blade views into specif
 
 Render hooks give you named injection points inside Shopper's admin views. Instead of overriding templates, you register a callback on a hook name and Shopper renders your content in the right place at the right time.
 
-This is the recommended way to extend any admin page adding a custom banner to the order detail sidebar, inserting a widget above the product list, or injecting tracking scripts into the page head.
+This is the recommended way to extend any admin page: adding a custom banner to the order detail sidebar, inserting a widget above the product list, or injecting tracking scripts into the page head.
 
 ## Registering a Hook
 
@@ -21,7 +21,17 @@ Shopper::renderHook(
 );
 ```
 
-The callback receives no arguments and must return a `string`. You can return any HTML, a rendered Blade view, or a Livewire component tag.
+The callback receives no arguments and must return a `string`. Shopper outputs the returned string as HTML without compiling it with Blade, so return plain HTML, a rendered Blade view, or a Livewire component rendered with `Blade::render()`.
+
+The `orders.custom-sidebar-widget` view holds the content of the hook:
+
+```blade title="resources/views/orders/custom-sidebar-widget.blade.php"
+<p class="text-sm text-gray-500 dark:text-gray-400">Ships from the Lyon warehouse.</p>
+```
+
+The text shows at the end of the sidebar of the order page, below the billing address:
+
+<Screenshot src="/images/v2/extending-render-hook.png" alt="Customer sidebar of an order with the line Ships from the Lyon warehouse below the billing address" />
 
 ### Returning a Blade View
 
@@ -38,12 +48,13 @@ Shopper::renderHook(
 ### Returning a Livewire Component
 
 ```php
+use Illuminate\Support\Facades\Blade;
 use Shopper\Facades\Shopper;
 use Shopper\View\CustomerRenderHook;
 
 Shopper::renderHook(
     CustomerRenderHook::SHOW_TABS_END,
-    fn (): string => '<livewire:customer-loyalty-tab />',
+    fn (): string => Blade::render('<livewire:customer-loyalty-tab />'),
 );
 ```
 
@@ -70,7 +81,7 @@ Multiple callbacks registered on the same hook are rendered in the order they we
 
 ## Disabling a Hook
 
-Hooks registered from an addon respect the addon's enabled state they are never registered when the addon is disabled. For application-level hooks, you can conditionally register them:
+Hooks registered from an addon respect the addon's enabled state: they are never registered when the addon is disabled. For application-level hooks, you can conditionally register them:
 
 ```php
 if (config('features.custom_order_widget')) {
@@ -89,12 +100,12 @@ if (config('features.custom_order_widget')) {
 
 | Constant | Hook Name | Position |
 |----------|-----------|----------|
-| `HEAD_START` | `shopper::head.start` | Immediately after `<head>` |
-| `HEAD_END` | `shopper::head.end` | Immediately before `</head>` |
+| `HEAD_START` | `shopper::head.start` | In `<head>`, after the meta tags and before the Filament styles and Shopper theme |
+| `HEAD_END` | `shopper::head.end` | In `<head>`, after the Shopper theme, scripts, and extra stylesheets |
 | `BODY_START` | `shopper::body.start` | Immediately after `<body>` |
 | `BODY_END` | `shopper::body.end` | Immediately before `</body>` |
 | `HEADER_START` | `shopper::header.start` | Start of the top navigation bar |
-| `HEADER_END` | `shopper::header.end` | End of the top navigation bar |
+| `HEADER_END` | `shopper::header.end` | In the top navigation bar, before the site link and account dropdown |
 | `CONTENT_START` | `shopper::content.start` | Before the main page content area |
 | `CONTENT_END` | `shopper::content.end` | After the main page content area |
 | `DASHBOARD_START` | `shopper::dashboard.start` | Top of the dashboard page |
@@ -198,18 +209,31 @@ if (config('features.custom_order_widget')) {
 
 A real-world scenario: your store syncs orders to a fulfillment service (ShipStation, ShipBob, etc.) and you want to display the external status directly on the order detail page, without modifying any Shopper files.
 
-Create a Livewire component:
+The hook callback receives no arguments, so it cannot pass the order to your component. Instead, the hook renders a Livewire component that reads the order from the current route in its `mount()` method. The order detail route is `{order}/detail`, and the order detail page resolves `{order}` to the `Order` model. Livewire keeps the component's state on later requests, so `mount()` only runs on the page load.
 
-```php
-use Livewire\Component;
+Create the Livewire component:
+
+```php title="app/Livewire/ExternalOrderStatus.php"
+<?php
+
+namespace App\Livewire;
+
+use App\Services\ExternalFulfillmentService;
+use Illuminate\Contracts\View\View;
 use Livewire\Attributes\Locked;
+use Livewire\Component;
 
 final class ExternalOrderStatus extends Component
 {
     #[Locked]
     public int $orderId;
 
-    public function render(): \Illuminate\Contracts\View\View
+    public function mount(): void
+    {
+        $this->orderId = request()->route('order')->id;
+    }
+
+    public function render(): View
     {
         $status = ExternalFulfillmentService::getStatus($this->orderId);
 
@@ -221,6 +245,7 @@ final class ExternalOrderStatus extends Component
 Register the hook in your service provider:
 
 ```php
+use Illuminate\Support\Facades\Blade;
 use Shopper\Facades\Shopper;
 use Shopper\View\OrderRenderHook;
 
@@ -228,7 +253,7 @@ public function boot(): void
 {
     Shopper::renderHook(
         OrderRenderHook::DETAIL_SIDEBAR_AFTER,
-        fn (): string => '<livewire:external-order-status :order-id="$order->id" />',
+        fn (): string => Blade::render('<livewire:external-order-status />'),
     );
 }
 ```

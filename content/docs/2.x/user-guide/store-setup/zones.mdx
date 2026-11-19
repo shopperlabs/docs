@@ -10,7 +10,8 @@ Zones are central to how your store operates. When a customer checks out, Shoppe
 - Which **currency** to charge in
 - Which **payment methods** to show (Stripe, PayPal, Cash on Delivery)
 - Which **delivery options** are available and at what price
-- Which **tax rules** apply
+
+Tax rules do not come from the zone: they follow the customer's country and state, as set in [Taxes](/2.x/user-guide/store-setup/taxes).
 
 <Note>
 You need at least one enabled zone before customers can complete checkout.
@@ -21,34 +22,32 @@ You need at least one enabled zone before customers can complete checkout.
 1. Click on **Settings** in the sidebar
 2. Select **Zones** from the settings menu
 
-<Frame caption="Zones settings page">
-  <img src="/images/v2/starterkit-zones.png" alt="Shipping Zones list" />
-</Frame>
+<Screenshot src="/images/v2/starterkit-zones.png" alt="Shipping Zones list" caption="Zones settings page" />
 
-The zones page shows all your configured zones. Click on a zone to view its details, shipping options, and connected carriers.
+The zones page lists your zones on the left. Each zone shows its name and code, an **Enabled** or **Disabled** badge, and its carriers and countries. Select a zone to show its details and shipping options on the right.
 
 ## Creating a Zone
 
 To create a new zone:
 
-1. Click the **plus icon** button
+1. Click the **plus icon** next to the **Zones** heading. The **Add zone** panel opens
 2. Fill in the zone details
-3. Click **Save**
+3. Click **Save**. The zones page opens with the new zone selected
 
-<Frame>
-  <img src="/images/v2/add-zone.png" alt="Create zone form" />
-</Frame>
+<Screenshot src="/images/v2/add-zone.png" alt="Create zone form" />
 
 ### Zone Fields
+
+**Payment Methods** and **Carriers** sit in the **Providers** section of the form, where you add the delivery and payment methods available in the zone.
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | **Name** | Yes | A descriptive name (e.g., "Europe", "North America", "Africa") |
 | **Code** | No | A short identifier code (e.g., "EU", "NA", "AF") |
 | **Countries** | Yes | The countries included in this zone. A country can only belong to one zone. |
-| **Currency** | Yes | The currency used for pricing and checkout in this zone. Each zone has exactly one currency. |
-| **Visibility** | No | Whether this zone is active. Disabled zones are not matched during checkout. |
-| **Payment methods** | Yes | Which payment methods are available in this zone (e.g., Stripe, Cash on Delivery) |
+| **Currency** | Yes | The currency used for pricing and checkout in this zone, chosen among the currencies configured for your store. Each zone has exactly one currency. |
+| **Visibility** | No | Whether this zone is active for customers. Disabled zones are not matched during checkout. |
+| **Payment Methods** | Yes | Which payment methods are available in this zone (e.g., Stripe, Cash on Delivery) |
 | **Carriers** | Yes | Which shipping carriers serve this zone (e.g., UPS, Colissimo, Local Delivery) |
 | **Metadata** | No | Optional key-value data for custom use |
 
@@ -58,22 +57,16 @@ Countries already assigned to another zone are grayed out in the country selecto
 
 ## Zone Detail Page
 
-After creating a zone, click on it to view its detail page. The detail page shows the zone's configuration and its shipping options.
+Select a zone in the zones list to show its details on the same page. The header shows the zone's name and code, with a pencil icon to edit it and a trash icon to delete it. Below come its currency, countries, payment methods, carriers, and metadata, then the **Shipping Options** section with its delivery options.
 
-<Frame>
-  <img src="/images/v2/starterkit-enable-zone.png" alt="Zone detail page" />
-</Frame>
-
-{/* SCREENSHOT NEEDED: The zone detail page showing zone info (name, code, countries list,
-    currency, payment methods, carriers) and the shipping options section below.
-    Use a zone named "Europe" with EUR currency, France/Germany/Belgium as countries. */}
+<Screenshot src="/images/v2/starterkit-enable-zone.png" alt="Zone detail page" />
 
 ## Editing a Zone
 
 To update a zone's settings:
 
-1. Click on the zone from the zones list
-2. Click the **Edit** button
+1. Select the zone in the zones list
+2. Click the pencil icon at the top right of the zone details
 3. Modify the fields you want to change
 4. Click **Save**
 
@@ -93,8 +86,8 @@ Each zone connects three things together for a region:
 | **Currency** | What currency customers pay in | Zone form |
 | **Payment methods** | How customers can pay (Stripe, Cash on Delivery, etc.) | Zone form (select from available methods) |
 | **Carriers** | Which shipping providers serve this zone | Zone form (select from available carriers) |
-| **Shipping options** | Specific delivery options with pricing | Zone detail page (see [Carriers](/2.x/user-guide/store-setup/carriers)) |
-| **Tax rules** | Tax rates applied at checkout | Managed separately in tax settings |
+| **Shipping options** | Specific delivery options with pricing | **Shipping Options** section of the zone (see [Carriers](/2.x/user-guide/store-setup/carriers)) |
+| **Tax rules** | Tax rates applied at checkout. Not part of the zone: they follow the customer's country and state | Managed separately in [tax settings](/2.x/user-guide/store-setup/taxes) |
 
 <Tip>
 You need to create [carriers](/2.x/user-guide/store-setup/carriers) and payment methods before you can assign them to a zone. Set those up first, then create your zones.
@@ -102,11 +95,9 @@ You need to create [carriers](/2.x/user-guide/store-setup/carriers) and payment 
 
 ## Zones in Orders
 
-When viewing orders, you can see which zone applies to each order. This helps you understand which shipping and payment rules were used.
+The orders list can show which zone applies to each order. This helps you understand which shipping and payment rules were used. The **Zone** column is hidden by default: turn it on from the **Column manager** above the table. To see only the orders of one zone, open **Filter** and pick a **Zone**.
 
-<Frame>
-  <img src="/images/v2/orders-with-zone.png" alt="Orders showing zone information" />
-</Frame>
+<Screenshot src="/images/v2/orders-with-zone.png" alt="Orders showing zone information" />
 
 ## Common Zone Setups
 

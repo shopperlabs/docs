@@ -1,0 +1,236 @@
+---
+title: 'Empty State'
+description: 'Illustration, message and call to action shown when a list or table has no records yet.'
+---
+
+The empty state is what a table shows before it holds any record: an illustration, a title, a short explanation and a button to create the first record. Shopper's main tables each have one, from products to webhooks.
+
+## Preview
+
+The component stacks its content in a centered column, at most `max-w-md` wide: the illustration, the title, the text, then the button. Open an empty list in your admin panel, the suppliers page for instance, to see it.
+
+## Usage
+
+Pass the title, the text and the button, and put the illustration in the default slot. The suppliers table passes the same props:
+
+```blade
+<x-shopper::empty-state
+    title="No suppliers yet"
+    content="Add the companies you buy your products from, with their contact details."
+    button="Add Supplier"
+    permission="suppliers.create"
+    panel="{ component: 'shopper-slide-overs.supplier-form' }"
+>
+    <img src="{{ asset('images/empty-suppliers.svg') }}" alt="" class="h-44 w-auto sm:h-52" />
+</x-shopper::empty-state>
+```
+
+## Props
+
+The title and the content are required. The four other props build the button.
+
+<ApiTable name="x-shopper::empty-state" element="div">
+
+<ParamField path="title" type="string" required>
+  The heading of the empty state.
+</ParamField>
+
+<ParamField path="content" type="string" required>
+  The text below the title: what the list holds and how to add the first record.
+</ParamField>
+
+<ParamField path="button" type="string | false" default="false">
+  The label of the button. The button only shows when `permission` is set, the user has that permission, and `url` or `panel` is set.
+</ParamField>
+
+<ParamField path="permission" type="string | false" default="false">
+  The permission the user needs to see the button, like `suppliers.create`. It is checked with `@can`.
+</ParamField>
+
+<ParamField path="url" type="string | false" default="false">
+  The URL the button links to, opened with `wire:navigate`. When both are set, `url` wins over `panel`.
+</ParamField>
+
+<ParamField path="panel" type="string | null" default="null">
+  The arguments of the `openPanel` event that opens a slide-over, written as a JavaScript object such as `{ component: 'shopper-slide-overs.supplier-form' }`.
+</ParamField>
+
+</ApiTable>
+
+The default slot holds the illustration, centered above the title. A named `action` slot replaces the button: when you pass it, the component ignores `button`, `permission`, `url` and `panel`.
+
+## Examples
+
+The examples below cover the two kinds of button, no button, and custom content in the slots.
+
+### Basic Empty State
+
+Without a button, the empty state only informs. The orders table uses one, since orders come from the storefront:
+
+```blade
+<x-shopper::empty-state
+    title="No orders yet"
+    content="When customers place orders, they will appear here."
+>
+    <img src="{{ asset('images/empty-orders.svg') }}" alt="" class="h-44 w-auto sm:h-52" />
+</x-shopper::empty-state>
+```
+
+### With URL Action
+
+Pass `url` when the record is created on its own page. The customers table links to the customer form:
+
+```blade
+<x-shopper::empty-state
+    title="No customers yet"
+    content="Customers will appear here once they create an account or place an order."
+    button="Add Customer"
+    permission="customers.create"
+    :url="route('shopper.customers.create')"
+>
+    <img src="{{ asset('images/empty-customers.svg') }}" alt="" class="h-44 w-auto sm:h-52" />
+</x-shopper::empty-state>
+```
+
+### With Panel Action
+
+Pass `panel` to open a slide-over instead of leaving the page. The value is printed inside the `$dispatch('openPanel', ...)` call, so write it as a JavaScript object:
+
+```blade
+<x-shopper::empty-state
+    title="No attributes yet"
+    content="Attributes describe your products, like a color or a size, and power the storefront filters."
+    button="Create Attribute"
+    permission="attributes.create"
+    panel="{ component: 'shopper-slide-overs.attribute-form' }"
+>
+    <img src="{{ asset('images/empty-attributes.svg') }}" alt="" class="h-44 w-auto sm:h-52" />
+</x-shopper::empty-state>
+```
+
+### Without Button
+
+Leave out `permission` and the button props when the records come from somewhere else, like reviews written by customers:
+
+```blade
+<x-shopper::empty-state
+    title="No reviews yet"
+    content="Reviews will appear here once customers rate the products they bought."
+>
+    <img src="{{ asset('images/empty-reviews.svg') }}" alt="" class="h-44 w-auto sm:h-52" />
+</x-shopper::empty-state>
+```
+
+### Custom Slot Content
+
+The default slot takes any markup, like an inline SVG that uses the theme colors. The `action` slot takes your own button, for instance one that mounts a Filament action of the Livewire component. The slot skips the permission check, so add `@can` yourself:
+
+```blade
+<x-shopper::empty-state
+    title="No loyalty members yet"
+    content="Customers join the program with their first order, or you can enroll them yourself."
+>
+    <svg class="h-44 w-auto sm:h-52" viewBox="0 0 360 300" fill="none" aria-hidden="true">
+        <ellipse class="fill-primary-500 opacity-[0.08] dark:opacity-[0.16]" cx="180" cy="160" rx="150" ry="120" />
+        <rect class="fill-primary-600" x="110" y="110" width="140" height="90" rx="12" />
+    </svg>
+
+    @can('loyalty.create')
+        <x-slot:action>
+            <x-filament::button type="button" icon="untitledui-plus" wire:click="mountAction('enrollMember')">
+                Enroll Customer
+            </x-filament::button>
+        </x-slot:action>
+    @endcan
+</x-shopper::empty-state>
+```
+
+## Usage in Livewire Components
+
+A Filament table shows its empty state when its query returns no record. Render the component from a view and pass it to the table's `emptyState()` method, as Shopper's tables do:
+
+```php title="app/Livewire/GiftCards.php"
+use App\Models\GiftCard;
+use Filament\Tables\Columns\TextColumn;
+use Filament\Tables\Table;
+
+public function table(Table $table): Table
+{
+    return $table
+        ->query(GiftCard::query()->latest())
+        ->columns([
+            TextColumn::make('code')
+                ->searchable(),
+            TextColumn::make('expires_at')
+                ->date(),
+        ])
+        ->emptyState(view('livewire.empty-states.gift-cards'));
+}
+```
+
+The view holds the `x-shopper::empty-state` component, as in the examples above. Outside a table, render it yourself when the collection is empty:
+
+```blade
+@if ($giftCards->isEmpty())
+    <x-shopper::empty-state
+        title="No gift cards yet"
+        content="Issue gift cards your customers can spend at checkout."
+    >
+        <img src="{{ asset('images/empty-gift-cards.svg') }}" alt="" class="h-44 w-auto sm:h-52" />
+    </x-shopper::empty-state>
+@else
+    <ul role="list" class="divide-sh-border divide-y">
+        @foreach ($giftCards as $giftCard)
+            <li class="text-sh-fg py-3 text-sm">{{ $giftCard->code }}</li>
+        @endforeach
+    </ul>
+@endif
+```
+
+## Blade Component Source
+
+The view is `resources/views/components/empty-state.blade.php` in the `shopper/framework` package:
+
+```blade
+@props([
+    'title',
+    'content',
+    'button' => false,
+    'permission' => false,
+    'url' => false,
+    'panel' => null,
+])
+
+<div
+    {{ $attributes->twMerge(['class' => 'relative mx-auto flex w-full max-w-md flex-col items-center py-12 text-center']) }}
+>
+    <div class="flex justify-center">
+        {{ $slot }}
+    </div>
+
+    <h3 class="font-heading text-sh-fg mt-8 text-xl font-semibold">
+        {{ $title }}
+    </h3>
+    <p class="text-sh-fg-muted mt-2 max-w-sm text-base">
+        {{ $content }}
+    </p>
+
+    @if (isset($action))
+        <div class="mt-6">
+            {{ $action }}
+        </div>
+    @elseif ($permission)
+        @can($permission)
+            @if ($url)
+                <x-filament::button tag="a" :href="$url" wire:navigate class="mt-6">
+                    {{ $button }}
+                </x-filament::button>
+            @elseif ($panel)
+                <x-filament::button type="button" wire:click="$dispatch('openPanel', {{ $panel }})" class="mt-6">
+                    {{ $button }}
+                </x-filament::button>
+            @endif
+        @endcan
+    @endif
+</div>
+```

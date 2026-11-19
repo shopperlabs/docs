@@ -1,0 +1,75 @@
+---
+title: 'Extending Shopper'
+description: 'Learn how to extend Shopper with custom features and functionalities'
+---
+
+Although Shopper is primarily designed for e-commerce sites and has many associated features, you are free to add or modify existing ones.
+
+## Why extend Shopper [#why-extends-shopper]
+
+One might ask, knowing that the purpose of setting up an e-commerce site is simply to make the whole system work without always wanting to add to it.
+
+For example if you want a blog on your store, a section for a KYC, or maybe a forum, instead of creating another project to manage this you can directly extend Shopper to manage all this in the same administration area.
+
+## How to extend Shopper [#how-to-extend-shopper]
+
+A screen of your own in the admin panel takes three pieces, each set up once in your application:
+
+1. A route file for your admin pages. Point the `custom_file` key of `config/shopper/routes.php` to it: its routes share the login, the middleware and the URL prefix of the admin panel. [Controllers](/3.x/extending/controllers#custom-routes) shows the setup.
+2. The pages. `php artisan make:shopper-page` creates a Livewire page in the namespace and the view path set by the `pages` key of `config/shopper/admin.php`.
+3. A sidebar entry that links to the pages. A sidebar class listens to the `Shopper\Sidebar\SidebarBuilder` event from the `register()` method of a service provider, as [Navigation](/3.x/extending/navigation) shows.
+
+The `config/shopper/admin.php` file also holds the URL prefix, the domain, the brand logo and the primary color of the admin panel, described in [Configuration](/3.x/configuration#admin-panel).
+
+## Extension Points [#extension-points]
+
+Each extension point is documented on the page of the feature it changes. The pages of this group cover the admin panel of your application:
+
+| Page | What it covers |
+|------|----------------|
+| [Control Panel](/3.x/extending/control-panel) | Extra stylesheets and scripts, a Tailwind theme of your own, the brand logo, and admin routes |
+| [Navigation](/3.x/extending/navigation) | Groups and entries added to the admin sidebar |
+| [Controllers](/3.x/extending/controllers) | Admin pages built with Livewire or with controllers, their breadcrumbs and their authorization |
+| [Forms](/3.x/extending/forms) | Filament forms in an admin page |
+| [Slide-overs](/3.x/extending/slideover) | Forms opened in a side panel |
+| [Render Hooks](/3.x/render-hooks) | HTML added at named places of the admin views |
+| [Sidebar](/3.x/sidebar/overview) | The sidebar package, in Shopper or in any Laravel application |
+| [Components](/3.x/extending/components/overview) | The Blade and Filament components of the admin panel, for your own screens |
+
+A package that extends the admin panel for several stores is an add-on: [Extending the Admin Panel](/3.x/addons/admin-panel) lists what an add-on can register.
+
+The pages below replace or extend a part of Shopper itself:
+
+| Extension point | Page |
+|-----------------|------|
+| Your own class for a Shopper model | [Swapping a Model](/3.x/models#swapping-a-model) |
+| A payment provider | [Custom Drivers](/3.x/payments#custom-drivers) |
+| A shipping carrier | [Custom Shipping Drivers](/3.x/carriers#custom-shipping-drivers) |
+| A step of the cart calculation | [Custom Pipeline](/3.x/cart#custom-pipeline) |
+| A tax provider | [Custom Tax Providers](/3.x/taxes#custom-tax-providers) |
+| A discount condition | [Custom Eligibility Rules](/3.x/discounts#custom-eligibility-rules) |
+| Price resolution, quantity rules and the price index | [Custom Price Resolver](/3.x/pricing#custom-price-resolver), [Quantity Rules](/3.x/pricing#quantity-rules), [Price Index](/3.x/pricing#price-index) |
+| Stock resolution and allocation | [Custom Inventory Resolver](/3.x/locations#custom-inventory-resolver), [Allocating Stock Across Locations](/3.x/locations#allocating-stock-across-locations) |
+| Webhook payloads and events | [Custom Payloads](/3.x/webhooks#custom-payloads), [Registering Custom Events](/3.x/webhooks#registering-custom-events) |
+| An import source | [Custom Import Sources](/3.x/import#custom-import-sources) |
+| A sales channel driver and the channel and zone resolvers | [Registering a Driver](/3.x/channels#registering-a-driver), [Channel Resolver](/3.x/channels#custom-resolver), [Zone Resolver](/3.x/zones#custom-resolver) |
+| A search indexer | [Custom Indexers](/3.x/search#custom-indexers) |
+| A Livewire component of the admin panel | [Components](/3.x/configuration#components), [Replacing the Dashboard](/3.x/dashboard#replacing-the-page), [Replacing a Widget](/3.x/dashboard#replacing-a-widget), [Replacing the General Page](/3.x/setup-store#replacing-the-general-page) |
+| A settings page | [Adding a Settings Page](/3.x/configuration#adding-a-settings-page) |
+| A color theme of the admin panel | [Creating a Theme](/3.x/themes#creating-a-theme) |
+| A permission | [Creating Custom Permissions](/3.x/acl#creating-custom-permissions) |
+| A notification sent by Shopper | [Replacing a Notification](/3.x/notifications#replacing-a-notification) |
+| The two-factor code provider | [Code Provider](/3.x/two-factor#code-provider) |
+| Payment method logos | [Logo Handling](/3.x/payment-methods#logo-handling) |
+| The order number format | [Orders](/3.x/configuration#orders) |
+
+## How not to extend Shopper [#how-not-to-extend-shopper]
+
+It should go without saying, but we'll say it anyway just in case...
+
+Don't ever, for any reason, ever, no matter what, no matter where, or who, or who you are with, or where you are going or...
+or where you've been... ever, for any reason, whatsoever, edit the files inside `/vendor/shopper`. Or any other Composer package.
+Anything you do will get blown away and you'll lose those changes forever and ever amen.
+
+You should instead build addons, extensions, and submit pull requests to [admin](https://github.com/shopperlabs/shopper) (after checking with the team first
+if we'll accept them). Thanks!

@@ -52,7 +52,7 @@ An order keeps a copy of everything it needs once the cart is gone: its items, i
 | `Order` | `orders` | `order` | [Orders](/3.x/orders) |
 | `OrderItem` | `order_items` | | [Orders](/3.x/orders) |
 | `OrderAddress` | `order_addresses` | | [Orders](/3.x/orders) |
-| `OrderRefund` | `order_refunds` | | [Orders](/3.x/orders) |
+| `OrderRefund` | `order_refunds` | | [Payments](/3.x/payments) |
 | `OrderShipping` | `order_shipping` | | [Fulfillment](/3.x/fulfillment) |
 | `OrderShippingEvent` | `order_shipping_events` | | [Fulfillment](/3.x/fulfillment) |
 | `OrderTaxLine` | `order_tax_lines` | | [Taxes](/3.x/taxes) |
@@ -182,6 +182,7 @@ The Shopper models declare their casts in a `casts()` method. When you override 
 Once a class is registered, Shopper uses it wherever it loads that model:
 
 - The container binds the contract, here `Shopper\Core\Models\Contracts\Product`, to your class. The admin panel, the Store API and the cart resolve models through these contracts.
+- Static calls on the Shopper class are forwarded to your class: `Shopper\Core\Models\Product::query()`, `::where()`, `::find()` and `::create()` return `App\Models\Product` instances. A model built with `new Shopper\Core\Models\Product` stays a Shopper instance, so create records with `create()` or with your own class.
 - Relationships read the class from the configuration: `$variant->product` and `$category->products` return instances of your class.
 - The morph map points the `product` alias to your class, so polymorphic relations such as order items and stock levels load it too.
 - The admin pages bind their route parameters to your class: the product edit page receives an `App\Models\Product`.

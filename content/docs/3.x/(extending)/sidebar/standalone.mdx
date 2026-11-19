@@ -1,0 +1,595 @@
+---
+title: Standalone Installation
+description: Install shopper/sidebar in a Laravel application without Shopper, then build, render and style a sidebar with breadcrumbs.
+---
+
+This guide installs the sidebar package in a Laravel application that does not run Shopper, such as a back office or a customer account area. The examples build the sidebar of a store back office.
+
+## Installation
+
+The package needs Livewire, as listed in [Requirements](/3.x/sidebar/overview#requirements). Install it with Composer:
+
+```bash
+composer require shopper/sidebar
+```
+
+Publish the configuration file:
+
+```bash
+php artisan vendor:publish --tag="sidebar-config"
+```
+
+Publish the views when you want to change their markup, as described in [Customizing Views](/3.x/sidebar/configuration#customizing-views):
+
+```bash
+php artisan vendor:publish --tag="sidebar-views"
+```
+
+## Setting Up the Middleware
+
+The `ResolveSidebars` middleware builds the registered sidebars at the start of each request. Add it to the routes that show a sidebar:
+
+```php
+use App\Livewire\Dashboard;
+use App\Livewire\Orders\OrderIndex;
+use Illuminate\Support\Facades\Route;
+use Shopper\Sidebar\Middleware\ResolveSidebars;
+
+Route::middleware(['auth', ResolveSidebars::class])->group(function (): void {
+    Route::livewire('/dashboard', Dashboard::class)->name('dashboard');
+    Route::livewire('/orders', OrderIndex::class)->name('orders.index');
+});
+```
+
+You can also append it to the `web` middleware group in `bootstrap/app.php`. The sidebars are then built on every web request, storefront pages included:
+
+```php
+use Illuminate\Foundation\Configuration\Middleware;
+use Shopper\Sidebar\Middleware\ResolveSidebars;
+
+->withMiddleware(function (Middleware $middleware): void {
+    $middleware->appendToGroup('web', [
+        ResolveSidebars::class,
+    ]);
+})
+```
+
+## Creating a Sidebar
+
+A sidebar is a class that you write and register once. The middleware builds it, and the views render it.
+
+### 1. Create a Sidebar Class
+
+Implement the `Shopper\Sidebar\Contracts\Sidebar` contract. The container injects an empty menu, `build()` fills it, and `getMenu()` returns it:
+
+```php title="app/Sidebar/StoreSidebar.php"
+namespace App\Sidebar;
+
+use Shopper\Sidebar\Contracts\Builder\Group;
+use Shopper\Sidebar\Contracts\Builder\Item;
+use Shopper\Sidebar\Contracts\Builder\Menu;
+use Shopper\Sidebar\Contracts\Sidebar;
+
+final class StoreSidebar implements Sidebar
+{
+    public function __construct(private Menu $menu) {}
+
+    public function build(): void
+    {
+        $this->menu->group(__('Store'), function (Group $group): void {
+            $group->weight(1);
+            $group->hideHeading();
+
+            $group->item(__('Dashboard'), function (Item $item): void {
+                $item->weight(1);
+                $item->route('dashboard');
+                $item->setIcon('untitledui-home-line');
+            });
+
+            $group->item(__('Orders'), function (Item $item): void {
+                $item->weight(2);
+                $item->route('orders.index');
+                $item->setIcon('untitledui-shopping-bag');
+
+                $item->item(__('Returns'), function (Item $subItem): void {
+                    $subItem->weight(1);
+                    $subItem->route('returns.index');
+                });
+
+                $item->item(__('Abandoned carts'), function (Item $subItem): void {
+                    $subItem->weight(2);
+                    $subItem->route('carts.abandoned');
+                });
+            });
+
+            $group->item(__('Products'), function (Item $item): void {
+                $item->weight(3);
+                $item->route('products.index');
+                $item->setIcon('untitledui-package');
+            });
+        });
+
+        $this->menu->group(__('Settings'), function (Group $group): void {
+            $group->weight(10);
+
+            $group->item(__('General'), function (Item $item): void {
+                $item->route('settings.general');
+                $item->setIcon('untitledui-settings-02');
+            });
+        });
+    }
+
+    public function getMenu(): Menu
+    {
+        return $this->menu;
+    }
+}
+```
+
+### 2. Register the Sidebar
+
+Register the class with the `SidebarManager` in the `boot()` method of a service provider. `register()` throws a `LogicException` when the class does not exist:
+
+```php title="app/Providers/AppServiceProvider.php"
+namespace App\Providers;
+
+use App\Sidebar\StoreSidebar;
+use Illuminate\Support\ServiceProvider;
+use Shopper\Sidebar\SidebarManager;
+
+class AppServiceProvider extends ServiceProvider
+{
+    public function boot(SidebarManager $manager): void
+    {
+        $manager->register(StoreSidebar::class);
+    }
+}
+```
+
+## Using the Sidebar
+
+Render the sidebar with the Livewire component that the package registers, or pass it to the renderer in a Blade layout of your own. Both read the Alpine.js store described in [Alpine.js Store Setup](#alpinejs-store-setup).
+
+### Option 1: Livewire Component
+
+The `sidebar` component renders a registered sidebar inside a wrapper view with a collapse button:
+
+```blade
+@livewire('sidebar', [
+    'sidebarClass' => \App\Sidebar\StoreSidebar::class,
+    'class' => 'store-sidebar',
+    'collapsible' => true,
+])
+```
+
+The component takes these parameters, all locked after mount:
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `sidebarClass` | Required | The sidebar class registered with the `SidebarManager`. |
+| `class` | `''` | CSS classes on the root element of the wrapper view. |
+| `collapsible` | `true` | Shows the collapse button of the default wrapper view. |
+| `view` | `sidebar::livewire.sidebar` | The wrapper view. It receives `$sidebar`, `$renderedSidebar`, `$class` and `$collapsible`. |
+
+Pass `view` to wrap the menu in your own markup, with a logo or a store switcher, without publishing the package views:
+
+```blade
+@livewire('sidebar', [
+    'sidebarClass' => \App\Sidebar\StoreSidebar::class,
+    'view' => 'layouts.partials.sidebar',
+])
+```
+
+<Note>
+The item view shows the label of each entry in an `x-tooltip` while the sidebar is collapsed. Alpine.js ships no tooltip directive: the attribute does nothing until your application registers one, as Filament does.
+</Note>
+
+### Refreshing the Sidebar
+
+The component renders the sidebar again when it receives the `sidebar:refresh` event, so a badge count can follow a change on the page. Dispatch it from a Livewire action:
+
+```php
+public function markAsShipped(): void
+{
+    $this->order->update(['shipped_at' => now()]);
+
+    $this->dispatch('sidebar:refresh');
+}
+```
+
+From Alpine.js, `$store.sidebar.refresh()` dispatches the same event:
+
+```blade
+<button type="button" x-on:click="$store.sidebar.refresh()">
+    {{ __('Refresh') }}
+</button>
+```
+
+The refresh runs as a Livewire update request, and Livewire applies only its persistent middleware to those requests. Add `ResolveSidebars` to them in the `boot()` method of a service provider, or the refreshed component renders an empty menu. Livewire applies it only when the route of the page has it:
+
+```php
+use Livewire\Livewire;
+use Shopper\Sidebar\Middleware\ResolveSidebars;
+
+Livewire::addPersistentMiddleware([ResolveSidebars::class]);
+```
+
+With a cache method set, the refresh renders the cached sidebar. Flush it first, as described in [Clearing the Cache](/3.x/sidebar/configuration#clearing-the-cache).
+
+### Option 2: Custom Blade Implementation
+
+For full control of the markup around the menu, pass the sidebar to the `Shopper\Sidebar\Presentation\SidebarRenderer` contract. The middleware has already built the sidebar, so resolve it from the container and do not call `build()` again, or every badge and quick action is added a second time:
+
+```blade
+@php
+    $renderedSidebar = app(\Shopper\Sidebar\Presentation\SidebarRenderer::class)
+        ->render(app(\App\Sidebar\StoreSidebar::class));
+@endphp
+
+<aside
+    class="store-sidebar"
+    x-data
+    x-bind:class="{ 'store-sidebar-collapsed': $store.sidebar.isCollapsed }"
+>
+    <a href="{{ route('dashboard') }}" class="store-sidebar-logo">
+        <img src="{{ asset('images/logo.svg') }}" alt="{{ config('app.name') }}" />
+    </a>
+
+    <nav>
+        {!! $renderedSidebar !!}
+    </nav>
+
+    <button type="button" x-on:click="$store.sidebar.toggle()">
+        {{ __('Toggle sidebar') }}
+    </button>
+</aside>
+```
+
+## Alpine.js Store Setup [#alpinejs-store-setup]
+
+The views read the open, collapsed and active states from an Alpine.js store named `sidebar`. Livewire ships Alpine.js, and the store must be registered before Alpine starts. With Vite, publish the JavaScript sources to `resources/js/vendor/sidebar/`:
+
+```bash
+php artisan vendor:publish --tag="sidebar-js"
+```
+
+Then register the store from `resources/js/app.js` when Alpine initializes:
+
+```js title="resources/js/app.js"
+import { sidebarStore } from './vendor/sidebar/index.js'
+
+document.addEventListener('alpine:init', () => {
+    window.Alpine.store('sidebar', sidebarStore())
+})
+```
+
+Without a build step, publish the compiled script to `public/vendor/sidebar/sidebar.js`:
+
+```bash
+php artisan vendor:publish --tag="sidebar-assets"
+```
+
+The script exposes the same functions on `window.SidebarStore`. Load it in the `<head>` of your layout and register the store the same way:
+
+```blade
+<script src="{{ asset('vendor/sidebar/sidebar.js') }}"></script>
+<script>
+    document.addEventListener('alpine:init', () => {
+        window.Alpine.store('sidebar', window.SidebarStore.store())
+    })
+</script>
+```
+
+The `sidebarStore()` factory takes two options. `breakpoint` sets the width in pixels below which the sidebar works as a mobile drawer (`1024` by default). `persistKeys` renames the `localStorage` keys, so two sidebars on the same domain keep separate states. Each key you leave out keeps its default:
+
+```js
+sidebarStore({
+    breakpoint: 1280,
+    persistKeys: {
+        isOpen: 'account-sidebar-is-open',
+        isCollapsed: 'account-sidebar-is-collapsed',
+        collapsedGroups: 'account-sidebar-collapsed-groups',
+    },
+})
+```
+
+Alpine.js calls the store's `init()` method when the store is registered. `init()` reads the `data-sidebar-breakpoint` and `data-sidebar-collapsible` attributes of the `<body>` set in [CSS Variables](#css-variables), and the breakpoint attribute wins over the `breakpoint` option. Do not call `init()` yourself: it adds its resize and navigation listeners again.
+
+The script exports these functions, also available on `window.SidebarStore`:
+
+| Export | Global | Description |
+|--------|--------|-------------|
+| `sidebarStore(config)` | `window.SidebarStore.store` | The store factory, also the default export. |
+| `registerSidebarStore(config)` | `window.SidebarStore.register` | Registers the store on `alpine:init`. Alpine.js must be loaded when you call it. |
+| `initSidebarStore(config)` | `window.SidebarStore.init` | Registers the store at once, for code that already runs inside an `alpine:init` listener. |
+| `getSidebarStore()` | `window.SidebarStore.get` | Returns the registered store, for JavaScript outside Alpine.js templates. |
+
+The three functions log an error and stop when `window.Alpine` does not exist.
+
+### Store API
+
+The store keeps its state in these properties. The three states marked as saved are written to `localStorage`:
+
+| Property | Description |
+|----------|-------------|
+| `$store.sidebar.isOpen` | Whether the sidebar is open below the breakpoint. Saved. |
+| `$store.sidebar.isCollapsed` | Whether the sidebar is collapsed from the breakpoint up. Saved. |
+| `$store.sidebar.collapsedGroups` | The names of the folded groups. Saved. |
+| `$store.sidebar.collapsible` | Whether the sidebar can collapse, from `data-sidebar-collapsible`. |
+| `$store.sidebar.currentPath` | The path of the page, updated after each `wire:navigate` visit. |
+| `$store.sidebar.breakpoint` | The mobile breakpoint in pixels. |
+| `$store.sidebar.persistKeys` | The `localStorage` keys. |
+
+Its methods change the state and save it:
+
+| Method | Description |
+|--------|-------------|
+| `open()`, `close()` | Opens or closes the sidebar below the breakpoint. |
+| `toggle()` | Opens or closes the sidebar below the breakpoint, collapses or expands it from the breakpoint up. |
+| `collapse()`, `expand()`, `toggleCollapse()` | Collapses or expands the sidebar. `collapse()` adds the `sidebar-collapsed` class to the `<html>` element and `expand()` removes it. `collapse()` and `toggleCollapse()` do nothing when `collapsible` is `false`. |
+| `isGroupCollapsed(label)`, `collapseGroup(label)`, `expandGroup(label)`, `toggleGroup(label)` | Reads or changes the folded state of a group, by group name. |
+| `refresh()` | Dispatches the `sidebar:refresh` Livewire event. |
+| `isActive(url, activeWhen)` | Whether the current page matches a link. |
+
+The item view calls `isActive()` with the URL of each entry and its `isActiveWhen()` pattern, so the active entry follows `wire:navigate` visits without a new render. Without a pattern, a link is active when the current path equals its path or starts with it, and the root path `/` only matches itself. A pattern is compared to the current path without its leading slash, and `*` matches any characters:
+
+```js
+$store.sidebar.isActive('/orders')
+$store.sidebar.isActive(null, 'orders/*')
+```
+
+## CSS Variables
+
+The default wrapper view sets the sidebar width from the `--sidebar-width` and `--sidebar-collapsed-width` CSS variables. Define them from the configuration in your layout, and pass the breakpoint and the collapsible setting to the store on the `<body>`:
+
+```blade
+<style>
+    :root {
+        --sidebar-width: {{ \Shopper\Sidebar\sidebar_width() }};
+        --sidebar-collapsed-width: {{ \Shopper\Sidebar\sidebar_collapsed_width() }};
+    }
+</style>
+
+<body
+    data-sidebar-breakpoint="{{ \Shopper\Sidebar\sidebar_breakpoint() }}"
+    data-sidebar-collapsible="{{ \Shopper\Sidebar\sidebar_is_collapsible() ? 'true' : 'false' }}"
+>
+```
+
+The package ships no stylesheet. Style the `sh-*` classes of the views, such as `sh-sidebar-item`, `sh-sidebar-item-active` and `sh-si-collapsed`, in your own CSS.
+
+## Menu Item API
+
+The item builder sets the link, the icon, the order, the visibility and the classes of an entry. The [Item](/3.x/sidebar/overview#item) table of the overview lists every method.
+
+### Basic Item Options
+
+This entry sets each option:
+
+```php
+use Shopper\Sidebar\Contracts\Builder\Item;
+
+$group->item(__('Orders'), function (Item $item): void {
+    $item->route('orders.index');
+    $item->setIcon('untitledui-shopping-bag', iconClass: 'size-5', attributes: ['stroke-width' => '1.5']);
+    $item->weight(2);
+    $item->setAuthorized(auth()->user()->can('orders.browse'));
+    $item->isActiveWhen('orders/*');
+    $item->useSpa();
+    $item->setItemClass('store-sidebar-link');
+    $item->setActiveClass('store-sidebar-link-active');
+    $item->setParentItemClass('store-sidebar-entry');
+});
+```
+
+`route()` takes a route name and its parameters, and resolves the URL while the sidebar is built: a route name that does not exist throws an exception. `setUrl()` takes any URL, such as an external link opened with `isNewTab()`. `setIcon()` takes a Blade Icons name, or raw SVG markup with `svg` as the second argument; an entry without an icon shows a dot. `isActiveWhen()` replaces the URL match with a path pattern, so Orders stays active on every order page. The store adds the active class (`sh-active` by default) to the link and `sh-sidebar-item-active` to the list element in the browser.
+
+The examples use the Untitled UI icons (`untitledui-*`) that the package installs. Any Blade Icons set works once installed: Heroicons (`heroicon-o-*`) come from the `blade-ui-kit/blade-heroicons` package, which Filament installs.
+
+### Adding Badges
+
+`badge()` takes a value and optional CSS classes, and returns the `Shopper\Sidebar\Contracts\Builder\Badge` instance. `color()` adds the `sh-sidebar-item-badge-{color}` class, for your stylesheet to color. Each call adds a badge, and a badge without a value still renders, so add one only when there is something to show:
+
+```php
+use App\Models\ProductReview;
+use Shopper\Sidebar\Contracts\Builder\Badge;
+
+$pendingReviews = ProductReview::query()->where('is_approved', false)->count();
+
+if ($pendingReviews > 0) {
+    $item->badge($pendingReviews)->color('warning');
+}
+
+$item->badge(function (Badge $badge): void {
+    $badge->setValue(__('New'));
+    $badge->setClass('store-badge-new');
+    $badge->color('info');
+});
+```
+
+### Adding Append Elements
+
+`append()` adds a quick action link after an entry. With a string, the first argument is a route name, the second the icon (`untitledui-plus` when you pass none) and the third the name, which the link shows as its title. Always pass a name:
+
+```php
+$item->append('products.create', 'untitledui-plus', __('New product'));
+```
+
+The closure form sets the same values on the `Shopper\Sidebar\Contracts\Builder\Append` instance, and accepts route parameters, icon classes, CSS classes, authorization, or a full URL with `setUrl()`:
+
+```php
+use Shopper\Sidebar\Contracts\Builder\Append;
+
+$item->append(function (Append $append): void {
+    $append->route('products.create', ['type' => 'variant']);
+    $append->setIcon('untitledui-plus', iconClass: 'size-4');
+    $append->setName(__('New product with variants'));
+    $append->setClass('store-sidebar-append');
+    $append->setAuthorized(auth()->user()->can('products.create'));
+});
+```
+
+The link renders with the `sh-sidebar-item-append` class and hides while the sidebar is collapsed.
+
+### Sub-Items
+
+`$item->item()` adds a sub-item, with the same builder as an entry:
+
+```php
+$group->item(__('Orders'), function (Item $item): void {
+    $item->route('orders.index');
+    $item->setIcon('untitledui-shopping-bag');
+
+    $item->item(__('Returns'), function (Item $subItem): void {
+        $subItem->weight(1);
+        $subItem->route('returns.index');
+    });
+
+    $item->item(__('Abandoned carts'), function (Item $subItem): void {
+        $subItem->weight(2);
+        $subItem->route('carts.abandoned');
+    });
+});
+```
+
+Sub-items render in a `ul.sh-sidebar-list-items.sh-submenu` list. The parent entry gets the `sh-items-has-child` class and a chevron, and stays active while one of its sub-items is active.
+
+## Group API
+
+`$menu->group()` creates a group, or returns the group that already has that name. The group builder sets its order, its visibility and its classes:
+
+```php
+use Shopper\Sidebar\Contracts\Builder\Group;
+use Shopper\Sidebar\Contracts\Builder\Item;
+
+$menu->group(__('Catalog'), function (Group $group): void {
+    $group->weight(2);
+    $group->setAuthorized(auth()->user()->can('products.browse'));
+    $group->collapsible();
+    $group->setClass('store-sidebar-group');
+    $group->setHeadingClass('store-sidebar-heading');
+    $group->setGroupItemsClass('space-y-1');
+
+    $group->item(__('Products'), function (Item $item): void {
+        $item->route('products.index');
+        $item->setIcon('untitledui-package');
+    });
+});
+```
+
+| Method | Description |
+|--------|-------------|
+| `weight($weight)` | The position of the group in the menu, lowest first. Defaults to `0`. |
+| `setAuthorized($authorized)` | Hides the group and its entries when `false`. |
+| `hideHeading()` | Hides the heading. A group with an empty name has no heading either. |
+| `collapsible()` | Turns the heading into a button that folds the entries. The store remembers folded groups by name. |
+| `setClass()`, `setHeadingClass()`, `setGroupItemsClass()` | CSS classes for the group, its heading and its list of entries. |
+
+## Helper Functions
+
+The package defines its helpers in the `Shopper\Sidebar` namespace. Import them with `use function`:
+
+```php
+use function Shopper\Sidebar\sidebar_breadcrumbs;
+use function Shopper\Sidebar\sidebar_breakpoint;
+use function Shopper\Sidebar\sidebar_collapsed_width;
+use function Shopper\Sidebar\sidebar_config;
+use function Shopper\Sidebar\sidebar_is_collapsible;
+use function Shopper\Sidebar\sidebar_width;
+
+$cacheMethod = sidebar_config('cache.method');
+$width = sidebar_width();
+$collapsedWidth = sidebar_collapsed_width();
+$breakpoint = sidebar_breakpoint();
+$collapsible = sidebar_is_collapsible();
+$breadcrumbs = sidebar_breadcrumbs();
+```
+
+| Function | Returns |
+|----------|---------|
+| `sidebar_config($key, $default)` | A value of `config/sidebar.php`, or the whole array without a key. |
+| `sidebar_width()` | The `width` option. |
+| `sidebar_collapsed_width()` | The `collapsed_width` option. |
+| `sidebar_breakpoint()` | The `breakpoint` option, as an integer. |
+| `sidebar_is_collapsible()` | The `collapsible` option. |
+| `sidebar_breadcrumbs()` | The breadcrumb trail of the current page, as a list of `Breadcrumb` objects. |
+
+## Breadcrumbs
+
+The package builds a breadcrumb trail from the active entry of your sidebar, then adds the crumbs that the page pushes, such as the number of the order on screen.
+
+### Displaying the Breadcrumbs
+
+Include the breadcrumb view in your layout, where the trail should appear:
+
+```blade
+<header class="store-header">
+    @include(config('sidebar.breadcrumbs.view'))
+</header>
+```
+
+The view calls `sidebar_breadcrumbs()`, which looks for the active entry in each registered sidebar, in registration order. The trail starts with that entry and its active sub-items. The first crumb opens a dropdown with the other authorized entries of its group, and the last crumb shows as the current page. The view name comes from the `breadcrumbs.view` option, so a themed view replaces the default by configuration: the Shopper admin points it to `shopper::components.breadcrumbs`.
+
+### Adding Page Breadcrumbs
+
+A Livewire page adds its own crumbs with the `Shopper\Sidebar\Traits\WithBreadcrumbs` trait. Return them from `getBreadcrumbs()`, and the trait pushes them when the component mounts:
+
+```php title="app/Livewire/Orders/ShowOrder.php"
+namespace App\Livewire\Orders;
+
+use App\Models\Order;
+use Illuminate\Contracts\View\View;
+use Livewire\Component;
+use Shopper\Sidebar\Breadcrumbs\Breadcrumb;
+use Shopper\Sidebar\Traits\WithBreadcrumbs;
+
+class ShowOrder extends Component
+{
+    use WithBreadcrumbs;
+
+    public Order $order;
+
+    public function getBreadcrumbs(): array
+    {
+        return [
+            new Breadcrumb(text: __('Order :number', ['number' => $this->order->number])),
+        ];
+    }
+
+    public function render(): View
+    {
+        return view('livewire.orders.show-order');
+    }
+}
+```
+
+On `/orders/1042`, the trail reads **Orders** (the active entry, with its dropdown) then **Order 1042**. A pushed crumb that has the same URL as an entry of the trail replaces that entry.
+
+### Breadcrumb Registry
+
+Outside Livewire, push crumbs to the `Shopper\Sidebar\Breadcrumbs\Breadcrumbs` registry. The container creates one registry per request:
+
+```php
+use Shopper\Sidebar\Breadcrumbs\Breadcrumb;
+use Shopper\Sidebar\Breadcrumbs\BreadcrumbLink;
+use Shopper\Sidebar\Breadcrumbs\Breadcrumbs;
+
+app(Breadcrumbs::class)->push(new Breadcrumb(
+    text: __('Reports'),
+    url: route('reports.index'),
+    links: [
+        new BreadcrumbLink(text: __('Sales'), url: route('reports.sales')),
+        new BreadcrumbLink(text: __('Inventory'), url: route('reports.inventory')),
+    ],
+));
+```
+
+| Method | Description |
+|--------|-------------|
+| `push(Breadcrumb $crumb)` | Adds a crumb at the end of the pushed crumbs. |
+| `prepend(Breadcrumb $crumb)` | Adds a crumb before the pushed crumbs. |
+| `all()` | Returns the pushed crumbs. |
+| `reset()` | Removes the pushed crumbs. |
+| `build(Menu $menu)` | Returns the trail of a menu: its active entries, then the pushed crumbs. |
+
+A `Breadcrumb` takes a `text`, and optionally a `url`, an `icon`, a list of `BreadcrumbLink` objects for its dropdown in `links`, and `spa` (`true` by default, for `wire:navigate`). A `BreadcrumbLink` takes a `text`, a `url`, an `icon` and `spa`. A URL must start with `/`, `#`, `?`, `http://` or `https://`: any other value is dropped, so the crumb shows as text and the link points to `#`.

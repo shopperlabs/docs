@@ -24,6 +24,8 @@ The User Avatar component displays a user's profile picture with an optional nam
 
 ## Props
 
+<ApiTable name="x-shopper::user-avatar" element="div">
+
 <ParamField path="user" type="Model" required>
   The user model instance. Must have `picture` and `full_name` attributes.
 </ParamField>
@@ -31,6 +33,8 @@ The User Avatar component displays a user's profile picture with an optional nam
 <ParamField path="showName" type="bool" default="true">
   Whether to display the user's name next to the avatar.
 </ParamField>
+
+</ApiTable>
 
 ## Examples
 
@@ -56,21 +60,24 @@ The User Avatar component displays a user's profile picture with an optional nam
 
 ### In a Filament Table
 
+The view needs a `user` variable, so render it from `formatStateUsing()` and pass the related user:
+
 ```php
-Tables\Columns\ViewColumn::make('customer')
-    ->view('shopper::components.user-avatar')
-    ->label(__('Customer')),
+use Filament\Tables\Columns\TextColumn;
+use Illuminate\Contracts\View\View;
+use Shopper\Core\Models\Order;
+
+TextColumn::make('customer.first_name')
+    ->label(__('Customer'))
+    ->formatStateUsing(fn (Order $record): View => view(
+        'shopper::components.user-avatar',
+        ['user' => $record->customer]
+    )),
 ```
 
 ## User Model Requirements
 
-The user model must implement:
-
-```php
-public function getPictureAttribute(): string;
-
-public function getFullNameAttribute(): string;
-```
+The user model must have `picture` and `full_name` attributes. The `Shopper\Traits\InteractsWithShopper` trait on your `User` model provides both: `full_name` joins the first and last name, and `picture` returns the uploaded avatar URL or a generated one.
 
 ## Blade Component Source
 
@@ -81,11 +88,7 @@ public function getFullNameAttribute(): string;
 ])
 
 <div class="flex items-center gap-2">
-    <img
-        class="size-8 rounded-full"
-        src="{{ $user->picture }}"
-        alt="{{ $user->full_name }}"
-    />
+    <img class="size-8 rounded-full" src="{{ $user->picture }}" alt="{{ $user->full_name }}" />
 
     @if ($showName)
         <span class="text-sm font-medium text-gray-700 dark:text-gray-300">

@@ -1,0 +1,308 @@
+---
+title: Extending Shopper
+description: Add groups, entries, badges and quick actions to the Shopper admin sidebar from your application with a SidebarBuilder listener.
+---
+
+This guide adds entries to the Shopper admin sidebar from your application. An add-on registers its sidebar class with `addonSidebar()` instead of a listener, as described in [Sidebar Navigation](/3.x/addons/admin-panel#sidebar-navigation). The class itself is written the same way in both cases.
+
+## Overview
+
+The admin panel registers one sidebar, `Shopper\Sidebar\AdminSidebar`. The `ResolveSidebars` middleware of the admin routes builds it on each admin request, and building it fires the `Shopper\Sidebar\SidebarBuilder` event with the menu. Shopper's own groups are listeners of this event, and your extension is one more listener.
+
+## Creating a Sidebar Extension
+
+An extension is a class that adds groups and entries to the menu, registered as a listener of `SidebarBuilder`.
+
+### 1. Create an Extension Class
+
+Extend `Shopper\Sidebar\AbstractAdminSidebar` and add your groups in `extendWith()`. The parent class receives the event, passes the menu to `extendWith()` and merges the menu you return. This class adds a **Gift Cards** group:
+
+```php title="app/Sidebar/GiftCardSidebar.php"
+namespace App\Sidebar;
+
+use Shopper\Sidebar\AbstractAdminSidebar;
+use Shopper\Sidebar\Contracts\Builder\Group;
+use Shopper\Sidebar\Contracts\Builder\Item;
+use Shopper\Sidebar\Contracts\Builder\Menu;
+
+final class GiftCardSidebar extends AbstractAdminSidebar
+{
+    public function extendWith(Menu $menu): Menu
+    {
+        $menu->group(__('Gift Cards'), function (Group $group): void {
+            $group->weight(5);
+            $group->collapsible();
+
+            $group->item(__('Issued cards'), function (Item $item): void {
+                $item->weight(1);
+                $item->useSpa();
+                $item->route('shopper.gift-cards.index');
+                $item->setIcon('phosphor-gift');
+            });
+
+            $group->item(__('Redemptions'), function (Item $item): void {
+                $item->weight(2);
+                $item->useSpa();
+                $item->route('shopper.gift-cards.redemptions');
+                $item->setIcon('phosphor-receipt');
+            });
+        });
+
+        return $menu;
+    }
+}
+```
+
+<Info>
+The `$this->user` property holds the signed-in user, so your extension can check permissions and roles, as shown in [Authorization](#authorization).
+</Info>
+
+Shopper draws its own entries with Phosphor icons (`phosphor-*`), and the admin panel styles fill every sidebar icon with the text color. Use Phosphor, or another Blade Icons set drawn with filled shapes: an outline icon, such as the Untitled UI icons that the sidebar package installs (`untitledui-*`), gets its outline filled in and shows as a solid shape.
+
+### 2. Register the Extension
+
+Register the class as a listener of `SidebarBuilder` in a service provider:
+
+```php title="app/Providers/AppServiceProvider.php"
+namespace App\Providers;
+
+use App\Sidebar\GiftCardSidebar;
+use Illuminate\Support\ServiceProvider;
+use Shopper\Sidebar\SidebarBuilder;
+
+class AppServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        $this->app['events']->listen(SidebarBuilder::class, GiftCardSidebar::class);
+    }
+}
+```
+
+<Note>
+Shopper registers its own sidebar listeners in the `register()` method of a service provider. The sidebar is built later, while the admin request runs, so a listener registered in `boot()` works too.
+</Note>
+
+## Weight System
+
+`weight()` orders the groups of the menu and the entries of a group, lowest first. Shopper gives its groups these weights:
+
+| Group | Label | Weight |
+|-------|-------|--------|
+| Dashboard | None, the group has no heading | 1 |
+| Catalog | `shopper::layout.sidebar.catalog` | 2 |
+| Sales | `shopper::layout.sidebar.sales` | 3 |
+| Customers | `shopper::pages/customers.menu` | 3 |
+| Settings | `shopper::pages/settings/global.menu` | 10 |
+
+Sales and Customers share the weight 3 and keep the order in which Shopper adds them, Sales first. A weight from 4 to 9 places your group between Customers and Settings, and a weight above 10 places it after Settings. To add an entry to one of Shopper's groups instead of a group of your own, call `$menu->group()` with the translated label from this table, as shown in [Sidebar Navigation](/3.x/addons/admin-panel#sidebar-navigation).
+
+## Adding Sub-Items
+
+`$item->item()` adds a sub-item to an entry. Sub-items are sorted by their own weight and rendered as a nested list under the entry:
+
+```php
+$group->item(__('Issued cards'), function (Item $item): void {
+    $item->weight(1);
+    $item->route('shopper.gift-cards.index');
+    $item->setIcon('phosphor-gift');
+
+    $item->item(__('All cards'), function (Item $subItem): void {
+        $subItem->weight(1);
+        $subItem->useSpa();
+        $subItem->route('shopper.gift-cards.index');
+    });
+
+    $item->item(__('New gift card'), function (Item $subItem): void {
+        $subItem->weight(2);
+        $subItem->useSpa();
+        $subItem->route('shopper.gift-cards.create');
+    });
+});
+```
+
+<Info>
+The item view adds the `sh-items-has-child` class to an entry that has sub-items and shows a chevron after its label: `untitledui-chevron-down`, or `untitledui-chevron-up` while the entry or one of its sub-items is active. Change them with `toggleIcon()` and `toggleActiveIcon()`. A sub-item without an icon shows a dot.
+</Info>
+
+## Authorization
+
+Groups, entries, badges and quick actions are visible by default. `setAuthorized()` takes a boolean: with `false`, the sidebar skips the element and everything inside it.
+
+### Permission-Based Authorization
+
+Check a permission with `can()` on `$this->user`:
+
+```php
+$group->item(__('Issued cards'), function (Item $item): void {
+    $item->setAuthorized($this->user->can('gift-cards.browse'));
+    $item->route('shopper.gift-cards.index');
+    $item->setIcon('phosphor-gift');
+});
+```
+
+Create the permissions before you check them: `Permission::generate('gift-cards', 'sales')` creates `gift-cards.browse`, `gift-cards.read`, `gift-cards.edit`, `gift-cards.create` and `gift-cards.delete`, as described in [Generating Permissions](/3.x/acl#generating-permissions). Use `can()` rather than `hasPermissionTo()`: `can()` returns `false` for a permission that does not exist yet, while `hasPermissionTo()` throws an exception, which breaks every admin page.
+
+### Role-Based Authorization
+
+The roles of the [ACL](/3.x/acl#checking-roles) work the same way. This entry shows to administrators and to members of a `marketing` role:
+
+```php
+$group->item(__('Gift card designs'), function (Item $item): void {
+    $item->setAuthorized($this->user->isAdmin() || $this->user->hasRole('marketing'));
+    $item->route('shopper.gift-cards.designs');
+    $item->setIcon('phosphor-palette');
+});
+```
+
+## Adding Badges
+
+`badge()` adds a badge after the label of an entry and returns it. `color()` gives the badge the `sh-sidebar-item-badge-{color}` class, which the admin styles for `primary`, `success`, `warning`, `danger`, `info` and `purple`. Each call adds a new badge, so add one only when there is something to show:
+
+```php
+use App\Models\GiftCard;
+
+$group->item(__('Issued cards'), function (Item $item): void {
+    $item->route('shopper.gift-cards.index');
+    $item->setIcon('phosphor-gift');
+
+    $pending = GiftCard::query()->whereNull('activated_at')->count();
+
+    if ($pending > 0) {
+        $item->badge($pending)->color('warning');
+    }
+});
+```
+
+Shopper's **Orders** entry works this way: it shows the number of new orders in a `warning` badge. The second argument of `badge()` adds CSS classes of your own, and a closure gives access to the `Shopper\Sidebar\Contracts\Builder\Badge` instance.
+
+## Adding Quick Actions (Append)
+
+`append()` adds a small link after an entry, such as a button that opens a creation form. With a string, the first argument is a route name, the second the icon (`untitledui-plus` when you pass none) and the third the name, which the link shows as its title. Always pass a name:
+
+```php
+$item->append('shopper.gift-cards.create', 'phosphor-plus', __('New gift card'))
+    ->setAuthorized($this->user->can('gift-cards.create'));
+```
+
+The closure form sets the same values on the `Append` instance, and accepts route parameters, CSS classes, or a full URL with `setUrl()`:
+
+```php
+use Shopper\Sidebar\Contracts\Builder\Append;
+
+$item->append(function (Append $append): void {
+    $append->route('shopper.gift-cards.create', ['type' => 'digital']);
+    $append->setIcon('phosphor-plus');
+    $append->setName(__('New digital gift card'));
+    $append->setAuthorized($this->user->can('gift-cards.create'));
+});
+```
+
+## Complete Example
+
+This extension adds a **Gift Cards** group with a badge, a quick action and sub-items, each entry checked against the `gift-cards.*` permissions:
+
+```php title="app/Sidebar/GiftCardSidebar.php"
+namespace App\Sidebar;
+
+use App\Models\GiftCard;
+use Shopper\Sidebar\AbstractAdminSidebar;
+use Shopper\Sidebar\Contracts\Builder\Group;
+use Shopper\Sidebar\Contracts\Builder\Item;
+use Shopper\Sidebar\Contracts\Builder\Menu;
+
+final class GiftCardSidebar extends AbstractAdminSidebar
+{
+    public function extendWith(Menu $menu): Menu
+    {
+        $menu->group(__('Gift Cards'), function (Group $group): void {
+            $group->weight(5);
+            $group->collapsible();
+
+            $group->item(__('Issued cards'), function (Item $item): void {
+                $item->weight(1);
+                $item->setAuthorized($this->user->can('gift-cards.browse'));
+                $item->route('shopper.gift-cards.index');
+                $item->setIcon('phosphor-gift');
+
+                $pending = GiftCard::query()->whereNull('activated_at')->count();
+
+                if ($pending > 0) {
+                    $item->badge($pending)->color('warning');
+                }
+
+                $item->append('shopper.gift-cards.create', 'phosphor-plus', __('New gift card'))
+                    ->setAuthorized($this->user->can('gift-cards.create'));
+
+                $item->item(__('All cards'), function (Item $subItem): void {
+                    $subItem->weight(1);
+                    $subItem->useSpa();
+                    $subItem->route('shopper.gift-cards.index');
+                });
+
+                $item->item(__('Expired cards'), function (Item $subItem): void {
+                    $subItem->weight(2);
+                    $subItem->useSpa();
+                    $subItem->route('shopper.gift-cards.expired');
+                });
+            });
+
+            $group->item(__('Redemptions'), function (Item $item): void {
+                $item->weight(2);
+                $item->setAuthorized($this->user->can('gift-cards.read'));
+                $item->useSpa();
+                $item->route('shopper.gift-cards.redemptions');
+                $item->setIcon('phosphor-receipt');
+            });
+        });
+
+        return $menu;
+    }
+}
+```
+
+## Using Closures for Dynamic Sidebars
+
+For a few entries, a closure listener is enough. `getMenu()` on the event returns the admin menu itself, so the closure adds its group to it directly:
+
+```php
+use Illuminate\Support\Facades\Event;
+use Shopper\Sidebar\Contracts\Builder\Group;
+use Shopper\Sidebar\SidebarBuilder;
+
+Event::listen(SidebarBuilder::class, function (SidebarBuilder $sidebar): void {
+    $sidebar->getMenu()->group(__('Payments'), function (Group $group): void {
+        $group->weight(20);
+
+        $group->item(__('Stripe dashboard'))
+            ->setUrl('https://dashboard.stripe.com')
+            ->isNewTab()
+            ->setIcon('phosphor-credit-card');
+    });
+});
+```
+
+## Routes Configuration
+
+`route()` resolves the URL while the sidebar is built, so the route must exist: a route name that does not exist throws an exception on every admin page. Put the admin routes of your application in a file of your own and set it as `custom_file` in `config/shopper/routes.php`, as described in [Custom Routes](/3.x/configuration#custom-routes):
+
+```php title="routes/shopper.php"
+use App\Livewire\Shopper\GiftCards\CreateGiftCard;
+use App\Livewire\Shopper\GiftCards\Designs;
+use App\Livewire\Shopper\GiftCards\ExpiredGiftCards;
+use App\Livewire\Shopper\GiftCards\GiftCardIndex;
+use App\Livewire\Shopper\GiftCards\Redemptions;
+use Illuminate\Support\Facades\Route;
+
+Route::prefix('gift-cards')->name('gift-cards.')->group(function (): void {
+    Route::livewire('/', GiftCardIndex::class)->name('index');
+    Route::livewire('/create', CreateGiftCard::class)->name('create');
+    Route::livewire('/expired', ExpiredGiftCards::class)->name('expired');
+    Route::livewire('/redemptions', Redemptions::class)->name('redemptions');
+    Route::livewire('/designs', Designs::class)->name('designs');
+});
+```
+
+<Warning>
+Shopper loads this file inside its admin route group: the routes get the admin URL prefix, the admin middleware and the `shopper.` name prefix. The `gift-cards.index` route above is named `shopper.gift-cards.index`, and that full name is the one `route()` takes in the sidebar.
+</Warning>

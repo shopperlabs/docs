@@ -25,6 +25,8 @@ The Card component is the primary container used throughout Shopper to group rel
 
 ## Props
 
+<ApiTable name="x-shopper::card" element="div">
+
 <ParamField path="title" type="string | Slot" default="null">
   The card header title. Can be a string or a slot for custom content.
 </ParamField>
@@ -32,6 +34,8 @@ The Card component is the primary container used throughout Shopper to group rel
 <ParamField path="description" type="string" default="null">
   Optional description text displayed below the title.
 </ParamField>
+
+</ApiTable>
 
 ## Examples
 
@@ -117,13 +121,15 @@ You can pass a custom slot for the title to include additional elements:
 The Card component is located at `packages/admin/resources/views/components/card.blade.php`:
 
 ```blade
+@blaze
+
 @props([
     'title' => null,
     'description' => null,
 ])
 
 <div
-    {{ $attributes->twMerge(['class' => 'sh-card p-1.5 bg-gray-50 dark:bg-gray-950 rounded-lg ring-1 ring-gray-200 dark:ring-white/10 overflow-hidden']) }}
+    {{ $attributes->twMerge(['class' => 'sh-card p-1 bg-gray-50 dark:bg-gray-950 rounded-xl ring-1 ring-gray-200 dark:ring-white/10 overflow-hidden']) }}
 >
     @if ($title)
         <header class="sh-card-header px-2 py-3">
@@ -135,7 +141,9 @@ The Card component is located at `packages/admin/resources/views/components/card
         </header>
     @endif
 
-    <div class="sh-card-content bg-white dark:bg-gray-900 ring-1 ring-gray-200 rounded-lg dark:ring-white/10 p-4 overflow-hidden">
+    <div
+        class="sh-card-content overflow-hidden rounded-lg bg-white p-4 ring-1 ring-gray-200 dark:bg-gray-900 dark:ring-white/10"
+    >
         {{ $slot }}
     </div>
 </div>

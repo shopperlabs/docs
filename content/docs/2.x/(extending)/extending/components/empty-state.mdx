@@ -25,13 +25,15 @@ The Empty State component is used to display a helpful message when there's no d
     content="Get started by creating your first product."
     button="Create Product"
     permission="add_products"
-    :url="route('shopper.products.create')"
+    panel="{ component: 'shopper-slide-overs.add-product' }"
 >
     <img src="{{ asset('images/empty-products.svg') }}" alt="" class="h-auto w-full max-w-xs" />
 </x-shopper::empty-state>
 ```
 
 ## Props
+
+<ApiTable name="x-shopper::empty-state" element="div">
 
 <ParamField path="title" type="string" required>
   The main heading text for the empty state.
@@ -42,7 +44,7 @@ The Empty State component is used to display a helpful message when there's no d
 </ParamField>
 
 <ParamField path="button" type="string | false" default="false">
-  Text for the call-to-action button. Set to `false` to hide the button.
+  Text for the call-to-action button. The button only shows when `permission` is set, the user has that permission, and `url` or `panel` is set.
 </ParamField>
 
 <ParamField path="permission" type="string | false" default="false">
@@ -54,8 +56,10 @@ The Empty State component is used to display a helpful message when there's no d
 </ParamField>
 
 <ParamField path="panel" type="string | null" default="null">
-  Panel name to dispatch an event for opening a slide-over or modal. Alternative to `url`.
+  Arguments of the `openPanel` event that opens a slide-over, written as a JavaScript object such as `{ component: 'shopper-slide-overs.brand-form' }`. Alternative to `url`.
 </ParamField>
+
+</ApiTable>
 
 ## Examples
 
@@ -81,19 +85,19 @@ The Empty State component is used to display a helpful message when there's no d
 
 ```blade
 <x-shopper::empty-state
-    title="No categories"
-    content="Categories help organize your products for easier browsing."
-    button="Add Category"
-    permission="add_categories"
-    :url="route('shopper.categories.create')"
+    title="No customers"
+    content="Customers will appear here once they create an account or place an order."
+    button="Add Customer"
+    permission="add_customers"
+    :url="route('shopper.customers.create')"
 >
-    <img src="{{ asset('images/empty-categories.svg') }}" alt="" />
+    <img src="{{ asset('images/empty-customers.svg') }}" alt="" />
 </x-shopper::empty-state>
 ```
 
 ### With Panel Action
 
-Use a panel action to open a slide-over or modal instead of navigating:
+Use a panel action to open a slide-over instead of navigating:
 
 ```blade
 <x-shopper::empty-state
@@ -101,7 +105,7 @@ Use a panel action to open a slide-over or modal instead of navigating:
     content="Attributes let you define extra product characteristics like color or size."
     button="Create Attribute"
     permission="add_attributes"
-    :panel="json_encode(['name' => 'attribute-form'])"
+    panel="{ component: 'shopper-slide-overs.attribute-form' }"
 >
     <img src="{{ asset('images/empty-attributes.svg') }}" alt="" />
 </x-shopper::empty-state>
@@ -137,7 +141,7 @@ The default slot is used for the illustration on the left side:
     content="Create discount codes to offer promotions to your customers."
     button="Create Discount"
     permission="add_discounts"
-    :url="route('shopper.discounts.create')"
+    panel="{ component: 'shopper-slide-overs.discount-form' }"
 >
     {{-- Custom SVG or image --}}
     <svg class="h-40 w-40 text-gray-400" ...>
@@ -157,7 +161,7 @@ Empty states are typically rendered conditionally when a collection is empty:
         content="Start building your catalog by adding your first product."
         button="Add Product"
         permission="add_products"
-        :url="route('shopper.products.create')"
+        panel="{ component: 'shopper-slide-overs.add-product' }"
     >
         <img src="{{ asset('images/empty-products.svg') }}" alt="" />
     </x-shopper::empty-state>
@@ -201,7 +205,7 @@ The Empty State component is located at `packages/admin/resources/views/componen
             @if ($permission)
                 @can($permission)
                     @if ($url)
-                        <x-filament::button tag="a" :href="$url" class="mt-5">
+                        <x-filament::button tag="a" :href="$url" wire:navigate class="mt-5">
                             {{ $button }}
                         </x-filament::button>
                     @elseif ($panel)

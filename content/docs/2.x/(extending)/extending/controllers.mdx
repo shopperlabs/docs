@@ -15,7 +15,7 @@ To add custom routes inside the admin panel, set the `custom_file` key in `confi
 'custom_file' => base_path('routes/shopper.php'),
 ```
 
-Routes defined in this file are automatically loaded with the admin panel's middleware stack (authentication, authorization).
+Routes defined in this file are automatically loaded with the admin panel's middleware stack (authentication, authorization), under the admin URL prefix. Shopper also prefixes their names with `shopper.`, so a route you name `posts.index` is called with `route('shopper.posts.index')`.
 
 ## Using Controllers
 
@@ -31,7 +31,10 @@ This creates a controller in `app/Http/Controllers/Shopper/PostController.php`:
 namespace App\Http\Controllers\Shopper;
 
 use App\Http\Controllers\Controller;
+use App\Models\Post;
 use Illuminate\Contracts\View\View;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 
 class PostController extends Controller
 {
@@ -47,7 +50,7 @@ class PostController extends Controller
         return view('shopper.posts.create');
     }
 
-    public function store(Request $request)
+    public function store(Request $request): RedirectResponse
     {
         // Handle form submission
 
@@ -62,15 +65,38 @@ Register the routes in your custom route file:
 // routes/shopper.php
 
 use App\Http\Controllers\Shopper\PostController;
+use Illuminate\Support\Facades\Route;
 
-Route::get('/posts', [PostController::class, 'index'])->name('shopper.posts.index');
-Route::get('/posts/create', [PostController::class, 'create'])->name('shopper.posts.create');
-Route::post('/posts', [PostController::class, 'store'])->name('shopper.posts.store');
+Route::get('/posts', [PostController::class, 'index'])->name('posts.index');
+Route::get('/posts/create', [PostController::class, 'create'])->name('posts.create');
+Route::post('/posts', [PostController::class, 'store'])->name('posts.store');
 ```
+
+The views of a controller render inside the admin layout when they use the `x-shopper::layouts.app` component, which adds the sidebar, the top bar and the notifications around the page:
+
+```blade title="resources/views/shopper/posts/index.blade.php"
+<x-shopper::layouts.app :title="__('Posts')">
+    <x-shopper::container class="space-y-8 py-5">
+        <x-shopper::heading :title="__('Posts')" />
+
+        <ul>
+            @foreach ($posts as $post)
+                <li>{{ $post->title }}</li>
+            @endforeach
+        </ul>
+
+        {{ $posts->links() }}
+    </x-shopper::container>
+</x-shopper::layouts.app>
+```
+
+The page renders next to the sidebar of the admin panel, under its top bar:
+
+<Screenshot src="/images/v2/extending-controller.png" alt="Posts page of the admin panel listing four blog post titles, with a Blog group in the sidebar" />
 
 ## Using Livewire Components
 
-Livewire is the recommended approach since the entire Shopper admin is built with Livewire. The `pages` configuration in `config/shopper/admin.php` controls the namespace and view path for custom Livewire components:
+Livewire is the recommended approach since the entire Shopper admin is built with Livewire. The `pages` configuration in `config/shopper/admin.php` sets the namespace and view path used by the `make:shopper-page` command:
 
 ```php
 // config/shopper/admin.php
@@ -81,23 +107,21 @@ Livewire is the recommended approach since the entire Shopper admin is built wit
 ],
 ```
 
-Create a Livewire component:
+Create a page component:
 
 ```bash
-php artisan make:livewire Shopper/PostIndex
+php artisan make:shopper-page PostIndex
 ```
 
-Use Shopper's layout attribute to inherit the admin panel styling:
+The command creates the class and its view. The class extends `Shopper\Livewire\Pages\AbstractPageComponent`, which renders the page inside the admin panel layout:
 
 ```php
 namespace App\Livewire\Shopper;
 
 use Illuminate\Contracts\View\View;
-use Livewire\Attributes\Layout;
-use Livewire\Component;
+use Shopper\Livewire\Pages\AbstractPageComponent;
 
-#[Layout('shopper::components.layouts.app')]
-class PostIndex extends Component
+class PostIndex extends AbstractPageComponent
 {
     public function render(): View
     {
@@ -112,12 +136,13 @@ Register Livewire routes in your custom route file:
 // routes/shopper.php
 
 use App\Livewire\Shopper\PostIndex;
+use Illuminate\Support\Facades\Route;
 
-Route::get('/posts', PostIndex::class)->name('shopper.posts.index');
+Route::get('/posts', PostIndex::class)->name('posts.index');
 ```
 
 <Tip>
-Use `#[Layout('shopper::components.layouts.app')]` on your Livewire component to inherit the admin panel layout with sidebar, header, and notification system.
+If your component extends `Livewire\Component` instead, add `#[Layout('shopper::components.layouts.app')]` to the class to inherit the admin panel layout with sidebar, header, and notification system.
 </Tip>
 
 ## Adding Navigation
@@ -161,7 +186,7 @@ Any `public Model $x` property on a Livewire component must be marked `#[Locked]
 
 ```php
 use Livewire\Attributes\Locked;
-use Shopper\Models\Order;
+use Shopper\Core\Models\Order;
 
 #[Locked]
 public Order $order;
@@ -182,6 +207,8 @@ $data = Arr::only($payload, ['first_name', 'last_name', 'email']);
 Livewire components that resolve a model from user input must handle the lookup failure path. Returning early on null avoids the cascade of bypasses that follow when a misbound ID is treated as authoritative:
 
 ```php
+use Shopper\Models\Permission;
+
 public function togglePermission(int $permissionId): void
 {
     $this->authorize('access_setting');

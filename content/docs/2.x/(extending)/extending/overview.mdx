@@ -5,7 +5,7 @@ description: 'Learn how to extend Shopper with custom features and functionaliti
 
 Although Shopper is primarily designed for e-commerce sites and has many associated features, you are free to add or modify existing ones.
 
-## Why extends Shopper
+## Why extend Shopper [#why-extends-shopper]
 
 One might ask, knowing that the purpose of setting up an e-commerce site is simply to make the whole system work without always wanting to add to it.
 
@@ -13,26 +13,28 @@ For example if you want a blog on your store, a section for a KYC, or maybe a fo
 
 ## How to extend Shopper
 
-To add new features to Shopper, the first thing you need to do is to register a new element in the sidebar by creating an event (for example `RegisterCustomMenu`) and load it directly into your `AppServiceProvider` like this
+To add new features to Shopper, the first thing you need to do is to register a new element in the sidebar by creating a sidebar class (for example `RegisterCustomMenu`, which extends `Shopper\Sidebar\AbstractAdminSidebar`) and listening to the `SidebarBuilder` event with it in your `AppServiceProvider`. See [Extending Shopper](/2.x/sidebar/shopper-extension) for the sidebar class:
 
 ```php
 namespace App\Providers;
 
+use App\Sidebar\RegisterCustomMenu;
+use Illuminate\Support\ServiceProvider;
 use Shopper\Sidebar\SidebarBuilder;
 
 class AppServiceProvider extends ServiceProvider
 {
-  public function registerCustomShopperSidebar()
-  {
-    $this->app['events']->listen(SidebarBuilder::class, RegisterCustomMenu::class);
-  }
+    public function register(): void
+    {
+        $this->app['events']->listen(SidebarBuilder::class, RegisterCustomMenu::class);
+    }
 }
 ```
 
 The rest of the configuration will be done using the configuration files in the `config/shopper/` folder
 
 - `/routes.php` for the routes that should be dynamically loaded for the admin panel
-- `/shopper.php` for the configuration that should be loaded for the cpanel.
+- `/admin.php` for the admin panel configuration (URL prefix, domain, pages, roles, brand).
 
 We will deal with all this in more detail later.
 

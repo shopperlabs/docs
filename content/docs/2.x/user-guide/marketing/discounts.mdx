@@ -10,7 +10,7 @@ Discounts are a powerful way to attract customers, boost sales, and reward loyal
 The Discounts section allows you to:
 
 - Create discount codes
-- Set up automatic discounts
+- Limit a discount code to one zone
 - Define discount rules and conditions
 - Track discount usage
 - Schedule promotional periods
@@ -23,22 +23,19 @@ Click on **Discounts** in the sidebar to access discount management.
 
 If you haven't created any discounts yet:
 
-<Frame>
-  <img src="/images/v2/discounts-empty-state.png" alt="Discounts Empty State" />
-</Frame>
+<Screenshot src="/images/v2/discounts-empty-state.png" alt="Discounts Empty State" />
 
 ## Creating a Discount
 
 To create a new discount:
 
-1. Click the **Create** button
-2. Configure the discount settings
-3. Set conditions and limits
-4. Click **Save**
+1. Click the **New discount** button
+2. Choose the zone, the type, the code and the value
+3. Set the usage limits and the **Active dates**
+4. Set the **Conditions**: what the code applies to, who can use it and the minimum requirements
+5. Click **Save**
 
-<Frame>
-  <img src="/images/v2/discount-create.png" alt="Create Discount" />
-</Frame>
+<Screenshot src="/images/v2/discount-create.png" alt="Create Discount" />
 
 ### Discount Types
 
@@ -46,44 +43,54 @@ To create a new discount:
 |------|-------------|---------|
 | **Percentage** | Discount as a percentage | 20% off |
 | **Fixed amount** | Specific amount off | $10 off |
-| **Free shipping** | Removes shipping cost | Free delivery |
+
+<Note>
+There is no free shipping discount type. To offer free delivery, add a delivery option with a price of 0 in the zone (see [Setting Up Delivery Options](/2.x/user-guide/store-setup/carriers#setting-up-delivery-options)).
+</Note>
 
 ### Discount Configuration
 
 | Field | Description |
 |-------|-------------|
-| **Code** | The code customers enter (e.g., SUMMER20) |
-| **Type** | Percentage, fixed amount, or free shipping |
-| **Value** | The discount amount or percentage |
-| **Applies to** | Entire order, specific products, or collections |
+| **Zone** | Optional. Limits the code to one zone. A fixed amount is then in the zone's currency. |
+| **Type** | **Percentage** or **Fixed amount** |
+| **Code** | The code customers enter at checkout (e.g., SUMMER20). Must be unique. Click **Generate** to create a random code. |
+| **Percentage** or **Fixed amount** | The discount value: from 1 to 100 for a percentage, at least 0.01 for a fixed amount |
+| **Visibility** | Turn on to make the code usable at checkout. A code with **Visibility** off is ignored. |
+| **Applies To** | **Entire order** or **Specific products** (see [Product Restrictions](#product-restrictions)) |
+| **Metadata** | Extra key and value pairs your developer can use |
 
 ## Discount Conditions
 
-Set rules for when the discount can be used:
+Set rules for when the discount can be used in the **Conditions** part of the form:
 
 ### Minimum Requirements
 
+Under **Minimum requirements**, choose one option, then enter the value:
+
 | Condition | Example |
 |-----------|---------|
-| **Minimum purchase** | Order must be at least $50 |
-| **Minimum quantity** | Cart must have at least 3 items |
+| **None** | No minimum |
+| **Minimum purchase amount** | Order must be at least $50 |
+| **Minimum quantity of items** | Cart must have at least 3 items |
 
 ### Customer Eligibility
 
 | Option | Description |
 |--------|-------------|
-| **All customers** | Anyone can use the discount |
-| **Specific customers** | Only selected customers |
-| **Customer groups** | Based on customer segments |
+| **Everyone** | Anyone can use the discount |
+| **Specific customers** | Only the customers you pick in **Select customers** |
 
 ### Product Restrictions
 
+Under **Applies To**, choose:
+
 | Option | Description |
 |--------|-------------|
-| **All products** | Applies to everything |
-| **Specific products** | Only selected products |
-| **Specific collections** | Products in certain collections |
-| **Specific brands** | Products from certain brands |
+| **Entire order** | Applies to everything in the cart |
+| **Specific products** | Only the products you pick in **Select products** |
+
+To discount a whole collection or brand, pick its products in **Select products**.
 
 ## Usage Limits
 
@@ -91,29 +98,30 @@ Control how the discount can be used:
 
 | Limit | Description |
 |-------|-------------|
-| **Total uses** | Maximum times the discount can be used |
-| **Uses per customer** | Limit per individual customer |
-| **One per order** | Can't combine with other discounts |
+| **Limit number of times this discount can be used in total** | Turn on, then enter the maximum in **Usage limit value**. The limit counts uses by all customers together. |
+| **Limit to one use per customer** | Each customer can use the code once |
+
+A cart holds one discount code at a time: applying a new code replaces the previous one, so codes never add up.
 
 ## Scheduling Discounts
 
 Set active periods for your discounts:
 
-- **Start date** - When the discount becomes active
-- **End date** - When the discount expires
-- **No end date** - Discount runs indefinitely
+- **Start date** - When the discount becomes active. Required, and it cannot be in the past.
+- **End date** - When the discount expires. It must be on or after the start date.
+- **No end date** - Leave **End date** empty and the discount runs indefinitely
 
 ## Discount Strategies
 
 <CardGroup cols={2}>
   <Card title="Welcome Discount" icon="hand-wave">
-    Offer first-time customers a discount on their initial purchase.
+    Send new customers a code with **Limit to one use per customer** turned on, so each of them can use it once.
   </Card>
   <Card title="Seasonal Sales" icon="calendar">
     Create time-limited discounts for holidays and seasons.
   </Card>
   <Card title="Cart Recovery" icon="cart-shopping">
-    Send abandoned cart emails with exclusive discount codes.
+    Check the **Abandoned Carts** list under **Orders** and send those customers an exclusive code yourself. Shopper does not send recovery emails.
   </Card>
   <Card title="Loyalty Rewards" icon="star">
     Reward repeat customers with special discounts.
@@ -126,7 +134,7 @@ Set active periods for your discounts:
 Use unique, memorable discount codes that are easy to type. Avoid confusing characters like 0/O or 1/l/I.
 </Tip>
 
-- **Clear naming** - Make codes descriptive (SUMMER2024, FREESHIP)
+- **Clear naming** - Make codes descriptive (SUMMER2024, SAVE10)
 - **Set limits** - Protect margins with usage limits
 - **Track performance** - Monitor which discounts drive sales
 - **Create urgency** - Use end dates to encourage quick action
@@ -136,8 +144,8 @@ Use unique, memorable discount codes that are easy to type. Avoid confusing char
 
 | Campaign | Code | Type | Value |
 |----------|------|------|-------|
-| Welcome offer | WELCOME10 | Percentage | 10% off first order |
-| Free shipping | FREESHIP | Free shipping | Orders over $50 |
+| Welcome offer | WELCOME10 | Percentage | 10% off, one use per customer |
+| Spend and save | SAVE10 | Fixed amount | $10 off orders over $50 |
 | Flash sale | FLASH25 | Percentage | 25% off, 24 hours only |
 | Holiday | HOLIDAY15 | Percentage | 15% off storewide |
 

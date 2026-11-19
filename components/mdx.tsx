@@ -148,6 +148,18 @@ function Frame({ caption, children }: { caption?: string; children: ReactNode })
   );
 }
 
+// Captures are taken at a device scale of 2, so the 2x descriptor shows them at their size on screen.
+function Screenshot({ src, alt, caption }: { src: string; alt: string; caption?: string }) {
+  const dark = src.replace(/\.png$/, '-dark.png');
+
+  return (
+    <Frame caption={caption}>
+      <img src={src} srcSet={`${src} 2x`} alt={alt} loading="lazy" className="mx-auto! block dark:hidden" />
+      <img src={dark} srcSet={`${dark} 2x`} alt={alt} loading="lazy" className="mx-auto! hidden dark:block" />
+    </Frame>
+  );
+}
+
 // Fumadocs picks the title icon from the language alone, so a Blade view or a Livewire class gets a generic one.
 // The div matches the wrapper Fumadocs puts around its own icons, which global.css styles as part of the title tab.
 function frameworkIcon(title: CodeBlockProps['title']) {
@@ -174,6 +186,63 @@ function CodeBlockPre({ title, icon, children, ...props }: CodeBlockProps) {
   );
 }
 
+const bareCode = 'border-0 bg-transparent p-0 font-mono text-[0.8125rem] font-semibold text-fd-foreground';
+const cell = 'border-0 py-1.5 pl-0 align-baseline';
+
+// The typography plugin gives every prose table a bordered card; utilities outrank its layer, so these classes undo it.
+function ApiTable({
+  name,
+  element,
+  builtOn,
+  label = 'Prop',
+  children,
+}: {
+  name: string;
+  element?: string;
+  builtOn?: string;
+  label?: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="my-6 overflow-x-auto" tabIndex={0}>
+      <table className="my-0 border-collapse rounded-none border-0 bg-transparent">
+        <colgroup>
+          <col className="w-1/4" />
+          <col className="w-1/4" />
+          <col className="w-1/2" />
+        </colgroup>
+        <thead className="border-b border-fd-border">
+          <tr>
+            {[label, 'Default', 'Description'].map((heading) => (
+              <th key={heading} className="border-0 bg-transparent pt-0 pr-4 pb-4 pl-0 text-sm font-semibold last:pr-0">
+                {heading}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody className="[&>tr:nth-child(2)>td]:pt-3">
+          <tr>
+            <td colSpan={3} className="border-y border-fd-border bg-fd-secondary p-2 text-fd-muted-foreground">
+              <code className={bareCode}>{name}</code>
+              {element && (
+                <span className="ml-1 italic">
+                  renders a <code className={bareCode}>{`<${element}>`}</code> element
+                </span>
+              )}
+              {builtOn && (
+                <span className="ml-1 italic">
+                  built on the <code className={bareCode}>{`<${builtOn}>`}</code> component
+                </span>
+              )}
+            </td>
+          </tr>
+          {children}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 function ParamField({
   path,
   type,
@@ -188,15 +257,16 @@ function ParamField({
   children: ReactNode;
 }) {
   return (
-    <div className="my-6 border-b pb-4 last:border-b-0">
-      <div className="flex flex-wrap items-baseline gap-2 text-sm">
-        <code>{path}</code>
-        {type && <span className="font-mono text-fd-muted-foreground">{type}</span>}
-        {defaultValue !== undefined && <span className="font-mono text-fd-muted-foreground">default: {defaultValue}</span>}
-        {required && <span className="font-medium text-fd-error">required</span>}
-      </div>
-      <div className="prose-no-margin mt-2 text-sm">{children}</div>
-    </div>
+    <tr>
+      <td className={clsx(cell, 'pr-4')}>
+        <code className={bareCode}>{path}</code>
+        {type && <div className="mt-0.5 font-mono text-xs text-fd-muted-foreground">{type}</div>}
+      </td>
+      <td className={clsx(cell, 'pr-4')}>
+        {defaultValue !== undefined ? <code className={bareCode}>{defaultValue}</code> : required ? 'required' : '-'}
+      </td>
+      <td className={clsx(cell, 'prose-no-margin pr-0')}>{children}</td>
+    </tr>
   );
 }
 
@@ -215,6 +285,8 @@ export function getMDXComponents(components?: MDXComponents) {
     Steps,
     Step,
     Frame,
+    Screenshot,
+    ApiTable,
     ParamField,
     ...components,
   } satisfies MDXComponents;

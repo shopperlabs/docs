@@ -12,9 +12,7 @@ Common uses for tags include seasonal labels ("Summer 2026"), marketing campaign
 1. Click on **Products** in the sidebar
 2. Select **Tags** from the submenu
 
-<Frame>
-  <img src="/images/v2/tags-list.png" alt="Tags list page" />
-</Frame>
+<Screenshot src="/images/v2/tags-list.png" alt="Tags list page" />
 
 The tags list shows all your tags with their name, slug, and creation date. You can search, edit, and delete tags from this page.
 
@@ -22,24 +20,18 @@ The tags list shows all your tags with their name, slug, and creation date. You 
 
 To create a new tag:
 
-1. Click the **Create tag** button
-2. Enter the tag name
-3. Click **Save**
+1. Click the **Create** button
+2. In the **Create tag** window, enter the tag name
+3. Click **Submit**
 
-<Frame>
-  <img src="/images/v2/tags-create.png" alt="Create tag form" />
-</Frame>
-
-{/* SCREENSHOT NEEDED: The "Create tag" modal form with fields:
-    Name: "Summer 2026", Slug: "summer-2026" (auto-generated, disabled).
-    Show the Save button. */}
+<Screenshot src="/images/v2/tags-create.png" alt="Create tag form" />
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | **Name** | Yes | The tag label (e.g., "Summer 2026", "New Arrival") |
 | **Slug** | Auto | Generated automatically from the name. Used in URLs on your storefront. |
 
-The slug is generated automatically from the tag name and cannot be edited manually. If two tags have the same name, the slug is made unique by appending a number (e.g., "summer-2026-1").
+The slug is generated automatically from the tag name and cannot be edited manually. Each slug must be unique: if another tag already uses the same slug, the form shows an error and the tag is not created. Choose a different name.
 
 ## Editing a Tag
 
@@ -47,15 +39,11 @@ To update an existing tag:
 
 1. Click the **Edit** icon next to the tag
 2. Modify the name
-3. Click **Save**
+3. Click **Update**
 
-<Frame>
-  <img src="/images/v2/tags-edit.png" alt="Edit tag form" />
-</Frame>
+Renaming a tag keeps its existing slug, so its storefront URLs do not change.
 
-{/* SCREENSHOT NEEDED: The "Edit tag" modal form showing the Name field
-    with "Summer Collection" as the value, and the Slug field showing
-    "summer-collection" (disabled). */}
+<Screenshot src="/images/v2/tags-edit.png" alt="Edit tag form" />
 
 ## Deleting Tags
 
@@ -75,21 +63,14 @@ Deleting a tag removes it from all products that use it. The products themselves
 Tags are assigned to products from the product edit form, not from the tags page. When editing a product:
 
 1. Go to the product's edit page
-2. Find the **Tags** field
-3. Select existing tags or create a new one inline
-4. Click **Save**
+2. In the **Overview** tab, find the **Tags** field in the **Associations** section
+3. Select existing tags, or click the **+** button next to the field to create a new one
+4. Click **Update**
 
-<Frame>
-  <img src="/images/v2/tags-product.png" alt="Tags field on product edit form" />
-</Frame>
-
-{/* SCREENSHOT NEEDED: The product edit form showing the Tags field with
-    a multi-select dropdown. Show 2 tags already selected ("Summer 2026",
-    "Best Seller") and the dropdown open showing more options. Include
-    the "Create" option for inline tag creation. */}
+<Screenshot src="/images/v2/tags-product.png" alt="Tags field on product edit form" />
 
 <Tip>
-You can create new tags directly from the product edit form without going to the Tags page. Just type a new tag name and select **Create** from the dropdown.
+You can create new tags directly from the product edit form without going to the Tags page. Click the **+** button next to the **Tags** field, enter the name in the **Create tag** window, then click **Create**. The new tag is selected in the field: click **Update** to save the product.
 </Tip>
 
 ## Tags vs Categories vs Collections

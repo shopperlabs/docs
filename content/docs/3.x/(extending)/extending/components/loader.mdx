@@ -1,0 +1,110 @@
+---
+title: 'Loader'
+description: 'Animated spinner for loading states, sized and colored with classes.'
+---
+
+import { ComponentPreview, PreviewLoader } from '@/components/component-preview'
+
+The loader is a spinning SVG for loading states. Shopper's forms place it in their save button, where it shows while Livewire runs the save method.
+
+## Preview
+
+The preview shows the loader at its default size.
+
+<ComponentPreview>
+  <PreviewLoader />
+</ComponentPreview>
+
+## Usage
+
+The loader takes no prop. Add Livewire's `wire:loading` and `wire:target` attributes to show it only while a method runs:
+
+```blade
+<x-shopper::loader wire:loading wire:target="save" />
+```
+
+## Attributes
+
+Every attribute goes to the `svg` element. The `class` attribute is merged with the default classes, so a size you pass replaces the default one.
+
+<ApiTable name="x-shopper::loader" element="svg" label="Attribute">
+
+<ParamField path="class" type="string" default="size-5 animate-spin">
+  Classes for the size and the color. The spinner is drawn with `currentColor`, so a text color class sets its color.
+</ParamField>
+
+</ApiTable>
+
+## Examples
+
+The examples below change the size and the color, and place the loader in a button and a page.
+
+### Different Sizes
+
+Pass a `size-*` class.
+
+<ComponentPreview>
+  <div style={{ display: 'flex', gap: 24, alignItems: 'center' }}>
+    <PreviewLoader size="sm" />
+    <PreviewLoader size="md" />
+    <PreviewLoader size="lg" />
+  </div>
+</ComponentPreview>
+
+```blade
+<x-shopper::loader class="size-4" />
+<x-shopper::loader class="size-5" />
+<x-shopper::loader class="size-6" />
+```
+
+### With Color
+
+Pass a text color class. The theme tokens follow dark mode:
+
+```blade
+<x-shopper::loader class="text-primary-500" />
+<x-shopper::loader class="text-sh-fg-muted" />
+```
+
+### In a Button
+
+Shopper's settings forms show the loader in the submit button while the `store` method runs, and disable the button meanwhile:
+
+```blade
+<x-filament::button type="submit" wire:loading.attr="disabled">
+    <x-shopper::loader wire:loading wire:target="store" class="text-white" />
+    Save
+</x-filament::button>
+```
+
+### Loading State
+
+Center a larger loader in an area while its content loads:
+
+```blade
+<div wire:loading.flex wire:target="loadOrders" class="items-center justify-center py-8">
+    <x-shopper::loader class="text-primary-500 size-8" />
+</div>
+```
+
+## Blade Component Source
+
+The view is `resources/views/components/loader.blade.php` in the `shopper/framework` package:
+
+```blade
+@blaze(memo: true)
+
+<svg
+    {{ $attributes->twMerge(['class' => 'size-5 animate-spin']) }}
+    fill="none"
+    viewBox="0 0 24 24"
+    aria-hidden="true"
+>
+    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
+    <path
+        class="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"
+    />
+</svg>
+```

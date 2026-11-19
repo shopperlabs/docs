@@ -186,17 +186,13 @@ For full control, use the `SidebarRenderer` directly:
 
 ## Alpine.js Store Setup
 
-The sidebar uses an Alpine.js store for state management. Add the store to your JavaScript:
+The sidebar uses an Alpine.js store for state management. Livewire ships Alpine, so register the store when Alpine initializes. Alpine calls the store's `init()` method when the store is registered:
 
 ```javascript
-import Alpine from 'alpinejs'
 import sidebarStore from './vendor/sidebar/stores/sidebar'
 
-Alpine.store('sidebar', sidebarStore())
-Alpine.start()
-
 document.addEventListener('alpine:init', () => {
-    Alpine.store('sidebar').init()
+    window.Alpine.store('sidebar', sidebarStore())
 })
 ```
 
@@ -294,7 +290,7 @@ $group->item('Label', function (Item $item): void {
 
     // Authorization
     $item->setAuthorized();          // Always authorized
-    $item->setAuthorized(fn() => auth()->user()->isAdmin()); // Conditional
+    $item->setAuthorized(auth()->user()->can('manage-users')); // Conditional
 
     // Behavior
     $item->useSpa();                 // Use wire:navigate for Livewire
@@ -324,10 +320,11 @@ $item->badge(function (Badge $badge): void {
 
 ### Adding Append Elements
 
-Append elements are additional action buttons displayed next to the item:
+Append elements are additional action buttons displayed next to the item. When you pass a string, `append()` reads it as a route name, then takes the icon and the name. Always give the append a CSS class with `setClass()`, since the append view renders it:
 
 ```php
-$item->append('/users/create', 'heroicon-o-plus', 'Add User');
+$item->append('users.create', 'heroicon-o-plus', 'Add User')
+    ->setClass('hover:bg-gray-100');
 
 
 

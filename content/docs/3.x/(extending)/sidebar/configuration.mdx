@@ -1,0 +1,269 @@
+---
+title: Configuration
+description: Configure the sidebar cache, dimensions, breakpoint, collapsing and breadcrumb view, then customize the views and clear the cache.
+---
+
+The sidebar package reads its options from `config/sidebar.php`. Publish the file to change them:
+
+```bash
+php artisan vendor:publish --tag="sidebar-config"
+```
+
+## Configuration Options
+
+The file has five options: the cache, the two widths, the mobile breakpoint, collapsing, and the breadcrumb view.
+
+### Caching
+
+Building a sidebar runs every listener, permission check and badge query on each request. The `cache` option stores the built sidebar instead:
+
+```php
+'cache' => [
+    'method' => null,
+    'duration' => 1440,
+],
+```
+
+| Option | Values | Description |
+|--------|--------|-------------|
+| `method` | `null`, `static`, `user-based` | The caching method. Any other value throws a `SidebarResolverNotSupported` exception. |
+| `duration` | Integer | How long a cached sidebar is kept, in minutes. The default, `1440`, is one day. |
+
+Each method stores the sidebar differently:
+
+- `null` builds the sidebar on every request. This is the default.
+- `static` stores one copy of each sidebar for each locale, shared by every user, under the `shopper.sidebar.` key followed by an md5 hash of the sidebar class name.
+- `user-based` stores one copy for each user and locale, tagged with that key. It needs a cache store that supports tags, such as Redis or Memcached. With a store that does not, such as `file` or `database`, the sidebar is built on every request, as with `null`.
+
+<Warning>
+With `static`, the first user who loads the sidebar decides what everyone sees: entries hidden by permissions stay hidden or visible for every user, and badge counts stay at their first value until the cache expires. The Shopper admin hides entries by permission, so keep `null` or use `user-based` there. With `user-based`, badge counts are also cached: flush the cache when they must change, as described in [Clearing the Cache](#clearing-the-cache).
+</Warning>
+
+### Dimensions
+
+The two widths of the sidebar, expanded and collapsed:
+
+```php
+'width' => '15rem',
+'collapsed_width' => '4.5rem',
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `width` | `15rem` | The width of the expanded sidebar. |
+| `collapsed_width` | `4.5rem` | The width of the collapsed sidebar. |
+
+Your layout passes these values to the CSS variables `--sidebar-width` and `--sidebar-collapsed-width`, as described in [Injecting CSS Variables](#injecting-css-variables).
+
+### Responsive Breakpoint
+
+The width in pixels below which the sidebar works as a mobile drawer:
+
+```php
+'breakpoint' => 1024,
+```
+
+Below this width, the sidebar stays hidden until it is opened, `toggle()` opens and closes it instead of collapsing it, and a click on an entry closes it, as does the Escape key in the Livewire component. The store reads the value from the `data-sidebar-breakpoint` attribute of the `<body>`.
+
+### Collapsible
+
+Whether the sidebar can collapse to icons from the breakpoint up:
+
+```php
+'collapsible' => true,
+```
+
+With `false`, the store's `collapse()` and `toggleCollapse()` methods do nothing, and the default wrapper view hides its collapse button. The store reads the value from the `data-sidebar-collapsible` attribute of the `<body>`.
+
+### Breadcrumbs
+
+The Blade view that renders the breadcrumb trail:
+
+```php
+'breadcrumbs' => [
+    'view' => 'sidebar::breadcrumbs',
+],
+```
+
+The package does not render this view by itself: your layout includes it, as described in [Displaying the Breadcrumbs](/3.x/sidebar/standalone#displaying-the-breadcrumbs). In a Shopper application, Shopper sets this option to `shopper::components.breadcrumbs` when it registers, after the published file is loaded. To use another view there, set the option from the `boot()` method of a service provider:
+
+```php
+config(['sidebar.breadcrumbs.view' => 'partials.breadcrumbs']);
+```
+
+## Full Configuration Example
+
+The published file with its default values:
+
+```php title="config/sidebar.php"
+return [
+
+    'cache' => [
+        'method' => null,
+        'duration' => 1440,
+    ],
+
+    'width' => '15rem',
+
+    'collapsed_width' => '4.5rem',
+
+    'breakpoint' => 1024,
+
+    'collapsible' => true,
+
+    'breadcrumbs' => [
+        'view' => 'sidebar::breadcrumbs',
+    ],
+
+];
+```
+
+## Environment Variables
+
+The package reads no environment variable. To change an option per environment, such as the cache method in production, call `env()` in your published `config/sidebar.php` with variable names of your choice:
+
+```php
+'cache' => [
+    'method' => env('SIDEBAR_CACHE_METHOD'),
+    'duration' => (int) env('SIDEBAR_CACHE_DURATION', 1440),
+],
+```
+
+Then set the variables in the `.env` file of each environment:
+
+```dotenv
+SIDEBAR_CACHE_METHOD=user-based
+SIDEBAR_CACHE_DURATION=60
+```
+
+## Accessing Configuration
+
+The helper functions of the `Shopper\Sidebar` namespace read the options:
+
+```php
+use function Shopper\Sidebar\sidebar_breakpoint;
+use function Shopper\Sidebar\sidebar_collapsed_width;
+use function Shopper\Sidebar\sidebar_config;
+use function Shopper\Sidebar\sidebar_is_collapsible;
+use function Shopper\Sidebar\sidebar_width;
+
+$cacheMethod = sidebar_config('cache.method');
+$width = sidebar_width();
+$collapsedWidth = sidebar_collapsed_width();
+$breakpoint = sidebar_breakpoint();
+$collapsible = sidebar_is_collapsible();
+```
+
+With the default configuration, they return `null`, `15rem`, `4.5rem`, `1024` and `true`. [Helper Functions](/3.x/sidebar/standalone#helper-functions) lists every helper.
+
+## Injecting CSS Variables
+
+The views size the sidebar with CSS variables, and the store reads its breakpoint and collapsing options from the `<body>`. Set both in your layout:
+
+```blade title="resources/views/layouts/app.blade.php"
+<!DOCTYPE html>
+<html lang="{{ str_replace('_', '-', app()->getLocale()) }}">
+<head>
+    <meta charset="utf-8">
+    <style>
+        :root {
+            --sidebar-width: {{ \Shopper\Sidebar\sidebar_width() }};
+            --sidebar-collapsed-width: {{ \Shopper\Sidebar\sidebar_collapsed_width() }};
+        }
+    </style>
+</head>
+<body
+    data-sidebar-breakpoint="{{ \Shopper\Sidebar\sidebar_breakpoint() }}"
+    data-sidebar-collapsible="{{ \Shopper\Sidebar\sidebar_is_collapsible() ? 'true' : 'false' }}"
+>
+    {{ $slot }}
+</body>
+</html>
+```
+
+The store's `init()` method reads the two `data-*` attributes when Alpine.js registers the store.
+
+## Customizing Views
+
+Publish the views to change their markup:
+
+```bash
+php artisan vendor:publish --tag="sidebar-views"
+```
+
+The views are copied to `resources/views/vendor/sidebar/`, and Laravel uses your copies instead of the package views:
+
+| View | Renders | Variables |
+|------|---------|-----------|
+| `menu.blade.php` | The list of groups | `$groups`, the rendered groups |
+| `group.blade.php` | A group, with its heading | `$group`, `$items` (the rendered entries) |
+| `item.blade.php` | An entry, with its badges, quick actions and sub-items | `$item`, `$items`, `$badges`, `$appends`, `$active` |
+| `badge.blade.php` | A badge | `$badge` |
+| `append.blade.php` | A quick action link | `$append` |
+| `breadcrumbs.blade.php` | The breadcrumb trail | None, it calls `sidebar_breadcrumbs()` |
+| `livewire/sidebar.blade.php` | The wrapper of the Livewire component | `$sidebar`, `$renderedSidebar`, `$class`, `$collapsible` |
+
+### Example: Customizing the Item View
+
+In the item view, `$item` is the entry builder, while `$items`, `$badges` and `$appends` hold the sub-items, badges and quick actions already rendered as HTML. `$active` tells whether the entry or one of its sub-items matched the request on the server. This version uses Tailwind classes and keeps the `x-data` and `$store.sidebar` bindings, so the active state still follows `wire:navigate` visits:
+
+```blade title="resources/views/vendor/sidebar/item.blade.php"
+<li
+    @class(['store-sidebar-entry', 'store-sidebar-entry-current' => $active])
+    x-data="{ url: @js($item->getUrl()), activeWhen: @js($item->getActiveWhen()) }"
+>
+    <a
+        href="{{ $item->getUrl() }}"
+        class="flex items-center gap-3 rounded-lg p-2 text-gray-700 hover:bg-gray-50"
+        x-bind:class="{ 'bg-gray-100 font-medium text-gray-900': $store.sidebar?.isActive(url, activeWhen) }"
+        @if ($item->withSpa()) wire:navigate @endif
+        @if ($item->getNewTab()) target="_blank" @endif
+    >
+        @if ($item->iconSvg())
+            {!! $item->getIcon() !!}
+        @elseif ($item->getIcon() !== null)
+            @svg($item->getIcon(), 'size-5 ' . $item->getIconClass(), $item->getIconAttributes())
+        @endif
+
+        <span class="flex-1" x-show="! $store.sidebar?.isCollapsed">{{ $item->getName() }}</span>
+
+        @foreach ($badges as $badge)
+            {!! $badge !!}
+        @endforeach
+    </a>
+
+    @foreach ($appends as $append)
+        {!! $append !!}
+    @endforeach
+
+    @if (count($items) > 0)
+        <ul role="list" class="ml-4 space-y-1">
+            @foreach ($items as $subItem)
+                {!! $subItem !!}
+            @endforeach
+        </ul>
+    @endif
+</li>
+```
+
+## Clearing the Cache
+
+`php artisan cache:clear` empties the whole application cache, the sidebars included. The cache keys are hashed, so use the `Shopper\Sidebar\Infrastructure\SidebarFlusher` service rather than `cache:forget` to flush one sidebar. The container binds it to the flusher of the configured method:
+
+```php
+use App\Sidebar\StoreSidebar;
+use Shopper\Sidebar\Infrastructure\SidebarFlusher;
+
+app(SidebarFlusher::class)->flush(StoreSidebar::class);
+```
+
+The static flusher deletes the shared copy, the user-based flusher deletes the copies of every user through the tag, and with `null` there is nothing to flush. The `SidebarManager` flushes every registered sidebar at once:
+
+```php
+use Shopper\Sidebar\Infrastructure\SidebarFlusher;
+use Shopper\Sidebar\SidebarManager;
+
+app(SidebarManager::class)->flush(app(SidebarFlusher::class));
+```
+
+Flush after a change that a cached sidebar shows, such as new permissions for a role. In a Shopper application, the admin sidebar class is `Shopper\Sidebar\AdminSidebar`.

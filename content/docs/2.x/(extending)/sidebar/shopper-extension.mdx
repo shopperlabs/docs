@@ -38,7 +38,7 @@ class BlogSidebar extends AbstractAdminSidebar
                 $item->setAuthorized();
                 $item->useSpa();
                 $item->route('shopper.blog.posts.index');
-                $item->setIcon('untitledui-file-02');
+                $item->setIcon('phosphor-article');
             });
 
             $group->item(__('Categories'), function (Item $item): void {
@@ -46,7 +46,7 @@ class BlogSidebar extends AbstractAdminSidebar
                 $item->setAuthorized();
                 $item->useSpa();
                 $item->route('shopper.blog.categories.index');
-                $item->setIcon('untitledui-folder');
+                $item->setIcon('phosphor-folder');
             });
         });
 
@@ -58,6 +58,8 @@ class BlogSidebar extends AbstractAdminSidebar
 <Info>
 The `$this->user` property is available in your extension class to access the authenticated user for authorization checks.
 </Info>
+
+Shopper draws its own entries with Phosphor icons (`phosphor-*`), and the admin panel styles fill every sidebar icon with the text color. Use Phosphor, or another Blade Icons set drawn with filled shapes: an outline icon, such as the Untitled UI icons that the sidebar package installs (`untitledui-*`), gets its outline filled in and shows as a solid shape.
 
 ### 2. Register the Extension
 
@@ -81,9 +83,9 @@ class AppServiceProvider extends ServiceProvider
 }
 ```
 
-<Warning>
-Make sure to register the listener in the `register()` method, not `boot()`, to ensure it's registered before the sidebar is built.
-</Warning>
+<Note>
+Shopper registers its own sidebar listeners in the `register()` method of a service provider. The sidebar is built later, while the admin request runs, so a listener registered in `boot()` works too.
+</Note>
 
 ## Weight System
 
@@ -94,11 +96,10 @@ The `weight` value determines the order of items and groups. Lower values appear
 | Dashboard | 1 |
 | Catalog | 2 |
 | Sales | 3 |
-| Customers | 4 |
-| Your Extension | 5-9 |
-| Settings (footer) | 10+ |
+| Customers | 3 |
+| Your Extension | 4 and above |
 
-Choose a weight value that positions your menu in the desired location.
+Choose a weight value that positions your menu in the desired location. The Settings link sits in the sidebar footer and does not use a weight.
 
 ## Adding Sub-Items
 
@@ -109,7 +110,7 @@ $group->item(__('Blog'), function (Item $item): void {
     $item->weight(1);
     $item->setAuthorized();
     $item->route('shopper.blog.posts.index');
-    $item->setIcon('untitledui-file-02');
+    $item->setIcon('phosphor-article');
 
     // Sub-items
     $item->item(__('All Posts'), function (Item $subItem): void {
@@ -129,7 +130,7 @@ $group->item(__('Blog'), function (Item $item): void {
 ```
 
 <Info>
-Add `sh-items-has-child` to the parent item class to enable the proper dropdown styling.
+The sidebar adds the `sh-items-has-child` class to an item that has sub-items, which enables the dropdown styling.
 </Info>
 
 ## Authorization
@@ -141,7 +142,7 @@ Use Laravel's authorization system to control visibility:
 ```php
 $group->item(__('Posts'), function (Item $item): void {
     // Only show if user can manage posts
-    $item->setAuthorized(fn() => $this->user?->can('manage_posts'));
+    $item->setAuthorized($this->user->can('manage_posts'));
 
     // ... rest of configuration
 });
@@ -151,7 +152,7 @@ $group->item(__('Posts'), function (Item $item): void {
 
 ```php
 $group->item(__('Admin Settings'), function (Item $item): void {
-    $item->setAuthorized(fn() => $this->user?->hasRole('admin'));
+    $item->setAuthorized($this->user->isAdmin());
 
     // ... rest of configuration
 });
@@ -159,20 +160,21 @@ $group->item(__('Admin Settings'), function (Item $item): void {
 
 ## Adding Badges
 
-Show notification counts or labels on menu items:
+Show notification counts or labels on menu items. Every call to `badge()` adds a badge, so check the count before adding it:
 
 ```php
+use Shopper\Core\Enum\OrderStatus;
+use Shopper\Core\Models\Order;
+
 $group->item(__('Orders'), function (Item $item): void {
     // ... item configuration
 
-    // Add a badge with pending order count
-    $item->badge(function (Badge $badge): void {
-        $count = Order::pending()->count();
-        if ($count > 0) {
-            $badge->setValue($count);
-            $badge->setClass('bg-danger-500 text-white');
-        }
-    });
+    // Add a badge with the new order count
+    $count = Order::query()->where('status', OrderStatus::New)->count();
+
+    if ($count > 0) {
+        $item->badge($count, 'bg-danger-500 text-white');
+    }
 });
 ```
 
@@ -181,16 +183,16 @@ $group->item(__('Orders'), function (Item $item): void {
 Add action buttons next to menu items:
 
 ```php
-$group->item(__('Products'), function (Item $item): void {
+$group->item(__('Customers'), function (Item $item): void {
     // ... item configuration
 
-    // Add a "+" button to quickly create a product
+    // Add a "+" button to quickly create a customer
     $item->append(function (Append $append): void {
-        $append->route('shopper.products.create');
+        $append->route('shopper.customers.create');
         $append->setIcon('untitledui-plus');
-        $append->setName(__('Add Product'));
+        $append->setName(__('Add Customer'));
         $append->setClass('sh-sidebar-item-nav');
-        $append->setAuthorized(fn() => $this->user?->can('create_products'));
+        $append->setAuthorized($this->user->hasPermissionTo('add_customers'));
     });
 });
 ```
@@ -222,24 +224,26 @@ class BlogSidebar extends AbstractAdminSidebar
 
             $group->item(__('Blog'), function (Item $item): void {
                 $item->weight(1);
-                $item->setAuthorized(fn() => $this->user?->can('manage_blog'));
+                $item->setAuthorized($this->user->can('manage_blog'));
                 $item->route('shopper.blog.posts.index');
-                $item->setIcon('untitledui-edit-04');
+                $item->setIcon('phosphor-note-pencil');
 
                 // Badge for draft posts
-                $item->badge(function (Badge $badge): void {
-                    $drafts = Post::draft()->count();
-                    if ($drafts > 0) {
+                $drafts = Post::draft()->count();
+
+                if ($drafts > 0) {
+                    $item->badge(function (Badge $badge) use ($drafts): void {
                         $badge->setValue($drafts);
                         $badge->setClass('text-xs bg-warning-100 text-warning-700');
-                    }
-                });
+                    });
+                }
 
                 // Quick create button
                 $item->append(function (Append $append): void {
                     $append->route('shopper.blog.posts.create');
                     $append->setIcon('untitledui-plus');
                     $append->setName(__('New Post'));
+                    $append->setClass('sh-sidebar-item-nav');
                 });
 
                 // Sub-items
@@ -267,10 +271,10 @@ class BlogSidebar extends AbstractAdminSidebar
 
             $group->item(__('Pages'), function (Item $item): void {
                 $item->weight(2);
-                $item->setAuthorized(fn() => $this->user?->can('manage_pages'));
+                $item->setAuthorized($this->user->can('manage_pages'));
                 $item->useSpa();
                 $item->route('shopper.pages.index');
-                $item->setIcon('untitledui-file-06');
+                $item->setIcon('phosphor-file-text');
             });
         });
 
@@ -295,7 +299,7 @@ Event::listen(SidebarBuilder::class, function (SidebarBuilder $sidebar) {
         $group->item('Documentation')
             ->setUrl('https://docs.example.com')
             ->isNewTab()
-            ->setIcon('untitledui-book-open');
+            ->setIcon('phosphor-book-open');
     });
 
     $sidebar->add($menu);
@@ -307,6 +311,8 @@ Event::listen(SidebarBuilder::class, function (SidebarBuilder $sidebar) {
 Add your routes in the `routes/shopper.php` file (configured in `config/shopper/routes.php`):
 
 ```php
+use App\Http\Controllers\Shopper\CategoryController;
+use App\Http\Controllers\Shopper\PostController;
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('blog')->name('blog.')->group(function (): void {
@@ -317,5 +323,5 @@ Route::prefix('blog')->name('blog.')->group(function (): void {
 ```
 
 <Warning>
-All routes in `routes/shopper.php` are automatically prefixed with the Shopper route prefix and have the `shopper.` route name prefix. So `posts.index` becomes `shopper.blog.posts.index`.
+All routes in `routes/shopper.php` are automatically prefixed with the Shopper route prefix and have the `shopper.` route name prefix. So the `blog.posts.index` route above becomes `shopper.blog.posts.index`.
 </Warning>

@@ -22,7 +22,10 @@ The Heading component is used for main page titles. It displays a large, bold he
     <x-slot:title>Products</x-slot:title>
 
     <x-slot:action>
-        <x-filament::button tag="a" href="{{ route('shopper.products.create') }}">
+        <x-filament::button
+            type="button"
+            wire:click="$dispatch('openPanel', { component: 'shopper-slide-overs.add-product' })"
+        >
             Add Product
         </x-filament::button>
     </x-slot:action>
@@ -31,6 +34,8 @@ The Heading component is used for main page titles. It displays a large, bold he
 
 ## Slots
 
+<ApiTable name="x-shopper::heading" element="div" label="Slot">
+
 <ParamField path="title" type="Slot" required>
   The heading title. Can be plain text or a custom slot with additional elements.
 </ParamField>
@@ -38,6 +43,8 @@ The Heading component is used for main page titles. It displays a large, bold he
 <ParamField path="action" type="Slot">
   Optional slot for action buttons or controls aligned to the right.
 </ParamField>
+
+</ApiTable>
 
 ## Examples
 
@@ -129,15 +136,15 @@ For more complex titles, you can use the title as a slot:
 The Heading component is located at `packages/admin/resources/views/components/heading.blade.php`:
 
 ```blade
+@blaze
+
 <div
     {{ $attributes->twMerge(['class' => 'space-y-3 sm:flex sm:items-center sm:justify-between sm:space-x-4 sm:space-y-0']) }}
 >
     @if ($title instanceof \Illuminate\View\ComponentSlot)
         {{ $title }}
     @else
-        <h2
-            class="font-heading text-2xl font-bold text-gray-900 sm:truncate sm:text-3xl dark:text-white"
-        >
+        <h2 class="font-heading text-2xl font-bold text-gray-900 sm:truncate sm:text-3xl dark:text-white">
             {{ $title }}
         </h2>
     @endif

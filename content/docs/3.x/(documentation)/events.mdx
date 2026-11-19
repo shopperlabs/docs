@@ -163,11 +163,11 @@ The payment status follows its own state machine, `Shopper\Core\Enum\PaymentStat
 
 `OrderPaid` is dispatched by `$order->transitionPaymentTo(PaymentStatus::Paid)`, whatever moved the payment: Mark as paid in the admin panel for offline payments such as cash on delivery, Capture payment in the admin panel for an authorized payment, or the capture event of the payment provider, applied at checkout, from the provider's webhook or by the `shopper:payments:reconcile` command.
 
-`PaymentFailed` carries `$type`, a `Shopper\Payment\Enum\TransactionType` case (`Authorize`, `Capture` or `Refund`), and `$reason`, the message returned by the provider. A failure reported by the provider's webhook only dispatches the event while the payment is still pending: the order keeps its reserved stock so that the customer can try again.
+`PaymentFailed` carries `$type`, a `Shopper\Payment\Enum\TransactionType` case (`Authorize`, `Capture` or `Refund`), and `$reason`, the message returned by the provider. A payment failure reported by the provider's webhook only dispatches the event while the payment is still pending: the order keeps its reserved stock so that the customer can try again. A refund the provider reports as failed dispatches it with the `Refund` type whatever the payment status, as described in [Pending Refunds](/3.x/payments#pending-refunds).
 
 ### Orphaned Payments
 
-A customer can pay and lose the connection before the checkout creates the order. Every 15 minutes, the scheduled `shopper:payments:reconcile` command looks for provider authorizations and captures that still have no order after `reconciliation.orphan_after_minutes` in `config/shopper/payment.php` (30 by default, set with `PAYMENT_ORPHAN_AFTER_MINUTES`), and dispatches `PaymentOrphaned` for each one. Listeners run during the command and answer through three methods of the event:
+A customer can pay and lose the connection before the checkout creates the order. Every 15 minutes, the scheduled `shopper:payments:reconcile` command looks for provider authorizations and captures that still have no order after `reconciliation.orphan_after_minutes` in `config/shopper/payment.php` (30 by default, set with `PAYMENT_ORPHAN_AFTER_MINUTES`), and dispatches `PaymentOrphaned` for each one the provider has not since reported as refunded or canceled. A refund the provider has reported as failed does not count. Listeners run during the command and answer through three methods of the event:
 
 | Method | Meaning |
 |--------|---------|
@@ -175,7 +175,7 @@ A customer can pay and lose the connection before the checkout creates the order
 | `resolve()` | The listener created the order for this payment |
 | `defer()` | The payment is checked again on the next run |
 
-Shopper's cart package recognizes a payment whose reference matches a cart. With the Store API installed, a second listener completes that cart and calls `resolve()`, or `defer()` when the cart is locked or the provider does not answer. A payment recognized but not resolved is reported to your exception handler, then refunded when `config('shopper.payment.reconciliation.orphans')` is `refund` (`PAYMENT_ORPHANS`, `alert` by default). A successful refund dispatches `OrphanedPaymentRefunded`, with `$amount` set to `null`. The provider's refund webhook also dispatches it for a payment without an order, with the refunded amount when the provider sends one. A storefront that completes its checkout without the Store API can listen to `PaymentOrphaned` and complete the cart the same way.
+Shopper's cart package recognizes a payment whose reference matches a cart. With the Store API installed, a second listener completes that cart and calls `resolve()`, or `defer()` when the cart is locked or the provider does not answer. A payment recognized but not resolved is reported to your exception handler, then refunded when `config('shopper.payment.reconciliation.orphans')` is `refund` (`PAYMENT_ORPHANS`, `alert` by default). A successful refund dispatches `OrphanedPaymentRefunded`, with `$amount` set to `null`. The provider's refund webhook also dispatches it for a payment without an order, with the refunded amount when the provider sends one. A refund the provider reports as failed for a payment without an order is reported to your exception handler. A storefront that completes its checkout without the Store API can listen to `PaymentOrphaned` and complete the cart the same way.
 
 ## Shipment Events
 
@@ -298,7 +298,7 @@ The `shopper/framework` package dispatches three events from the admin panel:
 
 `TwoFactorAuthenticationDisabled` exists, but Shopper does not dispatch it when a user turns two-factor authentication off, so a listener on it never runs. The [Two-Factor Authentication](/3.x/two-factor) page covers the feature.
 
-The sidebar of the admin panel is built through its own `Shopper\Sidebar\SidebarBuilder` event. The [Extending](/3.x/extending) section shows how to add menu groups and items with it.
+The sidebar of the admin panel is built through its own `Shopper\Sidebar\SidebarBuilder` event. The [Navigation](/3.x/extending/navigation) page shows how to add menu groups and items with it.
 
 ## Listeners Shopper Registers
 

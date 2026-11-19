@@ -1,0 +1,151 @@
+---
+title: 'Empty Card'
+description: 'Compact empty state for a card or a panel, with an optional icon, description and action.'
+---
+
+import { ComponentPreview, PreviewEmptyCard, PreviewButton } from '@/components/component-preview'
+
+The empty card fills a card or a panel that has nothing to show yet. It is more compact than the [empty state](/3.x/extending/components/empty-state) of a table: an icon in a circle, a heading, a description and an optional action. The admin panel uses it for a customer without addresses, a zone without shipping options or a product without related products.
+
+## Preview
+
+The preview shows the icon, the heading and the description, centered.
+
+<ComponentPreview centered={false}>
+  <PreviewEmptyCard
+    heading="No zones available"
+    description="Create shipping zones to define where you deliver products."
+  />
+</ComponentPreview>
+
+## Usage
+
+Pass the heading, the description and the name of a Blade icon:
+
+```blade
+<x-shopper::empty-card
+    heading="No zones available"
+    description="Create shipping zones to define where you deliver products."
+    icon="untitledui-globe-02"
+/>
+```
+
+## Props
+
+Only the heading is required. Other attributes go to the wrapping `div`.
+
+<ApiTable name="x-shopper::empty-card" element="div">
+
+<ParamField path="heading" type="string" required>
+  The heading of the empty card.
+</ParamField>
+
+<ParamField path="description" type="string" default="null">
+  The text below the heading.
+</ParamField>
+
+<ParamField path="icon" type="string" default="null">
+  The name of a Blade icon, displayed in a circle above the heading. Without it, the card shows no circle.
+</ParamField>
+
+<ParamField path="action" type="Slot" default="null">
+  A button or a link displayed below the text. Pass it as a named slot.
+</ParamField>
+
+</ApiTable>
+
+## Examples
+
+The examples below add an action and leave out the icon.
+
+### With Action Button
+
+Pass a button in the `action` slot. This one sits in the points card of a loyalty member and opens the `shopper-loyalty.form` slide-over of the add-on built in [Extending the Admin Panel](/3.x/addons/admin-panel), with the member as argument:
+
+<ComponentPreview centered={false}>
+  <PreviewEmptyCard
+    heading="No points history"
+    description="Points this customer earns and spends will appear here."
+    action={<PreviewButton variant="primary">Adjust Points</PreviewButton>}
+  />
+</ComponentPreview>
+
+```blade
+<x-shopper::empty-card
+    heading="No points history"
+    description="Points this customer earns and spends will appear here."
+    icon="untitledui-coins-stacked"
+>
+    <x-slot:action>
+        <x-filament::button
+            type="button"
+            icon="untitledui-plus"
+            wire:click="$dispatch('openPanel', {
+                component: 'shopper-loyalty.form',
+                arguments: { memberId: {{ $member->id }} },
+            })"
+        >
+            Adjust Points
+        </x-filament::button>
+    </x-slot:action>
+</x-shopper::empty-card>
+```
+
+### Without Icon
+
+Leave out `icon` to display the text only.
+
+<ComponentPreview centered={false}>
+  <PreviewEmptyCard
+    heading="No addresses saved"
+    description="Customer addresses will appear here."
+    icon={false}
+  />
+</ComponentPreview>
+
+```blade
+<x-shopper::empty-card
+    heading="No addresses saved"
+    description="Customer addresses will appear here."
+/>
+```
+
+## Blade Component Source
+
+The view is `resources/views/components/empty-card.blade.php` in the `shopper/framework` package:
+
+```blade
+@blaze
+
+@props([
+    'heading',
+    'description' => null,
+    'icon' => null,
+    'action' => null,
+])
+
+<div
+    {{ $attributes->twMerge(['class' => 'flex flex-col items-center justify-center px-8 py-10 text-center']) }}
+>
+    @if ($icon)
+        <div class="bg-sh-muted text-sh-fg flex size-12 items-center justify-center rounded-full">
+            @svg($icon, 'size-5', ['aria-hidden' => 'true'])
+        </div>
+    @endif
+
+    <h3 @class(['text-sh-fg font-medium', 'mt-2' => $icon])>
+        {{ $heading }}
+    </h3>
+    @if ($description)
+        <p class="text-sh-fg-muted mx-auto mt-1 max-w-lg text-sm">
+            {{ $description }}
+        </p>
+    @endif
+
+    @if ($action)
+        <div class="mt-6">
+            {{ $action }}
+        </div>
+    @endif
+</div>
+```

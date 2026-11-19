@@ -10,45 +10,55 @@ Staff users are the people who help manage your store. Shopper allows you to cre
 The Staff management section allows you to:
 
 - Add new administrators
-- Manage existing staff accounts
+- See every staff account with its role and level of access
 - Assign roles and permissions
-- Enable/disable accounts
+- Delete the accounts of people who no longer need access
 
 ## Accessing Staff Settings
 
 1. Click on **Settings** in the sidebar
-2. Select **Staff** from the settings menu
+2. Select **Staff & permissions** from the settings menu
 
-<Frame caption="Staff List">
-  <img src="/images/v2/settings-staff.png" alt="Staff List" />
-</Frame>
+The page opens with the title **Administrators & roles**. The **Administrators accounts** table lists your staff:
+
+| Column | Description |
+|--------|-------------|
+| **Full Name** | The staff member's name and registration date. Your own row shows a **Me** badge |
+| **Email** | Login email address, with a green icon once it is verified |
+| **Role** | The role assigned to the staff member |
+| **Access** | **Full** for administrators, **Limited** for every other role |
+
+<Screenshot src="/images/v2/settings-staff.png" alt="Staff List" caption="Staff List" />
 
 ## Adding a New Admin
 
 To add a new staff member:
 
-1. Click the **Add admin** button
-2. Fill in the administrator details
-3. Assign a role
-4. Click **Save**
+1. Click the **Add administrator** button
+2. Under **Login information**, enter the **Email address** and a **Password**, or click **Generate** to create one. Turn on **Send Invite** to email the login details to the new administrator
+3. Under **Personal Information**, enter the **First name** and **Last Name**, and optionally the **Gender** and **Phone number**
+4. Under **Role Information**, pick a role in **Choose a role for this admin**
+5. Click **Save**
 
-<Frame caption="Add Administrator">
-  <img src="/images/v2/add-admin.png" alt="Add Administrator" />
-</Frame>
+The account can be used right away: its email address is marked as verified when you create it.
+
+<Screenshot src="/images/v2/add-admin.png" alt="Add Administrator" caption="Add Administrator" />
 
 ### Admin Fields
 
 | Field | Required | Description |
 |-------|----------|-------------|
+| **Email address** | Yes | Login email address (must not be used by another account) |
+| **Password** | Yes | Login password. **Generate** fills in a random 16-character password, and the eye icon shows it |
+| **Send Invite** | No | Sends the new administrator an email with their login information |
 | **First name** | Yes | Staff member's first name |
-| **Last name** | Yes | Staff member's last name |
-| **Email** | Yes | Login email address (must be unique) |
-| **Phone** | No | Contact phone number |
-| **Role** | Yes | Permission level for this user |
-| **Send invite** | No | Email login credentials |
+| **Last Name** | Yes | Staff member's last name |
+| **Gender** | No | Male or Female |
+| **Phone number** | No | Contact phone number |
+| **Choose a role for this admin** | Yes | The role of this user, picked from a list of radio buttons |
 
 <Note>
-Only administrators can assign the **Administrator** role to a new team member. For other staff members, this role does not appear in the role choices.
+Only administrators can assign the **Administrator** role to a new team member. For other staff members, this role does not appear in the role choices. A warning in the form reminds you that the Administrator role gives the same rights and permissions as yours.
 </Note>
 
 ## Staff Roles
@@ -57,10 +67,12 @@ Each staff member is assigned a role that determines what they can access:
 
 | Role | Typical Access |
 |------|----------------|
-| **Administrator** | Full access to all features |
-| **Manager** | Most features except settings |
-| **Editor** | Product and content management |
-| **Support** | Orders and customer management |
+| **Administrator** | Full access to all features. Installed with Shopper |
+| **Manager** | Installed with Shopper without any permission: give it the ones your managers need, for example everything except settings |
+| **Editor** | A role you create for product and content management |
+| **Support** | A role you create for orders and customer management |
+
+See [Roles & Permissions](/2.x/user-guide/administration/roles) to create roles and choose their permissions.
 
 <Tip>
 Create roles that match your team structure. The principle of least privilege suggests giving users only the access they need for their job.
@@ -70,39 +82,37 @@ Create roles that match your team structure. The principle of least privilege su
 
 ### Edit Staff Member
 
-1. Click on a staff member's name
-2. Update their information
-3. Click **Save**
+The staff list has no edit action: you cannot change another person's name, email address, password or role after the account is created. Instead:
+
+- Each staff member updates their own details and password from their profile (see [Your Profile](#your-profile) below)
+- To change what someone can do, change the permissions of their role on the [Roles & Permissions](/2.x/user-guide/administration/roles) page. The change applies to everyone with that role
 
 ### Disable Staff Member
 
-Instead of deleting, you can disable a staff account:
-
-- They won't be able to log in
-- Their activity history is preserved
-- Can be re-enabled later
+Shopper has no option to disable a staff account and enable it again later. To stop someone from signing in, delete their account as described below. If they come back, add them again with **Add administrator**.
 
 ### Delete Staff Member
 
 Permanently remove a staff account:
 
+1. Click the trash icon on the staff member's row in **Administrators accounts**. The same icon appears on the **Users** tab of each role
+2. Confirm the deletion
+
+- Only administrators see the trash icon, and it never appears on an administrator's row
 - Use with caution - this cannot be undone
-- Consider disabling instead for record-keeping
 
 ## Your Profile
 
-Each staff member can manage their own profile:
+Each staff member can manage their own profile. Click your avatar at the top-right of the header, then **Personal Account**:
 
-<Frame caption="User Profile">
-  <img src="/images/v2/profile.png" alt="User Profile" />
-</Frame>
+<Screenshot src="/images/v2/profile.png" alt="User Profile" caption="User Profile" />
 
 From your profile, you can:
 
 - Update personal information
 - Change your password
-- Enable two-factor authentication
-- Set notification preferences
+- Enable two-factor authentication, when it is turned on for your store
+- See the devices signed in to your account and log out your other browser sessions
 
 ## Best Practices
 
@@ -123,10 +133,10 @@ From your profile, you can:
 
 ## Security Recommendations
 
-1. **Remove inactive accounts** - Disable accounts for staff who leave
+1. **Remove inactive accounts** - Delete the accounts of staff who leave
 2. **Use role-based access** - Don't give everyone admin access
 3. **Enable two-factor** - Add an extra layer of security
-4. **Monitor activity** - Keep track of who does what
+4. **Monitor activity** - Ask staff to check the devices signed in to their account from their profile and log out the sessions they don't recognize. Shopper does not keep a history of staff actions
 5. **Regular password changes** - Encourage periodic password updates
 
 For developer details, see the [Roles & Permissions documentation](/2.x/acl).

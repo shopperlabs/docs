@@ -23,9 +23,13 @@ The Loader component displays an animated spinning indicator for loading states.
 
 The loader accepts standard HTML attributes that are merged with Tailwind classes:
 
+<ApiTable name="x-shopper::loader" element="svg" label="Attribute">
+
 <ParamField path="class" type="string" default="size-5 animate-spin">
   CSS classes to customize size and animation. Common sizes: `size-4`, `size-5`, `size-6`.
 </ParamField>
+
+</ApiTable>
 
 ## Examples
 
@@ -73,6 +77,8 @@ The loader accepts standard HTML attributes that are merged with Tailwind classe
 ## Blade Component Source
 
 ```blade
+@blaze(memo: true)
+
 <svg
     {{ $attributes->twMerge(['class' => 'size-5 animate-spin']) }}
     fill="none"

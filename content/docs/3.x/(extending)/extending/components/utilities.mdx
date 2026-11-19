@@ -1,0 +1,209 @@
+---
+title: 'Utility Components'
+description: 'Layout and form helpers of the admin panel: container, link, separator, breadcrumb, errors, dropdown link and form slide-over.'
+---
+
+These components structure a page or a form more than they display content, so they have no preview. Each one takes the classes you pass, merged with its own unless noted otherwise.
+
+## Container
+
+The container adds the horizontal padding of the admin pages, `px-4` on small screens and `px-6` from `lg`. The product pages wrap their sections in it:
+
+```blade
+<x-shopper::container class="space-y-6">
+    <x-shopper::card title="Loyalty points">
+        {{ $this->form }}
+    </x-shopper::card>
+</x-shopper::container>
+```
+
+The view:
+
+```blade
+@blaze
+
+<div {{ $attributes->twMerge(['class' => 'px-4 lg:px-6']) }}>
+    {{ $slot }}
+</div>
+```
+
+## Link
+
+The link is an `a` element with Livewire's `wire:navigate.hover`: Livewire prefetches the page when the pointer rests on the link, then swaps the page without a full reload. Use it for links between admin pages.
+
+```blade
+<x-shopper::link :href="route('shopper.products.index')" class="text-primary-600 text-sm font-medium">
+    Products
+</x-shopper::link>
+```
+
+The view passes every attribute through, without default classes:
+
+```blade
+@blaze
+
+<a {{ $attributes }} wire:navigate.hover>
+    {{ $slot }}
+</a>
+```
+
+## Separator
+
+The separator draws a horizontal line between two sections of a page, with vertical spacing around it. The account page and the inventory section of a product use it.
+
+```blade
+<x-shopper::separator />
+```
+
+It takes no attribute:
+
+```blade
+<div class="sh-separator py-8 lg:py-10">
+    <div class="border-sh-border border-t"></div>
+</div>
+```
+
+## Breadcrumb
+
+The breadcrumb renders a trail for a page: a back link on small screens, and from `sm` a dashboard icon, the links of its slot and the current page. The admin header already shows breadcrumbs built from the sidebar and from the crumbs a page declares, as shown in [Settings Items](/3.x/addons/admin-panel#settings-items), so use this component only for a page that renders its own trail.
+
+```blade
+<x-shopper::breadcrumb :back="route('shopper.loyalty.index')" :current="$member->customer->full_name">
+    <x-shopper::breadcrumb.link :link="route('shopper.loyalty.index')" title="Loyalty" />
+</x-shopper::breadcrumb>
+```
+
+### Props
+
+The back URL is required. Other attributes go to the wrapping `div`.
+
+<ApiTable name="x-shopper::breadcrumb" element="div">
+
+<ParamField path="back" type="string" required>
+  URL of the back link shown below `sm`
+</ParamField>
+
+<ParamField path="current" type="string" default="null">
+  Title of the current page, shown last
+</ParamField>
+
+</ApiTable>
+
+### Breadcrumb Link
+
+A link of the trail. The `link` prop sets the URL and the `title` prop sets the text. It renders an `x-shopper::link`, so it uses `wire:navigate.hover` too.
+
+```blade
+<x-shopper::breadcrumb.link :link="route('shopper.customers.index')" :title="__('Customers')" />
+```
+
+## Validation Errors
+
+The validation errors box lists every message of the `$errors` bag in a red panel, under the heading "Your submission contains errors. Please try again". Filament forms show their errors under each field, so use it for a form you build yourself:
+
+```blade
+<form wire:submit="redeem">
+    <x-shopper::validation-errors />
+
+    <x-shopper::label for="code" value="Gift card code" :isRequired="true" />
+    <x-shopper::forms.input id="code" wire:model="code" class="mt-1" />
+</form>
+```
+
+The view renders nothing when the bag is empty:
+
+```blade
+@if ($errors->count() > 0)
+    <div class="bg-danger-50 my-2 rounded-lg p-4">
+        <div class="flex">
+            <div class="shrink-0">
+                <svg class="text-danger-400 size-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path
+                        fill-rule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                        clip-rule="evenodd"
+                    />
+                </svg>
+            </div>
+            <div class="ml-3">
+                <h3 class="text-danger-800 text-sm leading-5 font-medium">
+                    {{ __('shopper::forms.error') }}
+                </h3>
+                <div class="text-danger-700 mt-2 text-sm leading-5">
+                    <ul class="list-disc space-y-1 pl-5">
+                        @foreach ($errors->all() as $message)
+                            <li>{{ $message }}</li>
+                        @endforeach
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+@endif
+```
+
+## Dropdown Link
+
+The dropdown link is a menu item, styled for dropdowns like the account menu at the top of the admin panel. It renders an `x-shopper::link`, so it takes an `href`.
+
+```blade
+<x-shopper::dropdown-link :href="route('shopper.profile')">
+    Profile
+</x-shopper::dropdown-link>
+```
+
+## Form Slide-over
+
+The form slide-over is the layout of every form slide-over in the admin panel: a header with the title, the description and a close button, a scrolling body, and a footer with a Cancel and a Save button. Shopper's slide-overs render it from the view `shopper::livewire.slide-overs.form`:
+
+```blade
+<x-shopper::form-slider-over
+    :action="$this->getFormAction()"
+    :title="$this->getTitle()"
+    :description="$this->getDescription()"
+>
+    {{ $this->form }}
+</x-shopper::form-slider-over>
+```
+
+A slide-over that uses the `Shopper\Traits\InteractsWithSlideOverForm` trait gets these three methods, which read its `$action`, `$title` and `$description` properties, and renders that view. In your own view, pass the values directly:
+
+```blade
+<x-shopper::form-slider-over action="save" title="Adjust Points" description="Add or remove points from this member's balance.">
+    {{ $this->form }}
+</x-shopper::form-slider-over>
+```
+
+### Props [#props-1]
+
+The action and the title are required.
+
+<ApiTable name="x-shopper::form-slider-over" builtOn="x-shopper::slideover-card">
+
+<ParamField path="action" type="string" required>
+  Livewire method called when the form is submitted
+</ParamField>
+
+<ParamField path="title" type="string" required>
+  Title of the slide-over
+</ParamField>
+
+<ParamField path="description" type="string" default="null">
+  Text below the title
+</ParamField>
+
+</ApiTable>
+
+### Slots
+
+The component has a single slot.
+
+<ApiTable name="x-shopper::form-slider-over" builtOn="x-shopper::slideover-card" label="Slot">
+
+<ParamField path="default">
+  The form content, usually `{{ $this->form }}`
+</ParamField>
+
+</ApiTable>
+
+The footer is fixed: a Cancel button that dispatches `closePanel`, and a Save button that submits the form and shows a [loader](/3.x/extending/components/loader) while the action runs. For other buttons, write the slide-over's markup yourself.

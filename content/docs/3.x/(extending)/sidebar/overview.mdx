@@ -1,0 +1,80 @@
+---
+title: Sidebar Package
+description: The shopper/sidebar package builds the Shopper admin sidebar and any Laravel sidebar, with Blade views, a Livewire component and an Alpine.js store.
+---
+
+The `shopper/sidebar` package builds sidebars for Laravel applications. You describe groups and entries in PHP, the package renders them with Blade views that you can publish and restyle, and an Alpine.js store keeps the open, collapsed and active states in the browser. The Shopper admin panel draws its own sidebar with it. The package started as a fork of [SpartnerNL/Laravel-Sidebar](https://github.com/SpartnerNL/Laravel-Sidebar) and was rewritten for Livewire and Alpine.js.
+
+## Features
+
+The package covers the server side and the browser side of a sidebar:
+
+- Blade views for the menu, groups, entries, badges, quick actions and breadcrumbs, which you publish and restyle.
+- A `sidebar` Livewire component that renders a registered sidebar and renders it again on the `sidebar:refresh` event.
+- An Alpine.js store for the mobile, collapsed and folded-group states, saved in `localStorage`.
+- Extension through Laravel events: the Shopper admin fires one event, and each listener adds its groups and entries.
+- Authorization on groups, entries, badges and quick actions.
+- Breadcrumbs built from the active entry of the sidebar, plus the crumbs a page adds.
+- Optional caching, shared by every user or kept per user.
+
+## Architecture
+
+A sidebar is a class that implements the `Shopper\Sidebar\Contracts\Sidebar` contract and fills a menu in its `build()` method. The menu holds groups, and each group holds entries.
+
+### Menu
+
+The menu is the root of a sidebar. `$menu->group()` creates a group, or returns the group that already has that name, so several classes can add entries to the same group. Groups are sorted by weight, lowest first.
+
+### Group
+
+A group is a set of entries under an optional heading. It has a weight, can hide its heading with `hideHeading()`, and can be made collapsible with `collapsible()`: its heading then becomes a button that folds the entries, and the store remembers the folded groups.
+
+### Item
+
+An item is a single entry of the sidebar. Its builder methods cover the link, the display and the behavior of the entry:
+
+| Method | Description |
+|--------|-------------|
+| `route($name, $parameters)`, `setUrl($url)` | The link of the entry, from a route name or a URL. |
+| `setIcon($icon, $type, $iconClass, $attributes)` | A Blade Icons name (`blade`, the default) or raw SVG markup (`svg`). |
+| `weight($weight)` | The position among the other entries of the group, lowest first. |
+| `setAuthorized($authorized)` | Hides the entry and its sub-items when `false`. |
+| `badge($value, $class)` | Adds a badge, such as a count of new orders. |
+| `append($route, $icon, $name)` | Adds a quick action link after the entry, such as a button that opens a creation form. |
+| `item($name, $callback)` | Adds a sub-item. |
+| `isActiveWhen($pattern)` | Marks the entry active for a path pattern instead of its own URL. |
+| `isNewTab()` | Opens the link in a new tab. |
+| `useSpa()` | Opens the link with Livewire's `wire:navigate`, without a full page reload. |
+| `setItemClass()`, `setActiveClass()`, `setParentItemClass()` | CSS classes for the link, the link while active, and the list element. |
+| `toggleIcon()`, `toggleActiveIcon()` | The chevron of an entry that has sub-items, closed and open. |
+
+[Menu Item API](/3.x/sidebar/standalone#menu-item-api) shows each method in use.
+
+### Contracts
+
+Every part of the sidebar is a contract. The service provider binds each builder contract to a class of the `Shopper\Sidebar\Domain` namespace, so binding your own class to a contract in a service provider replaces the default one everywhere:
+
+| Contract | Role | Default class |
+|----------|------|---------------|
+| `Shopper\Sidebar\Contracts\Sidebar` | A sidebar: `build()` and `getMenu()` | None, you write it |
+| `Shopper\Sidebar\Contracts\Builder\Menu` | The root of a sidebar | `DefaultMenu` |
+| `Shopper\Sidebar\Contracts\Builder\Group` | A group of entries | `DefaultGroup` |
+| `Shopper\Sidebar\Contracts\Builder\Item` | An entry | `DefaultItem` |
+| `Shopper\Sidebar\Contracts\Builder\Badge` | A badge on an entry | `DefaultBadge` |
+| `Shopper\Sidebar\Contracts\Builder\Append` | A quick action after an entry | `DefaultAppend` |
+
+## Use Cases
+
+The package works in two kinds of projects: a Laravel application that builds its own sidebar, and a Shopper store that adds entries to the admin sidebar.
+
+### Standalone Laravel Applications
+
+Any Laravel application that runs Livewire can build sidebars with the package, for a back office or a customer account area. See the [Standalone Installation](/3.x/sidebar/standalone) guide.
+
+### Extending Shopper
+
+The Shopper admin builds its sidebar from an event. Your application adds groups and entries with a listener, as described in [Extending Shopper](/3.x/sidebar/shopper-extension). An add-on registers its sidebar class with `addonSidebar()` instead, as described in [Sidebar Navigation](/3.x/addons/admin-panel#sidebar-navigation).
+
+## Requirements
+
+The package needs the PHP, Laravel and Livewire versions that Shopper needs, listed in [Laravel and Package Versions](/3.x/requirements#laravel-and-package-versions). Alpine.js, which runs the sidebar store, ships with Livewire.

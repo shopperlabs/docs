@@ -7,11 +7,9 @@ When a customer places an order on your store, it appears in the **Orders** sect
 
 ## Order List
 
-Click **Orders** in the sidebar to see all your orders. The list shows each order's number, date, total amount, and three status badges that tell you where the order stands at a glance.
+Click **Orders** in the sidebar to see all your orders. The list has the columns **#** (order number), **Date**, **Status**, **Price amount**, **Purchased** (the ordered items), and **Customer**. The **Status** column shows a payment badge and a shipping badge, or a single **Cancelled** or **Archived** badge, so you see where the order stands at a glance. The **Currency**, **Zone**, and **Channel** columns are hidden by default; turn them on from the column selector above the table.
 
-<Frame>
-  <img src="/images/v2/orders.png" alt="Orders list with status badges" />
-</Frame>
+<Screenshot src="/images/v2/orders.png" alt="Orders list with status badges" />
 
 ### Tabs
 
@@ -32,11 +30,9 @@ Click the filter icon to narrow down your list. You can filter by order number, 
 
 ## Order Detail
 
-Click on any order to open its detail page. The page is split into two areas: the main content on the left and customer information on the right.
+Click the eye icon (**View details**) on an order to open its detail page. The page is split into two areas: the main content on the left and customer information on the right.
 
-<Frame>
-  <img src="/images/v2/order-detail.png" alt="Order detail page" />
-</Frame>
+<Screenshot src="/images/v2/order-detail.png" alt="Order detail page" />
 
 ### Header
 
@@ -52,7 +48,7 @@ The header stays visible as you scroll. It shows:
 
 The left side of the page contains three sections:
 
-**Fulfillment**. A visual progress bar showing where the order is in the fulfillment process (New → Processing → Shipped → Completed). If there are items that haven't been assigned to a shipment yet, a **Create Shipping Label** button appears here.
+**Fulfillment**. A visual progress bar showing where the order is in the fulfillment process (**New**, **Processing**, **Shipped**, **Completed**). If there are items that haven't been assigned to a shipment yet and the order is not completed, cancelled, or archived, a **Create Shipping Label** button appears here.
 
 **Products**. The list of items in the order with their thumbnail, name, quantity, fulfillment status badge, and price.
 
@@ -65,7 +61,7 @@ The right side shows:
 - **Customer profile**. Name, avatar, and a link to their full profile. Below that, how long they've been a customer and how many orders they've placed.
 - **Contact information**. Email and phone number.
 - **Shipping address**. The delivery address for this order.
-- **Billing address**. Displayed separately, or "Same address" if it matches the shipping address.
+- **Billing address**. Displayed separately, or **Same as shipping address** if it matches the shipping address.
 - **Private notes**. A text field where you can leave internal comments. Only your team can see these.
 
 ## Order Status
@@ -121,9 +117,7 @@ The actions available depend on the current state of the order. They appear in t
 
 ### Capture Payment
 
-<Frame>
-  <img src="/images/v2/order-capture-button.png" alt="Capture payment button" />
-</Frame>
+<Screenshot src="/images/v2/order-capture-button.png" alt="Capture payment button" />
 
 Appears when the payment status is **Authorized**. Clicking it charges the customer for the authorized amount. A confirmation dialog will appear since this action cannot be undone.
 
@@ -143,10 +137,10 @@ The dropdown contains context-sensitive actions:
 
 | Action | When it appears | What it does |
 |--------|-----------------|--------------|
-| **Start processing** | Order is **New** | Changes order status to Processing and sets item fulfillment to Preparing |
-| **Mark as paid** | Payment is **Pending** or **Authorized** | Changes payment status directly to Paid (without going through the payment provider) |
+| **Start processing** | Order is **New** | Changes order status to Processing. The items' fulfillment status does not change |
+| **Mark as paid** | Payment is **Pending** or **Authorized** | Changes payment status directly to Paid (without going through the payment provider). A **New** order also moves to Processing |
 | **Mark complete** | Order is **Processing** and payment is **Paid** | Changes order status to Completed |
-| **Cancel order** | Order can be cancelled | Cancels the order and records the cancellation date |
+| **Cancel Order** | Order can be cancelled | Cancels the order and records the cancellation date |
 
 ## Fulfillment
 
@@ -156,57 +150,53 @@ Fulfillment is the process of getting the ordered items to the customer. Shopper
 
 When an order has items that haven't been shipped yet, the **Create Shipping Label** button appears in the fulfillment section.
 
-<Frame>
-  <img src="/images/v2/order-fulfillment.png" alt="Fulfillment section" />
-</Frame>
+<Screenshot src="/images/v2/order-fulfillment.png" alt="Fulfillment section" />
 
-Clicking it opens a panel where you:
+Clicking it opens the **Create Shipping Label** panel, where you:
 
-1. **Select a carrier**. Choose from your configured shipping carriers
-2. **Add tracking info** (optional). Enter a tracking number and tracking URL
-3. **Select items**. Pick which items to include in this shipment
+1. **Choose the Carrier Service**. Pick one of your enabled carriers. The field starts with the carrier of the shipping option the customer chose
+2. **Add tracking info** (optional). Enter a **Tracking number** and a **Tracking URL**
+3. **Check the Items to fulfill**. Every item not yet in a shipment is listed with its product, quantity, and price. Remove the items that are not in this package with the trash icon; at least one item must stay
 
-<Frame>
-  <img src="/images/v2/order-create-shipping-label.png" alt="Create shipping label panel" />
-</Frame>
+The right side of the panel shows the order summary and the shipping address. Click **Save** to create the shipment.
 
-Once created, the shipment appears in the **Shipments** page and the selected items are marked as assigned.
+<Screenshot src="/images/v2/order-create-shipping-label.png" alt="Create shipping label panel" />
+
+Once created, the shipment appears in the **Shipments** page with the status **Label created**, and the selected items are assigned to it. Their fulfillment status stays **Awaiting fulfillment** until the carrier picks up the package.
 
 ### Partial Shipments
 
 You don't have to ship everything at once. If an order has 5 items and only 3 are ready, create a shipment with those 3 items. The remaining 2 stay as unfulfilled and you can create a second shipment later.
 
-The shipping status updates automatically:
-- First shipment created → **Partially shipped**
-- All items shipped → **Shipped**
-- First package delivered → **Partially delivered**
-- All packages delivered → **Delivered**
+The shipping status updates automatically from the shipment events (see [Adding Tracking Events](#adding-tracking-events)), not when you create the shipment:
+- A shipment is **Picked up** while other items are not shipped yet: **Partially shipped**
+- Every item is in a shipment that was picked up: **Shipped**
+- Some items are delivered: **Partially delivered**
+- Every item is delivered: **Delivered**
+
+When the first shipment is picked up, a **New** order also moves to **Processing**.
 
 ## Shipments
 
-The **Shipments** page gives you a dedicated view of all shipments across your orders. Access it from the sidebar under Orders.
+The **Shipments** page gives you a dedicated view of all shipments across your orders. Access it from the sidebar under Orders. Each row shows the **Shipment ID**, the latest **Shipment Event**, the **Status**, **Shipped at**, the **Order Number**, and the **Carrier Service**.
 
-<Frame>
-  <img src="/images/v2/shipments.png" alt="Shipments page" />
-</Frame>
+<Screenshot src="/images/v2/shipments.png" alt="Shipments page" />
 
 ### Tabs
 
 | Tab | Shows |
 |-----|-------|
 | **All** | Every shipment |
-| **Pending** | Shipments with labels created but not yet picked up |
-| **In Transit** | Shipments that have been picked up and are on their way |
+| **Label created** | Shipments with labels created but not yet picked up |
+| **In transit** | Shipments that are picked up, in transit, at a sorting center, or out for delivery |
 | **Delivered** | Shipments that reached their destination |
-| **Failed** | Shipments where delivery failed |
+| **Delivery failed** | Shipments where delivery failed |
 
 ### Shipment Detail
 
-Click the eye icon on any shipment to open its detail panel. This panel shows:
+Click the **Manage shipment** icon (sliders) on a shipment to open its detail panel. To change only the carrier service or the tracking details, use the pencil icon (**Edit**) instead. The detail panel shows:
 
-<Frame>
-  <img src="/images/v2/shipment-detail.png" alt="Shipment detail panel" />
-</Frame>
+<Screenshot src="/images/v2/shipment-detail.png" alt="Shipment detail panel" />
 
 **Tracking progress**. A 5-step visual tracker:
 
@@ -236,11 +226,13 @@ Click the eye icon on any shipment to open its detail panel. This panel shows:
 
 ### Adding Tracking Events
 
-Click **Add event** in the shipment detail panel to log a new tracking update. Select the status, set the date, and optionally add a location and description. This is useful when you receive updates from your carrier and want to keep the timeline accurate.
+Click **Add event** in the shipment detail panel to log a new tracking update. The **Status** list only offers the statuses that can follow the current one (after **Label created**, for example: **Picked up** or **Returned**). Set **Occurred at**, which cannot be earlier than the last event, and optionally add a **Location** and a **Description**. This is useful when you receive updates from your carrier and want to keep the timeline accurate. Once a shipment is **Returned**, no status can follow and the **Add event** button disappears.
+
+Recording **Picked up** marks the shipment's items as shipped and updates the order's shipping status. Recording **Delivered** has the same effect as **Mark as delivered** below.
 
 ### Marking as Delivered
 
-When a shipment arrives, click **Mark as delivered**. This updates the shipment status and all its items to Delivered. If this was the last pending shipment on the order, the order automatically moves to **Completed**.
+When a shipment is **Out for delivery**, a **Mark as delivered** button appears on its row in the **Shipments** table. Click it and confirm. This updates the shipment and its items to Delivered. When every item of the order is delivered and the order is **Processing**, the order automatically moves to **Completed**.
 
 ## Typical Order Flow
 
@@ -254,16 +246,16 @@ Here's how a standard order moves through the system:
     Depending on your payment method, the payment status changes to **Paid** (automatic capture) or **Authorized** (manual capture). If authorized, you capture it when ready.
   </Step>
   <Step title="Start processing">
-    Click **Start processing** to indicate you're preparing the order. Items move to **Preparing** status.
+    Click **Start processing** to indicate you're preparing the order. The order moves to **Processing**.
   </Step>
   <Step title="Create shipment">
-    Click **Create Shipping Label**, select a carrier, add tracking info, and pick the items to ship. The shipping status updates to **Shipped** (or **Partially shipped** if not all items are included).
+    Click **Create Shipping Label**, check the carrier service, add tracking info, and keep the items to ship. The shipment starts as **Label created**.
   </Step>
   <Step title="Track delivery">
-    Add tracking events as the carrier provides updates. The shipment timeline shows the package's journey.
+    Add tracking events as the carrier provides updates. When you record **Picked up**, the shipping status changes to **Shipped** (or **Partially shipped** if some items are not in a shipment yet). The shipment timeline shows the package's journey.
   </Step>
   <Step title="Delivery confirmed">
-    Mark the shipment as delivered. The order status automatically changes to **Completed**.
+    Mark the shipment as delivered. Once every item is delivered, the order status automatically changes to **Completed**.
   </Step>
 </Steps>
 
@@ -278,37 +270,24 @@ A cart is considered abandoned when it has items but no activity for a configura
 To see abandoned carts:
 
 1. Go to **Orders** in the sidebar
-2. Click the **Abandoned Carts** tab
+2. Click **Abandoned Carts**, listed under **Orders**. It opens its own page
 
-<Frame>
-  <img src="/images/v2/ug-abandoned-carts.png" alt="Abandoned carts list" />
-</Frame>
+<Screenshot src="/images/v2/ug-abandoned-carts.png" alt="Abandoned carts list" />
 
-{/* SCREENSHOT NEEDED: The Abandoned Carts page showing a table with columns:
-    Cart ID, Customer name (or "Guest"), Item count, Currency badge, Channel,
-    Created date, Last activity date. Show 3-4 rows with a mix of guest and
-    logged-in customers. */}
-
-The abandoned carts list shows each cart with the customer name (or "Guest" for anonymous shoppers), the number of items, the channel, and when the cart was last active.
+The abandoned carts list shows each cart's number (**#**), the **Customer** (or **Guest** for shoppers who were not logged in), the number of **Items**, the **Currency**, the **Channel**, when the cart was created (**Created At**), and when it was last active (**Last Activity**). You can filter the list by customer, creation date, or channel.
 
 ### Cart Details
 
-Click on any abandoned cart to view its contents. The detail panel shows the items the customer had in their cart and their contact information (if they were logged in).
+Click the eye icon (**View details**) on an abandoned cart to view its contents. The detail panel shows when the cart was created, the customer's name and email (or **Guest**), the channel, the items with their quantity and price, and the shipping and billing addresses if the customer entered them.
 
-<Frame>
-  <img src="/images/v2/ug-abandoned-cart-detail.png" alt="Abandoned cart detail" />
-</Frame>
-
-{/* SCREENSHOT NEEDED: The abandoned cart detail slide-over showing:
-    Customer info (name, email), cart items with product thumbnails,
-    quantities, and prices. Show 2-3 items in the cart. */}
+<Screenshot src="/images/v2/ug-abandoned-cart-detail.png" alt="Abandoned cart detail" />
 
 ### What You Can Learn
 
 Abandoned carts help you understand:
 
 - **Which products are being abandoned** to identify pricing or UX issues
-- **At what stage customers leave** to improve your checkout flow
+- **How far customers got in checkout** to improve your checkout flow: with the starter kit checkout, a cart with a shipping address got past the address step
 - **Whether logged-in customers abandon more than guests** to target recovery efforts
 
 <Tip>
@@ -317,7 +296,7 @@ Look for patterns in abandoned carts. If many customers abandon carts with the s
 
 ### Automatic Cleanup
 
-Abandoned carts older than 30 days are automatically cleaned up to keep your database lean. This threshold is configurable by your developer in the [Cart configuration](/2.x/cart#pruning).
+Shopper includes a cleanup task that deletes unfinished carts not updated for 30 days, to keep your database lean. It runs automatically once your developer schedules it, and they can change the 30-day threshold in the [Cart configuration](/2.x/cart#pruning).
 
 For developer details on querying abandoned carts and building recovery email flows, see the [Cart documentation](/2.x/cart#abandoned-carts).
 

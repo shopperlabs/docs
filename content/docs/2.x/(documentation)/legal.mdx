@@ -64,9 +64,7 @@ The installer seeds four legal pages through `Shopper\Core\Database\Seeders\Lega
 
 Write the content of each page, turn on the **Enabled** toggle and click **Save**. Only enabled pages are returned by `Legal::enabled()` in your front-end. The seeded pages start enabled and without content, and the form requires content to save, even to disable a page: write the content of a page before you link to it from your store.
 
-<Frame>
-  <img src="/images/v2/legal.png" alt="legal settings" />
-</Frame>
+<Screenshot src="/images/v2/legal.png" alt="legal settings" />
 
 <Warning>
 Shopper does not generate the routes for the legal pages, you should set them up yourself. As mentioned in the [introduction](/2.x/getting-started#headless-from-day-one) of this documentation, Shopper provides the admin panel and your application builds the storefront.

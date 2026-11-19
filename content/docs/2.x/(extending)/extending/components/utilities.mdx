@@ -17,6 +17,8 @@ Page content wrapper with responsive horizontal padding.
 
 **Source:**
 ```blade
+@blaze
+
 <div {{ $attributes->twMerge(['class' => 'px-4 lg:px-6']) }}>
     {{ $slot }}
 </div>
@@ -36,6 +38,8 @@ Internal navigation link with Livewire `wire:navigate.hover` for SPA-like naviga
 
 **Source:**
 ```blade
+@blaze
+
 <a {{ $attributes }} wire:navigate.hover>
     {{ $slot }}
 </a>
@@ -53,6 +57,8 @@ Visual divider between content sections.
 
 **Source:**
 ```blade
+@blaze(fold: true)
+
 <div class="sh-separator py-8 lg:py-10">
     <div class="border-t border-gray-200 dark:border-white/20"></div>
 </div>
@@ -67,7 +73,7 @@ Navigation breadcrumb with mobile back link support.
 ```blade
 <x-shopper::breadcrumb :back="route('shopper.products.index')" current="iPhone 15">
     <x-shopper::breadcrumb.link
-        :href="route('shopper.products.index')"
+        :link="route('shopper.products.index')"
         :title="__('Products')"
     />
 </x-shopper::breadcrumb>
@@ -75,16 +81,25 @@ Navigation breadcrumb with mobile back link support.
 
 ### Props
 
-| Prop | Type | Description |
-|------|------|-------------|
-| `back` | string | URL for mobile back link |
-| `current` | string | Current page title (optional) |
+<ApiTable name="x-shopper::breadcrumb" element="div">
+
+<ParamField path="back" type="string" required>
+  URL for mobile back link
+</ParamField>
+
+<ParamField path="current" type="string" default="null">
+  Current page title
+</ParamField>
+
+</ApiTable>
 
 ### Breadcrumb Link
 
+The `link` prop sets the URL and the `title` prop sets the text:
+
 ```blade
 <x-shopper::breadcrumb.link
-    :href="route('shopper.categories.index')"
+    :link="route('shopper.categories.index')"
     :title="__('Categories')"
 />
 ```
@@ -107,7 +122,13 @@ Automatically displays all validation errors from `$errors->all()`.
     <div class="bg-danger-50 my-2 rounded-lg p-4">
         <div class="flex">
             <div class="shrink-0">
-                <!-- Error icon -->
+                <svg class="text-danger-400 size-5" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                    <path
+                        fill-rule="evenodd"
+                        d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
+                        clip-rule="evenodd"
+                    />
+                </svg>
             </div>
             <div class="ml-3">
                 <h3 class="text-danger-800 text-sm leading-5 font-medium">
@@ -142,31 +163,44 @@ Menu item for dropdown menus.
 
 ## Form Slide-over
 
-Wrapper for forms displayed in slide-over panels.
+Wrapper for forms displayed in slide-over panels. Use it in the view of a slide-over component:
 
 ```blade
-<x-shopper::form-slider-over action="save" close-panel="form-panel">
-    <x-slot:title>Edit Product</x-slot:title>
-
-    <!-- Form content -->
-
-    <x-slot:buttons>
-        <x-filament::button type="submit">Save</x-filament::button>
-    </x-slot:buttons>
+<x-shopper::form-slider-over
+    action="save"
+    title="Edit Supplier"
+    description="Update the supplier contact details."
+>
+    {{ $this->form }}
 </x-shopper::form-slider-over>
 ```
 
 ### Props
 
-| Prop | Type | Description |
-|------|------|-------------|
-| `action` | string | Livewire method to call on submit |
-| `close-panel` | string | Panel name to close after submit |
+<ApiTable name="x-shopper::form-slider-over" builtOn="x-shopper::slideover-card">
+
+<ParamField path="action" type="string" required>
+  Livewire method to call on submit
+</ParamField>
+
+<ParamField path="title" type="string" required>
+  Slide-over header title
+</ParamField>
+
+<ParamField path="description" type="string" default="null">
+  Text below the title
+</ParamField>
+
+</ApiTable>
 
 ### Slots
 
-| Slot | Description |
-|------|-------------|
-| `title` | Slide-over header title |
-| `default` | Form content |
-| `buttons` | Footer action buttons |
+<ApiTable name="x-shopper::form-slider-over" builtOn="x-shopper::slideover-card" label="Slot">
+
+<ParamField path="default">
+  Form content
+</ParamField>
+
+</ApiTable>
+
+The footer always shows a Cancel button, which dispatches `closePanel`, and a Save button that submits the form.

@@ -1,0 +1,178 @@
+---
+title: 'Heading'
+description: 'Page-level heading with a title and an optional action slot for buttons.'
+---
+
+import { ComponentPreview, PreviewHeading, PreviewButton } from '@/components/component-preview'
+
+The heading displays the title at the top of a page, with an optional slot for the buttons that act on the page. Every index page of the admin panel starts with one: products, categories, customers and the others.
+
+## Preview
+
+The preview shows a page title with a primary button on the right.
+
+<ComponentPreview centered={false}>
+  <PreviewHeading title="Products">
+    <PreviewButton variant="primary">Add Product</PreviewButton>
+  </PreviewHeading>
+</ComponentPreview>
+
+## Usage
+
+Pass the title as an attribute and the buttons in the `action` slot. The products page opens its creation slide-over this way:
+
+```blade
+<x-shopper::heading title="Products">
+    <x-slot:action>
+        @can('products.create')
+            <x-filament::button
+                type="button"
+                wire:click="$dispatch('openPanel', { component: 'shopper-slide-overs.add-product' })"
+            >
+                Add Product
+            </x-filament::button>
+        @endcan
+    </x-slot:action>
+</x-shopper::heading>
+```
+
+On small screens the title and the action stack. From the `sm` breakpoint they sit on one line, the action aligned to the right.
+
+## Props and Slots [#slots]
+
+The heading takes one prop and one named slot.
+
+<ApiTable name="x-shopper::heading" element="div">
+
+<ParamField path="title" type="string | Slot" default="null">
+  The page title. A string is rendered in an `h2` with the admin panel's title styles. A slot is printed as is, without the `h2`, so it brings its own markup.
+</ParamField>
+
+<ParamField path="action" type="Slot">
+  Buttons or other controls, displayed on the right of the title.
+</ParamField>
+
+</ApiTable>
+
+## Examples
+
+The examples below cover a title alone, one or several actions, and a custom title.
+
+### Simple Heading
+
+Without the `action` slot, the heading only shows the title.
+
+<ComponentPreview centered={false}>
+  <PreviewHeading title="Dashboard" />
+</ComponentPreview>
+
+```blade
+<x-shopper::heading title="Dashboard" />
+```
+
+### Heading with Action Button
+
+The categories page opens the category form in a slide-over:
+
+<ComponentPreview centered={false}>
+  <PreviewHeading title="Categories">
+    <PreviewButton variant="primary">Add Category</PreviewButton>
+  </PreviewHeading>
+</ComponentPreview>
+
+```blade
+<x-shopper::heading title="Categories">
+    <x-slot:action>
+        @can('categories.create')
+            <x-filament::button
+                type="button"
+                wire:click="$dispatch('openPanel', { component: 'shopper-slide-overs.category-form' })"
+            >
+                Add Category
+            </x-filament::button>
+        @endcan
+    </x-slot:action>
+</x-shopper::heading>
+```
+
+### Heading with Multiple Actions
+
+Wrap several buttons in a flex container. The methods called here, `export` and `create`, belong to your Livewire component:
+
+<ComponentPreview centered={false}>
+  <PreviewHeading title="Gift Cards">
+    <div className="flex items-center gap-2">
+      <PreviewButton variant="secondary">Export</PreviewButton>
+      <PreviewButton variant="primary">New Gift Card</PreviewButton>
+    </div>
+  </PreviewHeading>
+</ComponentPreview>
+
+```blade
+<x-shopper::heading title="Gift Cards">
+    <x-slot:action>
+        <div class="flex items-center gap-2">
+            <x-filament::button color="gray" wire:click="export">
+                Export
+            </x-filament::button>
+            <x-filament::button wire:click="create">
+                New Gift Card
+            </x-filament::button>
+        </div>
+    </x-slot:action>
+</x-shopper::heading>
+```
+
+### Custom Title Slot
+
+Pass a `title` slot to show more than text, like a badge above the title. The slot replaces the `h2`, so add it yourself with the same classes. The product edit page does this to show the product type:
+
+```blade
+<x-shopper::heading>
+    <x-slot:title>
+        <div class="space-y-2">
+            <x-filament::badge color="success" class="inline-flex">
+                Published
+            </x-filament::badge>
+
+            <h2 class="font-heading text-sh-fg text-2xl font-bold sm:truncate sm:text-3xl sm:leading-9">
+                Leather Weekender Bag
+            </h2>
+        </div>
+    </x-slot:title>
+
+    <x-slot:action>
+        <x-filament::button color="danger" wire:click="unpublish">
+            Unpublish
+        </x-filament::button>
+    </x-slot:action>
+</x-shopper::heading>
+```
+
+## Blade Component Source
+
+The view is `resources/views/components/heading.blade.php` in the `shopper/framework` package:
+
+```blade
+@blaze
+
+@props([
+    'title' => null,
+])
+
+<div
+    {{ $attributes->twMerge(['class' => 'space-y-3 sm:flex sm:items-center sm:justify-between sm:space-x-4 sm:space-y-0']) }}
+>
+    @if ($title instanceof \Illuminate\View\ComponentSlot)
+        {{ $title }}
+    @else
+        <h2 class="font-heading text-sh-fg text-2xl font-bold sm:truncate sm:text-3xl">
+            {{ $title }}
+        </h2>
+    @endif
+
+    @isset($action)
+        {{ $action }}
+    @endisset
+</div>
+```

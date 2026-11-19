@@ -12,39 +12,37 @@ Shopper supports both **tax-inclusive pricing** (VAT, common in Europe where tax
 1. Click on **Settings** in the sidebar
 2. Select **Taxes** from the settings menu
 
-<Frame>
-  <img src="/images/v2/taxes-list.png" alt="Tax settings page" />
-</Frame>
+<Screenshot src="/images/v2/taxes-list.png" alt="Tax settings page" />
 
 ## Creating a Tax Zone
 
 A tax zone maps to a country (and optionally a province/state). To create one:
 
-1. Click the **Add tax zone** button
-2. Select the country
-3. Optionally enter a province/state code (e.g., "CA" for California)
-4. Choose whether prices include tax (**tax-inclusive**) or tax is added at checkout (**tax-exclusive**)
+1. Click the **plus icon** next to the **Taxes** heading. The **Add tax zone** panel opens
+2. Select the **Country**
+3. Optionally enter a **Province / State code** in ISO 3166-2 format (e.g., "US-CA" for California)
+4. Turn on **Incl. tax** if your prices include tax (**tax-inclusive**), or leave it off if tax is added at checkout (**tax-exclusive**)
 5. Click **Save**
 
-<Frame>
-  <img src="/images/v2/tax-zone-form.png" alt="Create tax zone form" />
-</Frame>
+<Screenshot src="/images/v2/tax-zone-form.png" alt="Create tax zone form" />
 
 ### Tax Zone Fields
 
 | Field | Required | Description |
 |-------|----------|-------------|
 | **Country** | Yes | The country this tax zone applies to |
-| **Province/State** | No | A specific province or state code (e.g., "CA", "NY"). Leave empty for country-wide rules |
-| **Name** | No | A label to identify this zone (e.g., "Standard VAT", "California Sales Tax") |
-| **Tax Inclusive** | Yes | If ON, prices already include tax (VAT). If OFF, tax is added at checkout (sales tax) |
+| **Province / State code** | No | A province or state code in ISO 3166-2 format, country code first (e.g., "US-CA", "US-NY", "FR-IDF"). Leave empty for country-wide rules |
+| **Name** | No | A display name for this zone (e.g., "California", "Île-de-France") |
+| **Incl. tax** | No | If ON, prices already include tax (VAT). If OFF, tax is added at checkout (sales tax). The tax zones list shows an **Incl. tax** or **Excl. tax** badge |
+| **Tax provider** | No | Leave on **System (default)** to use the rates you set below. Other providers appear here once your developer has enabled them |
+| **Metadata** | No | Optional key-value data for custom use |
 
 ### Tax-Inclusive vs Tax-Exclusive
 
 | Setting | How it works | Common in |
 |---------|-------------|-----------|
-| **Tax Inclusive (ON)** | A product listed at 100 EUR already includes tax. The tax amount is extracted from the price. | Europe (VAT), Australia (GST) |
-| **Tax Exclusive (OFF)** | A product listed at $100 has tax added on top at checkout (e.g., $100 + $10 tax = $110). | United States, Canada |
+| **Incl. tax** ON | A product listed at 100 EUR already includes tax. The tax amount is extracted from the price. | Europe (VAT), Australia (GST) |
+| **Incl. tax** OFF (**Excl. tax**) | A product listed at $100 has tax added on top at checkout (e.g., $100 + $10 tax = $110). | United States, Canada |
 
 ## Adding Tax Rates
 
@@ -53,14 +51,12 @@ Each tax zone needs at least one tax rate. The **default rate** applies to all p
 To add a rate:
 
 1. Select a tax zone from the list
-2. Click **Add rate**
-3. Enter the rate name, code, and percentage
-4. Toggle **Default** if this is the zone's primary rate
+2. Click **Add Rate** above the **Tax Rates** table. A panel titled with the tax zone (e.g., "Tax rate for France") opens
+3. Enter the **Name**, **Code**, and **Rate**
+4. Turn on **Default** if this is the zone's primary rate
 5. Click **Save**
 
-<Frame>
-  <img src="/images/v2/tax-rate-form.png" alt="Add tax rate form" />
-</Frame>
+<Screenshot src="/images/v2/tax-rate-form.png" alt="Add tax rate form" />
 
 ### Tax Rate Fields
 
@@ -68,9 +64,12 @@ To add a rate:
 |-------|----------|-------------|
 | **Name** | Yes | Rate name shown on invoices (e.g., "TVA 20%", "State Sales Tax") |
 | **Code** | No | Machine-readable identifier (e.g., "FR_VAT_STANDARD") |
-| **Rate** | Yes | The percentage (e.g., 20 for 20%) |
-| **Default** | Yes | If ON, this rate applies to all products that don't match a specific override |
-| **Combinable** | No | Whether this rate stacks with rates from a parent zone |
+| **Rate** | Yes | The percentage (e.g., 20 for 20%, 5.5 for 5.5%) |
+| **Default** | No | If ON, this rate applies to all products that don't match a specific override |
+| **Combinable** | No | Shown as "Allow this rate to stack with parent zone rates." The built-in tax calculation applies one rate per product, so this setting has no effect unless your developer has connected a tax provider that uses it |
+| **Metadata** | No | Optional key-value data for custom use |
+
+The **Tax Rates** table lists each rate with its **Name**, **Code**, **Rate**, **Default**, **Targets** (the number of override targets), and **Combinable** columns. Use the pencil icon to edit a rate and the trash icon to delete it.
 
 ### Multiple Rates per Zone
 
@@ -82,28 +81,29 @@ Some countries have different tax rates for different types of products. For exa
 | Reduced VAT | 5.5% | Food, books |
 | Zero VAT | 0% | Certain essential goods |
 
-Create each rate in the same zone. The default rate applies to all products. Use **rate overrides** to assign non-default rates to specific products or categories.
+Create each rate in the same zone. Create the standard rate with **Add Rate** and turn on **Default**: it applies to all products. Create each other rate as a **rate override** and pick the products, product types, or categories it applies to. A rate that is neither the default nor linked to targets is never applied.
 
 ## Rate Overrides
 
 Overrides let you apply a non-default tax rate to specific products, product types, or categories. For example, you can set food products to use the 5.5% reduced rate instead of the default 20%.
 
-<Frame>
-  <img src="/images/v2/tax-rate-override.png" alt="Tax rate override form" />
-</Frame>
+To create an override:
 
-{/* SCREENSHOT NEEDED: The tax rate override form showing:
-    Reference type dropdown with options (Product Type, Product, Category),
-    Reference value field. Example: Type "Category" selected, Value showing
-    a food category. */}
+1. Select a tax zone from the list
+2. Click **Create Override** above the **Tax Rates** table. A panel titled with the tax zone (e.g., "Override rate for France") opens
+3. Enter the **Name** and **Rate**, and optionally a **Code**. An override is never the default rate, so the form has no **Default** toggle
+4. Under **Targets**, click **Add target**, then choose a **Target type** and a **Target value**. Add as many targets as you need
+5. Click **Save**
+
+<Screenshot src="/images/v2/tax-rate-override.png" alt="Tax rate override form" />
 
 ### Override Types
 
 | Type | What it targets | Example |
 |------|----------------|---------|
-| **Product Type** | All products of a type (standard, virtual, external) | Virtual products with digital tax rate |
-| **Product** | A specific product | A book with zero-rated VAT |
-| **Category** | All products in a category | Food category with reduced rate |
+| **Product types** | All products of a type (Standard, Virtual, External) | Virtual products with digital tax rate |
+| **Products** | A specific product | A book with zero-rated VAT |
+| **Categories** | All products in a category | Food category with reduced rate |
 
 ## Best Practices
 

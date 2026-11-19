@@ -1,0 +1,119 @@
+---
+title: 'Label'
+description: 'Form field label with an optional required marker.'
+---
+
+import { ComponentPreview, PreviewLabel } from '@/components/component-preview'
+
+The label renders a `label` element with the admin panel's field label styles, and an optional red asterisk for required fields. Use it with your own inputs; Filament fields render their own labels.
+
+## Preview
+
+The preview shows an optional field and a required one.
+
+<ComponentPreview>
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <PreviewLabel value="Gift card code" />
+    <PreviewLabel value="Amount" isRequired={true} />
+  </div>
+</ComponentPreview>
+
+## Usage
+
+Pass the text to `value` and the input id to `for`:
+
+```blade
+<x-shopper::label for="code" value="Gift card code" />
+```
+
+## Props
+
+Both props are optional. Other attributes, like `for`, go to the `label` element.
+
+<ApiTable name="x-shopper::label" element="label">
+
+<ParamField path="value" type="string">
+  The text of the label. Without it, the label prints its slot.
+</ParamField>
+
+<ParamField path="isRequired" type="bool" default="false">
+  Shows a red asterisk after the text.
+</ParamField>
+
+</ApiTable>
+
+## Examples
+
+The examples below show a required field, the slot and a full field.
+
+### Basic Label
+
+A label with a text.
+
+<ComponentPreview>
+  <PreviewLabel value="Supplier" />
+</ComponentPreview>
+
+```blade
+<x-shopper::label for="supplier" value="Supplier" />
+```
+
+### Required Field
+
+Set `isRequired` to add the asterisk.
+
+<ComponentPreview>
+  <PreviewLabel value="Email" isRequired={true} />
+</ComponentPreview>
+
+```blade
+<x-shopper::label for="email" value="Email" :isRequired="true" />
+```
+
+### Using Slot
+
+Put the text in the slot when it holds markup or a translation:
+
+```blade
+<x-shopper::label for="price" :isRequired="true">
+    {{ __('Price') }}
+</x-shopper::label>
+```
+
+### With Form Input
+
+Pair the label with `x-shopper::forms.input`, which has the admin panel's input styles:
+
+```blade
+<div>
+    <x-shopper::label for="email" value="Email" :isRequired="true" />
+    <x-shopper::forms.input
+        type="email"
+        name="email"
+        id="email"
+        wire:model="email"
+        class="mt-1"
+    />
+</div>
+```
+
+## Blade Component Source
+
+The view is `resources/views/components/label.blade.php` in the `shopper/framework` package:
+
+```blade
+@blaze
+
+@props([
+    'value',
+    'isRequired' => false,
+])
+
+<label {{ $attributes->twMerge(['class' => 'block font-medium text-sm text-sh-fg-secondary']) }}>
+    {{ $value ?? $slot }}
+
+    @if ($isRequired)
+        <span class="text-red-500">*</span>
+    @endif
+</label>
+```

@@ -145,9 +145,25 @@ export function scopeFor(tree: TreeNode[], pathname: string): Scope {
 
 const equivalents: Record<string, Record<string, string>> = {
   '2.x': {
+    '/addons/admin-panel': '/addons#what-an-addon-can-register',
+    '/addons/creating': '/addons#creating-an-addon',
+    '/addons/publishing': '/addons',
+    '/carriers/fedex': '/carriers',
+    '/carriers/ups': '/carriers',
+    '/carriers/usps': '/carriers',
+    '/extending/components/filament': '/extending/components/overview',
     '/models': '/configuration#models',
     '/money': '/pricing#money-storage-standard',
+    '/payments/stripe': '/addons/stripe',
     '/settings': '/setup-store#settings-model',
+    '/team': '/acl#admin-user-creation',
+    '/themes': '/extending/control-panel#customize-shopper-theme',
+  },
+  '3.x': {
+    '/addons/stripe': '/payments/stripe',
+    '/extending/components/user-avatar': '/extending/components/filament#user-column',
+    '/extending/empty-state': '/extending/components/empty-state',
+    '/extending/modals': '/extending/forms#forms-in-a-modal',
   },
 };
 

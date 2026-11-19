@@ -1,0 +1,195 @@
+---
+title: 'Control Panel'
+description: 'Customize the Shopper control panel with your own assets, routes, and branding'
+---
+
+The control panel may be customized in a number of different ways. You may add new pages, menus, a stylesheet, or maybe you just want to add some arbitrary JavaScript.
+
+## Adding CSS and JS Assets
+
+`Shopper::styles()` adds stylesheets to the `<head>` of every admin page, after Shopper's stylesheet and the theme. `Shopper::scripts()` adds scripts at the end of the `<body>`, after Filament's scripts. Call them from the `boot()` method of a service provider. Each call adds to the files already registered and returns the panel, so the calls chain:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Shopper\Facades\Shopper;
+
+public function boot(): void
+{
+    Shopper::styles([
+        'css/admin.css',
+        'https://cdn.example.com/library.min.css',
+    ])->scripts([
+        'https://cdn.example.com/library.min.js',
+        'js/admin.js',
+    ]);
+}
+```
+
+A value that starts with `http://` or `https://` is used as is. Any other value goes through `asset()`, so it is a path under the `public` directory of your application. The files load on every admin page, sign-in pages included, so scope your CSS to your own markup.
+
+Add-ons register their files with `addonStyles()` and `addonScripts()`, as described in [Styles and Scripts](/3.x/addons/admin-panel#styles-and-scripts). The admin panel outputs your files first, then those of the add-ons.
+
+## Customize Shopper theme [#customize-shopper-theme]
+
+The admin panel ships with a compiled stylesheet and three color themes: Default, Midnight and Evergreen. The `<html>` element of every admin page carries a `data-theme` attribute set to the ID of the active theme, and each theme sets the `--theme-sh-*` color variables for its ID. [Themes](/3.x/themes) covers how a store picks the active theme and how to add a color theme in `config/shopper/themes.php`.
+
+To change more than the colors, replace the compiled stylesheet. Call one of these methods on the `Shopper` facade from the `boot()` method of a service provider:
+
+| Method | Stylesheet |
+|--------|------------|
+| `registerViteTheme(string\|array $theme, ?string $buildDirectory = null)` | One or more Vite entries of your application, built with Tailwind CSS from Shopper's sources. The next sections set it up. |
+| `registerTheme(string\|Htmlable\|null $theme)` | A stylesheet you build some other way. Pass its URL, or the HTML of a `<link>` tag when it needs more attributes. |
+
+When both are set, the Vite theme wins. Without either, the admin panel loads its compiled stylesheet. The CSS of the active color theme, when its configuration sets one, loads after the stylesheet in all three cases.
+
+### Setting up Tailwind CSS for your project
+
+Install Tailwind CSS with its Vite plugin, and the forms and typography plugins that Shopper's styles use:
+
+```bash
+npm install -D tailwindcss @tailwindcss/vite @tailwindcss/forms @tailwindcss/typography
+```
+
+Add the `@tailwindcss/vite` plugin to your `vite.config.js` file, and add the theme file you create in the next section to the inputs of the Laravel plugin:
+
+```js title="vite.config.js"
+import tailwindcss from '@tailwindcss/vite';
+import laravel from 'laravel-vite-plugin';
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+    plugins: [
+        tailwindcss(),
+        laravel({
+            input: [
+                'resources/css/app.css',
+                'resources/js/app.js',
+                'resources/css/shopper.css',
+            ],
+            refresh: true,
+        }),
+    ],
+});
+```
+
+### Creating the theme file
+
+Create a `resources/css/shopper.css` file that imports Shopper's `theme.css` entry point. This file imports Tailwind CSS, Filament's styles, Shopper's base styles and components, and the forms and typography plugins. It also declares the `@source` paths of the Blade views that Shopper, Filament and the slide-over panels render.
+
+`theme.css` does not import the three color themes, which the compiled stylesheet includes. Import them after it, so that the `data-theme` attribute of the page finds its colors:
+
+```css title="resources/css/shopper.css"
+@import '../../vendor/shopper/framework/resources/css/theme.css';
+@import '../../vendor/shopper/framework/resources/css/themes/default.css';
+@import '../../vendor/shopper/framework/resources/css/themes/midnight.css';
+@import '../../vendor/shopper/framework/resources/css/themes/evergreen.css';
+
+@source '../../resources/views/**/*.blade.php';
+```
+
+The last line adds your own views to the sources that Tailwind CSS scans, so the classes of your admin pages and components are compiled too. Add one `@source` line per folder of views, such as the views of a module, and write your own styles after them.
+
+### Load theme
+
+Register the theme file in the `boot()` method of your `AppServiceProvider` or of any other service provider:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Shopper\Facades\Shopper;
+
+public function boot(): void
+{
+    Shopper::registerViteTheme('resources/css/shopper.css');
+}
+```
+
+The admin panel then loads the file through Laravel's `@vite` helper: from the Vite development server while `npm run dev` runs, and from the build manifest otherwise. When your build writes to a directory other than `public/build`, pass that directory as the second argument.
+
+### Branding Logo
+
+By default, the Shopper logo is shown on the sign-in pages, in the top bar of the admin panel and on the store setup screen. You have two options to replace it with your own brand.
+
+#### Via configuration
+
+The simplest approach is to set the `brand` key of your `config/shopper/admin.php` file to the path of your logo:
+
+```php title="config/shopper/admin.php"
+'brand' => 'images/logo.svg',
+```
+
+Shopper loads the image with the `asset()` helper, so the file belongs in your `public` directory. The `favicon` key of the same file sets the favicon: its value is output as is in the `href` of the icon link, so give it a URL or an absolute path such as `/favicon.svg`.
+
+The logo then shows in the top bar, next to the name of the store:
+
+<Screenshot src="/images/v3/extending-brand-logo.png" alt="Top bar of the admin panel with a custom shopping bag logo next to the Shopper Store name" />
+
+#### Via service provider
+
+For more control, call `brandLogo()` on the `Shopper` facade. It takes an HTML string, or a closure that returns an HTML string or a view:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Illuminate\Contracts\View\View;
+use Shopper\Facades\Shopper;
+
+public function boot(): void
+{
+    Shopper::brandLogo(fn (): View => view('brand.logo'));
+}
+```
+
+The closure runs each time the logo renders, so it can render an inline SVG, a Blade component with `Blade::render('<x-application-logo class="size-8" />')`, or a logo that depends on the current store. A plain string such as `'<img class="size-8" src="/images/logo.svg" alt="Acme Store" />'` is output as is.
+
+<Info>
+The priority order is: `Shopper::brandLogo()`, then `config('shopper.admin.brand')`, then the default Shopper logo.
+</Info>
+
+## Render hooks
+
+Render hooks add HTML at named places of the admin panel, such as the end of the `<head>`, the start of the `<body>` or the sidebar of an order. They are the way to set up a package that needs its own Blade markup in the layout, such as [Flux UI](https://fluxui.dev), [Wire Elements Modal](https://github.com/wire-elements/modal) or [Laravel Notify](https://github.com/mckenziearts/laravel-notify). [Render Hooks](/3.x/render-hooks) lists every hook and shows how to register one.
+
+## Adding control panel routes
+
+Your `routes/web.php` file is not loaded inside the admin panel. To add routes that share its login, its middleware and its URL prefix, give the admin panel a route file of its own:
+
+<Steps>
+<Step>
+
+Create a route file. Name it whatever you want, for example `routes/shopper.php`.
+
+</Step>
+<Step>
+
+Point the `custom_file` key of `config/shopper/routes.php` to it, so that its routes are loaded with the admin panel:
+
+```php title="config/shopper/routes.php"
+'custom_file' => base_path('routes/shopper.php'),
+```
+
+Shopper loads the file after its own routes, under the admin panel prefix, and adds `shopper.` to the name of each route: a route named `gift-cards.index` is called with `route('shopper.gift-cards.index')`.
+
+</Step>
+<Step>
+
+Restrict a route to the users who hold a permission with Laravel's `can` middleware:
+
+```php title="routes/shopper.php"
+use App\Livewire\Shopper\GiftCards\GiftCardIndex;
+use Illuminate\Support\Facades\Route;
+
+Route::middleware('can:gift-cards.browse')->group(function (): void {
+    Route::livewire('/gift-cards', GiftCardIndex::class)->name('gift-cards.index');
+});
+```
+
+[Generating Permissions](/3.x/acl#generating-permissions) shows how to create the `gift-cards.*` permissions.
+
+</Step>
+</Steps>
+
+The `middleware` key of the same file adds middleware to every route behind the admin login, Shopper's routes included, as described in [Middleware](/3.x/configuration#middleware):
+
+```php title="config/shopper/routes.php"
+'middleware' => [
+    'log-admin-activity',
+],
+```
+
+[Controllers](/3.x/extending/controllers) shows how to build the pages these routes serve.

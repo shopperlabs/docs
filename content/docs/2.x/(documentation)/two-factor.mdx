@@ -58,9 +58,7 @@ From your administrator interface, click your profile picture in the upper right
 
 Scroll to the **Two Factor Authentication** section and click **Enable Two Factor**. A modal asks you to confirm your password.
 
-<Frame>
-  <img src="/images/v2/two-factor-section.png" alt="Two factor section Screenshot" />
-</Frame>
+<Screenshot src="/images/v2/two-factor-section.png" alt="Two factor section Screenshot" />
 
 Enter your current password and click **Confirm**. If you confirmed your password recently, within the `password_timeout` delay set in `config/auth.php`, Shopper skips the modal.
 
@@ -70,9 +68,7 @@ Store the recovery codes in your password manager.
 
 If the user loses access to their mobile device, the login page will allow them to authenticate using one of their recovery codes instead of the temporary token provided by their mobile device's authenticator application.
 
-<Frame>
-  <img src="/images/v2/two-factor-code.png" alt="Two factor code Screenshot" />
-</Frame>
+<Screenshot src="/images/v2/two-factor-code.png" alt="Two factor code Screenshot" />
 
 Later, **Show Recovery Codes** displays your current recovery codes again and **Regenerate Recovery Codes** replaces all eight with new ones.
 Both ask for your password, like **Enable Two Factor**.
@@ -98,9 +94,7 @@ From your administrator interface, click your profile picture in the upper right
 In the **Two Factor Authentication** section, click **Disable**. Enter your password in the confirmation modal and click **Confirm**.
 Shopper deletes your secret and your recovery codes: to turn two-factor authentication back on later, you scan a new QR code.
 
-<Frame>
-  <img src="/images/v2/two-factor-disable.png" alt="Two factor disable Screenshot" />
-</Frame>
+<Screenshot src="/images/v2/two-factor-disable.png" alt="Two factor disable Screenshot" />
 
 ## Developer Integration
 

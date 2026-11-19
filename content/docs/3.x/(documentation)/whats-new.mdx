@@ -28,11 +28,11 @@ Product prices come from a `PriceResolver`, swappable in a service provider. The
 
 ## Payments
 
-Payment providers post to an inbox at `POST /store/webhooks/{driver}`, which stores each event once: a provider retry is applied once, and an event that arrives before its order exists is applied later by `php artisan shopper:payments:reconcile`. With `--pull`, the command also asks the provider for the status of payments still pending. A payment authorized or captured without an order after 30 minutes dispatches `PaymentOrphaned`: the Store API completes the cart it paid for when it can. Otherwise, a payment that matches one of the store's carts is reported to your exception handler, then refunded when the `reconciliation.orphans` option of the payment config is `refund`. Payment status changes follow allowed transitions only, and a refund sent twice is applied once.
+Payment providers post to an inbox at `POST /store/webhooks/{driver}`, which stores each event once: a provider retry is applied once, and an event that arrives before its order exists is applied later by `php artisan shopper:payments:reconcile`. With `--pull`, the command also asks the provider for the status of payments still pending. A payment authorized or captured without an order after 30 minutes dispatches `PaymentOrphaned`: the Store API completes the cart it paid for when it can. Otherwise, a payment that matches one of the store's carts is reported to your exception handler, then refunded when the `reconciliation.orphans` option of the payment config is `refund`. Payment status changes follow allowed transitions only. A refund request sent again with the same idempotency key is applied once, and a refund the provider settles later stays pending until its webhook or `--pull` reports the outcome.
 
 ## Shipping
 
-Shipment status now follows the carrier, through the carrier's webhooks at `POST /store/webhooks/shipping/{driver}` or with `php artisan shopper:shipments:sync-tracking` (every 30 minutes while `shopper.shipping.tracking.sync` is on), and each change dispatches the shipment events. The customer can follow a parcel through a public tracking endpoint. UPS, FedEx and USPS are separate packages that you install only for the carriers you use: see [Add-ons](/3.x/addons).
+Shipment status now follows the carrier, through the carrier's webhooks at `POST /store/webhooks/shipping/{driver}` or with `php artisan shopper:shipments:sync-tracking` (every 30 minutes while `shopper.shipping.tracking.sync` is on), and each change dispatches the shipment events. The customer can follow a parcel through a public tracking endpoint. UPS, FedEx and USPS are separate packages that you install only for the carriers you use: see [Carriers](/3.x/carriers).
 
 ## Orders
 
@@ -61,7 +61,7 @@ Team members can sign in with a passkey once `SHOPPER_ENABLED_PASSKEYS` is set t
 - Add-ons add sections to the product edit page with `$panel->addonProductSections()` in their `register()` method.
 - The payment, shipping, import and sales channel managers extend Laravel's `Illuminate\Support\Manager`, so a custom driver registers with `extend()` like any Laravel driver.
 
-See [Extending](/3.x/extending).
+The [Webhooks](/3.x/webhooks), [Product Sections](/3.x/addons/admin-panel#product-sections), [Custom Drivers](/3.x/payments#custom-drivers) and [Custom Import Sources](/3.x/import#custom-import-sources) sections cover these, and the [Extending](/3.x/extending/overview) tab covers admin pages, render hooks, the sidebar and the Blade components.
 
 ## Requirements
 
@@ -69,4 +69,4 @@ Shopper 3.0 requires PHP 8.3, Laravel 12.68 or 13.27, Filament 5.11 and Livewire
 
 ## Upgrading
 
-Shopper 3.0 has breaking changes in the config files, the `ShopperUser`, `Cart`, `CartLine`, `PaymentDriver` and `Order` contracts, the product edit screen and the settings namespace. The `shopper/upgrade` package applies most of them: `php artisan shopper:upgrade` runs the migrations, renames classes with Rector, moves permissions to dot notation, fixes zero-decimal currency amounts, reconciles the stock snapshot with the inventory ledger and recreates the storage and panel asset links, and its [Laravel Boost skills](/3.x/ai-tools#upgrade-skills) guide a coding agent through the changes that need a decision. The [upgrade guide](/3.x/upgrade) lists every change with the code before and after.
+Shopper 3.0 has breaking changes in the config files, the `ShopperUser`, `Cart`, `CartLine`, `PaymentDriver` and `Order` contracts, the product edit screen and the settings namespace. The `shopper/upgrade` package applies most of them: `php artisan shopper:upgrade` runs the migrations, renames classes with Rector, moves permissions to dot notation, fixes zero-decimal currency amounts, reconciles the stock snapshot with the inventory ledger, recreates the storage and panel asset links and moves the files of virtual products to a private disk, and its [Laravel Boost skills](/3.x/ai-tools#upgrade-skills) guide a coding agent through the changes that need a decision. The [upgrade guide](/3.x/upgrade) lists every change with the code before and after.

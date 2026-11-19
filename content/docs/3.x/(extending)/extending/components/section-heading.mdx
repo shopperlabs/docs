@@ -1,0 +1,159 @@
+---
+title: 'Section Heading'
+description: 'Section title with an optional description, used to introduce the content of a card or a form.'
+---
+
+import { ComponentPreview, PreviewSectionHeading, PreviewCard } from '@/components/component-preview'
+
+The section heading introduces a section inside a page: a title, and an optional description that explains what the section holds. The [card](/3.x/extending/components/card) renders one for its title.
+
+## Preview
+
+The preview shows a title with a description.
+
+<ComponentPreview centered={false}>
+  <PreviewSectionHeading
+    title="General Information"
+    description="The name, description and pricing of the product."
+  />
+</ComponentPreview>
+
+## Usage
+
+Pass the title and the description as attributes:
+
+```blade
+<x-shopper::section-heading
+    title="General Information"
+    description="The name, description and pricing of the product."
+/>
+```
+
+The title and description are rendered with Filament's section heading and description components, so they match the headings of Filament sections in the same page.
+
+## Props
+
+The title is required. Other attributes go to the wrapping `div`.
+
+<ApiTable name="x-shopper::section-heading" element="div">
+
+<ParamField path="title" type="string" required>
+  The section title.
+</ParamField>
+
+<ParamField path="description" type="string" default="null">
+  Text displayed below the title.
+</ParamField>
+
+</ApiTable>
+
+## Examples
+
+The examples below show the component alone, with a description, and inside a card.
+
+### Title Only
+
+Leave out the description for a short title.
+
+<ComponentPreview centered={false}>
+  <PreviewSectionHeading title="Pricing" />
+</ComponentPreview>
+
+```blade
+<x-shopper::section-heading title="Pricing" />
+```
+
+### With Description
+
+The description is limited to a readable line length.
+
+<ComponentPreview centered={false}>
+  <PreviewSectionHeading
+    title="Inventory"
+    description="Stock levels, SKU and barcode of the product."
+  />
+</ComponentPreview>
+
+```blade
+<x-shopper::section-heading
+    title="Inventory"
+    description="Stock levels, SKU and barcode of the product."
+/>
+```
+
+### Inside a Card
+
+The card uses the section heading when you pass it a `title` string, and forwards its `description`:
+
+<ComponentPreview centered={false}>
+  <PreviewCard
+    title="Media"
+    description="Images and videos shown on the product page."
+  >
+    <div className="h-24 rounded-lg border-2 border-dashed border-gray-300 dark:border-gray-700 flex items-center justify-center">
+      <span className="text-gray-500 dark:text-gray-400">No media yet</span>
+    </div>
+  </PreviewCard>
+</ComponentPreview>
+
+```blade
+<x-shopper::card
+    title="Media"
+    description="Images and videos shown on the product page."
+>
+    <x-shopper::empty-card heading="No media yet" icon="untitledui-image" />
+</x-shopper::card>
+```
+
+### Standalone Usage
+
+Use the section heading on its own to split a long form into parts:
+
+```blade
+<div class="space-y-6">
+    <x-shopper::section-heading
+        title="Customer Details"
+        description="Personal information and contact details."
+    />
+
+    <div class="grid grid-cols-2 gap-4">
+        <x-shopper::forms.input name="first_name" placeholder="First name" />
+        <x-shopper::forms.input name="last_name" placeholder="Last name" />
+    </div>
+
+    <x-shopper::section-heading
+        title="Shipping Address"
+        description="Where orders will be delivered."
+    />
+
+    <div class="grid grid-cols-2 gap-4">
+        <x-shopper::forms.input name="street_address" placeholder="Street address" />
+        <x-shopper::forms.input name="city" placeholder="City" />
+    </div>
+</div>
+```
+
+## Blade Component Source
+
+The view is `resources/views/components/section-heading.blade.php` in the `shopper/framework` package:
+
+```blade
+@blaze
+
+@props([
+    'title',
+    'description' => null,
+])
+
+<div {{ $attributes }}>
+    <x-filament::section.heading class="font-heading text-sh-fg font-semibold">
+        {{ $title }}
+    </x-filament::section.heading>
+
+    @if ($description)
+        <x-filament::section.description class="text-sh-fg-muted mt-1 max-w-2xl text-sm">
+            {{ $description }}
+        </x-filament::section.description>
+    @endif
+</div>
+```
