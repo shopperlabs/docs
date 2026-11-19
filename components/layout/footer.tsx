@@ -1,5 +1,8 @@
+'use client';
+
 import type { ComponentType, ReactNode } from 'react';
 import Link from 'next/link';
+import { usePathname } from 'next/navigation';
 import clsx from 'clsx';
 import {
   AimeosIcon,
@@ -16,7 +19,7 @@ import { InstallCommand } from '@/components/ui/install-command';
 import { TouchTarget } from '@/components/ui/touch-target';
 import { links, siteUrl } from '@/lib/shared';
 import { Logo } from './logo';
-import { versionHome, versions, type TreeNode } from './tree';
+import { flattenPages, versionFor, versionHome, versions, type TreeNode } from './tree';
 
 type FooterLink = { label: ReactNode; href: string; ext?: boolean; Icon?: ComponentType<{ className?: string }> };
 
@@ -113,7 +116,15 @@ function Wordmark() {
   );
 }
 
+/** The upgrade guide of the version read; 1.x has none, so its readers get the current release's. */
+function upgradeGuide(tree: TreeNode[], pathname: string): string {
+  const read = versionFor(tree, pathname);
+  const url = `/${read.$id}/upgrade`;
+  return flattenPages(read.children).some((page) => page.url === url) ? url : `/${versions(tree)[0].$id}/upgrade`;
+}
+
 export function Footer({ tree, stars }: { tree: TreeNode[]; stars?: number }) {
+  const pathname = usePathname();
   // The reader is already in the docs, so the site's "Get started" button stays out.
   const columns = [
     { title: 'Product', links: PRODUCT },
@@ -123,7 +134,7 @@ export function Footer({ tree, stars }: { tree: TreeNode[]; stars?: number }) {
         { label: 'Documentation', href: versionHome(versions(tree)[0]) },
         { label: 'Blog', href: links.blog, ext: true },
         { label: 'Changelog', href: `${siteUrl}/changelog`, ext: true },
-        { label: 'Upgrade guide', href: '/2.x/upgrade' },
+        { label: 'Upgrade guide', href: upgradeGuide(tree, pathname) },
         { label: 'GitHub', href: links.github, ext: true },
       ],
     },
