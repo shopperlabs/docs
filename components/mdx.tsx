@@ -5,6 +5,9 @@ import { CodeBlock, type CodeBlockProps, Pre } from 'fumadocs-ui/components/code
 import { Step as BaseStep, Steps } from 'fumadocs-ui/components/steps';
 import { CircleCheck, CircleX, icons, Info, Lightbulb, TriangleAlert } from 'lucide-react';
 import type { MDXComponents } from 'mdx/types';
+import Image from 'next/image';
+import { closeSync, openSync, readSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ReactNode } from 'react';
 import { LaravelIcon, LivewireIcon } from '@/components/ui/brand-icons';
 import { Lined, type linings } from '@/components/ui/lined';
@@ -142,20 +145,40 @@ function Step({ title, children }: { title: string; children: ReactNode }) {
 function Frame({ caption, children }: { caption?: string; children: ReactNode }) {
   return (
     <figure className="my-6">
-      <div className="overflow-hidden rounded-xl border bg-fd-card p-1 [&_img]:m-0 [&_img]:rounded-lg">{children}</div>
+      <div className="overflow-hidden rounded-xl border bg-fd-card p-1 [&_img]:m-0 [&_img]:rounded-lg [&_p]:m-0">
+        {children}
+      </div>
       {caption && <figcaption className="mt-2 text-center text-sm text-fd-muted-foreground">{caption}</figcaption>}
     </figure>
   );
 }
 
-// Captures are taken at a device scale of 2, so the 2x descriptor shows them at their size on screen.
+const pngSignature = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+// A PNG stores its width and height at bytes 16-23. Captures are taken at a device scale of 2: they show at half.
+// Any other format would read as a nonsense size without an error, so it fails the build instead.
+function screenshotSize(src: string) {
+  const header = Buffer.alloc(24);
+  const file = openSync(join(process.cwd(), 'public', src), 'r');
+  try {
+    readSync(file, header, 0, 24, 0);
+  } finally {
+    closeSync(file);
+  }
+  if (!header.subarray(0, 8).equals(pngSignature)) throw new Error(`Screenshot ${src} is not a PNG file`);
+  return { width: header.readUInt32BE(16) / 2, height: header.readUInt32BE(20) / 2 };
+}
+
+// The article column is at most 768px wide.
+const screenshotSizes = '(min-width: 768px) 768px, 100vw';
+
 function Screenshot({ src, alt, caption }: { src: string; alt: string; caption?: string }) {
   const dark = src.replace(/\.png$/, '-dark.png');
 
   return (
     <Frame caption={caption}>
-      <img src={src} srcSet={`${src} 2x`} alt={alt} loading="lazy" className="mx-auto! block dark:hidden" />
-      <img src={dark} srcSet={`${dark} 2x`} alt={alt} loading="lazy" className="mx-auto! hidden dark:block" />
+      <Image src={src} alt={alt} sizes={screenshotSizes} {...screenshotSize(src)} className="mx-auto! block dark:hidden" />
+      <Image src={dark} alt={alt} sizes={screenshotSizes} {...screenshotSize(dark)} className="mx-auto! hidden dark:block" />
     </Frame>
   );
 }

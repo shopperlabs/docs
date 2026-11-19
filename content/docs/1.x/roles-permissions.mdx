@@ -67,7 +67,7 @@ RBAC (Role Based Access Control) or ACL (Access Control Layer) is an approach to
 To view the roles and permissions management page, you must go to the `Settings > Staff & Permissions`
 
 <Frame caption="Settings > Staff & permissions">
-  <img src="/images/v1/settings-staff.png" alt="Setting Staff & permissions" />
+  ![Setting Staff & permissions](/images/v1/settings-staff.png)
 </Frame>
 
 ### Fields
@@ -154,7 +154,7 @@ A Role is a set of permissions to perform certain operations within the system, 
 The user role does not appear, modifying it could lead to bugs on your store so it is not listed here.
 
 <Frame caption="Roles & Admins">
-  <img src="/images/v1/roles-admins.png" alt="roles and admins users" />
+  ![roles and admins users](/images/v1/roles-admins.png)
 </Frame>
 
 <Warning>
@@ -165,7 +165,7 @@ It's **strongly** advised to not change the name of roles when they are already 
 To add a new role, you must click on `Add a new role` button. Required fields are marked with asterisks
 
 <Frame caption="Add new role">
-  <img src="/images/v1/add-role.png" alt="addd new role" />
+  ![addd new role](/images/v1/add-role.png)
 </Frame>
 
 The added roles can be used later in your code to assign functionality or access to resources.
@@ -176,20 +176,20 @@ To modify a role you must click on the role you want to modify to access the edi
 And as already mentioned, all Shopper features are livewire components. So you can change everything at any time to fit your store.
 
 <Frame caption="Update role">
-  <img src="/images/v1/update-role.png" alt="update role" />
+  ![update role](/images/v1/update-role.png)
 </Frame>
 
 ### Create admin
 In addition to creating an administrator from the command line you can also do it from the Shopper interface, you just need to click on **Add Administrator** button.
 
 <Frame caption="Add admin">
-  <img src="/images/v1/add-admin.png" alt="add new admin" />
+  ![add new admin](/images/v1/add-admin.png)
 </Frame>
 
 Then you fill in the information of your administrator with the role chosen for him
 
 <Frame caption="Add admin form">
-  <img src="/images/v1/admin-user-form.png" alt="add new admin form" />
+  ![add new admin form](/images/v1/admin-user-form.png)
 </Frame>
 
 The actual role registration function looks like the code below. And the whole implementation class is `Shopper\Http\Livewire\Components\Settings\Management\CreateAdminUser`
@@ -229,7 +229,7 @@ Let’s assume that you would like to add a new permission to ACL. You will need
 In the way that when a admin are granted of a specific role, he take all role's permissions.
 
 <Frame caption="Role's permissions example">
-  <img src="/images/v1/permissions-browse.png" alt="Role's permissions example" />
+  ![Role's permissions example](/images/v1/permissions-browse.png)
 </Frame>
 
 As you may have noticed all permissions are grouped by type, and the available types are mentioned above in this [section](/1.x/roles-permissions#fields).
@@ -237,7 +237,7 @@ As you may have noticed all permissions are grouped by type, and the available t
 To add a new permission you just need to click on the **Create permission** button.
 
 <Frame caption="Add permission">
-  <img src="/images/v1/add-permission.png" alt="Add permission" />
+  ![Add permission](/images/v1/add-permission.png)
 </Frame>
 
 After adding your permission it will be automatically associated with the role and therefore all administrators with this role will have this permission.
@@ -245,5 +245,5 @@ After adding your permission it will be automatically associated with the role a
 If the permission has no group it will be in a `Custom permissions` section.
 
 <Frame caption="New permission">
-  <img src="/images/v1/custom-permissions.png" alt="new permission" />
+  ![new permission](/images/v1/custom-permissions.png)
 </Frame>

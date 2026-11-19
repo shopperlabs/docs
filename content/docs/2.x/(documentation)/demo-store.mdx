@@ -3,6 +3,9 @@ title: "Demo Store"
 description: "A fully functional e-commerce store built with Shopper to showcase real-world usage patterns."
 ---
 
+import Image from 'next/image'
+import cover from '@/public/images/demo-store.jpg'
+
 The official Shopper demo is a complete e-commerce application with a storefront and admin panel. It covers product browsing, variant selection, multi-step checkout, customer accounts, a blog, and multi-zone support with country-based currency switching. The full source code is [available on GitHub](https://github.com/shopperlabs/demo.laravelshopper.dev).
 
 <Card title="Visit the live demo" icon="globe" href="https://demo.laravelshopper.dev">
@@ -10,7 +13,7 @@ The official Shopper demo is a complete e-commerce application with a storefront
 </Card>
 
 <Frame>
-  <img src="/images/demo-store.jpg" alt="Shopper demo store homepage" />
+  <Image src={cover} alt="Shopper demo store homepage" sizes="(min-width: 768px) 768px, 100vw" loading="eager" />
 </Frame>
 
 ## What's Included

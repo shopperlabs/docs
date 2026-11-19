@@ -9,7 +9,7 @@ title: "Customization"
 Once you have installed Shopper, you need to set up a store to serve as your first location.  After creating a new user, you need to login via the url `/shopper/login`. After logging in you need to fill in the required information to access the Shopper dashboard
 
 <Frame caption="Store customization">
-  <img src="/images/v1/customization.png" alt="Shopper Config Example" />
+  ![Shopper Config Example](/images/v1/customization.png)
 </Frame>
 
 Defines your shop’s address country and state, where you are based as a seller. It determines default tax rates and customer locations.
@@ -70,7 +70,7 @@ When you launch your store the first important thing to do is to fill in the inf
 Your customers and the different services you might use need to know the information about your store.
 
 <Frame caption="Store information">
-  <img src="/images/v1/store-information.png" alt="Store information" />
+  ![Store information](/images/v1/store-information.png)
 </Frame>
 
 The information stored in this section is available using the following keys: `shop_name` for the store name, `shop_email` for the email and `shop_country_id` for the Country.
@@ -79,7 +79,7 @@ The information stored in this section is available using the following keys: `s
 Choose the default currency for the store. Only one may be selected.
 
 <Frame caption="Store currency">
-  <img src="/images/v1/store-currency.png" alt="Store currency" />
+  ![Store currency](/images/v1/store-currency.png)
 </Frame>
 
 For currency configurations we use the [moneyphp/money](https://github.com/moneyphp/money) package. At the moment, the formatter does it automatically depending on the currency.
@@ -92,7 +92,7 @@ Most stores keep their products in different locations around the world. When se
 When shipping an order, the products to be delivered/shipped will start from this location and thus the shipping price can be set according to this.
 
 <Frame caption="Store location address">
-  <img src="/images/v1/customization-map-off.png" alt="Store location" />
+  ![Store location](/images/v1/customization-map-off.png)
 </Frame>
 
 You must fill in the address of your location. You can specify GPS coordinates if you want customers to be able to geolocate you on a map with this information.
@@ -100,7 +100,7 @@ You must fill in the address of your location. You can specify GPS coordinates i
 Shopper uses mapbox to display this map. To configure your map you can go to the [mapbox documentation](https://docs.mapbox.com/mapbox-gl-js/api/).
 
 <Frame caption="Store with enable mapbox">
-  <img src="/images/v1/customization-map.png" alt="Store location with mapbox" />
+  ![Store location with mapbox](/images/v1/customization-map.png)
 </Frame>
 
 The keys registered in the database during this section: `shop_street_address`, `shop_zipcode`, `shop_city`, `shop_phone_number`, `shop_lng` and `shop_lat`.
@@ -142,7 +142,7 @@ If you want your customers to find you easily on social networks, you can fill i
 This step is completely optional
 
 <Frame caption="Store social links">
-  <img src="/images/v1/customization-social-media.png" alt="Store social links" />
+  ![Store social links](/images/v1/customization-social-media.png)
 </Frame>
 
 The keys registered in the database during this section: `shop_facebook_link`, `shop_instagram_link` and `shop_twitter_link`.
@@ -157,7 +157,7 @@ To edit your shop information, you must:
 - From your administration, on the blue sidebar click on the settings icon at the bottom of the page **Settings > General**
 
 <Frame caption="Admin setting">
-  <img src="/images/v1/setting.jpg" alt="Admin Panel setting" />
+  ![Admin Panel setting](/images/v1/setting.jpg)
 </Frame>
 
 The component used to update store setting of the store is found in the component configuration file `config/shopper/components.php`, It's the `Shopper\Framework\Http\Livewire\Settings\General` component.
@@ -180,7 +180,7 @@ return [
 ```
 
 <Frame caption="Admin update setting">
-  <img src="/images/v1/store-setting-update.png" alt="Admin update setting" />
+  ![Admin update setting](/images/v1/store-setting-update.png)
 </Frame>
 
 In this interface you will update your store. Don't forget that the model used is the model `Shopper\Models\Setting`.
