@@ -183,9 +183,6 @@ function NodeItems({ nodes, depth, onNavigate }: { nodes: TreeNode[]; depth: num
 type NavGroup = {
   key: string;
   title?: string;
-  labelOnly?: boolean;
-  /** A sub-section lifted from a folder: it folds unless it holds the page. */
-  collapsible?: boolean;
   nodes: TreeNode[];
 };
 
@@ -206,9 +203,8 @@ function toGroups(nodes: TreeNode[]): NavGroup[] {
   const groups: NavGroup[] = [];
   let current: NavGroup = { key: 'g0', nodes: [] };
 
-  function flush({ keepLabel = true } = {}) {
+  function flush() {
     if (current.nodes.length > 0) groups.push(current);
-    else if (current.title && keepLabel) groups.push({ ...current, labelOnly: true });
     current = { key: `g${groups.length + 1}`, title: undefined, nodes: [] };
   }
 
@@ -226,7 +222,6 @@ function toGroups(nodes: TreeNode[]): NavGroup[] {
         : node.children;
       groups.push({
         key: `f${groups.length}`,
-        collapsible: true,
         title: typeof node.name === 'string' ? node.name : undefined,
         nodes: index ? [{ ...index, name: labelFor(rest) }, ...rest] : rest,
       });
@@ -234,7 +229,7 @@ function toGroups(nodes: TreeNode[]): NavGroup[] {
     }
     current.nodes.push(node);
   }
-  flush({ keepLabel: false });
+  flush();
 
   return groups;
 }
@@ -243,18 +238,6 @@ function NavigationGroup({ group, onNavigate }: { group: NavGroup; onNavigate?: 
   const pathname = usePathname();
   const contentId = useId();
   const [open, setOpen] = useFold(group.nodes.some((node) => containsActive(node, pathname)));
-
-  if (group.labelOnly) {
-    return (
-      <li
-        role="separator"
-        aria-label={group.title}
-        className="relative mt-8 font-mono text-xs/5 tracking-wide text-zinc-500 uppercase first:mt-0 dark:text-zinc-400"
-      >
-        <span aria-hidden="true">{group.title}</span>
-      </li>
-    );
-  }
 
   const list = (
     <div className={clsx('relative', group.title && 'mt-3')}>
@@ -265,7 +248,7 @@ function NavigationGroup({ group, onNavigate }: { group: NavGroup; onNavigate?: 
     </div>
   );
 
-  if (group.collapsible && group.title) {
+  if (group.title) {
     return (
       <li className="relative mt-6 first:mt-0">
         <h2 className="text-sm/6 font-semibold sm:text-xs/5">
@@ -296,12 +279,7 @@ function NavigationGroup({ group, onNavigate }: { group: NavGroup; onNavigate?: 
     );
   }
 
-  return (
-    <li className="relative mt-6 first:mt-0">
-      {group.title ? <h2 className="text-sm/6 font-semibold text-foreground sm:text-xs/5">{group.title}</h2> : null}
-      {list}
-    </li>
-  );
+  return <li className="relative mt-6 first:mt-0">{list}</li>;
 }
 
 export function SidebarNav({ nodes, onNavigate }: { nodes: TreeNode[]; onNavigate?: () => void }) {

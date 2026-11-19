@@ -1,0 +1,452 @@
+---
+title: Upgrade Guide
+description: Upgrade a Shopper 2.x store to 3.0 with the shopper:upgrade command, then update the code and config files it does not change.
+---
+
+<Info>
+**Estimated Upgrade Time:** 1 to 3 hours for a store with few customizations. Custom admin components, payment or shipping drivers and published config files add to it.
+</Info>
+
+Shopper 3.0 moves to Filament 5 and Livewire 4, renames the admin permissions, ships each carrier as its own package and changes several contracts and config files. The `shopper/upgrade` package applies most of these changes with one command. This guide covers the command and the production deploy, then lists every change by impact, with the code before and after.
+
+## Before You Start
+
+Upgrade the store to Shopper 2.12 first. From 2.10, `composer update` is enough; from an older release, see [Coming From a Release Before 2.7](#coming-from-a-release-before-27) and the [2.x upgrade guides](/2.x/upgrade).
+
+Shopper 2.12 already runs on the versions 3.0 requires for Laravel and Spatie Permission, so move the application to them while it is still on 2.12, one change at a time:
+
+- Laravel 12.68 or 13.27. Laravel 11 is no longer supported. See the [Laravel upgrade guide](https://laravel.com/docs/12.x/upgrade).
+- Spatie Permission 7. See the [Spatie Permission upgrade guide](https://spatie.be/docs/laravel-permission/v7/upgrading).
+
+Filament 5 and Livewire 4 come with Shopper 3.0. If your application uses them outside Shopper, read the [Filament 5](https://filamentphp.com/docs/5.x/upgrade-guide) and [Livewire 4](https://livewire.laravel.com/docs/4.x/upgrading) upgrade guides as well. PHP 8.3 stays the minimum. The full list is on the [Requirements](/3.x/requirements) page.
+
+Then prepare the upgrade itself:
+
+- Back up the database and the storage disks. The upgrade rewrites permission names, can change amounts and moves the files of virtual products.
+- Commit your work. The command rewrites your code with Rector and asks for confirmation when the Git tree has uncommitted changes.
+- Run the upgrade on a local copy or a staging environment first, with a recent copy of the production database.
+
+## Updating Dependencies
+
+Update the Shopper packages in your `composer.json`:
+
+```json title="composer.json"
+"shopper/framework": "^2.12", // [!code --]
+"shopper/framework": "^3.0", // [!code ++]
+```
+
+If you installed `shopper/stripe`, change it to `^3.0` as well. Then install the upgrade package as a development dependency and update:
+
+```bash
+composer require shopper/upgrade:^3.0 --dev
+composer update
+```
+
+<Note>
+While 3.0 is in release candidates, Composer installs it only with `"minimum-stability": "rc"` and `"prefer-stable": true` in your `composer.json`. Shopper's own packages depend on each other at the release candidate version, so requiring `shopper/framework:^3.0@rc` alone is not enough.
+</Note>
+
+Shopper no longer installs `gehrisandro/tailwind-merge-laravel`. It registers the `$attributes->twMerge()` macro itself, so Blade components that call it keep working. An application that uses `twMergeFor()`, `withoutTwMergeClasses()`, the `@twMerge` directive or a `config/tailwind-merge.php` file requires the package in its own `composer.json`. The `ivanmitrikeski/laravel-shipping` package is no longer installed. Shopper now installs Laravel Scout, Laravel Sanctum, Laravel Passkeys, `league/csv`, `spatie/laravel-query-builder` and `giggsey/libphonenumber-for-php`.
+
+## Running the Upgrade
+
+Run the command on your local copy:
+
+```bash
+php artisan shopper:upgrade
+```
+
+The command asks for confirmation, then runs seven steps in order:
+
+| Step | Command | What it does |
+|------|---------|--------------|
+| 1 | `migrate --force` | Runs the 3.0 migrations. |
+| 2 | `shopper:upgrade:rector` | Renames the moved classes and namespaces in your code. |
+| 3 | `shopper:upgrade:permissions --force` | Renames the admin permissions to dot notation. See [Permissions](#permissions-use-dot-notation). |
+| 4 | `shopper:upgrade:fix-zero-decimal-currencies --force` | Divides by 100 the amounts in zero-decimal currencies. See [Zero-Decimal Amounts](#zero-decimal-amounts). |
+| 5 | `shopper:stock:reconcile --fix` | Rewrites the stock snapshot from the inventory ledger. See [Reconciling Stock Levels](/3.x/locations#reconciling-stock-levels). |
+| 6 | `shopper:link --force` | Recreates the storage link and links the panel assets at `public/vendor/shopper`. |
+| 7 | `shopper:files:secure` | Moves the files of virtual products to the private disk. See [Downloadable Files](/3.x/products#downloadable-files). |
+
+When it finishes, the command lists the carrier packages your 2.x config or `.env` enabled and that are not installed yet, with the `composer require` line to run.
+
+Rector scans `app` by default. If your code lives in other directories as well, list them, separated by commas:
+
+```bash
+php artisan shopper:upgrade --path=app,src
+```
+
+In a CI job or any run without a terminal, the confirmation answers no and the command stops. Pass `--force` to run every step without asking.
+
+Run the command once. Its steps record that they ran, and a second run of the whole command stops with an error. To repeat one step, run its own command from the table.
+
+<Warning>
+The zero-decimal step expects the amounts Shopper wrote before 2.7, multiplied by 100. A store that already ran `shopper:fix-zero-decimal-currencies` under 2.x, or that started on 2.7 or later, holds whole units: on such a store, do not run `shopper:upgrade`. Run the other steps one by one, as in [Upgrading Production](#upgrading-production), and leave out the zero-decimal step.
+</Warning>
+
+Review the Rector changes with `git diff`, then work through the [High Impact Changes](#high-impact-changes) the command does not apply: published config files, permission checks in your code and the scheduler. Let Boost add the [upgrade skills](/3.x/ai-tools#upgrade-skills) if a coding agent works on the upgrade with you, and run your test suite.
+
+## Upgrading Production
+
+The Rector step changed your code, and you commit that code. The other steps change the database and the files, and they run again on production when you deploy 3.0. Put the store in maintenance mode, deploy, then run the steps one by one:
+
+```bash
+php artisan down
+php artisan migrate --force
+php artisan shopper:upgrade:permissions --force
+php artisan permission:cache-reset
+php artisan shopper:stock:reconcile --fix
+php artisan shopper:link --force
+php artisan shopper:files:secure
+php artisan up
+```
+
+Add `php artisan shopper:upgrade:fix-zero-decimal-currencies --force` after the permissions only when the production store still holds amounts multiplied by 100, as explained in [Zero-Decimal Amounts](#zero-decimal-amounts).
+
+The `shopper:upgrade:permissions` and `shopper:upgrade:fix-zero-decimal-currencies` commands come from `shopper/upgrade`. A deploy that runs `composer install --no-dev` does not install it, so for the release that ships 3.0, move the package from `require-dev` to `require`:
+
+```bash
+composer require shopper/upgrade:^3.0
+```
+
+Some 3.0 migrations rewrite whole tables: the `public_id` columns get a ULID on every row, and the stock levels are built from the inventory history. On a large catalog or order history, they take minutes rather than seconds, so plan the maintenance window from the time they took on your staging copy.
+
+Once production runs 3.0, remove the package:
+
+```bash
+composer remove shopper/upgrade
+```
+
+## High Impact Changes
+
+### Permissions Use Dot Notation
+
+**Likelihood of Impact: High**
+
+*Affects every application that checks a Shopper permission in its own code, policies, Blade views or seeders.*
+
+Shopper 3.0 names permissions `resource.action` instead of `action_resource`, and the `add` action becomes `create`. The upgrade command renames the permissions in the database and the roles keep them. Rename the checks in your own code:
+
+```php
+$user->can('browse_orders'); // [!code --]
+$user->can('orders.browse'); // [!code ++]
+
+$user->can('add_products'); // [!code --]
+$user->can('products.create'); // [!code ++]
+```
+
+```blade
+@can('edit_products') <!-- [!code --] -->
+@can('products.edit') <!-- [!code ++] -->
+```
+
+The resources keep their names, except `product_variants`, which becomes `products.variants`. Three permissions have a fixed name:
+
+| 2.x | 3.0 |
+|-----|-----|
+| `access_dashboard` | `system.dashboard` |
+| `access_setting` | `system.settings` |
+| `view_users` | `system.users` |
+
+The order detail page and the shipment slide-overs check `orders.read`, renamed from `read_orders`. Spatie keeps the 2.x names in its cache: clear it after the rename with `php artisan permission:cache-reset`.
+
+The `campaigns` resource is new and the rename does not create its permissions. Generate them and give them to the administrator role, as shown in [Generating Permissions](/3.x/acl#generating-permissions). The [ACL page](/3.x/acl#upgrading-from-2x) details the rename.
+
+### Published Config Files
+
+**Likelihood of Impact: High**
+
+*Affects applications with config files published under `config/shopper/` in 2.x.*
+
+A published config file is loaded over the package defaults. Shopper fills in a missing key from its own default, but a list such as the cart pipelines or the settings items is replaced as a whole, and an old class name stops the boot. Compare each published file with the 3.0 version and update these ones:
+
+**`settings.php`**: the settings items moved to a new namespace, and the old import fails on boot. The list also gains three pages, which stay hidden until you add them:
+
+```php title="config/shopper/settings.php"
+use Shopper\Settings\Items; // [!code --]
+use Shopper\Navigation\Setting\Items; // [!code ++]
+
+'items' => [
+    Items\GeneralSetting::class => true,
+    Items\AppearanceSetting::class => true, // [!code ++]
+    Items\StaffSetting::class => true,
+    Items\LocationSetting::class => true,
+    Items\ChannelSetting::class => true, // [!code ++]
+    Items\PaymentSetting::class => true,
+    Items\CarrierSetting::class => true,
+    Items\LegalSetting::class => true,
+    Items\ZoneSetting::class => true,
+    Items\TaxSetting::class => true,
+    Items\CurrencySetting::class => true,
+    Items\WebhookSetting::class => true, // [!code ++]
+],
+```
+
+**`cart.php`**: without the new pipeline stage, [automatic discounts](/3.x/discounts#automatic-discounts) never apply to a cart. Add it before `ApplyDiscounts`, with the two new keys:
+
+```php title="config/shopper/cart.php"
+'pipelines' => [
+    'cart' => [
+        Pipelines\CalculateLines::class,
+        Pipelines\ApplyAutomaticPromotions::class, // [!code ++]
+        Pipelines\ApplyDiscounts::class,
+        Pipelines\CalculateTax::class,
+        Pipelines\Calculate::class,
+    ],
+],
+
+'max_promotions' => 5, // [!code ++]
+
+'totals_ttl_minutes' => 15, // [!code ++]
+```
+
+**`orders.php`**: 3.0 builds the order number from the order's own id, where 2.x added the start value to the id of the previous order. Keep `start_sequence_from` at `1` and every new number is one higher than 2.x would have given it. Set it to `0` to continue the 2.x numbering:
+
+```php title="config/shopper/orders.php"
+'generator' => [
+    'start_sequence_from' => 1, // [!code --]
+    'start_sequence_from' => 0, // [!code ++]
+],
+```
+
+See [Order Number Generation](/3.x/orders#order-number-generation). The same file gains `reclaim_pending_after_hours`, covered in [Pending Orders Are Reclaimed](#pending-orders-are-reclaimed).
+
+**`payment.php`** and **`shipping.php`**: delete the `drivers` block of each file. Stripe reads `config/shopper/stripe.php` and each carrier reads its own file, see [Carriers Are Separate Packages](#carriers-are-separate-packages). `shipping.php` gains a rates cache:
+
+```php title="config/shopper/shipping.php"
+'rates_cache_ttl' => env('SHIPPING_RATES_CACHE_TTL', 600),
+```
+
+**`admin.php`** and **`features.php`** gain optional keys: a `notifications.database` block for the admin bell, and the `campaign` feature. Their defaults apply when the keys are missing. `themes.php` is a new file: `php artisan shopper:publish` adds it and keeps your existing files.
+
+**`components/*.php`**: the component keys changed in `product.php`, `setting.php`, `discount.php`, `dashboard.php` and `account.php`. Publish each file you had published again, then apply your overrides to it:
+
+```bash
+php artisan shopper:component:publish discount --force
+```
+
+In `discount.php`, for example, `slide-overs.discount-form` is gone, replaced by `slide-overs.add-promotion`, `slide-overs.products-picker`, `slide-overs.customers-picker`, `discounts.stats-panel` and the `discount-edit` page. See [Configuration](/3.x/configuration#components).
+
+The `shopper-upgrade-config` and `shopper-upgrade-settings-namespace` [upgrade skills](/3.x/ai-tools#upgrade-skills) guide a coding agent through these files.
+
+### Scheduler and Queue Worker
+
+**Likelihood of Impact: High**
+
+*Affects every store.*
+
+Shopper 2.x scheduled no command. Shopper 3.0 schedules several: reclaiming unpaid pending orders, sending webhook deliveries again, reconciling payments, syncing shipment tracking, pruning abandoned carts and pruning old records. Its event listeners also run on the queue. Without the scheduler and a queue worker, these tasks never run. See [Run the Scheduler and a Queue Worker](/3.x/installation#run-the-scheduler-and-a-queue-worker).
+
+### Carriers Are Separate Packages
+
+**Likelihood of Impact: High**
+
+*Affects stores that use UPS, FedEx or USPS.*
+
+Each carrier is now its own package with its own config file, like Stripe. Without the package, the carrier disappears from the shipping settings and `Shipping::driver('ups')` throws an exception. Install the carriers you use:
+
+```bash
+composer require shopper/ups shopper/fedex shopper/usps
+php artisan vendor:publish --tag=shopper-ups-config
+```
+
+The environment variables keep their names. A value you wrote directly in the `drivers` block of `shipping.php` moves to the carrier's file, where the keys are flat:
+
+```php
+// config/shopper/shipping.php in 2.x
+'drivers' => ['ups' => ['enabled' => true, 'credentials' => ['client_id' => 'abc']]],
+
+// config/shopper/ups.php in 3.0
+'enabled' => true,
+'client_id' => 'abc',
+```
+
+Rector renames the driver classes, from `Shopper\Shipping\Drivers\UpsDriver` to `Shopper\Ups\UpsDriver`, and the same for FedEx and USPS. See [UPS](/3.x/carriers/ups), [FedEx](/3.x/carriers/fedex) and [USPS](/3.x/carriers/usps).
+
+### Zero-Decimal Amounts
+
+**Likelihood of Impact: High**
+
+*Affects stores that sell in a zero-decimal currency, such as XAF or JPY.*
+
+Before 2.7, Shopper multiplied every amount by 100, zero-decimal currencies included. Step 4 of the upgrade divides those amounts by 100. It is right only for a store that still holds them: one that started before 2.7 and never ran `shopper:fix-zero-decimal-currencies`. On any other store, leave the step out, as the [warning above](#running-the-upgrade) explains. Preview what the command would change:
+
+```bash
+php artisan shopper:upgrade:fix-zero-decimal-currencies --dry-run
+```
+
+See [Data From Shopper 2.x](/3.x/money#data-from-shopper-2x) for the tables it changes.
+
+## Medium Impact Changes
+
+### Renamed Classes
+
+**Likelihood of Impact: Medium**
+
+*Affects code that imports these classes. Rector renames them.*
+
+| 2.x | 3.0 |
+|-----|-----|
+| `Shopper\Settings\*` | `Shopper\Navigation\Setting\*` |
+| `Shopper\Core\Models\Contracts\ShopperUser` | `Shopper\Models\Contracts\ShopperUser` |
+| `Shopper\Core\Models\Contracts\Cart`, `CartLine` | `Shopper\Cart\Models\Contracts\Cart`, `CartLine` |
+| `Shopper\Livewire\Components\Products\Form\*` | `Shopper\Livewire\Pages\Product\*` (`Edit` becomes `Overview`, `RelatedProducts` becomes `Related`) |
+| `Shopper\Shipping\Drivers\UpsDriver`, `FedExDriver`, `UspsDriver` | `Shopper\Ups\UpsDriver`, `Shopper\FedEx\FedExDriver`, `Shopper\Usps\UspsDriver` |
+
+Rector does not replace the `Shopper\Core\Traits\ShopperUser` trait, which 3.0 removes. Use `Shopper\Traits\InteractsWithShopper` on your User model:
+
+```php title="app/Models/User.php"
+use Shopper\Core\Traits\ShopperUser; // [!code --]
+use Shopper\Traits\InteractsWithShopper; // [!code ++]
+```
+
+A custom product edit screen moves from Livewire form components to pages registered in `config/shopper/components/product.php`. The `shopper-upgrade-product-edit` [upgrade skill](/3.x/ai-tools#upgrade-skills) covers it.
+
+### Contracts
+
+**Likelihood of Impact: Medium**
+
+*Affects classes that implement these contracts themselves. A model that extends Shopper's model, or a driver that extends Shopper's base driver, already has the new methods.*
+
+| Contract | Added in 3.0 |
+|----------|--------------|
+| `Shopper\Core\Models\Contracts\Order` | `canTransitionTo(OrderStatus $status): bool`, `transitionTo(OrderStatus $status): void`, `canTransitionPaymentTo(PaymentStatus $status): bool`, `transitionPaymentTo(PaymentStatus $status): void`, `allowsDownloads(): bool`, `promotions(): HasMany` |
+| `Shopper\Core\Models\Contracts\Category` | `enabledSubtreeIds(): Illuminate\Support\Collection` |
+| `Shopper\Core\Contracts\Priceable` | `resolvePrice(?PricingContext $context = null): ?ResolvedPrice` |
+| `Shopper\Payment\Contracts\PaymentDriver` | `mode(): ?PaymentMode`, `supportsRetrieval(): bool` |
+| `Shopper\Shipping\Contracts\ShippingDriver` | `supportsWebhooks(): bool`, `handleWebhook(Request $request): ?TrackingInfo` |
+
+A payment driver that overrides `refundPayment()` takes the new `$context` argument, even when it extends `Shopper\Payment\Drivers\Driver`:
+
+```php
+public function refundPayment(string $reference, int $amount, ?string $reason = null): PaymentResult // [!code --]
+public function refundPayment(string $reference, int $amount, ?string $reason = null, array $context = []): PaymentResult // [!code ++]
+```
+
+`WebhookResult::$action` is a `Shopper\Payment\Enum\WebhookAction` case, where 2.x took a string. A driver's `handleWebhook()` passes `WebhookAction::Captured` in place of `'captured'`, and the same for `authorized`, `failed`, `canceled`, `refunded` and `ignored`. The enum adds `RefundFailed`.
+
+```php
+use Shopper\Payment\Enum\WebhookAction;
+
+return new WebhookResult(action: 'refunded', reference: $reference, amount: $amount); // [!code --]
+return new WebhookResult(action: WebhookAction::Refunded, reference: $reference, amount: $amount); // [!code ++]
+```
+
+In 2.x every successful refund result settled the refund at once. A 3.x result whose `isPending()` is true (status `pending` or `requires_action`) and whose reference is not the payment reference leaves the refund pending until a `Refunded` or `RefundFailed` webhook carries the same refund ID. A driver whose provider settles refunds later returns `PaymentResult::pendingRefund()` with the provider's refund ID, as described in [Pending Refunds](/3.x/payments#pending-refunds).
+
+`PaymentProcessingService::refund()` takes a fifth, optional `$idempotencyKey` argument. A call that repeats a key already used on the order returns that refund without calling the provider: generate the key once per refund and send it again on every retry. A successful result can now be pending, so check `$result->isPending()` before treating the money as returned.
+
+A custom settings page implements `SettingItem`, which now extends `NavigationItem` and requires `group(): ?string`. A custom sidebar item returns `?string` from `getActiveWhen()`, where 2.x returned `bool`. The `shopper-upgrade-contracts` [upgrade skill](/3.x/ai-tools#upgrade-skills) covers these changes.
+
+### Product Channel Scope
+
+**Likelihood of Impact: Medium**
+
+*Affects storefront code that filters products by sales channel.*
+
+```php
+Product::query()->forChannel($mobileApp->id)->get(); // [!code --]
+Product::query()->channel($mobileApp->id)->get(); // [!code ++]
+```
+
+See [Filter by Channel](/3.x/products#filter-by-channel).
+
+### Cart Coupons
+
+**Likelihood of Impact: Medium**
+
+*Affects storefront code that reads `coupon_code` on a cart.*
+
+A cart can now hold several promotion codes, so the `coupon_code` column of `carts` is dropped and its values are not copied. Read the codes from `$cart->promotions()`. `applyCoupon(Cart $cart, string $code)` keeps its signature, and `removeCoupon()` takes the code to remove, or removes every code without it:
+
+```php
+Cart::removeCoupon($cart); // [!code --]
+Cart::removeCoupon($cart, 'SUMMER10'); // [!code ++]
+```
+
+### Order Numbers
+
+**Likelihood of Impact: Medium**
+
+*Affects code that calls `generate_number()`.*
+
+The helper takes the sequence to format, which Shopper reads from the order's id once the order exists. A migration also renames duplicate order numbers by appending `-{id}`.
+
+```php
+$number = generate_number(); // [!code --]
+$number = generate_number($order->id); // [!code ++]
+```
+
+See [Order Number Generation](/3.x/orders#order-number-generation), and the `start_sequence_from` change in [Published Config Files](#published-config-files).
+
+### Pending Orders Are Reclaimed
+
+**Likelihood of Impact: Medium**
+
+*Affects stores with orders that stay pending for more than a day.*
+
+A pending order whose online payment never lands is cancelled after 24 hours and its stock is released. Offline payments are never reclaimed. Set `reclaim_pending_after_hours` in `config/shopper/orders.php` to change the delay, or to `null` to turn it off. See [Reclaiming Pending Orders](/3.x/orders#reclaiming-pending-orders).
+
+### Files of Virtual Products
+
+**Likelihood of Impact: Medium**
+
+*Affects stores that sell downloadable products.*
+
+The files of virtual products move to the disk set in `shopper.media.storage.files_disk`, the private `local` disk by default. Each moved file gets a new `id`, so code or links that store a file id need the new one. See [Downloadable Files](/3.x/products#downloadable-files).
+
+### Removed Classes and Components
+
+**Likelihood of Impact: Medium**
+
+*Affects applications that extend or register these classes.*
+
+3.0 removes these classes:
+
+- `Shopper\Livewire\Components\Search`
+- `Shopper\Livewire\SlideOvers\DiscountForm` and `Shopper\Livewire\SlideOvers\RelatedProductsList`
+- `Shopper\Livewire\Pages\Settings\Index`
+- `Shopper\Livewire\Components\Settings\Legal\Privacy`, `Refund`, `Shipping` and `Terms`, replaced by `PolicyForm`
+- `Shopper\Livewire\Components\Settings\Team\UsersRole`
+- `Shopper\Traits\CanBeCacheable`
+- `Shopper\Cart\Discounts\DiscountCalculator`
+
+A published component config that still lists one of them points to a class that no longer exists: publish it again, as in [Published Config Files](#published-config-files).
+
+### Panel Assets
+
+**Likelihood of Impact: Medium**
+
+*Affects deploy scripts and servers that serve the panel assets.*
+
+2.x linked the panel assets at `public/{prefix}`, `public/cpanel` by default. 3.0 links them at `public/vendor/shopper`, and `shopper:link` removes the old link. The panel images and styles are served from `/vendor/shopper/...` and answer 404 until the new link exists. If `public/vendor/shopper` is a directory of published files rather than a link, delete it before you run `shopper:link`. The `/public/cpanel` line can leave your `.gitignore`.
+
+## Low Impact Changes
+
+### Renamed Zero-Decimal Command
+
+**Likelihood of Impact: Low**
+
+`shopper:fix-zero-decimal-currencies` becomes `shopper:upgrade:fix-zero-decimal-currencies`.
+
+### Inapplicable Discount Status
+
+**Likelihood of Impact: Low**
+
+`Shopper\Core\Enum\DiscountStatus` gains the `Inapplicable` case. A `match` on the enum without a `default` arm needs it.
+
+### Published Scope Compares the Time
+
+**Likelihood of Impact: Low**
+
+The `publish` scope of products compares `published_at` with the current time, where 2.x compared the date only. A product scheduled for later today stays hidden until that time.
+
+### Duplicate Rows Merged
+
+**Likelihood of Impact: Low**
+
+The 3.0 migrations remove duplicate rows before adding unique indexes: a product or customer attached twice to the same discount, several prices for the same product or variant in the same currency (the newest row stays), and several lines for the same product in one cart (merged into one line with the total quantity). Order numbers that appear twice are renamed, as in [Order Numbers](#order-numbers).
+
+## Coming From a Release Before 2.7
+
+The 2.x releases changed code that 3.0 relies on: amounts stored in cents (2.7), Filament components moved from `InteractsWithForms` to `InteractsWithSchemas`, slide-overs moved to the `laravelcm/livewire-slide-overs` package, and new two-factor authentication interfaces. Follow the [2.x upgrade guides](/2.x/upgrade) up to 2.12, then this guide. The `shopper-upgrade-money-storage`, `shopper-upgrade-filament-schemas`, `shopper-upgrade-slide-overs` and `shopper-upgrade-two-factor-auth` [upgrade skills](/3.x/ai-tools#upgrade-skills) cover these changes.

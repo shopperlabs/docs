@@ -162,8 +162,8 @@ export default async function Home() {
           Shopper 3 runs on Filament 5, Livewire 4 and Laravel 12 or 13. <code>php artisan shopper:upgrade</code> moves a 2.x application with Rector rules and a permission migration.
         </>
       ),
-      label: 'Upgrade',
-      href: firstUrl(tab('Upgrade'))!,
+      label: 'Upgrade guide',
+      href: '/3.x/upgrade',
     },
   ];
 
@@ -254,7 +254,7 @@ export default async function Home() {
                 </li>
               );
             })}
-            <li aria-hidden className={filler} />
+            <li aria-hidden className={`${filler} max-lg:hidden! lg:col-span-2`} />
           </ul>
         </Lined>
       </Section>

@@ -8,8 +8,8 @@ import { hatch, Lined, linings } from '@/components/ui/lined';
 export const frame = 'grid gap-px border border-zinc-950/10 bg-zinc-950/10 dark:border-white/10 dark:bg-white/10';
 
 /**
- * The marketing site's hatch, for the cell a grid leaves empty. 7 tabs and 5
- * domains leave exactly one at 2, 3 and 4 columns; another count needs another span.
+ * The marketing site's hatch, for the cell a grid leaves empty. 5 domains leave
+ * exactly one at 2, 3 and 4 columns; another count needs another span.
  */
 export const filler = clsx('hidden bg-background sm:block', hatch, linings.zinc);
 
