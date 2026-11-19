@@ -78,7 +78,7 @@ php artisan shopper:upgrade --path=app,src
 
 In a CI job or any run without a terminal, the confirmation answers no and the command stops. Pass `--force` to run every step without asking.
 
-Run the command once. Its steps record that they ran, and a second run of the whole command stops with an error. To repeat one step, run its own command from the table.
+Run the command once. Step 4 passes `--force`, which skips the check that the zero-decimal fix already ran: on a store that sells in a zero-decimal currency, a second run divides those amounts by 100 again, then stops with an error before steps 5 to 7. If a run stops partway, run the remaining steps one by one with their own commands from the table.
 
 <Warning>
 The zero-decimal step expects the amounts Shopper wrote before 2.7, multiplied by 100. A store that already ran `shopper:fix-zero-decimal-currencies` under 2.x, or that started on 2.7 or later, holds whole units: on such a store, do not run `shopper:upgrade`. Run the other steps one by one, as in [Upgrading Production](#upgrading-production), and leave out the zero-decimal step.
@@ -277,6 +277,43 @@ php artisan shopper:upgrade:fix-zero-decimal-currencies --dry-run
 
 See [Data From Shopper 2.x](/3.x/money#data-from-shopper-2x) for the tables it changes.
 
+### Zone Relations
+
+**Likelihood of Impact: High**
+
+*Affects every store with zones.*
+
+The `zone_has_relations` table links each zone to its countries, carriers and payment methods. 2.x stored the class name of each linked model in `zonable_type`, such as `Shopper\Core\Models\Country`. 3.0 adds `country`, `carrier` and `payment_method` to the morph map and looks for these names, and no 3.0 migration rewrites the existing rows. Until they are rewritten, `$zone->countries`, `$zone->carriers` and `$zone->paymentMethods` come back empty: every zone loses its countries, carriers and payment methods.
+
+Create a migration in your application, so production gets the same change when it runs `migrate --force`:
+
+```bash
+php artisan make:migration rename_shopper_zone_relation_types
+```
+
+Rewrite the rows in its `up()` method:
+
+```php
+use Illuminate\Support\Facades\DB;
+
+public function up(): void
+{
+    $types = [
+        'Shopper\Core\Models\Country' => 'country',
+        'Shopper\Core\Models\Carrier' => 'carrier',
+        'Shopper\Core\Models\PaymentMethod' => 'payment_method',
+    ];
+
+    foreach ($types as $class => $alias) {
+        DB::table(shopper_table('zone_has_relations'))
+            ->where('zonable_type', $class)
+            ->update(['zonable_type' => $alias]);
+    }
+}
+```
+
+The collections linked to a zone keep working: 2.x already stored them as `collection`.
+
 ## Medium Impact Changes
 
 ### Renamed Classes
@@ -364,6 +401,16 @@ Cart::removeCoupon($cart); // [!code --]
 Cart::removeCoupon($cart, 'SUMMER10'); // [!code ++]
 ```
 
+### Cart Exceptions
+
+**Likelihood of Impact: Medium**
+
+*Affects storefront code that adds products to a cart, completes a checkout or signs customers in.*
+
+`Cart::add()` throws `MissingPriceException` for a product without a price in the cart currency, where 2.x added the line at 0. Adding a product already in the cart with other metadata throws `CartLineMetadataConflictException`, and a quantity the [quantity rules](/3.x/pricing#quantity-rules) refuse throws `QuantityRuleViolationException`. Converting the cart to an order throws `PriceChangedException` when a unit price went up and `PromotionUnavailableException` when the terms of an applied promotion no longer hold. These exceptions extend `RuntimeException` and share no base class: catch each one where your storefront shows an error. See [Adding Items](/3.x/cart#adding-items) and [Order Conversion](/3.x/cart#order-conversion).
+
+When a customer signs in, `associate()` merges the guest cart into the customer's open cart, where 2.x gave the guest cart to the customer and left the other cart aside. See [Associating Cart on Login](/3.x/cart#associating-cart-on-login).
+
 ### Order Numbers
 
 **Likelihood of Impact: Medium**
@@ -386,6 +433,78 @@ See [Order Number Generation](/3.x/orders#order-number-generation), and the `sta
 *Affects stores with orders that stay pending for more than a day.*
 
 A pending order whose online payment never lands is cancelled after 24 hours and its stock is released. Offline payments are never reclaimed. Set `reclaim_pending_after_hours` in `config/shopper/orders.php` to change the delay, or to `null` to turn it off. See [Reclaiming Pending Orders](/3.x/orders#reclaiming-pending-orders).
+
+### Capture and Refund Checks
+
+**Likelihood of Impact: Medium**
+
+*Affects code that calls `PaymentProcessingService::capture()` or `refund()`.*
+
+2.x passed every capture and refund to the provider. 3.0 checks the order first and throws a `Shopper\Payment\Exceptions\PaymentException`:
+
+- `capture()` throws on a cancelled or archived order. On an order already paid, it returns a successful result without calling the provider.
+- `refund()` throws when the payment status is neither Paid nor Partially refunded, and when the amount is larger than what remains refundable: the captured total minus the refunds made or pending.
+
+Catch the exception where your code captures or refunds a payment.
+
+### Stripe Webhooks
+
+**Likelihood of Impact: Medium**
+
+*Affects stores that take payments with Stripe.*
+
+In 2.x the application registered its own Stripe webhook route, `/webhooks/stripe` in the starter kits. The Store API now receives the webhooks at `https://example.com/store/webhooks/stripe`: point the endpoint in the Stripe Dashboard to this URL and remove your route and controller. A store without the Store API keeps a route of its own, as shown at the end of [The Event Journal](/3.x/payments#the-event-journal).
+
+The driver reads refunds from `refund.created`, `refund.updated` and `refund.failed`, where 2.x read `charge.refunded`. Add the three events to the endpoint, as listed in [Handled Events](/3.x/payments/stripe#handled-events).
+
+`STRIPE_WEBHOOK_SECRET` is now required: without it, the driver counts as not configured and carts stop offering the payment methods that use Stripe. Copy the endpoint's signing secret into it, as described in [Configuration](/3.x/payments/stripe#configuration).
+
+### Custom Shipping Drivers
+
+**Likelihood of Impact: Medium**
+
+*Affects shipping drivers written for 2.x that extend `Shopper\Shipping\Drivers\Driver`.*
+
+The base driver returns `false` from `supportsTracking()`, where 2.x returned `true`. A driver that implements `track()` says so, or the scheduled tracking sync skips its shipments:
+
+```php
+public function supportsTracking(): bool
+{
+    return true;
+}
+```
+
+`TrackingInfo` and `TrackingEvent` take a `Shopper\Core\Enum\ShipmentStatus` case as their status, where 2.x took a string:
+
+```php
+use Shopper\Core\Enum\ShipmentStatus;
+
+new TrackingInfo(trackingNumber: $number, status: 'in_transit'); // [!code --]
+new TrackingInfo(trackingNumber: $number, status: ShipmentStatus::InTransit); // [!code ++]
+```
+
+See [Custom Shipping Drivers](/3.x/carriers#custom-shipping-drivers).
+
+### Rate Codes of Carrier Options
+
+**Likelihood of Impact: Medium**
+
+*Affects storefronts that find the chosen carrier option from a rate's `serviceCode`.*
+
+A rate built from a carrier option holds the option's `public_id`, a ULID, in `serviceCode`, where 2.x held its numeric `id`:
+
+```php
+CarrierOption::query()->find($rate->serviceCode); // [!code --]
+CarrierOption::query()->where('public_id', $rate->serviceCode)->first(); // [!code ++]
+```
+
+### Search Through Scout
+
+**Likelihood of Impact: Medium**
+
+*Affects every store, and most of all applications that already use Laravel Scout.*
+
+Shopper 3.0 requires `laravel/scout` and makes products, brands, categories, collections, orders and your User model searchable. These models follow `SCOUT_DRIVER`, like the rest of your application. With Algolia, Meilisearch or Typesense, import the existing records once, as shown in [Importing Existing Records](/3.x/search#importing-existing-records). The `database` driver does not work with Shopper's models, and searching them throws: use `collection`, the default, until you run a search engine. See [Search](/3.x/search).
 
 ### Files of Virtual Products
 
@@ -410,8 +529,11 @@ The files of virtual products move to the disk set in `shopper.media.storage.fil
 - `Shopper\Livewire\Components\Settings\Team\UsersRole`
 - `Shopper\Traits\CanBeCacheable`
 - `Shopper\Cart\Discounts\DiscountCalculator`
+- `Shopper\Core\Actions\CreateOrderTaxLinesAction`, `Shopper\Core\Taxes\OrderItemTaxAdapter` and `Shopper\Core\Listeners\Orders\SyncOrderShippingStatusListener`
 
 A published component config that still lists one of them points to a class that no longer exists: publish it again, as in [Published Config Files](#published-config-files).
+
+The `shopper.settings.index` route goes with the `Index` page: link to `shopper.settings.shop`, the General settings page. The `x-shopper::user-avatar`, `x-shopper::menu.setting`, `x-shopper::icons.facebook`, `x-shopper::icons.instagram` and `x-shopper::icons.twitter` Blade components are removed. `Shopper::addonPermissions()` is removed too: it had no effect in 2.x, so delete the call.
 
 ### Panel Assets
 
@@ -446,6 +568,59 @@ The `publish` scope of products compares `published_at` with the current time, w
 **Likelihood of Impact: Low**
 
 The 3.0 migrations remove duplicate rows before adding unique indexes: a product or customer attached twice to the same discount, several prices for the same product or variant in the same currency (the newest row stays), and several lines for the same product in one cart (merged into one line with the total quantity). Order numbers that appear twice are renamed, as in [Order Numbers](#order-numbers).
+
+### Used Discounts Are Locked
+
+**Likelihood of Impact: Low**
+
+Once a discount has been used, saving a new `code`, `type` or `value` throws `DiscountTermsFrozenException`, and moving a used fixed-amount discount to another zone throws `DiscountZoneFrozenException`. Code that edits discounts, such as an import, creates a new discount instead.
+
+### Model Scopes Use the Scope Attribute
+
+**Likelihood of Impact: Low**
+
+The query scopes of Shopper's models are protected methods marked with `#[Scope]`, such as `publish()` on products, where 2.x declared `scopePublish()`. Calls through a query, such as `Product::query()->publish()`, do not change. A swapped model that overrides a scope declares it the same way: Laravel calls the attribute method first, so a `scopePublish()` override is ignored.
+
+```php title="app/Models/Product.php"
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
+
+public function scopePublish(Builder $query): void // [!code --]
+#[Scope] // [!code ++]
+protected function publish(Builder $query): void // [!code ++]
+```
+
+### Registering Custom Drivers
+
+**Likelihood of Impact: Low**
+
+The closure passed to `Payment::extend()` or `Shipping::extend()` receives the service container, where 2.x passed the driver name. A closure that takes no argument keeps working, one typed `fn (string $name)` throws a `TypeError`. `configuredDrivers()` reads the `enabled` key of `config/shopper/{driver}.php`, where 2.x read `shopper.payment.drivers.{driver}.enabled`. See [Register the Driver](/3.x/payments#step-2-register-the-driver).
+
+### Variant Page URL
+
+**Likelihood of Impact: Low**
+
+The admin page of a variant moves from `/products/{product}/variants/{variant}` to `/products/{product}/edit/variants/{variant}`. Links built with `route()` keep working, since the route name does not change.
+
+### Sidebar Cache Duration
+
+**Likelihood of Impact: Low**
+
+`cache.duration` in `config/shopper/sidebar.php` counts minutes, where 2.x passed it to the cache as seconds. With the default `1440`, a cached sidebar now lasts 24 hours instead of 24 minutes. The cache is off unless `cache.method` is set.
+
+### Rector Removes Unused Imports
+
+**Likelihood of Impact: Low**
+
+The upgrade's Rector step removes the unused `use` statements of every file it scans, along with the class renames. The `git diff` you review after the upgrade includes them.
+
+### TypeScript Types
+
+**Likelihood of Impact: Low**
+
+*Affects storefronts that import `@shopperlabs/shopper-types`, such as the 2.x Inertia starter kits.*
+
+The package moves from 1.0 to 3.0. `Entity.id` is a `ResourceId`, `string | number`, where 1.0 typed it as a number, and the `DateEntity` type is removed: dates are ISO 8601 strings.
 
 ## Coming From a Release Before 2.7
 
