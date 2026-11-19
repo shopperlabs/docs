@@ -4,8 +4,8 @@ import clsx from 'clsx';
 import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useId, useMemo, useState, type ReactNode } from 'react';
-import { containsActive, samePath, type TreeFolder, type TreeItem, type TreeNode } from './tree';
+import { useEffect, useId, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { containsActive, firstUrl, samePath, type TreeFolder, type TreeItem, type TreeNode } from './tree';
 
 function itemClassName(active: boolean) {
   return clsx(
@@ -42,20 +42,71 @@ function NavLink({ item, depth, onNavigate }: { item: TreeItem; depth: number; o
   );
 }
 
+const NO_GROUPS: string[] = [];
+const openGroups = new Map<string, string[]>();
+const listeners = new Set<() => void>();
+
+function subscribe(listener: () => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
+// Same reference until a write, as useSyncExternalStore requires. Storage can throw (private mode, blocked site data)
+// or hold something other than a list, written by hand or by an older format.
+function readOpenGroups(version: string): string[] {
+  let groups = openGroups.get(version);
+  if (!groups) {
+    try {
+      const stored: unknown = JSON.parse(sessionStorage.getItem(`shopper-docs-navigation:${version}`) ?? '[]');
+      groups = Array.isArray(stored) ? stored : NO_GROUPS;
+    } catch {
+      groups = NO_GROUPS;
+    }
+    openGroups.set(version, groups);
+  }
+  return groups;
+}
+
+function writeOpenGroup(version: string, id: string, open: boolean) {
+  const groups = readOpenGroups(version);
+  if (groups.includes(id) === open) return;
+  const next = open ? [...groups, id] : groups.filter((group) => group !== id);
+  openGroups.set(version, next);
+  try {
+    sessionStorage.setItem(`shopper-docs-navigation:${version}`, JSON.stringify(next));
+  } catch {}
+  listeners.forEach((listener) => listener());
+}
+
 /**
- * Open on the pages it holds, closed elsewhere. A click flips it for the
- * current page; the next navigation goes back to the rule. The state resets
- * during render, without an effect.
+ * Closed by default and open on the pages it holds. Opening it, by a click or
+ * by visiting one of its pages, keeps it open for the rest of the tab's
+ * session, per version, like the Filament docs; closing it keeps it closed.
  */
-function useFold(rule: boolean): [boolean, (open: boolean) => void] {
+function useFold(id: string, holdsActive: boolean): [boolean, (open: boolean) => void] {
   const pathname = usePathname();
+  const version = pathname.split('/')[1];
+  const stored = useSyncExternalStore(subscribe, () => readOpenGroups(version), () => NO_GROUPS);
   const [toggled, setToggled] = useState<boolean | null>(null);
   const [seen, setSeen] = useState(pathname);
   if (seen !== pathname) {
     setSeen(pathname);
     setToggled(null);
   }
-  return [toggled ?? rule, setToggled];
+
+  useEffect(() => {
+    if (holdsActive) writeOpenGroup(version, id, true);
+  }, [version, id, holdsActive, pathname]);
+
+  return [
+    toggled ?? (holdsActive || stored.includes(id)),
+    (open) => {
+      setToggled(open);
+      writeOpenGroup(version, id, open);
+    },
+  ];
 }
 
 /** Folded content stays in the HTML, hidden: every page keeps its links to the others, for readers and crawlers. */
@@ -70,7 +121,10 @@ function FoldContent({ id, open, children }: { id: string; open: boolean; childr
 function FolderGroup({ folder, depth, onNavigate }: { folder: TreeFolder; depth: number; onNavigate?: () => void }) {
   const pathname = usePathname();
   const contentId = useId();
-  const [open, setOpen] = useFold(containsActive(folder, pathname) || folder.defaultOpen === true);
+  const [open, setOpen] = useFold(
+    `folder:${folder.$id}`,
+    containsActive(folder, pathname) || folder.defaultOpen === true,
+  );
 
   const index = folder.index;
   const indexActive = index ? samePath(pathname, index.url) : false;
@@ -237,7 +291,11 @@ function toGroups(nodes: TreeNode[]): NavGroup[] {
 function NavigationGroup({ group, onNavigate }: { group: NavGroup; onNavigate?: () => void }) {
   const pathname = usePathname();
   const contentId = useId();
-  const [open, setOpen] = useFold(group.nodes.some((node) => containsActive(node, pathname)));
+  // Titles repeat across the tabs of a version (2.x Documentation and User Guide both have "Sales"); URLs do not.
+  const [open, setOpen] = useFold(
+    `group:${firstUrl(group.nodes[0])}`,
+    group.title !== undefined && group.nodes.some((node) => containsActive(node, pathname)),
+  );
 
   const list = (
     <div className={clsx('relative', group.title && 'mt-3')}>
