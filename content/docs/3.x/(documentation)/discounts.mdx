@@ -1,0 +1,757 @@
+---
+title: Discounts
+description: The Discount model in Shopper, discount types and rules, eligibility, usage limits, automatic discounts, and how promotions stack on a cart.
+---
+
+A discount takes an amount off a cart: 20% off the whole order with the `SUMMER20` code, $10.00 off orders above $50.00, or 15% off the Classic T-Shirt for a list of customers. The customer enters a code, or the cart applies an automatic discount without one. Several discounts can apply to the same cart, in the order their exclusivity class and priority decide.
+
+Each discount carries its own rules: dates, usage limits, a minimum purchase, the customers who can use it and the zone it is sold in. A [campaign](/3.x/campaigns) can group several discounts under a shared budget. The models and enums live in `shopper/core`. The rules that decide whether a discount applies and how much it takes off live in `shopper/cart`, in `Shopper\Cart\Discounts\DiscountValidator` and `Shopper\Cart\Discounts\PromotionResolver`, which the [calculation pipeline](/3.x/cart#calculation-pipeline) runs every time a cart is calculated.
+
+## Models
+
+Shopper uses three models for discounts:
+
+| Model | Purpose |
+|-------|---------|
+| `Shopper\Core\Models\Discount` | The discount: code, type, value and rules |
+| `Shopper\Core\Models\DiscountDetail` | Links a discount to a product it applies to or a customer who can use it |
+| `Shopper\Core\Models\OrderPromotion` | One discount applied to an order, documented on the [Orders](/3.x/orders) page |
+
+`Discount` implements the `Shopper\Core\Models\Contracts\Discount` contract. None of these models has a key in `config/shopper/models.php`, so they are always loaded with their own class: write `Shopper\Core\Models\Discount` in your code, and add a relationship with `resolveRelationUsing()`, as shown in [Models You Cannot Swap](/3.x/models#models-you-cannot-swap).
+
+The `HasPublicId` trait fills the `public_id` of a discount with a ULID when it is created, so you can find a discount with `Discount::findByPublicId()` or the `wherePublicId()` scope, described in [Public IDs](/3.x/models#public-ids).
+
+## Database Schema
+
+Discounts use two tables: one row per discount, and one row per product or customer linked to a discount.
+
+### Discount Table
+
+The `sh_discounts` table holds one row per discount (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)):
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `code` | string | yes | null | Code the customer enters, unique; null for an automatic discount |
+| `trigger` | string | no | `code` | `code` or `automatic`, cast to `PromotionSource` |
+| `type` | string | no | - | `percentage` or `fixed_amount`, cast to `DiscountType` |
+| `value` | integer | no | - | Percentage, or amount in cents |
+| `is_active` | boolean | no | `false` | Turns the discount on |
+| `apply_to` | string | no | - | `order` or `products`, a `DiscountApplyTo` value |
+| `min_required` | string | no | - | `none`, `price` or `quantity`, a `DiscountRequirement` value |
+| `min_required_value` | string | yes | null | Minimum subtotal in cents, or minimum quantity |
+| `eligibility` | string | no | - | Key of the eligibility rule, such as `everyone` or `customers` |
+| `usage_limit` | unsigned integer | yes | null | Uses allowed across all customers, null for no limit |
+| `usage_limit_per_user` | boolean | no | `false` | Allows one use per customer |
+| `total_use` | unsigned integer | no | 0 | Uses so far |
+| `start_at` | datetime | no | - | Start of the discount |
+| `end_at` | datetime | yes | null | End of the discount, null when it never expires |
+| `zone_id` | bigint | yes | null | Zone the discount is limited to, null for every zone |
+| `campaign_id` | bigint | yes | null | Campaign of the discount |
+| `exclusivity_class` | string | no | `order` | `order`, `product` or `shipping`, cast to `ExclusivityClass` |
+| `combinable` | boolean | no | `false` | Lets the discount stack with another discount of its class |
+| `priority` | integer | no | 0 | Order within the class, highest first |
+| `metadata` | jsonb | yes | null | Your own data, cast to an array |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+`start_at` has no default, so pass it when you create a discount. Several automatic discounts can have a null `code`: the unique index accepts more than one null. Deleting a zone or a campaign sets `zone_id` or `campaign_id` to null. Shopper updates `total_use` at checkout; leave it out of your own writes.
+
+### Discountable Table (Pivot)
+
+The `sh_discountables` table holds the `DiscountDetail` rows, one per product or customer linked to a discount:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `discount_id` | bigint | no | - | Foreign key to the discount, rows are deleted with it |
+| `discountable_type` | string | no | - | Morph type of the linked model |
+| `discountable_id` | unsigned bigint | no | - | ID of the linked model |
+| `condition` | string | yes | null | `apply_to` or `eligibility`, cast to `DiscountCondition` |
+| `total_use` | unsigned integer | no | 0 | Not updated by Shopper |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+A unique index on `discount_id`, `discountable_type` and `discountable_id` links a model to a discount once.
+
+The orders table copies the discount that took the largest amount into its `discount_id`, `discount_code`, `discount_type`, `discount_value_at_apply` and `discount_currency_code` columns, and the `sh_order_promotions` table keeps every discount applied to the order. The [Orders](/3.x/orders) page documents both.
+
+## Discount Type
+
+The `type` column is cast to `Shopper\Core\Enum\DiscountType`, which sets what `value` means:
+
+| Case | Value | `value` holds |
+|------|-------|---------------|
+| `DiscountType::Percentage` | `percentage` | The percentage, from 1 to 100 |
+| `DiscountType::FixedAmount` | `fixed_amount` | The amount, in [cents](/3.x/money) |
+
+A percentage is computed on each line the discount applies to and rounded to the nearest cent per line. A fixed amount is capped at the subtotal of the lines it applies to, then split between them in proportion to their subtotals; the last line takes what is left, so the parts always add up to the amount.
+
+## Discount Application
+
+The `apply_to` column holds a `Shopper\Core\Enum\DiscountApplyTo` value:
+
+| Case | Value | Lines the discount reduces |
+|------|-------|----------------------------|
+| `DiscountApplyTo::Order` | `order` | Every line of the cart |
+| `DiscountApplyTo::Products` | `products` | The lines of the products linked to the discount, and of their variants |
+
+A discount reduces line subtotals: the shipping amount is never discounted. The cart records what each discount takes off each line, and tax is computed on the line subtotal minus those amounts, as described on the [Taxes](/3.x/taxes) page.
+
+## Discount Eligibility
+
+The `eligibility` column holds the key of an eligibility rule, which decides who can use the discount. `Shopper\Cart\Discounts\DiscountEligibilityManager` holds the rules, and Shopper registers two of them, whose keys are the cases of `Shopper\Core\Enum\DiscountEligibility`:
+
+| Key | Rule | Passes when |
+|-----|------|-------------|
+| `everyone` | `Shopper\Cart\Discounts\Eligibility\EveryoneEligibilityRule` | Always |
+| `customers` | `Shopper\Cart\Discounts\Eligibility\CustomersEligibilityRule` | The cart belongs to a customer linked to the discount |
+
+The `customers` rule refuses a guest cart with "Discount requires a logged-in customer." and a customer who is not linked with "Customer is not eligible for this discount.". Eligible customers are `DiscountDetail` rows with the `Eligibility` condition and the class of your user model, `config('auth.providers.users.model')`, as `discountable_type`.
+
+To set the eligible customers of a discount, call `Shopper\Cart\Discounts\SyncDiscountEligibilityAction`. It replaces the eligibility rows of the discount with the IDs you pass, using the morph type of the rule. It does not change the `eligibility` column, so set the column yourself, as shown in [VIP Customer Discount](#vip-customer-discount).
+
+### Custom Eligibility Rules
+
+A rule implements `Shopper\Cart\Contracts\DiscountEligibilityRule`. `key()` is the value stored in the `eligibility` column, `label()` and `description()` appear in the admin panel, `discountableType()` is the morph type of the models the rule links to a discount (null when it links none), and `passes()` decides for a cart. This rule keeps a discount for customers who never ordered:
+
+```php title="app/Discounts/FirstOrderEligibilityRule.php"
+<?php
+
+namespace App\Discounts;
+
+use Shopper\Cart\Contracts\DiscountEligibilityRule;
+use Shopper\Cart\Discounts\DiscountValidationResult;
+use Shopper\Cart\Pipelines\CartPipelineContext;
+use Shopper\Core\Models\Contracts\Order;
+use Shopper\Core\Models\Discount;
+
+class FirstOrderEligibilityRule implements DiscountEligibilityRule
+{
+    public function key(): string
+    {
+        return 'first_order';
+    }
+
+    public function label(): string
+    {
+        return __('First order');
+    }
+
+    public function description(): string
+    {
+        return __('Only customers who have never ordered can use it.');
+    }
+
+    public function discountableType(): ?string
+    {
+        return null;
+    }
+
+    public function passes(Discount $discount, CartPipelineContext $context): DiscountValidationResult
+    {
+        $customerId = $context->cart->customer_id;
+
+        if ($customerId === null) {
+            return new DiscountValidationResult(false, __('Sign in to use this discount.'));
+        }
+
+        $hasOrdered = resolve(Order::class)::query()
+            ->where('customer_id', $customerId)
+            ->exists();
+
+        if ($hasOrdered) {
+            return new DiscountValidationResult(false, __('This discount is for your first order.'));
+        }
+
+        return new DiscountValidationResult(true);
+    }
+}
+```
+
+Register the rule in the `boot` method of a service provider that every process loads (web requests, the Store API and queue workers), so the cart finds it wherever it is calculated:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Discounts\FirstOrderEligibilityRule;
+use Shopper\Cart\Discounts\DiscountEligibilityManager;
+
+public function boot(): void
+{
+    resolve(DiscountEligibilityManager::class)->register(new FirstOrderEligibilityRule);
+}
+```
+
+The discount form of the admin panel lists every registered rule with its label and description. A rule that links models, like `customers`, also needs a field to pick them: `Shopper\Discounts\DiscountEligibilityFieldRegistry` from the admin package holds these fields, and its `register()` method takes the rule key, the form state key, a closure that returns the Filament schema component, and a closure that keeps the allowed IDs among the submitted ones. A rule that links nothing, like the one above, needs no field.
+
+## Discount Requirements
+
+The `min_required` column holds a `Shopper\Core\Enum\DiscountRequirement` value, and `min_required_value` the minimum:
+
+| Case | Value | `min_required_value` |
+|------|-------|----------------------|
+| `DiscountRequirement::None` | `none` | Not used |
+| `DiscountRequirement::Price` | `price` | Minimum subtotal, in cents |
+| `DiscountRequirement::Quantity` | `quantity` | Minimum number of items |
+
+The price requirement compares the subtotal of the whole cart before any discount (unit price times quantity, for every line), whatever `apply_to` is. The quantity requirement adds up the quantities of every line. `min_required_value` is a string column: the cart reads it as an integer.
+
+## Discount Condition
+
+The `condition` column of a `DiscountDetail` row is cast to `Shopper\Core\Enum\DiscountCondition` and says why the model is linked:
+
+| Case | Value | Linked model |
+|------|-------|--------------|
+| `DiscountCondition::ApplyTo` | `apply_to` | A product the discount applies to |
+| `DiscountCondition::Eligibility` | `eligibility` | A customer who can use the discount |
+
+## Relationships
+
+A discount has its linked products and customers, a zone, a campaign and the orders it was used on.
+
+### Items (DiscountDetail)
+
+`items()` returns the `DiscountDetail` rows of the discount, a `HasMany` on `discount_id`. Each row points to its model through the polymorphic `discountable()` relationship, and `discount()` returns its discount:
+
+```php
+use Shopper\Core\Enum\DiscountCondition;
+use Shopper\Core\Models\Discount;
+
+$discount = Discount::query()->where('code', 'TSHIRT15')->firstOrFail();
+
+$products = $discount->items()
+    ->where('condition', DiscountCondition::ApplyTo)
+    ->with('discountable')
+    ->get()
+    ->pluck('discountable');
+```
+
+Link a product with its morph alias, `$product->getMorphClass()` (`product` in the [morph map](/3.x/models#morph-map)), so that `$product->discounts` finds the discount. Link a customer with the class of your user model, which `SyncDiscountEligibilityAction` does for you.
+
+### Zone
+
+`zone()` returns the zone the discount is limited to, or null when it applies in every [zone](/3.x/zones). A cart in another zone is refused with "Discount is not available in this zone.".
+
+The zone also sets the currency of a fixed amount: a fixed-amount discount applies only to carts in the currency of its zone, or in the store default currency (`shopper_currency()`) when it has no zone. Once a fixed-amount discount has been used, its zone is frozen: saving a new `zone_id` throws `Shopper\Core\Exceptions\DiscountZoneFrozenException`, so past orders keep the currency they were discounted in.
+
+### Campaign
+
+`campaign()` returns the campaign of the discount, or null. A campaign adds a currency check and a shared budget to the rules of its discounts, as described in [Campaigns and Discounts](/3.x/campaigns#campaigns-and-discounts).
+
+### Orders
+
+Every order a discount was applied to has an `OrderPromotion` row with the code, type, value and amount at checkout. `orders()` is a `HasMany` on the `discount_id` column of the orders table, which holds only the discount that took the largest amount from each order. To list every order that used a discount, query the promotions:
+
+```php
+use Shopper\Core\Models\OrderPromotion;
+
+$orderIds = OrderPromotion::query()
+    ->where('discount_id', $discount->id)
+    ->pluck('order_id');
+```
+
+From the order side, `$order->promotions` returns its `OrderPromotion` rows.
+
+## Value Handling
+
+The `value` of a percentage discount is the percentage as a whole number: `20` takes 20% off. The `value` of a fixed-amount discount is in [cents](/3.x/money): `1000` takes $10.00 off. `Shopper\Core\Observers\DiscountObserver` checks the value each time a discount is saved and throws `Shopper\Core\Exceptions\InvalidDiscountValueException` when it is 0 or less, or when a percentage is above 100.
+
+Once a discount has been used (`total_use` above 0), its terms are frozen: saving a new `code`, `type` or `value` throws `Shopper\Core\Exceptions\DiscountTermsFrozenException`, so past orders keep matching the discount they used. To offer different terms, create a new discount, or duplicate the used one from the admin panel and change the copy.
+
+## Dates
+
+`start_at` is required: a discount applies from that moment. `end_at` is optional, and a discount without one never expires. The cart compares both dates with the current time on every calculation. Before `start_at`, the code is refused with "Discount has not started yet.", and after `end_at` with "Discount has expired.". The checkout checks the dates again when it creates the order.
+
+A discount stays off until `is_active` is `true`, whatever its dates. The `active()` scope combines the three columns with the usage limit, as shown in [Retrieving Discounts](#retrieving-discounts).
+
+## Discount Status
+
+The `status` attribute returns a `Shopper\Core\Enum\DiscountStatus`, computed when you read it. The first matching row wins:
+
+| Status | When |
+|--------|------|
+| `Draft` | The discount is not saved yet |
+| `Disabled` | `is_active` is `false` |
+| `Expired` | `end_at` is in the past |
+| `LimitReached` | `total_use` reached `usage_limit` |
+| `Scheduled` | `start_at` is in the future |
+| `Inapplicable` | The discount applies to products and every linked product was deleted |
+| `Active` | None of the above |
+
+Each case has `getLabel()`, `getColor()` and `getIcon()` for display. The status reads the discount alone: it does not check the campaign budget, the eligibility or a cart.
+
+## Automatic Discounts
+
+An automatic discount applies without a code. Its `trigger` column is `automatic` (`Shopper\Core\Enum\PromotionSource::Automatic`) instead of the default `code`, and it usually has no code.
+
+The `ApplyAutomaticPromotions` step of the [calculation pipeline](/3.x/cart#calculation-pipeline) loads the automatic discounts of the `active()` scope on every calculation. It attaches each one to the cart, as a `CartPromotion` of source `automatic`, when the discount passes its rules and would take at least one cent off the cart. It removes the ones the cart no longer qualifies for, and the ones whose discount was turned off or switched back to a code. The step does nothing while the cart holds a payment session with a provider, so the amount being paid does not change.
+
+An automatic discount follows the same rules as a code: dates, usage limits, eligibility, zone, minimum requirement and campaign budget. It also competes with the codes of the cart under the rules of [Priority and Combination](#priority-and-combination). A limit reached at checkout names it "automatic promotion" in the exception message, since it has no code.
+
+## Priority and Combination
+
+Three columns decide how the discounts of a cart stack. `exclusivity_class` (`Shopper\Core\Enum\ExclusivityClass`) puts the discount in the `order`, `product` or `shipping` class, `priority` orders the discounts within a class, and `combinable` lets a discount share its class with another one.
+
+On each calculation, `PromotionResolver` sorts the valid promotions of the cart by class (`order`, then `product`, then `shipping`), then by `priority` from highest to lowest, then by the order they were attached to the cart, and applies them in that order:
+
+- The first discount applied in a class always applies.
+- A later discount in the same class stacks only when it and the first discount of the class are both combinable. Otherwise it stays on the cart with an amount of 0.
+- Discounts of different classes always stack.
+- Each discount is computed on the line subtotals before any discount, and capped at what the earlier discounts left on each line, so a line never goes below 0.
+- A discount that takes nothing off, or that its campaign budget cannot absorb, is skipped and does not count as the first of its class.
+- Once `config('shopper.cart.max_promotions')` discounts have applied (5 by default), the others stay on the cart with an amount of 0.
+
+The `shipping` class sorts last. A discount of that class reduces line subtotals like the others; Shopper has no discount on the shipping amount.
+
+A cart holds two Classic T-Shirts at $25.00 and a Hoodie at $60.00, so its line subtotals are 5000 and 6000 cents. It carries three discounts:
+
+| Discount | Class | Priority | Combinable | Classic T-Shirt line | Hoodie line |
+|----------|-------|----------|------------|----------------------|-------------|
+| `SUMMER20`, 20% off the order | `order` | 10 | no | 1000 | 1200 |
+| `WELCOME10`, 10% off the order | `order` | 0 | no | 0 | 0 |
+| `TSHIRT10`, 10% off the Classic T-Shirt | `product` | 0 | no | 500 | - |
+
+`SUMMER20` comes first: it is in the `order` class with the highest priority. `WELCOME10` is in the same class and neither discount is combinable, so it is suppressed. `TSHIRT10` is in another class and stacks: 10% of 5000, within the 4000 left on the line. The cart total discount is 2700 cents. With `combinable` set on both `SUMMER20` and `WELCOME10`, `WELCOME10` would add 500 and 600 cents.
+
+## Usage Limit Enforcement
+
+Two columns limit how often a discount is used: `usage_limit` caps the uses across all customers, and `usage_limit_per_user` allows one use per customer. `total_use` counts the uses. The cart checks both limits on every calculation, so a customer sees that a code is used up before paying. The checkout checks them again in the transaction that creates the order, because another checkout may have taken the last use in the meantime.
+
+### Global Usage Limit
+
+When the checkout creates the order, it increments `total_use` with a conditional update that only matches while `total_use` is below `usage_limit`. Two checkouts cannot both take the last use: the update of the second one matches no row, `DiscountLimitReachedException::global()` is thrown and the order transaction rolls back. On MySQL and MariaDB, the checkout also locks the discount rows of the cart, in ID order, at the start of the transaction.
+
+When the payment provider already collected the payment before the order is created, the checkout honors the discount the customer paid with: it records the use even when the limit was reached in between, so `total_use` can end above `usage_limit`. `total_use` is never decremented: a cancelled or refunded order keeps its use, while the [campaign budget](/3.x/campaigns#budgets) of the discount is given back.
+
+### Per-User Limit
+
+When `usage_limit_per_user` is `true`, the cart and the checkout look for an earlier order of the same customer with an `OrderPromotion` row for the discount: by `customer_id` for a signed-in customer, and by the email of the cart for a guest. The cart refuses the code with "Discount already used by this customer.", and the checkout throws `DiscountLimitReachedException::perUser()`.
+
+The Store API requires an email before it completes a cart. A checkout you build yourself sets it with `setEmail()` on `CartManager` before it creates the order.
+
+### Helpers
+
+`hasReachedLimit()` returns `true` once `total_use` reached `usage_limit`, and always `false` for a discount without a limit:
+
+```php
+$discount->hasReachedLimit();
+
+$remaining = $discount->usage_limit === null
+    ? null
+    : max(0, $discount->usage_limit - $discount->total_use);
+```
+
+`total_use` can pass `usage_limit` when a collected payment is honored, so floor the remaining uses at 0.
+
+### Handling DiscountLimitReachedException
+
+`Shopper\Cart\Actions\CreateOrderFromCartAction` throws an exception when a discount of the cart stopped holding during checkout. The transaction rolls back and the cart keeps its promotions: calculate it again to show the new total, where the discount has an amount of 0.
+
+```php title="app/Http/Controllers/CheckoutController.php"
+use Shopper\Cart\Actions\CreateOrderFromCartAction;
+use Shopper\Cart\Exceptions\DiscountLimitReachedException;
+use Shopper\Cart\Exceptions\PromotionUnavailableException;
+use Shopper\Cart\Facades\Cart;
+
+try {
+    $order = resolve(CreateOrderFromCartAction::class)->execute(Cart::current() ?? abort(404));
+} catch (DiscountLimitReachedException|PromotionUnavailableException $exception) {
+    return back()->with('error', $exception->getMessage());
+}
+```
+
+| Exception | Thrown when |
+|-----------|-------------|
+| `DiscountLimitReachedException::global($code)` | The discount reached its `usage_limit` |
+| `DiscountLimitReachedException::perUser($code)` | The customer already used a discount limited to one use per customer |
+| `PromotionUnavailableException` | The discount was deleted, or its terms stopped holding (turned off, expired, out of zone, minimum no longer reached) |
+| `Shopper\Core\Exceptions\CampaignBudgetExceededException` | The campaign budget cannot absorb the discount, see [Budget Exceeded Exception](/3.x/campaigns#budget-exceeded-exception) |
+
+The messages of `DiscountLimitReachedException` read "The discount "SUMMER20" has reached its usage limit and can no longer be applied." and "You have already used the discount "SUMMER20", which is limited to one use per customer.". The [Cart](/3.x/cart#discount-limit-exceptions) page covers the other checks of the checkout.
+
+## Discount Validation
+
+`DiscountValidator` holds the discount rules. The pipeline runs it on every promotion of the cart, and you can call it yourself, for example to check a code before attaching it: `applyCoupon()` only checks that the code exists. `validate()` runs the checks below in order and stops at the first failure. `validateTerms()` runs the first eleven, which describe the discount and the cart, without the usage limits and the campaign budget. Both return a `Shopper\Cart\Discounts\DiscountValidationResult` with a `valid` boolean and a `failureReason`:
+
+| Check | Fails when | Message key |
+|-------|------------|-------------|
+| Active | `is_active` is `false` | `not_active` |
+| Value | `value` is 0 or less | `invalid_value` |
+| Percentage | A percentage is above 100 | `invalid_percentage` |
+| Start | `start_at` is in the future | `not_started` |
+| End | `end_at` is in the past | `expired` |
+| Campaign currency | The campaign currency differs from the cart currency | `currency_mismatch` |
+| Eligibility | The rule of the `eligibility` key refuses the cart | Set by the rule |
+| Zone | The cart is in another zone than `zone_id` | `not_available_in_zone` |
+| Fixed amount currency | The currency of the zone, or the store default currency, differs from the cart currency | `currency_mismatch` |
+| Minimum amount | The cart subtotal is below `min_required_value` | `min_amount_not_reached` |
+| Minimum quantity | The cart quantity is below `min_required_value` | `min_quantity_not_reached` |
+| Usage limit | `hasReachedLimit()` is `true` | `usage_limit_reached` |
+| Campaign budget | The campaign reached its budget | `campaign_budget_reached` |
+| One per customer | The customer already used the discount | `already_used` |
+
+The keys live in the `shopper-cart::messages.discount` group. To change a message, override it in `lang/vendor/shopper-cart/en/messages.php`. The validator needs a calculated cart context:
+
+```php
+use Shopper\Cart\CartManager;
+use Shopper\Cart\Discounts\DiscountValidator;
+use Shopper\Cart\Facades\Cart;
+use Shopper\Core\Models\Discount;
+
+$context = resolve(CartManager::class)->calculate(Cart::current() ?? abort(404));
+$discount = Discount::query()->where('code', 'SUMMER20')->firstOrFail();
+
+$result = resolve(DiscountValidator::class)->validate($discount, $context);
+
+if (! $result->valid) {
+    return back()->withErrors(['code' => $result->failureReason]);
+}
+```
+
+A valid discount can still take nothing off the cart: a product discount on a cart without its products, or a discount suppressed by another one of its class, as described in [Priority and Combination](#priority-and-combination).
+
+## Configuration
+
+Discounts are on by default. Their settings are the feature flag, the cap on stacked promotions and the admin components; the model has no configuration key.
+
+### Disabling Discounts
+
+If your store does not use discounts, disable the feature in `config/shopper/features.php`:
+
+```php title="config/shopper/features.php"
+use Shopper\Enum\FeatureState;
+
+return [
+    'discount' => FeatureState::Disabled,
+];
+```
+
+The discount pages are no longer registered and the Promotions item leaves the Sales group of the sidebar. The flag only changes the admin panel: the cart keeps applying the active discounts, so turn them off with `is_active` if the store must stop honoring them. The [Configuration](/3.x/configuration#feature-flags) page lists every feature flag.
+
+### Maximum Stacked Promotions
+
+`config('shopper.cart.max_promotions')` caps the number of discounts that apply to one cart, 5 by default. It lives in `config/shopper/cart.php`, described in the [Configuration](/3.x/cart#configuration) section of the Cart page. A suppressed discount does not count against the cap.
+
+### Components
+
+The discounts section of the admin panel is made of two pages and four components. To replace any of them with your own Livewire component, publish the component file of the section:
+
+```bash
+php artisan shopper:component:publish discount
+```
+
+The command creates `config/shopper/components/discount.php`:
+
+```php title="config/shopper/components/discount.php"
+use Shopper\Livewire;
+
+return [
+    'pages' => [
+        'discount-index' => Livewire\Pages\Discount\Index::class,
+        'discount-edit' => Livewire\Pages\Discount\Edit::class,
+    ],
+
+    'components' => [
+        'slide-overs.add-promotion' => Livewire\SlideOvers\AddPromotion::class,
+        'slide-overs.products-picker' => Livewire\SlideOvers\ProductsPicker::class,
+        'slide-overs.customers-picker' => Livewire\SlideOvers\CustomersPicker::class,
+        'discounts.stats-panel' => Livewire\Components\Discounts\StatsPanel::class,
+    ],
+];
+```
+
+The [Configuration](/3.x/configuration#components) page explains how component overriding works.
+
+## Usage
+
+The examples below work with the core models directly, from a seeder, a command or the controllers of a storefront.
+
+### Creating Discounts
+
+Create a discount with its type, value, rules and dates. `type`, `trigger` and `exclusivity_class` are cast to enums; `apply_to`, `min_required` and `eligibility` are plain strings, so pass the enum `value`. Each example below lists only the imports the earlier ones did not need.
+
+#### Percentage Discount for All Orders
+
+A `SUMMER20` code takes 20% off every order for a month:
+
+```php
+use Shopper\Core\Enum\DiscountApplyTo;
+use Shopper\Core\Enum\DiscountEligibility;
+use Shopper\Core\Enum\DiscountRequirement;
+use Shopper\Core\Enum\DiscountType;
+use Shopper\Core\Models\Discount;
+
+$discount = Discount::query()->create([
+    'code' => 'SUMMER20',
+    'type' => DiscountType::Percentage,
+    'value' => 20,
+    'apply_to' => DiscountApplyTo::Order->value,
+    'min_required' => DiscountRequirement::None->value,
+    'eligibility' => DiscountEligibility::Everyone->value,
+    'is_active' => true,
+    'start_at' => now(),
+    'end_at' => now()->addMonth(),
+]);
+```
+
+#### Fixed Amount Discount with Minimum Order
+
+A `SAVE10` code takes $10.00 off orders of $50.00 or more, for the first 500 orders. Both amounts are in [cents](/3.x/money), in the store default currency since the discount has no zone:
+
+```php
+$discount = Discount::query()->create([
+    'code' => 'SAVE10',
+    'type' => DiscountType::FixedAmount,
+    'value' => 1000,
+    'apply_to' => DiscountApplyTo::Order->value,
+    'min_required' => DiscountRequirement::Price->value,
+    'min_required_value' => '5000',
+    'eligibility' => DiscountEligibility::Everyone->value,
+    'usage_limit' => 500,
+    'is_active' => true,
+    'start_at' => now(),
+]);
+```
+
+#### Product-Specific Discount
+
+A `TSHIRT15` code takes 15% off the Classic T-Shirt and its variants. Resolve the product through its contract so a swapped model is honored, and link it with its morph alias:
+
+```php
+use Shopper\Core\Enum\DiscountCondition;
+use Shopper\Core\Enum\ExclusivityClass;
+use Shopper\Core\Models\Contracts\Product;
+
+$product = resolve(Product::class)::query()->where('slug', 'classic-t-shirt')->firstOrFail();
+
+$discount = Discount::query()->create([
+    'code' => 'TSHIRT15',
+    'type' => DiscountType::Percentage,
+    'value' => 15,
+    'apply_to' => DiscountApplyTo::Products->value,
+    'min_required' => DiscountRequirement::None->value,
+    'eligibility' => DiscountEligibility::Everyone->value,
+    'exclusivity_class' => ExclusivityClass::Product,
+    'is_active' => true,
+    'start_at' => now(),
+]);
+
+$discount->items()->create([
+    'condition' => DiscountCondition::ApplyTo,
+    'discountable_type' => $product->getMorphClass(),
+    'discountable_id' => $product->id,
+]);
+```
+
+The `product` class lets the discount stack with an order discount such as `SUMMER20`.
+
+#### VIP Customer Discount
+
+A `VIP25` code takes 25% off, once per customer, for a list of customers. Set the `eligibility` column, then link the customers:
+
+```php
+use App\Models\User;
+use Shopper\Cart\Discounts\SyncDiscountEligibilityAction;
+
+$discount = Discount::query()->create([
+    'code' => 'VIP25',
+    'type' => DiscountType::Percentage,
+    'value' => 25,
+    'apply_to' => DiscountApplyTo::Order->value,
+    'min_required' => DiscountRequirement::None->value,
+    'eligibility' => DiscountEligibility::Customers->value,
+    'usage_limit_per_user' => true,
+    'is_active' => true,
+    'start_at' => now(),
+]);
+
+$vipCustomerIds = User::query()
+    ->whereIn('email', ['amelia@example.com', 'noah@example.com'])
+    ->pluck('id')
+    ->all();
+
+resolve(SyncDiscountEligibilityAction::class)->execute(
+    $discount,
+    DiscountEligibility::Customers->value,
+    $vipCustomerIds,
+);
+```
+
+Calling the action again with another list replaces the eligible customers.
+
+#### Automatic Discount
+
+An automatic discount takes 10% off every order of $100.00 or more, without a code:
+
+```php
+use Shopper\Core\Enum\PromotionSource;
+
+$discount = Discount::query()->create([
+    'trigger' => PromotionSource::Automatic,
+    'type' => DiscountType::Percentage,
+    'value' => 10,
+    'apply_to' => DiscountApplyTo::Order->value,
+    'min_required' => DiscountRequirement::Price->value,
+    'min_required_value' => '10000',
+    'eligibility' => DiscountEligibility::Everyone->value,
+    'is_active' => true,
+    'start_at' => now(),
+]);
+```
+
+The next calculation of every qualifying cart attaches it, as described in [Automatic Discounts](#automatic-discounts).
+
+### Retrieving Discounts
+
+The `active()` scope keeps the discounts that are active, started, not expired and below their usage limit:
+
+```php
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Core\Enum\PromotionSource;
+use Shopper\Core\Models\Discount;
+
+$running = Discount::query()->active()->get();
+
+$summerSale = Discount::query()->where('code', 'SUMMER20')->first();
+
+$automatic = Discount::query()
+    ->active()
+    ->where('trigger', PromotionSource::Automatic->value)
+    ->get();
+
+$forZone = Discount::query()
+    ->active()
+    ->where(fn (Builder $query) => $query->whereNull('zone_id')->orWhere('zone_id', $zone->id))
+    ->get();
+
+$summerSale->status->getLabel();
+```
+
+The scope does not check eligibility, the zone, the minimum requirement or the campaign budget. To know whether a discount applies to a cart, use the validator, as shown in [Discount Validation](#discount-validation).
+
+### Updating Discounts
+
+Dates, limits, requirements, eligibility and the stacking columns can change at any time, and the next calculation of each cart uses the new values:
+
+```php
+$summerSale->update([
+    'end_at' => now()->addWeeks(2),
+    'usage_limit' => 1000,
+]);
+```
+
+The code, type and value are frozen once the discount has been used, and so is the zone of a used fixed-amount discount, as described in [Value Handling](#value-handling). Deleting a discount deletes its `DiscountDetail` rows. Orders, order promotions and cart promotions keep their rows with a null `discount_id`, and each `OrderPromotion` keeps the code, type, value and amount of the discount.
+
+### Storefront Example
+
+A Blade or Livewire storefront attaches a code with `applyCoupon()` on `CartManager`, described in [Applying Coupons](/3.x/cart#applying-coupons). `applyCoupon()` attaches any existing code, and the calculation then gives it an amount of 0 when it does not apply. To tell the customer right away, validate the discount first:
+
+```php title="app/Http/Controllers/CouponController.php"
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Shopper\Cart\CartManager;
+use Shopper\Cart\Discounts\DiscountValidator;
+use Shopper\Cart\Facades\Cart;
+use Shopper\Core\Models\Discount;
+
+class CouponController extends Controller
+{
+    public function __construct(
+        private CartManager $manager,
+        private DiscountValidator $validator,
+    ) {}
+
+    public function store(Request $request): RedirectResponse
+    {
+        $request->validate(['code' => ['required', 'string']]);
+
+        $cart = Cart::current() ?? abort(404);
+        $discount = Discount::query()->where('code', $request->input('code'))->first();
+
+        if ($discount === null || ! $this->validator->validate($discount, $this->manager->calculate($cart))->valid) {
+            return back()->withErrors(['code' => __('This code does not apply to your cart.')]);
+        }
+
+        $this->manager->applyCoupon($cart, $discount->code);
+
+        return back()->with('status', __('Discount applied.'));
+    }
+
+    public function destroy(): RedirectResponse
+    {
+        $this->manager->removeCoupon(Cart::current() ?? abort(404));
+
+        return back();
+    }
+}
+```
+
+`removeCoupon()` without a code removes every code of the cart; automatic discounts stay while the cart qualifies.
+
+### Use Cases
+
+The columns combine into the usual promotions:
+
+| Scenario | Type | Apply To | Eligibility | Requirement | Trigger |
+|----------|------|----------|-------------|-------------|---------|
+| Site-wide sale | Percentage | Order | Everyone | None | Code |
+| $10.00 off orders over $50.00 | Fixed amount | Order | Everyone | Price | Code |
+| Buy 3 or more, get 10% off | Percentage | Order | Everyone | Quantity | Code |
+| 10% off orders over $100.00, no code | Percentage | Order | Everyone | Price | Automatic |
+| VIP member exclusive | Percentage | Order | Customers | None | Code |
+| Product clearance | Percentage | Products | Everyone | None | Automatic |
+| First order discount | Fixed amount | Order | A [custom rule](#custom-eligibility-rules) | None | Code |
+
+## Events
+
+Shopper dispatches no discount event: nothing fires when a discount is created, used or reaches its limit, as noted in [Cart and Discount Events](/3.x/events#cart-and-discount-events). The cart dispatches `CouponApplied` and `CouponRemoved` from `Shopper\Cart\Events` when a code is added to or removed from a cart; that section lists their payloads.
+
+To react to a use, listen to the Eloquent `created` event of `OrderPromotion`. The checkout increments `total_use` with a query, so the `updated` event of `Discount` does not fire when a discount is used:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Illuminate\Support\Facades\Cache;
+use Shopper\Core\Models\OrderPromotion;
+
+public function boot(): void
+{
+    OrderPromotion::created(function (OrderPromotion $promotion): void {
+        Cache::forget("discounts.{$promotion->discount_id}.remaining");
+    });
+}
+```
+
+The promotion is created inside the checkout transaction. The [Events](/3.x/events#listening-to-events) page covers listeners and queues.
+
+## Permissions
+
+The admin panel checks four permissions of the `discounts` resource, in the Sales group:
+
+| Permission | Allows |
+|------------|--------|
+| `discounts.browse` | Opening the discounts page and seeing the Promotions sidebar item |
+| `discounts.create` | Creating a discount with the wizard, and duplicating one |
+| `discounts.edit` | Opening the edit page and saving changes |
+| `discounts.delete` | Deleting a discount, from the list (one at a time or in bulk) or from its edit page |
+
+`discounts.read` is seeded with the others, but the admin panel never checks it. The 2.x names, such as `browse_discounts`, are gone: a store upgraded from 2.x follows [Upgrading from 2.x](/3.x/acl#upgrading-from-2x).
+
+## In the Admin
+
+Merchants manage discounts under Sales, Promotions. The list shows each discount with its code, method (code or automatic), type, amount, what it applies to, eligibility, status, dates, usage limit, redemptions, zone and campaign, and filters by active state, method, campaign, application, eligibility, zone and start date. A discount can be edited, duplicated (the copy is inactive, gets a new code and starts at 0 uses) or deleted. New discounts go through a three-step wizard: Type, Conditions and Campaign. The edit page groups the fields in General, Configuration, Targeting, Combinations and Advanced, locks the zone of a used fixed-amount discount and the campaign of a used discount, and shows the uses, remaining uses, gross revenue, discount cost, orders and average order value of the paid orders that used it. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API applies and removes codes on a cart and reports the discounts of the cart. It has no endpoint that lists discounts, so a storefront cannot show the available codes from it:
+
+| Request | Discount effect |
+|---------|-----------------|
+| `POST /store/carts/{cartId}/promotion` | Attaches the discount of the `code` in the body when it is active, passes its rules and takes something off the cart. A code suppressed by a discount of higher priority is accepted. Any refusal is a 422 error with code `promotion_not_applicable` on the `/data/attributes/code` pointer, which does not say why |
+| `DELETE /store/carts/{cartId}/promotion` | Removes the discount of the `code` sent, or every code when none is sent. Automatic discounts stay |
+| `GET /store/carts/{cartId}` | `promotions` lists each discount of the cart with its `code`, `source` (`code` or `automatic`), `amount` and `status` (`applied`, or `suppressed` with an amount of 0). `discount_total` holds their sum, and each line has its own `discount_total` |
+| `POST /store/carts/{cartId}/complete` | A discount that stopped holding answers a 422 error on the `/data/attributes/promotion` pointer: `promotion_limit_reached` for a usage limit, `promotion_not_applicable` for its terms, `promotion_budget_reached` for its campaign budget. The cart is priced again without the discount: show the new total and let the customer confirm |
+
+Both promotion endpoints use the checkout rate limit. Amounts are in cents. The `store` prefix is set by `SHOPPER_API_PREFIX`. The [Storefront](/3.x/storefront) page covers the Store API and its errors.

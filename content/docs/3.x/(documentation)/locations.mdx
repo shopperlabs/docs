@@ -1,0 +1,389 @@
+---
+title: Locations
+description: Inventory locations in Shopper, stock levels per location, the default location, how orders draw stock from several locations, and reconciling stock.
+---
+
+A location is a physical place where you keep stock and ship orders from: a warehouse, a retail store, a fulfillment center or a stockroom. Each location has its own address and its own stock, so a "Classic T-Shirt" can have 50 units in the Paris warehouse and 20 in the Lyon store.
+
+When the merchant finishes the [setup wizard](/3.x/setup-store), Shopper creates a default location from the store address. A store that ships from one place never has to create another one. A store that ships from several places adds a location for each, and Shopper draws the stock of each order from them in the priority order the merchant sets, as described in [Allocating Stock Across Locations](#allocating-stock-across-locations).
+
+This page covers the locations and the stock they hold. Reading and changing the stock of a product, and the inventory history, are on the [Products](/3.x/products#stock-management) page.
+
+## Model
+
+The model is `Shopper\Core\Models\Inventory`. It implements the `Shopper\Core\Models\Contracts\Inventory` contract, which declares the `country` and `histories` relationships, and it is registered under the `inventory` key of `config/shopper/models.php`, so you can swap it.
+
+The `HasPublicId` trait fills `public_id` with a ULID when a location is created, and adds `findByPublicId()` and the `wherePublicId` scope, as described in [Public IDs](/3.x/models#public-ids). The model casts `is_default` to a boolean.
+
+### Extending the Model
+
+To add relationships or methods, extend the core class. The core model has no relationship to the stock levels of a location, which is a common addition:
+
+```php title="app/Models/Inventory.php"
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Shopper\Core\Models\Inventory as ShopperInventory;
+use Shopper\Core\Models\StockLevel;
+
+class Inventory extends ShopperInventory
+{
+    public function stockLevels(): HasMany
+    {
+        return $this->hasMany(StockLevel::class);
+    }
+}
+```
+
+Then register your class in `config/shopper/models.php`:
+
+```php title="config/shopper/models.php"
+return [
+    'inventory' => App\Models\Inventory::class,
+];
+```
+
+Run `php artisan config:cache` in production after the change. The [Models](/3.x/models#swapping-a-model) page explains what follows your class once it is registered.
+
+## Database Schema
+
+Locations are stored in the `sh_inventories` table (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)):
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `name` | string | no | - | Location name |
+| `code` | string | no | - | Identifier code, unique |
+| `description` | text | yes | null | Location description |
+| `email` | string | no | - | Contact email, unique |
+| `street_address` | string | no | - | Street address |
+| `street_address_plus` | string | yes | null | Additional address line |
+| `postal_code` | string | no | - | Postal or ZIP code |
+| `city` | string | no | - | City |
+| `state` | string | yes | null | State, province or region |
+| `phone_number` | string | yes | null | Phone number |
+| `priority` | integer | no | 0 | Allocation order, lower values first |
+| `latitude` | decimal(11,5) | yes | null | GPS latitude |
+| `longitude` | decimal(10,5) | yes | null | GPS longitude |
+| `is_default` | boolean | no | false | Whether this is the default location |
+| `country_id` | bigint | yes | null | Foreign key to `sh_countries` |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+The `country_id` foreign key sets the column to `null` when the country is deleted.
+
+## Relationships
+
+A location belongs to a country and has many inventory history rows, one for each stock movement recorded there.
+
+### Country
+
+`country` returns the `Shopper\Core\Models\Country` of the location, or `null` when it has none:
+
+```php
+$location->country;
+
+$location->country?->cca2;
+```
+
+### Inventory Histories
+
+Every stock movement of a product or variant is a row of the inventory history, the ledger, tied to the location it happened at. `histories` returns the rows of a location as `Shopper\Core\Models\InventoryHistory` instances. The [Products](/3.x/products#stock-management) page describes the ledger and the methods that write to it.
+
+```php
+$movements = $location->histories()
+    ->with('stockable')
+    ->latest()
+    ->take(20)
+    ->get();
+```
+
+## Query Scopes
+
+The `default` scope keeps the default location. Resolve the model from its contract so that a swapped model is honored:
+
+```php
+use Shopper\Core\Models\Contracts\Inventory;
+
+$defaultLocation = resolve(Inventory::class)::query()->default()->first();
+```
+
+## Stock Levels
+
+The stock a product or variant holds at each location is a row of `Shopper\Core\Models\StockLevel`, stored in the `sh_stock_levels` table. The ledger is the record of every movement; the stock level is the current quantity, kept so that reading the stock costs one query whatever the length of the history. Shopper writes the ledger row and updates the stock level in the same database transaction.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `stockable_type` | string | no | - | Morph alias of the product or variant, such as `product` or `variant` |
+| `stockable_id` | bigint | no | - | ID of the product or variant |
+| `quantity` | integer | no | 0 | Current quantity at the location |
+| `inventory_id` | bigint | yes | null | Foreign key to `sh_inventories` |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+A unique index on `stockable_type`, `stockable_id` and `inventory_id` keeps one row per product and location. `stockable` returns the product or variant, and `inventory` returns the location. The model has no contract and no public ID, and it cannot be swapped.
+
+Products and variants read their stock levels through the `stockLevels` relation. To show the stock of a product at each location, on a product page that offers in-store pickup for example:
+
+```php
+$levels = $product->stockLevels()
+    ->with('inventory')
+    ->whereNotNull('inventory_id')
+    ->where('quantity', '>', 0)
+    ->get();
+
+$availability = $levels->mapWithKeys(fn ($level) => [$level->inventory->name => $level->quantity]);
+```
+
+Never write to `sh_stock_levels` yourself: change the stock with the methods of the [Products](/3.x/products#modifying-stock) page, which write the ledger and the stock level together. If the two ever disagree, the `shopper:stock:reconcile` command rebuilds the stock levels from the ledger, as described in [Reconciling Stock Levels](#reconciling-stock-levels).
+
+## How Locations Connect to Stock
+
+Every method that writes stock takes the ID of a location: `mutateStock()`, `decreaseStock()`, `setStock()` and `clearStock()` on a [product](/3.x/products#modifying-stock) or a [variant](/3.x/product-variants). The movement is recorded at that location (`clearStock()` first erases the stock of every location), and the `stock` attribute of the product returns the sum over every location:
+
+```php
+use Shopper\Core\Models\Contracts\Inventory;
+
+$warehouse = resolve(Inventory::class)::query()->where('code', 'WH-PARIS')->first();
+
+$product->mutateStock(
+    inventoryId: $warehouse->id,
+    quantity: 100,
+    event: 'Shipment received',
+);
+
+$product->stockInventory($warehouse->id);
+
+$product->stock;
+```
+
+Shopper has no transfer method. To move stock from one location to another, record the two movements yourself, in one transaction so that a failure leaves both locations as they were:
+
+```php
+use Illuminate\Support\Facades\DB;
+
+DB::transaction(function () use ($product, $warehouse, $lyonStore): void {
+    $product->decreaseStock(
+        inventoryId: $warehouse->id,
+        quantity: 20,
+        event: 'Transfer to Lyon store',
+        userId: auth()->id(),
+    );
+
+    $product->mutateStock(
+        inventoryId: $lyonStore->id,
+        quantity: 20,
+        event: 'Transfer from Paris warehouse',
+        userId: auth()->id(),
+    );
+});
+```
+
+To load the stock of one location for a whole listing in one query, use `loadStockForInventory()`, described in [Avoiding N+1 Queries](/3.x/products#avoiding-n1-queries).
+
+## Default Location
+
+One location at most is the default. When a location is saved with `is_default` set to `true`, Shopper sets `is_default` to `false` on every other location. Nothing requires a default to exist: a store can save its only location with `is_default` set to `false`.
+
+The setup wizard creates the default location when the merchant submits it, from the store name, email, street address, postal code, city, phone number and country. Its code is the store name as a slug. The wizard does not copy the state: set it on the location when your carriers need it.
+
+Shopper reads the default location in three places:
+
+- When the merchant creates a product or a variant in the admin panel with an initial quantity, the quantity is recorded at the default location. With no default location, the product is created without stock.
+- The product import records the imported quantities at the default location, and ignores them when there is none, as described in [Import](/3.x/import#stock-and-weight).
+- The Store API uses the default location as the origin address when it asks a carrier for live rates. With no default location, it uses the location with the lowest `priority`. The [Carriers](/3.x/carriers#calculating-shipping-rates) page describes the rate request.
+
+<Warning>
+Deleting a location deletes its inventory history rows and keeps its stock levels with `inventory_id` set to `null`. Those orphaned rows still count in the `stock` of each product, but no order can draw from them, so a product can show as in stock and fail at checkout. Move the stock to another location before you delete one, or run `php artisan shopper:stock:reconcile --fix` after the deletion to set the orphaned rows to zero.
+</Warning>
+
+## Allocating Stock Across Locations
+
+When a customer places an order, Shopper reserves the stock of each line that tracks inventory, as described in [Stock Reservation](/3.x/cart#stock-reservation). Three services, bound in the container by `Shopper\Core\CoreServiceProvider`, decide which locations the stock comes from:
+
+| Contract | Default implementation | Role |
+|----------|------------------------|------|
+| `Shopper\Core\Contracts\InventoryResolver` | `Shopper\Core\Stock\DefaultInventoryResolver` | Lists the locations a product can draw from, in order |
+| `Shopper\Core\Contracts\StockAllocator` | `Shopper\Core\Stock\PriorityStockAllocator` | Splits the quantity over those locations |
+| `Shopper\Core\Contracts\StockReserver` | `Shopper\Core\Stock\LockingStockReserver` | Locks the product and records the movements |
+
+The default resolver returns every location, ordered by `priority` (lowest first), then by ID. It does not look at `is_default`. The allocator then picks the first location in that order that holds the whole quantity. When no single location does, it splits the quantity: it takes what each location holds, in the same order, until the quantity is covered.
+
+The reserver locks the product row, asks the allocator for the split, and records one `decreaseStock()` movement per location, with the event "Reserved for order" and the order as reference. When the locations together hold less than the quantity, it records nothing and the order is refused with a `Shopper\Cart\Exceptions\InsufficientStockException`. A product that allows backorders is not refused as long as one location exists: when the stock is short, the reserver draws the whole quantity from the first location of the resolver, whose stock goes negative.
+
+The cart itself checks the total stock of a product across every location when a customer adds it, as described in [Stock Validation](/3.x/cart#stock-validation). When an order is cancelled, a queued listener puts each reserved quantity back at the location it was taken from, with the event "Released from cancelled order". Unpaid orders are cancelled the same way when they expire, as described in [Reclaiming Pending Orders](/3.x/orders#reclaiming-pending-orders).
+
+### Custom Inventory Resolver
+
+Replace the resolver to change which locations an order draws from, or in which order. This resolver tries the default location first, then the others by priority:
+
+```php title="app/Stock/DefaultFirstInventoryResolver.php"
+<?php
+
+namespace App\Stock;
+
+use Illuminate\Database\Eloquent\Collection;
+use Shopper\Core\Contracts\InventoryResolver;
+use Shopper\Core\Models\Contracts\Inventory;
+use Shopper\Core\Models\Contracts\Stockable;
+
+final class DefaultFirstInventoryResolver implements InventoryResolver
+{
+    public function resolve(Stockable $product): Collection
+    {
+        return resolve(Inventory::class)::query()
+            ->orderByDesc('is_default')
+            ->orderBy('priority')
+            ->orderBy('id')
+            ->get();
+    }
+}
+```
+
+Bind it in the `register` method of a service provider of your application. The allocator and the reserver receive the resolver from the container, so they use yours:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Stock\DefaultFirstInventoryResolver;
+use Shopper\Core\Contracts\InventoryResolver;
+
+public function register(): void
+{
+    $this->app->bind(InventoryResolver::class, DefaultFirstInventoryResolver::class);
+}
+```
+
+The resolver receives the product or variant, so it can also return a different list per product, such as only the locations that ship fragile goods. Bind your own `StockAllocator` the same way to change how the quantity is split.
+
+## Reconciling Stock Levels
+
+The `shopper:stock:reconcile` command compares the stock levels with the sum of the ledger for each product, variant and location, and reports every row that differs:
+
+```bash
+php artisan shopper:stock:reconcile
+```
+
+Each drifted row prints as `[product:12:1] snapshot 40, ledger 38`: the morph alias, the ID of the product or variant, the location ID, the quantity of the stock level and the quantity of the ledger. A stock level whose location was deleted has an empty location ID and reports `ledger 0`. Without `--fix`, the command exits with a failure code when it finds a drifted row, which makes it usable as a check in a scheduled job or a deployment.
+
+Add `--fix` to rewrite each drifted stock level from the ledger. Stock levels without any ledger row are set to `0`:
+
+```bash
+php artisan shopper:stock:reconcile --fix
+```
+
+Shopper does not schedule the command. The `shopper:upgrade` command runs it with `--fix` when you upgrade from Shopper 2.x, after the migration that builds the stock levels from the existing ledger, as described in [Upgrade](/3.x/upgrade).
+
+## Configuration
+
+Locations have no feature flag. Besides the `inventory` model key described in [Extending the Model](#extending-the-model), their only config key is `Items\LocationSetting::class` in `config/shopper/settings.php`, which removes the entry from the settings screen, as shown in [Settings](/3.x/configuration#settings). The stock services in [Allocating Stock Across Locations](#allocating-stock-across-locations) are plain container bindings, replaced from your own service provider.
+
+### Components
+
+The locations pages and form belong to the settings section of the admin panel. Publish its component file to replace any of them with your own Livewire component:
+
+```bash
+php artisan shopper:component:publish setting
+```
+
+The command creates `config/shopper/components/setting.php`. The location entries are these four:
+
+| Key | Group | Default class |
+|-----|-------|---------------|
+| `location-index` | `pages` | `Shopper\Livewire\Pages\Settings\Locations\Index` |
+| `location-create` | `pages` | `Shopper\Livewire\Pages\Settings\Locations\Create` |
+| `location-edit` | `pages` | `Shopper\Livewire\Pages\Settings\Locations\Edit` |
+| `settings.locations.form` | `components` | `Shopper\Livewire\Components\Settings\Locations\InventoryForm` |
+
+The [Configuration](/3.x/configuration#components) page explains how component overriding works.
+
+## Usage
+
+The examples below resolve the location class from its contract, so they keep working after you swap the model.
+
+### Creating Locations
+
+The model accepts every column through `create()`. The admin form fills `code` with the name as a slug; in code, pass it yourself:
+
+```php
+use Shopper\Core\Models\Contracts\Inventory;
+use Shopper\Core\Models\Country;
+
+$france = Country::query()->where('cca2', 'FR')->first();
+
+$warehouse = resolve(Inventory::class)::query()->create([
+    'name' => 'Paris Warehouse',
+    'code' => 'WH-PARIS',
+    'email' => 'paris@mystore.com',
+    'street_address' => '15 Rue du Commerce',
+    'city' => 'Paris',
+    'postal_code' => '75015',
+    'country_id' => $france->id,
+    'priority' => 1,
+    'latitude' => 48.8466,
+    'longitude' => 2.2958,
+]);
+```
+
+`code` and `email` are unique: a second location with the same value fails on the database index.
+
+### Retrieving Locations
+
+Load the locations in the order the default resolver allocates stock from:
+
+```php
+use Shopper\Core\Models\Contracts\Inventory;
+
+$locations = resolve(Inventory::class)::query()
+    ->with('country')
+    ->orderBy('priority')
+    ->orderBy('id')
+    ->get();
+```
+
+To find the location nearest to a customer, among those with coordinates:
+
+```php
+use Shopper\Core\Models\Contracts\Inventory;
+
+$nearest = resolve(Inventory::class)::query()
+    ->whereNotNull('latitude')
+    ->whereNotNull('longitude')
+    ->get()
+    ->sortBy(fn ($location): float => hypot(
+        ((float) $location->longitude - $customerLongitude) * cos(deg2rad($customerLatitude)),
+        (float) $location->latitude - $customerLatitude,
+    ))
+    ->first();
+```
+
+The distance is an approximation that ranks locations correctly within a country or a region. Shopper itself does not use the coordinates.
+
+## Events
+
+Shopper dispatches no location event of its own. Listen to the Eloquent model events instead. They are dispatched under the core class name as well, so a listener registered on `Shopper\Core\Models\Inventory` keeps firing after you swap the model. The [Events](/3.x/events#listening-to-events) page covers listeners and queues.
+
+Stock movements at a location dispatch no event either. The restock of a cancelled order runs in `Shopper\Core\Listeners\Orders\RestoreOrderStockListener`, a queued listener of the `OrderCancelled` event.
+
+## Permissions
+
+The admin panel checks four permissions of the `inventories` resource:
+
+| Permission | Allows |
+|------------|--------|
+| `inventories.browse` | Opening the locations page |
+| `inventories.create` | Opening the form for a new location and saving it |
+| `inventories.edit` | Editing a location |
+| `inventories.delete` | Deleting a location |
+
+`inventories.read` is seeded with the others, but the admin panel never checks it. Adding or removing stock on the product page requires `products.edit`. The [Access Control](/3.x/acl#access-by-section) page lists the permissions by section.
+
+## In the Admin
+
+Merchants manage locations under Settings, Inventories, at `/cpanel/setting/locations`, on a page titled Locations. The page lists each location with its name, a Default badge, its country, city and phone number. The location form has the name, email, description, a Set as default location toggle, the priority and the address, with the country and state. The default location has no delete button in the list. On the product page, the Stock & Inventory section records stock movements at a location chosen by the merchant and filters the history by location. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API does not expose locations: no endpoint lists them, and products return their total stock only. The only use of a location in the Store API is the origin address of live carrier rates. When no location can serve as the origin, because none exists or the chosen one has no street address, the shipping options of a cart carry the warning "Live carrier rates are unavailable: no inventory location can act as the shipment origin." The [Storefront](/3.x/storefront) section documents the Store API.

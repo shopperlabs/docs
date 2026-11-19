@@ -1,0 +1,183 @@
+---
+title: Team
+description: Team members of the admin panel, adding a member, the welcome email, roles, the Team screen and removing a member.
+---
+
+A team member is a user of your application's `User` model who holds a role other than the customer role, `config('shopper.admin.roles.user')`. Team members and customers share the `users` table: the role decides who opens the admin panel and what they can do there.
+
+Merchants manage the team from Settings, Staff & permissions, at `/cpanel/setting/team` with the default prefix. Roles and permissions are described on the [Permissions](/3.x/acl) page, and the rules that limit what a non-administrator can do on this screen in [Team Management Safeguards](/3.x/acl#team-management-safeguards).
+
+## Team Members
+
+Shopper seeds two team roles, `administrator` and `manager`, and both open the admin panel. A member who holds only a role you created, such as a "Fulfillment" role for the warehouse team, opens the admin panel when that role holds the `system.dashboard` permission. The [Roles](/3.x/acl#roles) section lists the seeded roles.
+
+A user can hold several roles. A customer who receives the `manager` role keeps their orders and addresses and appears on the Team screen, because the screen lists every user with at least one role other than the customer role.
+
+## Adding a Team Member
+
+The **Add administrator** button of the Team screen opens a slide-over with three sections:
+
+| Section | Fields |
+|---------|--------|
+| Login information | Email, password, Send Invite |
+| Personal information | First name, last name, gender, phone number |
+| Role information | One or more roles |
+
+The email, the password, the first name, the last name and at least one role are required. The **Generate** link next to the password field fills it with a random password of 16 characters. The email address must not belong to an existing user: to give a customer access to the admin panel, assign a role to their account, as shown in [Assigning Roles](#assigning-roles).
+
+The role list never shows the customer role, and shows the administrator role only to administrators. Shopper marks the new member's email as verified, so they can sign in at once.
+
+### Preparing the User Model
+
+The slide-over creates the user with Eloquent's `create()` method, so your `User` model must accept its attributes by mass assignment. Declare them with the `Fillable` attribute, along with the other columns Shopper writes, explained on the [Customers](/3.x/customers#user-model-integration) page:
+
+```php title="app/Models/User.php"
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Shopper\Models\Contracts\ShopperUser;
+use Shopper\Traits\InteractsWithShopper;
+
+#[Fillable([
+    'first_name',
+    'last_name',
+    'email',
+    'password',
+    'phone_number',
+    'gender',
+    'birth_date',
+    'opt_in',
+    'email_verified_at',
+    'avatar_type',
+    'avatar_location',
+    'last_login_at',
+    'last_login_ip',
+    'store_two_factor_secret',
+    'store_two_factor_recovery_codes',
+])]
+class User extends Authenticatable implements ShopperUser
+{
+    use InteractsWithShopper;
+    use Notifiable;
+}
+```
+
+The `Notifiable` trait sends the [welcome email](#welcome-email). Keep the `Hidden` attribute and the other contracts described in [Prepare Your User Model](/3.x/installation#prepare-your-user-model).
+
+### In Code
+
+A seeder or an import adds team members the same way, with the role names read from `config('shopper.admin.roles')`:
+
+```php
+use App\Models\User;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
+
+$user = User::query()->create([
+    'first_name' => 'Jane',
+    'last_name' => 'Cooper',
+    'email' => 'jane@example.com',
+    'password' => Hash::make(Str::password(16)),
+    'email_verified_at' => now(),
+]);
+
+$user->assignRole(config('shopper.admin.roles.manager'));
+```
+
+The `shopper:user` command creates the first administrator from the terminal, as described in [Admin User Creation](/3.x/acl#admin-user-creation).
+
+## Welcome Email
+
+Shopper creates the account with the password typed or generated in the slide-over. The new member receives access in one of two ways.
+
+With **Send Invite** on, Shopper sends the `Shopper\Notifications\AdminSendCredentials` notification by email once the member is created. The message holds the URL of the store from `config('app.url')`, the member's email address and password, a **Login** button to the admin login page, and a request to change the password from the profile page after the first sign-in. The notification is sent during the request, through the `mail` channel, so the mailer of your application must be configured.
+
+With **Send Invite** off, Shopper sends nothing. The merchant passes the sign-in details on, or tells the member to open the login page and click **Forgot your password?** to choose their own password. That link is shown while `password_reset` is `true` in `config/shopper/auth.php`, the default.
+
+The email text comes from the `mails.admin` keys of Shopper's translation files. When the store enables them, a new member who signs in can turn on [two-factor authentication](/3.x/two-factor) or add a passkey from their profile page.
+
+## Assigning Roles
+
+The slide-over gives a member their roles when it creates them. The Team screen does not change the roles of an existing member: change them in code, with the methods of [Assigning Roles](/3.x/acl#assigning-roles).
+
+`syncRoles()` replaces every role of the user, so a manager moving to the warehouse team keeps only the new role:
+
+```php
+use App\Models\User;
+
+$user = User::query()->where('email', 'jane@example.com')->firstOrFail();
+
+$user->syncRoles(['fulfillment']);
+```
+
+Roles are checked on every request, so the change applies to the member's next page or action in the admin panel. A user who keeps only the customer role, or no role, no longer appears on the Team screen and can no longer open the admin panel. Removing the roles this way keeps the account, unlike deleting it.
+
+## The Team Screen
+
+The Team screen has two parts. The roles part shows a card for each role except the customer role, with the number of accounts that hold it. A card opens the role page, which has three tabs: Role for its name, display name and description, Users for the members who hold it, and Permissions. Users with `system.settings` create a role from the button next to the title.
+
+The Administrators accounts table lists the team members:
+
+| Column | Content |
+|--------|---------|
+| Full name | The member's name and photo, with a badge on your own row |
+| Role | Every role the member holds |
+| Joined | The creation date of the account |
+| Last signed in | The `last_login_at` column of the user |
+
+Each row has a **Copy user ID** action and a **Delete user** action.
+
+The `shopper:user` command fills `last_login_at` when it creates an administrator, and the sign-in of the admin panel does not update it. To keep the column current, update it from a listener on Laravel's `Login` event, which the admin panel dispatches on every password and passkey sign-in:
+
+```php title="app/Listeners/RecordTeamMemberSignIn.php"
+namespace App\Listeners;
+
+use Illuminate\Auth\Events\Login;
+
+class RecordTeamMemberSignIn
+{
+    public function handle(Login $event): void
+    {
+        $event->user->forceFill([
+            'last_login_at' => now(),
+            'last_login_ip' => request()->ip(),
+        ])->saveQuietly();
+    }
+}
+```
+
+`saveQuietly()` skips the model events, so a sign-in does not reindex the user in the search engine.
+
+## Removing a Team Member
+
+Only an administrator deletes team members, one at a time with **Delete user** or several at once with the bulk action. Neither action can delete your own account or the last administrator, as listed in [Team Management Safeguards](/3.x/acl#team-management-safeguards).
+
+Deleting a team member deletes the user. Shopper detaches their roles and deletes their addresses first. Orders the user placed as a customer stay in the store, without a customer. To take away access and keep the account, remove the roles instead, as shown in [Assigning Roles](#assigning-roles).
+
+## Permissions
+
+The Team screen checks two system permissions, and keeps two actions for administrators:
+
+| Permission | Allows |
+|------------|--------|
+| `system.users` | Opening the Team screen and the role pages, listing the members, adding a member |
+| `system.settings` | Creating, renaming and deleting roles, granting and revoking permissions |
+| Administrator role | Deleting team members, creating and deleting permissions, opening the administrator role |
+
+A user with `system.users` can give a new member any role except administrator, whatever permissions that role holds. The [Permissions](/3.x/acl#team-management-safeguards) page explains this rule.
+
+## Customizing the Team Screen
+
+The Team screen, the members table and the slide-over are Livewire components of the `setting` group. The [Components](/3.x/acl#components) section of the Permissions page lists their keys and explains how a replacement keeps the safeguards.
+
+## Events
+
+Shopper dispatches no event of its own when a team member is added or deleted. The `User` model fires Eloquent's `created` and `deleted` events, but `created` runs before the slide-over assigns the roles, so a listener on it cannot tell a team member from a customer. The [Events](/3.x/events) page lists the events Shopper dispatches.
+
+## In the Admin
+
+Merchants open the Team screen from Settings, Staff & permissions. It lists the roles and the team members, adds a member through the Add administrator slide-over, opens each role to edit its permissions, and deletes members. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API does not expose team members: no endpoint lists, creates or deletes them. Its registration endpoint, `/store/auth/register`, gives every new account the customer role. The [Storefront](/3.x/storefront) section documents the Store API.

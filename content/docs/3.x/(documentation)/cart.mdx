@@ -1,0 +1,706 @@
+---
+title: Cart
+description: The Shopper cart package, from the cart models and session to the calculation pipeline, stock checks, order conversion and abandoned carts.
+---
+
+The `shopper/cart` package holds everything between "Add to cart" and "Place order". It stores the cart and its lines, prices each line through the pricing resolver, checks stock, applies promotions, computes tax, and turns the cart into an order inside a single database transaction. The Store API is built on it, and a Blade or Livewire storefront calls the same classes directly.
+
+The package has five main pieces:
+
+- `Shopper\Cart\CartManager` changes a cart: lines, addresses, promotions, shipping and payment choices, currency and zone, totals.
+- `Shopper\Cart\CartSessionManager`, behind the `Shopper\Cart\Facades\Cart` facade, keeps the current cart of a visitor in the session.
+- The calculation pipeline computes the subtotal, discounts, tax, shipping and total through a list of steps you can extend.
+- `Shopper\Cart\Discounts\PromotionResolver` and `Shopper\Cart\Discounts\DiscountValidator` decide which discount codes and automatic promotions apply.
+- `Shopper\Cart\Actions\CreateOrderFromCartAction` converts the cart into an order, reserves stock and records promotion usage.
+
+Every amount of the cart is an integer in cents: a line priced at $25.00 stores `2500`. The [Money](/3.x/money#amounts-in-cents) page covers cents, zero-decimal currencies and formatting.
+
+## Models
+
+The cart models live in `Shopper\Cart\Models`. `Cart` and `CartLine` can be replaced with your own classes; their contracts are `Shopper\Cart\Models\Contracts\Cart` and `Shopper\Cart\Models\Contracts\CartLine`. The four other models (`CartAddress`, `CartLineAdjustment`, `CartLineTaxLine` and `CartPromotion`) are fixed. Their tables take the Shopper [table prefix](/3.x/configuration#database-table-prefix), `sh_` by default.
+
+### Cart
+
+`Shopper\Cart\Models\Cart` implements the `Shopper\Cart\Models\Contracts\Cart` contract and uses `HasPublicId`, which fills `public_id` with a ULID on creation. The Store API identifies a cart by this public ID, never by its numeric key, as described in [Public IDs](/3.x/models#public-ids).
+
+Carts are stored in the `sh_carts` table:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `customer_id` | bigint | yes | null | The customer, a row of the `users` table |
+| `channel_id` | bigint | yes | null | The sales channel |
+| `zone_id` | bigint | yes | null | The zone that sets carriers and payment methods, passed to the price resolver |
+| `currency_code` | string | no | - | ISO currency code, such as `USD` |
+| `email` | string | yes | null | Contact email of the checkout |
+| `completed_at` | timestamp | yes | null | Set when the cart becomes an order |
+| `order_id` | bigint | yes | null | The order created from the cart |
+| `payment_method_id` | bigint | yes | null | The payment method chosen at checkout |
+| `shipping_option_id` | string | yes | null | The chosen shipping option, `{carrier_code}:{service_code}` |
+| `shipping_amount` | integer | yes | null | Price of the chosen shipping option, in cents |
+| `payment_session` | jsonb | yes | null | The payment session opened with the payment provider |
+| `payment_reference` | string | yes | null | Provider reference of that payment session, indexed |
+| `calculated_at` | timestamp | yes | null | When the totals were last calculated |
+| `metadata` | jsonb | yes | null | Your own data, cast to an array |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last activity on the cart |
+
+Deleting a channel, a zone, a payment method or an order sets the matching column to `null`. Deleting a customer does the same for `customer_id`. `payment_session` and `payment_reference` are guarded from mass assignment: the payment flow writes them through the cart manager, as the [Payments](/3.x/payments) page describes.
+
+A cart has these relationships:
+
+| Relationship | Type | Related model |
+|--------------|------|---------------|
+| `lines` | HasMany | The class in `shopper.cart.models.cart_line` |
+| `promotions` | HasMany | `CartPromotion` |
+| `addresses` | HasMany | `CartAddress` |
+| `customer` | BelongsTo | The class in `auth.providers.users.model` |
+| `channel` | BelongsTo | The class in `shopper.models.channel` |
+| `zone` | BelongsTo | `Shopper\Core\Models\Zone` |
+| `paymentMethod` | BelongsTo | `Shopper\Core\Models\PaymentMethod` |
+| `order` | BelongsTo | `Shopper\Core\Models\Order` |
+
+And these methods:
+
+| Method | Returns |
+|--------|---------|
+| `isCompleted()` | `true` once `completed_at` is set |
+| `shippingAddress()` | The `CartAddress` of type shipping, or `null` |
+| `billingAddress()` | The `CartAddress` of type billing, or `null` |
+| `belongsToCustomer($customerId)` | Whether the cart belongs to that customer |
+| `holdsProviderPaymentSession()` | Whether a payment session other than the manual driver is open |
+| `pricingContext()` | The `PricingContext` of the cart (currency, zone, channel, customer), for the [price resolver](/3.x/pricing#resolving-prices) |
+
+Two query scopes find the cart of a payment: `holdingPaymentReference($reference)` and `forPayment($reference, $publicId)`. The payment package uses them when a provider reports a payment.
+
+### CartLine
+
+`Shopper\Cart\Models\CartLine` implements the `Shopper\Cart\Models\Contracts\CartLine` contract and uses `HasPublicId`. A line holds one purchasable, a product or a variant, through the `purchasable` morph relation. The cart keeps one line per purchasable: a unique index on `cart_id`, `purchasable_type` and `purchasable_id` enforces it.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `cart_id` | bigint | no | - | The cart, deleted with it |
+| `purchasable_type` | string | no | - | Morph type of the product or variant |
+| `purchasable_id` | bigint | no | - | Morph key of the product or variant |
+| `quantity` | unsigned int | no | - | Quantity, at most `CartLine::MAXIMUM_QUANTITY` (1,000,000) |
+| `unit_price_amount` | unsigned int | no | - | Unit price, in cents |
+| `is_custom_price` | boolean | no | false | Whether the price was set by hand, as described in [Custom Line Prices](#custom-line-prices) |
+| `pricing` | json | yes | null | What the price resolver returned with the price |
+| `metadata` | jsonb | yes | null | Your own data, such as a gift message |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+A line belongs to its `cart` and has many `adjustments` (`CartLineAdjustment`) and `taxLines` (`CartLineTaxLine`). `is_custom_price` and `pricing` are guarded: the cart manager writes them when it prices the line.
+
+### CartAddress
+
+`Shopper\Cart\Models\CartAddress` holds the shipping and billing addresses of the checkout. A cart has at most one address of each type, and the `type` column is cast to the `Shopper\Core\Enum\AddressType` enum (`Shipping` or `Billing`).
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | no | Primary key |
+| `public_id` | ulid | yes | Public identifier, unique |
+| `cart_id` | bigint | no | The cart, deleted with it |
+| `type` | string | no | `shipping` or `billing` |
+| `country_id` | bigint | yes | The country |
+| `first_name` | string | yes | First name |
+| `last_name` | string | no | Last name |
+| `company` | string | yes | Company name |
+| `address_1` | string | no | Street address |
+| `address_2` | string | yes | Apartment, suite, floor |
+| `city` | string | no | City |
+| `state` | string | yes | State or province code |
+| `postal_code` | string | no | Postal code |
+| `phone` | string | yes | Phone number |
+
+The `full_name` accessor joins `first_name` and `last_name`. The country of the shipping address decides the tax of the cart.
+
+### CartLineAdjustment
+
+`Shopper\Cart\Models\CartLineAdjustment` is the share of one promotion on one line. The pipeline deletes and rewrites these rows on every calculation.
+
+| Column | Type | Nullable | Description |
+|--------|------|----------|-------------|
+| `id` | bigint | no | Primary key |
+| `cart_line_id` | bigint | no | The line, deleted with it |
+| `cart_promotion_id` | bigint | yes | The promotion of the cart that produced it |
+| `discount_id` | bigint | yes | The discount |
+| `amount` | unsigned int | no | Discount on the line, in cents |
+| `code` | string | yes | The discount code, `null` for an automatic promotion |
+
+### CartLineTaxLine
+
+`Shopper\Cart\Models\CartLineTaxLine` is one tax applied to one line, with its `taxRate` relation. The pipeline rewrites these rows when it calculates tax.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `cart_line_id` | bigint | no | - | The line, deleted with it |
+| `tax_rate_id` | bigint | yes | null | The tax rate |
+| `code` | string | no | - | Tax code |
+| `name` | string | no | - | Tax name, such as "VAT" |
+| `rate` | decimal(8,4) | no | - | Rate in percent: `20.0000` for 20% |
+| `amount` | unsigned int | no | 0 | Tax on the line, in cents |
+
+### CartPromotion
+
+`Shopper\Cart\Models\CartPromotion` is a discount attached to the cart, either a code the customer entered or an automatic promotion the pipeline found. The `source` column is cast to `Shopper\Core\Enum\PromotionSource` (`Code` or `Automatic`). A cart holds each discount once: a unique index covers `cart_id` and `discount_id`.
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `cart_id` | bigint | no | - | The cart, deleted with it |
+| `discount_id` | bigint | yes | null | The discount |
+| `source` | string | no | `code` | `code` or `automatic` |
+| `code` | string | yes | null | The code entered, `null` for an automatic promotion |
+| `computed_amount` | unsigned int | no | 0 | What the promotion takes off the cart at the last calculation, in cents |
+| `sequence` | unsigned int | no | 0 | Order in which it was applied |
+| `type` | string | yes | null | Discount type at the last calculation |
+| `value` | unsigned int | yes | null | Discount value at the last calculation |
+| `campaign_id` | bigint | yes | null | Campaign of the discount at the last calculation |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+A promotion with a `computed_amount` of `0` stays on the cart without discounting anything: the code no longer validates, or a better promotion of the same class won.
+
+## Session Management
+
+`CartSessionManager` remembers the cart of a visitor in the HTTP session. It stores the cart's `id` under the session key `shopper.cart.session.key` (`shopper_cart` by default) and is registered as a singleton. A Blade or Livewire storefront uses it to find the cart of the current request; a storefront built on the Store API keeps the cart public ID on its side instead.
+
+### Using the Facade
+
+The `Shopper\Cart\Facades\Cart` facade points to the session manager. Create the cart with the channel and the zone of the visitor, so the pricing context carries them from the first line:
+
+```php title="app/Http/Controllers/CartController.php"
+use Shopper\Cart\Facades\Cart;
+use Shopper\Core\Models\Contracts\Channel;
+
+$cart = Cart::current() ?? Cart::create([
+    'channel_id' => resolve(Channel::class)::query()->default()->value('id'),
+    'zone_id' => session('zone_id'),
+    'currency_code' => 'EUR',
+]);
+
+Cart::use($existingCart);
+
+Cart::associate($request->user());
+
+Cart::forget();
+```
+
+### Behavior
+
+The session manager follows these rules:
+
+- `current()` returns the cart stored in the session, or `null` when there is none or it is completed. When `shopper.cart.session.auto_create` is `true`, it creates a cart instead of returning `null`.
+- `create()` creates a cart with the attributes you pass, sets `currency_code` to the store default currency from `shopper_currency()` when you pass none, and stores the cart in the session.
+- `use()` stores an existing cart in the session.
+- `forget()` removes the cart from the session without deleting it.
+- `associate()` gives the session cart to the customer who just signed in, as described in [Associating Cart on Login](#associating-cart-on-login).
+
+## Calculation Pipeline
+
+Cart totals come out of a Laravel pipeline. Each step receives a `Shopper\Cart\Pipelines\CartPipelineContext`, adds its part and passes it on. The context carries the cart and the running amounts in cents: `subtotal`, `discountTotal`, `taxTotal`, `shippingTotal`, `total`, `taxInclusive`, and `lineSubtotals`, the subtotal of each line keyed by line ID.
+
+### Default Pipeline
+
+The steps are listed under `pipelines.cart` in `config/shopper/cart.php`:
+
+```php title="config/shopper/cart.php"
+use Shopper\Cart\Pipelines;
+
+'pipelines' => [
+    'cart' => [
+        Pipelines\CalculateLines::class,
+        Pipelines\ApplyAutomaticPromotions::class,
+        Pipelines\ApplyDiscounts::class,
+        Pipelines\CalculateTax::class,
+        Pipelines\Calculate::class,
+    ],
+],
+```
+
+### Pipeline Steps
+
+Each step does one job, in this order:
+
+| Step | What it does |
+|------|--------------|
+| `CalculateLines` | Multiplies the unit price of each line by its quantity, fills `lineSubtotals` and sums them into `subtotal` |
+| `ApplyAutomaticPromotions` | Attaches each active automatic discount the cart qualifies for as a `CartPromotion`, and removes those it no longer qualifies for |
+| `ApplyDiscounts` | Resolves the promotions of the cart, writes a `CartLineAdjustment` for each line a promotion discounts, and sets `discountTotal` |
+| `CalculateTax` | Computes the tax of each line on its subtotal minus its adjustments, writes the `CartLineTaxLine` rows, sets `taxTotal` and `taxInclusive`. Skipped until the shipping address has a country |
+| `Calculate` | Sets `shippingTotal` from the cart's `shipping_amount` and computes `total` |
+
+`Calculate` adds tax to the total only when prices exclude it: the goods total is `subtotal - discountTotal + taxTotal`, or `subtotal - discountTotal` when prices include tax, and never goes below `0`. The shipping amount is added on top. The [Taxes](/3.x/taxes) page covers tax zones, rates and tax-inclusive prices.
+
+While the cart holds an open payment session with a provider, the promotion and tax steps keep the stored adjustments and tax lines as they are, so the amount being paid does not move under the customer.
+
+### Stored Totals
+
+`CartManager` offers two ways to read totals. `calculate()` always runs the pipeline and records the time in `calculated_at`. `totals()` runs the pipeline only when the cart was never calculated or the last calculation is older than `shopper.cart.totals_ttl_minutes` (15 by default). Otherwise it rebuilds the totals from the stored rows: line prices, adjustments, tax lines and `shipping_amount`.
+
+Every change to a line, an address, a promotion, the currency or the shipping choice clears `calculated_at`, so the next `totals()` call runs the pipeline again. The TTL covers what changes without touching the cart, such as an automatic promotion that starts or ends. The Store API answers with `totals()`; the checkout, the payment session and the promotion endpoint call `calculate()`.
+
+### Custom Pipeline
+
+A step is a class with a `handle(CartPipelineContext $context, Closure $next)` method that returns `$next($context)`. The container builds it, so its constructor can ask for services. This step records the loyalty points the order will earn, one point per dollar of the total, in the cart metadata where the storefront can show them:
+
+```php title="app/Cart/RecordLoyaltyPoints.php"
+<?php
+
+namespace App\Cart;
+
+use Closure;
+use Shopper\Cart\Pipelines\CartPipelineContext;
+
+final class RecordLoyaltyPoints
+{
+    public function handle(CartPipelineContext $context, Closure $next): mixed
+    {
+        $cart = $context->cart;
+        $points = intdiv($context->total, 100);
+
+        if (($cart->metadata['loyalty_points'] ?? null) !== $points) {
+            $cart->update([
+                'metadata' => [...$cart->metadata ?? [], 'loyalty_points' => $points],
+            ]);
+        }
+
+        return $next($context);
+    }
+}
+```
+
+Add it to `pipelines.cart` in `config/shopper/cart.php`, at the position where it must run. A package or an add-on that cannot edit the application configuration registers its step on the `Shopper\Cart\Pipelines\CartPipeline` singleton instead, from the `boot()` method of its service provider:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Cart\RecordLoyaltyPoints;
+use Shopper\Cart\Pipelines\CartPipeline;
+
+public function boot(): void
+{
+    $this->app->make(CartPipeline::class)->append(RecordLoyaltyPoints::class);
+}
+```
+
+`insertAfter($anchor, $step)` and `insertBefore($anchor, $step)` place a step next to an existing one, such as `Shopper\Cart\Pipelines\CalculateTax`. Shopper applies the insertions to the configured list in the order they are registered. When the anchor is not in the pipeline, the first calculation throws an `InvalidArgumentException` that names the step and its anchor.
+
+A step that changes an amount must store it where `totals()` reads it: the line prices, the adjustments, the tax lines or `shipping_amount`. An amount added to the context only shows in the result of `calculate()`, and `totals()` returns the stored amounts until the next calculation.
+
+## Promotions
+
+A discount reaches the cart in two ways. A code entered by the customer is attached with `applyCoupon()` as a `CartPromotion` of source `code`. An automatic discount needs no code: the `ApplyAutomaticPromotions` step attaches it while the cart qualifies. On each calculation, `ApplyDiscounts` checks every promotion against the discount rules (dates, usage limits, eligibility, zone, minimum amount or quantity), applies them by exclusivity class and priority, stacks a second discount of the same class only when both are combinable, stops at `shopper.cart.max_promotions` (5 by default), and skips a promotion its campaign budget cannot cover. A promotion that does not apply stays on the cart with a computed amount of `0`. The [Discounts](/3.x/discounts) page documents [eligibility](/3.x/discounts#discount-eligibility), [usage limits](/3.x/discounts#usage-limit-enforcement), [priority and combination](/3.x/discounts#priority-and-combination) and [automatic discounts](/3.x/discounts#automatic-discounts).
+
+## Stock Validation
+
+`add()` and `update()` check stock before they change the quantity of a line. The check covers products and variants that implement `Shopper\Core\Models\Contracts\Stockable` and track inventory: products of type standard or variant, and product variants. Virtual and external products are not checked, nor is a product with `allow_backorder` set to `true`. When the cart quantity exceeds the stock, the manager throws a `Shopper\Cart\Exceptions\InsufficientStockException`:
+
+```php title="app/Http/Controllers/CartLineController.php"
+use Shopper\Cart\Exceptions\InsufficientStockException;
+
+try {
+    $manager->add($cart, $variant, quantity: 10);
+} catch (InsufficientStockException $exception) {
+    return back()->with('error', __('Only :count left in stock.', [
+        'count' => $exception->available,
+    ]));
+}
+```
+
+The exception carries `purchasable` (the product or variant), `available` (its stock) and `requested` (the quantity asked for). This check reads the stock without holding it: two customers can put the last unit in their carts. Stock is held at checkout, as described in [Stock Reservation](#stock-reservation). The [Products](/3.x/products#stock-management) page explains how stock is counted.
+
+## Order Conversion
+
+`CreateOrderFromCartAction` turns a cart into an order, in one database transaction that Laravel attempts up to three times when it hits a deadlock:
+
+```php title="app/Http/Controllers/CheckoutController.php"
+use Shopper\Cart\Actions\CreateOrderFromCartAction;
+
+$order = resolve(CreateOrderFromCartAction::class)->execute($cart);
+```
+
+`execute()` accepts three optional closures that the Store API checkout uses: `assertTotals` receives the final `CartPipelineContext` and can throw to abort, `afterCreate` receives the new order inside the transaction, and `honoursPayment` tells whether a payment already collected must be honored when a price or a promotion changed. The [Payments](/3.x/payments) page covers that flow.
+
+### What Happens
+
+Inside the transaction, the action:
+
+1. Locks the cart row with `FOR UPDATE` and throws `CartCompletedException` when the cart is already completed, so two checkouts of the same cart create one order.
+2. On MySQL and MariaDB, locks the discount rows of the cart's promotions.
+3. Prices every line again. A unit price that went up throws `PriceChangedException` with `was` and `now`; a price that went down is applied. A line without a price throws `MissingPriceException`, a quantity the [quantity rules](/3.x/pricing#quantity-rules) refuse throws `QuantityRuleViolationException`.
+4. Runs the calculation pipeline and checks the terms of each applied promotion again, throwing `PromotionUnavailableException` when one no longer holds.
+5. Copies the shipping and billing addresses to `OrderAddress` rows.
+6. Creates the order with the total, tax and shipping amounts, the currency, email, customer, channel, zone, payment method and carrier option of the cart, and the discount of the promotion with the largest amount.
+7. Creates one order item per line, with its name, SKU, quantity, unit price, discount and tax, and reserves stock for each line that tracks inventory.
+8. Copies the tax lines of the cart to `OrderTaxLine` rows.
+9. Records the use of each applied promotion, checks its usage limits and charges its campaign budget.
+10. Sets `completed_at` and `order_id` on the cart and dispatches `CartCompleted` once the transaction commits.
+
+Any exception rolls the whole transaction back: no order, no stock movement, no promotion use. The [Orders](/3.x/orders) page covers the order that comes out.
+
+### Discount Limit Exceptions
+
+Usage limits are checked again at commit time, because another checkout may have used the last redemption since the cart was calculated. `Shopper\Cart\Exceptions\DiscountLimitReachedException::global()` is thrown when the discount reached its `usage_limit`, and `DiscountLimitReachedException::perUser()` when this customer, found by customer ID or by email for a guest, already used it. A campaign that cannot absorb the discount throws `Shopper\Core\Exceptions\CampaignBudgetExceededException`, as described in [Budgets](/3.x/campaigns#budgets).
+
+```php title="app/Http/Controllers/CheckoutController.php"
+use Shopper\Cart\Exceptions\DiscountLimitReachedException;
+
+try {
+    $order = resolve(CreateOrderFromCartAction::class)->execute($cart);
+} catch (DiscountLimitReachedException $exception) {
+    return back()->with('error', $exception->getMessage());
+}
+```
+
+The [Usage Limit Enforcement](/3.x/discounts#usage-limit-enforcement) section of the Discounts page explains the counters.
+
+### Stock Reservation
+
+Stock is reserved inside the transaction that creates the order, so two checkouts cannot both take the last unit. The action calls the `Shopper\Core\Contracts\StockReserver` contract for every line whose product or variant tracks inventory:
+
+```php
+namespace Shopper\Core\Contracts;
+
+use Illuminate\Database\Eloquent\Model;
+use Shopper\Core\Models\Contracts\Stockable;
+
+interface StockReserver
+{
+    public function reserve(Stockable $product, int $quantity, ?Model $reference = null, ?int $userId = null): int;
+}
+```
+
+The default implementation, `Shopper\Core\Stock\LockingStockReserver`, locks the product row, spreads the quantity over the [inventory locations](/3.x/locations) that hold stock, records the movements against the order, and returns the quantity reserved. When the stock is short, it reserves nothing and returns what was available; the action then throws `InsufficientStockException` and the order is rolled back. A product with `allow_backorder` takes the full quantity from its first inventory location, and its stock can go below zero.
+
+To reserve against an external warehouse system, bind your own implementation in a service provider:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Stock\WarehouseStockReserver;
+use Shopper\Core\Contracts\StockReserver;
+
+public function register(): void
+{
+    $this->app->bind(StockReserver::class, WarehouseStockReserver::class);
+}
+```
+
+## Abandoned Carts
+
+A cart is abandoned when it is not completed, has at least one line, and saw no activity for `shopper.cart.abandoned_after_minutes` (60 by default). Activity is read from the `updated_at` column of the cart row. Merchants see these carts in the admin panel, as described in [In the Admin](#in-the-admin); your code can query them to send recovery emails.
+
+### Querying Abandoned Carts
+
+Query the carts through the contract, so a swapped cart model is honored. This query keeps the carts of signed-in customers, the ones you can email:
+
+```php title="app/Console/Commands/SendCartReminders.php"
+use Shopper\Cart\Models\Contracts\Cart;
+
+$abandoned = resolve(Cart::class)::query()
+    ->whereNull('completed_at')
+    ->whereHas('lines')
+    ->whereNotNull('customer_id')
+    ->where('updated_at', '<=', now()->subMinutes(
+        (int) config('shopper.cart.abandoned_after_minutes')
+    ))
+    ->with(['customer', 'lines.purchasable'])
+    ->get();
+```
+
+A guest cart has no customer, but it has an `email` once the checkout collected one.
+
+### Pruning
+
+The `shopper:prune-carts` command deletes the open carts not updated for `shopper.cart.prune_after_days` days (30 by default). Completed carts are kept with their orders. The `--days` option overrides the setting for one run:
+
+```bash
+php artisan shopper:prune-carts
+php artisan shopper:prune-carts --days=7
+```
+
+The cart package schedules the command daily, so you do not add it to `routes/console.php`; your application only needs the Laravel scheduler running. The command deletes in batches of 1,000, and the lines, addresses and promotions of each cart are deleted with it.
+
+## Configuration
+
+The cart has no feature flag: the package is always installed with Shopper. Its settings live in `config/shopper/cart.php`, which `php artisan shopper:install` publishes with the other [configuration files](/3.x/configuration#configuration-files):
+
+| Key | Default | Purpose |
+|-----|---------|---------|
+| `pipelines.cart` | The five steps above | Steps of the [calculation pipeline](#calculation-pipeline) |
+| `max_promotions` | `5` | Most promotions applied to one cart |
+| `session.key` | `shopper_cart` | Session key of the current cart |
+| `session.auto_create` | `false` | Whether `Cart::current()` creates a cart when the session has none |
+| `abandoned_after_minutes` | `60` | Inactivity before a cart counts as [abandoned](#abandoned-carts) |
+| `totals_ttl_minutes` | `15` | How long `totals()` reuses the stored totals |
+| `prune_after_days` | `30` | Age of the open carts that `shopper:prune-carts` deletes |
+| `models.cart` | `Shopper\Cart\Models\Cart::class` | Cart model |
+| `models.cart_line` | `Shopper\Cart\Models\CartLine::class` | Cart line model |
+
+### Model Swapping
+
+Extend `Shopper\Cart\Models\Cart` or `Shopper\Cart\Models\CartLine` and register your class under `models` in the same file:
+
+```php title="config/shopper/cart.php"
+'models' => [
+    'cart' => App\Models\Cart::class,
+    'cart_line' => Shopper\Cart\Models\CartLine::class,
+],
+```
+
+Shopper binds the contracts to the configured classes, so the session manager, the admin panel and the Store API load your model. The [Swapping the Cart Models](/3.x/models#swapping-the-cart-models) section of the Models page lists the rules.
+
+## Usage
+
+Resolve `CartManager` from the container, or inject it. Every method takes the cart as its first argument, and the methods that change the cart throw `CartCompletedException` once it is completed:
+
+```php
+use Shopper\Cart\CartManager;
+
+$manager = resolve(CartManager::class);
+```
+
+### Adding Items
+
+`add()` takes any Eloquent model that implements `Shopper\Core\Contracts\Priceable`, a product or a variant, with an optional quantity and metadata. It prices the line in the currency of the cart through the [price resolver](/3.x/pricing#resolving-prices) and returns the `CartLine`:
+
+```php title="app/Http/Controllers/CartLineController.php"
+use Shopper\Core\Models\Contracts\Product;
+
+$tshirt = resolve(Product::class)::query()
+    ->where('slug', 'classic-t-shirt')
+    ->firstOrFail();
+
+$line = $manager->add($cart, $tshirt, quantity: 2, metadata: [
+    'gift_message' => 'Happy birthday!',
+]);
+```
+
+Adding a product already in the cart raises the quantity of its line. The metadata must then match the line's, or the manager throws `CartLineMetadataConflictException`. A quantity below 1 throws an `InvalidArgumentException`, a product without a price in the cart currency throws `MissingPriceException`, and a quantity the quantity rules refuse throws `QuantityRuleViolationException`. When a new quantity moves another line into a different price tier, the manager prices that line again.
+
+### Updating a Line
+
+`update()` takes the line ID and a quantity, metadata, or both:
+
+```php
+$manager->update($cart, $line->id, ['quantity' => 3]);
+
+$manager->update($cart, $line->id, ['metadata' => ['gift_message' => 'Congratulations!']]);
+```
+
+A new quantity goes through the same stock and quantity rule checks as `add()`.
+
+### Removing Lines
+
+`remove()` deletes one line and `clear()` deletes them all:
+
+```php
+$manager->remove($cart, $line->id);
+
+$manager->clear($cart);
+```
+
+### Applying Coupons
+
+`applyCoupon()` attaches the discount with that code to the cart. It throws `InvalidDiscountException` when no discount has the code. Whether the code discounts anything is decided at the next calculation, as described in [Promotions](#promotions):
+
+```php title="app/Http/Controllers/CouponController.php"
+use Shopper\Cart\Exceptions\InvalidDiscountException;
+
+try {
+    $manager->applyCoupon($cart, 'SUMMER20');
+} catch (InvalidDiscountException $exception) {
+    return back()->with('error', $exception->getMessage());
+}
+
+$manager->removeCoupon($cart, 'SUMMER20');
+```
+
+`removeCoupon()` without a code removes every code of the cart. When a guest cart passes to a signed-in customer, the manager calls `revalidateCoupons()`, which drops the codes that no longer validate for that customer.
+
+### Adding Addresses
+
+`addAddress()` creates the address of a type, or updates it when the cart already has one:
+
+```php title="app/Http/Controllers/CheckoutController.php"
+use Shopper\Core\Enum\AddressType;
+
+$manager->addAddress($cart, AddressType::Shipping, [
+    'first_name' => 'Jane',
+    'last_name' => 'Cooper',
+    'address_1' => '350 Fifth Avenue',
+    'city' => 'New York',
+    'state' => 'NY',
+    'postal_code' => '10118',
+    'country_id' => $country->id,
+]);
+
+$manager->setEmail($cart, 'jane@example.com');
+```
+
+### Shipping and Payment
+
+`setShippingMethod()` stores the chosen shipping option and its price in cents. The option ID has the form `{carrier_code}:{service_code}`, as the shipping options of the cart return it; compute the price on the server, as described in [Calculating Shipping Rates](/3.x/carriers#calculating-shipping-rates). `removeShippingMethod()` clears it. `setPaymentMethod()` takes the ID of one of the [payment methods](/3.x/payment-methods) of the zone:
+
+```php
+$manager->setShippingMethod($cart, 'ups:03', 899);
+
+$manager->setPaymentMethod($cart, $paymentMethod->id);
+```
+
+When a change moves the total of a cart that holds a provider payment session, the manager releases that session, so the customer is never charged an outdated amount.
+
+### Calculating Totals
+
+`calculate()` runs the pipeline and returns the `CartPipelineContext`; `totals()` returns the same object from the stored rows when they are recent, as described in [Stored Totals](#stored-totals):
+
+```blade title="resources/views/cart/summary.blade.php"
+@php($totals = app(\Shopper\Cart\CartManager::class)->totals($cart))
+
+<dl>
+    <dt>Subtotal</dt>
+    <dd>{{ shopper_money_format($totals->subtotal, $cart->currency_code) }}</dd>
+
+    @if ($totals->discountTotal > 0)
+        <dt>Discount</dt>
+        <dd>-{{ shopper_money_format($totals->discountTotal, $cart->currency_code) }}</dd>
+    @endif
+
+    <dt>Shipping</dt>
+    <dd>{{ shopper_money_format($totals->shippingTotal, $cart->currency_code) }}</dd>
+
+    <dt>{{ $totals->taxInclusive ? 'Including tax' : 'Tax' }}</dt>
+    <dd>{{ shopper_money_format($totals->taxTotal, $cart->currency_code) }}</dd>
+
+    <dt>Total</dt>
+    <dd>{{ shopper_money_format($totals->total, $cart->currency_code) }}</dd>
+</dl>
+```
+
+### Changing the Currency or the Zone
+
+`changeCurrency()` prices every line again in the new currency and clears the shipping choice; a line without a price in that currency throws `MissingPriceException` and nothing changes. `changeContext()` sets a new zone and channel, clears the shipping and payment choices, and prices the lines again, dispatching `CartLinesRepriced` when a unit price changed:
+
+```php
+$manager->changeCurrency($cart, 'EUR');
+
+$manager->changeContext($cart, zoneId: $zone->id, channelId: $cart->channel_id);
+```
+
+`reprice()` prices the lines again without changing the currency, the zone or the shipping choice, dispatches `CartLinesRepriced` when a unit price changed, and returns those changes, each with `line`, `from` and `to`.
+
+### Associating Cart on Login
+
+When a guest signs in, give the session cart to the customer from a `Login` listener:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Illuminate\Auth\Events\Login;
+use Illuminate\Support\Facades\Event;
+use Shopper\Cart\Facades\Cart;
+
+public function boot(): void
+{
+    Event::listen(Login::class, fn (Login $event) => Cart::associate($event->user));
+}
+```
+
+`associate()` calls `CartManager::transfer()`. When the customer already has an open cart, the guest cart is merged into it: lines of the same product or variant add up, the other lines and the codes move over, the guest cart is deleted, and the session points to the customer's cart. Otherwise the customer takes the guest cart. Either way the lines are priced again for the customer and the codes that no longer apply are dropped. When the guest cart is completed or belongs to another customer, `associate()` forgets it. `merge($source, $target)` is available on its own for other flows.
+
+### Custom Line Prices
+
+`setLinePrice()` sets the unit price of a line by hand, for a price your application decides, such as a negotiated quote. The line is then locked: its quantity cannot change and a currency change throws `CartLineLockedException`. `clearLinePrice()` returns the line to the resolved price:
+
+```php
+$manager->setLinePrice($cart, $line->id, 1999);
+
+$manager->clearLinePrice($cart, $line->id);
+```
+
+A negative amount throws an `InvalidArgumentException`. Call these methods from trusted code only, never with an amount taken from the customer's request.
+
+### Completed Cart Guard
+
+Once `completed_at` is set, every method that changes the cart throws `Shopper\Cart\Exceptions\CartCompletedException`, and `Cart::current()` stops returning it. The order holds the record of the purchase from then on.
+
+```php
+use Shopper\Cart\Exceptions\CartCompletedException;
+
+try {
+    $manager->add($cart, $tshirt);
+} catch (CartCompletedException) {
+    Cart::forget();
+}
+```
+
+### Converting to Order
+
+At the end of the checkout, convert the cart and clear the session:
+
+```php title="app/Http/Controllers/CheckoutController.php"
+use Shopper\Cart\Actions\CreateOrderFromCartAction;
+use Shopper\Cart\Facades\Cart;
+
+$order = resolve(CreateOrderFromCartAction::class)->execute(Cart::current() ?? abort(404));
+
+Cart::forget();
+
+return redirect()->route('orders.confirmation', $order);
+```
+
+The [Order Conversion](#order-conversion) section lists the exceptions to catch. A store that takes payment online opens a payment session before this step, as the [Payments](/3.x/payments) page describes.
+
+## Events
+
+The cart dispatches four events from `Shopper\Cart\Events`: `CartCompleted` when the checkout creates the order, `CouponApplied` and `CouponRemoved` when a code is added or removed, and `CartLinesRepriced` when unit prices change. The [Cart and Discount Events](/3.x/events#cart-and-discount-events) section of the Events page lists their payloads and the exact moments they fire.
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Notifications\OrderReceived;
+use Illuminate\Support\Facades\Event;
+use Shopper\Cart\Events\CartCompleted;
+
+public function boot(): void
+{
+    Event::listen(CartCompleted::class, function (CartCompleted $event): void {
+        $event->cart->customer?->notify(new OrderReceived($event->order));
+    });
+}
+```
+
+`CartCompleted` is also an outgoing [webhook](/3.x/webhooks) event, `cart.completed`.
+
+## Permissions
+
+The cart has no permission of its own. The admin panel checks `orders.browse` before it shows the Abandoned Carts page, its sidebar item and the detail of a cart. The [Access by Section](/3.x/acl#access-by-section) table of the Access Control page lists the permissions of the Orders section.
+
+## In the Admin
+
+Merchants find the carts that did not reach checkout under Orders, Abandoned Carts. The list shows each cart with its customer (or "Guest"), its items, its channel and its last activity, newest first, and opens a slide-over with the lines and the addresses of the cart. The page is read-only: carts are created and changed by the storefront. The [User Guide](/3.x/user-guide) walks through the orders screens.
+
+## From a Storefront
+
+The Store API exposes the cart under the `store` prefix, set by `SHOPPER_API_PREFIX`. A cart and its lines are addressed by their public IDs. Every route works for guests except the transfer, which needs a signed-in customer:
+
+| Endpoint | Does |
+|----------|------|
+| `POST /store/carts` | Creates a cart with an optional `currency_code`, `email` and `metadata`, in the zone and channel of the request |
+| `GET /store/carts/{cartId}` | Returns the cart. Add `include=lines`, `lines.purchasable`, `lines.purchasable.product`, `addresses` or `paymentMethod` |
+| `PATCH /store/carts/{cartId}` | Changes `currency_code`, `zone_code`, `email` or `metadata` |
+| `POST /store/carts/{cartId}/lines` | Adds a line from `purchasable_type` (`product` or `variant`), `purchasable_id`, `quantity` and `metadata` |
+| `PATCH /store/carts/{cartId}/lines/{lineId}` | Changes the quantity or the metadata of a line |
+| `DELETE /store/carts/{cartId}/lines/{lineId}` | Removes a line |
+| `POST /store/carts/{cartId}/addresses` | Sets `shipping_address`, `billing_address` and `email` |
+| `POST /store/carts/{cartId}/promotion` | Applies a discount `code` |
+| `DELETE /store/carts/{cartId}/promotion` | Removes a code, or every code when the request names none |
+| `GET /store/carts/{cartId}/shipping-options` | Lists the shipping options and their rates |
+| `POST /store/carts/{cartId}/shipping-method` | Chooses a shipping option by `option_id` |
+| `GET /store/carts/{cartId}/payment-methods` | Lists the enabled payment methods, limited to the cart's zone when it has one |
+| `POST /store/carts/{cartId}/payment-method` | Chooses a payment method |
+| `POST /store/carts/{cartId}/payment-session` | Opens a payment session with the provider |
+| `POST /store/carts/{cartId}/complete` | Converts the cart into an order |
+| `POST /store/carts/{cartId}/transfer` | Gives a guest cart to the signed-in customer, merging it into their open cart |
+
+A cart resource has the type `carts` and carries `currency_code`, `email`, `promotions` (each with `code`, `source`, `amount` and a `status` of `applied` or `suppressed`), `completed_at`, `metadata`, `lines_count`, `lines_quantity`, `subtotal`, `discount_total`, `tax_total`, `shipping_total`, `total`, `tax_inclusive`, `shipping_option_id`, `created_at` and `updated_at`, with the `lines`, `addresses` and `paymentMethod` relationships. Amounts are in cents.
+
+The promotion endpoint applies a code only when it discounts the cart and answers with the same error for every code it refuses. The [Storefront](/3.x/storefront) section documents the Store API.

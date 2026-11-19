@@ -171,7 +171,7 @@ The grant rule covers permissions given to a role. Adding a team member with an 
 
 ## Generating Permissions
 
-`Permission::generate()` creates the five permissions of a resource in one call: `browse`, `read`, `create`, `edit` and `delete`. The first argument is the resource, the second the group. Without a group, the resource name is used as the group. Running it again for a resource it already created adds nothing.
+`Permission::generate()` creates the five permissions of a resource in one call: `browse`, `read`, `create`, `edit` and `delete`. The first argument is the resource, the second the group. Without a group, the resource name is used as the group. Running it again for a resource it already created adds nothing, as long as the group and the application locale are the same as on the first run: it looks each permission up by all its columns, translated labels included.
 
 Shopper does not bypass the gate for administrators: they hold the seeded permissions because the seeder gave them every permission at install time. A permission created later belongs to no role until you give it, so give it to the administrator role as well, or administrators fail the check like everyone else.
 

@@ -1,0 +1,265 @@
+---
+title: Notifications
+description: The notifications Shopper sends to administrators and customers, the events behind them, and how to enable, change, replace or turn them off.
+---
+
+Shopper sends notifications on two channels. Database notifications appear under a bell in the top bar of the admin panel and tell administrators about new orders, payments, failed payments and finished product imports. Mail notifications go out when an administrator creates a team member or a customer, and when someone asks for a new password.
+
+Shopper sends no email to customers about their orders: no order confirmation, no payment receipt, no shipping update. Your application sends them by listening to the order events, as the [order notification example](/3.x/events#example-order-notification-system) shows.
+
+## Database Notifications
+
+The admin panel builds these notifications with Filament's notifications package and stores them in Laravel's `notifications` table. Four events create one, each through a queued listener of `shopper/framework`:
+
+| Event | Fires when | Notification | Button |
+|-------|------------|--------------|--------|
+| `Shopper\Core\Events\Orders\OrderCreated` | An order is created | "New order received" | View order |
+| `Shopper\Core\Events\Orders\OrderPaid` | The payment status of an order becomes paid | "Order paid" | View order |
+| `Shopper\Payment\Events\PaymentFailed` | The provider declines an authorization, a capture or a refund | "Payment failed", or "Refund failed" for a refund | View order |
+| `Shopper\Core\Events\Products\ProductImportCompleted` | A product import finishes, with or without row errors | "Product import finished", with the number of imported and failed rows | View products |
+
+The body names the order number, for example "Order ORD-20260312-000042 has just been placed." A failed payment shows in red, and an import with row errors in orange. The button opens the order, or the product list for an import, and marks the notification as read. An import that stops before the end, with the `Failed` status, sends no notification.
+
+The four listeners live in the `Shopper\Listeners\Notifications` namespace:
+
+| Listener | Event |
+|----------|-------|
+| `SendNewOrderNotification` | `OrderCreated` |
+| `SendOrderPaidNotification` | `OrderPaid` |
+| `SendPaymentFailedNotification` | `PaymentFailed` |
+| `SendProductImportCompletedNotification` | `ProductImportCompleted` |
+
+They implement `ShouldQueue` and run on a queue named `notifications`. The [Events](/3.x/events) page describes the events and their payloads.
+
+### Recipients
+
+Every user with the administrator or the manager role receives the notifications: the roles named in `config('shopper.admin.roles.admin')` and `config('shopper.admin.roles.manager')`, `administrator` and `manager` by default. Shopper finds them with the `administrators()` scope of the `InteractsWithShopper` trait on your user model. Customers and team members with any other role receive none, and nothing is stored when no user has one of the two roles. The [Roles](/3.x/acl#roles) section of the ACL page describes these roles.
+
+To avoid a role query on every notification, Shopper caches the IDs of these users for two hours under the `shopper.notifications.administrator_ids` cache key. A change of role takes effect when the cache expires. Clear the key to apply it at once:
+
+```bash
+php artisan cache:forget shopper.notifications.administrator_ids
+```
+
+## Enabling Database Notifications
+
+Database notifications are off by default. Turning them on registers the four listeners and adds the bell to the top bar:
+
+<Steps>
+<Step title="Turn on the flag">
+
+Set `enabled` to `true` under `notifications.database` in the admin configuration:
+
+```php title="config/shopper/admin.php"
+'notifications' => [
+    'database' => [
+        'enabled' => true,
+        'polling_interval' => '30s',
+    ],
+],
+```
+
+</Step>
+<Step title="Create the notifications table">
+
+Shopper does not ship a migration for Laravel's `notifications` table. Create it if your application does not have it yet:
+
+```bash
+php artisan make:notifications-table
+php artisan migrate
+```
+
+</Step>
+<Step title="Check the user model">
+
+Your user model needs Laravel's `Illuminate\Notifications\Notifiable` trait. The `User` model of a new Laravel application already uses it.
+
+</Step>
+<Step title="Listen to the notifications queue">
+
+The listeners run on the `notifications` queue. Add it to the queues of your worker, next to the ones listed in [Installation](/3.x/installation#queue-worker):
+
+```bash
+php artisan queue:work --queue=default,webhooks,notifications
+```
+
+</Step>
+</Steps>
+
+### Polling and Broadcasting
+
+The bell reloads its list every 30 seconds. Change the interval with `polling_interval`, using a duration such as `'60s'` or `'2m'`.
+
+Set `polling_interval` to `null` to stop polling. The bell then refreshes through broadcasting only. For each recipient, Shopper's listeners dispatch Filament's `Filament\Notifications\Events\DatabaseNotificationsSent` event, which Laravel broadcasts on the user's private channel, `App.Models.User.{id}` for the `App\Models\User` model, under the name `database-notifications.sent`. The bell listens to it when Laravel Echo is loaded on the page as `window.Echo` and the user already has at least one notification.
+
+The admin panel does not load Echo itself. Once broadcasting is set up in your application, as the [Laravel broadcasting documentation](https://laravel.com/docs/broadcasting) explains, add your Echo script to the admin pages with the `BODY_END` render hook:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Illuminate\Support\Facades\Blade;
+use Shopper\Facades\Shopper;
+use Shopper\View\LayoutRenderHook;
+
+public function boot(): void
+{
+    Shopper::renderHook(
+        LayoutRenderHook::BODY_END,
+        fn (): string => Blade::render("@vite('resources/js/echo.js')"),
+    );
+}
+```
+
+`resources/js/echo.js` is the file `php artisan install:broadcasting` creates in an application that uses neither React nor Vue. List it in the `input` array of `vite.config.js` so Vite builds it as an entry point.
+
+## Changing the Text
+
+The titles, bodies and button labels come from the `notifications.php` translation file of `shopper/framework`, under the `database` key. Shopper ships it in English, French, Spanish and Swedish. To change a text, create the file for your locale in `lang/vendor/shopper` with the keys you want to replace. Laravel merges it with the package file, so the other keys keep their text:
+
+```php title="lang/vendor/shopper/en/notifications.php"
+<?php
+
+return [
+    'database' => [
+        'order_created' => [
+            'title' => 'New order to pack',
+            'body' => 'Order :number is waiting in the warehouse queue.',
+        ],
+    ],
+];
+```
+
+| Key | Default text |
+|-----|--------------|
+| `database.order_created.title`, `.body` | "New order received", "Order :number has just been placed." |
+| `database.order_paid.title`, `.body` | "Order paid", "Payment for order :number has been received." |
+| `database.payment_failed.title`, `.body` | "Payment failed", "A payment attempt for order :number has failed." |
+| `database.refund_failed.title`, `.body` | "Refund failed", "A refund attempt for order :number has failed." |
+| `database.product_import.title`, `.body` | "Product import finished", ":imported products imported, :failed failed." |
+| `database.view_order` | "View order" |
+| `database.view_products` | "View products" |
+
+`php artisan shopper:publish` copies every translation file of the package to `lang/vendor/shopper`, if you prefer to start from the full file.
+
+## Adding a Notification
+
+Any listener can notify the same users. `Shopper\Listeners\Notifications\SendsOrderNotification` is the base class of the order listeners: it is queued on the `notifications` queue, finds the administrators and managers, adds the "View order" button and stores the notification. Extend it and call `send()` with a Filament notification and the order. This listener warns the team when a package reaches the Delivery failed status:
+
+```php title="app/Listeners/SendDeliveryFailedNotification.php"
+namespace App\Listeners;
+
+use Filament\Notifications\Notification;
+use Filament\Support\Icons\Heroicon;
+use Shopper\Core\Events\Orders\OrderShipmentDeliveryFailed;
+use Shopper\Listeners\Notifications\SendsOrderNotification;
+
+class SendDeliveryFailedNotification extends SendsOrderNotification
+{
+    public function handle(OrderShipmentDeliveryFailed $event): void
+    {
+        if (! config('shopper.admin.notifications.database.enabled')) {
+            return;
+        }
+
+        $this->send(
+            Notification::make()
+                ->title('Delivery failed')
+                ->body("A package of order {$event->order->number} could not be delivered.")
+                ->icon(Heroicon::OutlinedTruck)
+                ->danger(),
+            $event->order,
+        );
+    }
+}
+```
+
+Laravel discovers the listener in `app/Listeners`. Unlike Shopper's listeners, which are only registered when the flag is on, yours always runs: the configuration check keeps it from filling the table while the bell is hidden. For a notification that is not about an order, call `sendToDatabase()` on the Filament notification with the recipients of your choice, such as `User::query()->administrators()->get()`.
+
+## Replacing a Notification
+
+Laravel resolves a listener from the service container when the event fires, so binding one of Shopper's listener classes to your own class replaces it. Your class receives the same event and runs on the same queue. This one adds the order total to the new order notification, formatted with `shopper_money_format()` as described on the [Money](/3.x/money) page:
+
+```php title="app/Shopper/Listeners/SendNewOrderNotification.php"
+namespace App\Shopper\Listeners;
+
+use Filament\Notifications\Notification;
+use Filament\Support\Icons\Heroicon;
+use Shopper\Core\Events\Orders\OrderCreated;
+use Shopper\Listeners\Notifications\SendsOrderNotification;
+
+class SendNewOrderNotification extends SendsOrderNotification
+{
+    public function handle(OrderCreated $event): void
+    {
+        $order = $event->order;
+        $total = shopper_money_format($order->price_amount, $order->currency_code);
+
+        $this->send(
+            Notification::make()
+                ->title(__('shopper::notifications.database.order_created.title'))
+                ->body("Order {$order->number} of {$total} has just been placed.")
+                ->icon(Heroicon::OutlinedShoppingBag)
+                ->success(),
+            $order,
+        );
+    }
+}
+```
+
+Bind it in the `register` method of a service provider:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Shopper\Listeners\SendNewOrderNotification;
+use Shopper\Listeners\Notifications\SendNewOrderNotification as ShopperNewOrderNotification;
+
+public function register(): void
+{
+    $this->app->bind(ShopperNewOrderNotification::class, SendNewOrderNotification::class);
+}
+```
+
+<Warning>
+Keep the replacement out of `app/Listeners`. Laravel would discover it there and register it as a second listener of `OrderCreated`, and administrators would receive the notification twice.
+</Warning>
+
+## Turning Notifications Off
+
+`notifications.database.enabled` turns the four database notifications and the bell on or off together. There is no setting for a single notification: to drop one, [replace it](#replacing-a-notification) with a listener that sends something else, or nothing.
+
+The two welcome emails described below are only sent when the administrator asks for them in the creation form. The password reset email of the admin panel stops with the reset flow itself: set `password_reset` to `false` in `config/shopper/auth.php` and the login page hides the "Forgot your password?" link and no longer registers the reset routes.
+
+## Mail Notifications
+
+Shopper sends three emails from the admin panel, as Laravel notifications in the `Shopper\Notifications` namespace. They go through the `mail` channel with the mailer of `config/mail.php`, during the request:
+
+| Notification | Recipient | Sent when |
+|--------------|-----------|-----------|
+| `AdminSendCredentials` | The new team member | An administrator creates a team member with **Send Invite** turned on |
+| `CustomerSendCredentials` | The new customer | An administrator creates a customer with **Send customer credentials** checked |
+| `AdminResetPassword` | The user who asked for the reset | Someone submits the "Forgot your password?" form of the admin login page |
+
+The team member email is titled "Welcome to Shopper" and links to the admin login page. The customer email is titled "Welcome to" followed by `config('app.name')` and links to the home page of the application. The reset email links to the admin page where the user picks a new password. Both options of the creation forms are off by default. Creating team members is covered on the [Team](/3.x/team) page.
+
+Their subjects and lines come from the `mails.php` translation file (the two welcome emails) and the `pages/auth.php` file (the reset email) of `shopper/framework`, which you override in `lang/vendor/shopper` as shown in [Changing the Text](#changing-the-text). The layout is Laravel's mail notification template: `php artisan vendor:publish --tag=laravel-notifications` publishes it to `resources/views/vendor/notifications`.
+
+## In the Admin
+
+When database notifications are on, the bell in the top bar shows the number of unread notifications, up to "99+", and opens the list. Each notification has its button to the order or the products, and the list marks notifications as read or clears them. The [User Guide](/3.x/user-guide) walks through the admin screens.
+
+## From a Storefront
+
+The Store API does not expose database notifications: they belong to the admin panel. It sends one email of its own. `POST /store/auth/forgot-password` sends Laravel's `Illuminate\Auth\Notifications\ResetPassword` notification to the customer and answers `202`, whether the email exists or not. The link in that email points to the route named `password.reset` of your application. When your application has no such route, for example because the storefront runs on another domain, point the link at the reset page of your storefront in the `boot` method of a service provider:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Illuminate\Auth\Notifications\ResetPassword;
+
+public function boot(): void
+{
+    ResetPassword::createUrlUsing(function ($customer, string $token): string {
+        return 'https://shop.example.com/reset-password?' . http_build_query([
+            'token' => $token,
+            'email' => $customer->email,
+        ]);
+    });
+}
+```
+
+The page then sends the token, the email and the new password to `POST /store/auth/reset-password`. Customer accounts on the Store API are covered on the [Storefront](/3.x/storefront) page.

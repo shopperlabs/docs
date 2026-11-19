@@ -1,0 +1,721 @@
+---
+title: Customers
+description: Customers in Shopper are your User model with an address book, roles and orders. Columns, addresses, anonymization and the Store API account.
+---
+
+A customer is a row of your application's `users` table. Shopper ships no customer model: the `InteractsWithShopper` trait adds the customer columns, relationships and scopes to your `User` model, and the `Shopper\Core\Models\Address` model holds each customer's address book. Team members live in the same table and are told apart by their roles, as described on the [Team](/3.x/team) page.
+
+Customers sign up through the Store API, are created by a merchant in the admin panel, or come from your own sign-up code. Shopper gives the customers it creates the customer role, named `user` by default.
+
+## User Model Integration
+
+Shopper does not create a separate Customer model. Your `App\Models\User` uses the `Shopper\Traits\InteractsWithShopper` trait and implements the `Shopper\Models\Contracts\ShopperUser` contract, as set up in [Installation](/3.x/installation#prepare-your-user-model).
+
+Shopper writes customers with Eloquent's `create()` and `update()`: the admin form, the Store API registration and the anonymization action pass arrays of attributes. Declare these columns as fillable on your model. The Shopper migration renames the `name` column of the Laravel skeleton to `last_name`, so `name` leaves the list:
+
+```php title="app/Models/User.php"
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Attributes\Fillable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
+use Shopper\Models\Contracts\ShopperUser;
+use Shopper\Traits\InteractsWithShopper;
+
+#[Fillable([
+    'first_name',
+    'last_name',
+    'email',
+    'password',
+    'phone_number',
+    'gender',
+    'birth_date',
+    'opt_in',
+    'email_verified_at',
+    'avatar_type',
+    'avatar_location',
+    'last_login_at',
+    'last_login_ip',
+    'store_two_factor_secret',
+    'store_two_factor_recovery_codes',
+])]
+#[Hidden([
+    'password',
+    'remember_token',
+    'store_two_factor_secret',
+    'store_two_factor_recovery_codes',
+])]
+class User extends Authenticatable implements ShopperUser
+{
+    use HasApiTokens;
+    use InteractsWithShopper;
+    use Notifiable;
+}
+```
+
+The list covers every column Shopper writes: the profile fields of the sign-up and admin forms, `email_verified_at` set by the admin form, and the avatar, login and two-factor columns that [anonymization](#anonymization) clears. On Laravel 12, which has no `Fillable` and `Hidden` attributes, list the same columns in the `$fillable` and `$hidden` properties. `HasApiTokens` comes from Laravel Sanctum, which the Store API packages install, and is needed when your storefront uses the Store API, as described in [From a Storefront](#from-a-storefront). Without the Store API, leave the trait and its import out.
+
+`InteractsWithShopper` brings five traits that change what you can do with a user:
+
+- `HasRoles` from Spatie Permission gives roles and permissions, described on the [Access Control](/3.x/acl) page.
+- `HasDiscounts` adds the `discounts()` relation described in [Discounts](#discounts).
+- `HasProfilePhoto` adds the `picture` attribute described in [Computed Attributes](#computed-attributes).
+- `HasPublicId` fills `public_id` with a ULID when the user is created. The Store API never exposes the numeric ID. The [Models](/3.x/models#public-ids) page describes public IDs.
+- `Searchable` sends users to the search index with their name and email, as listed on the [Search](/3.x/search#orders-and-customers) page.
+
+The trait also merges five casts into your model: `email_verified_at`, `last_login_at` and `birth_date` to dates, `gender` to the `GenderType` enum and `opt_in` to a boolean. The `ShopperUser` contract declares the role checks, the `orders()` and `addresses()` relations and the two query scopes; type-hint it when your code receives a user from Shopper.
+
+## Database Schema
+
+Shopper adds columns to your `users` table and creates two tables of its own: the address book and the geolocation history.
+
+### User Table Modifications
+
+The `create_customer_columns` migration renames `name` to `last_name` (or adds `last_name` when the table has no `name` column), makes `password` nullable and adds the customer columns. Later migrations add the public ID and the two-factor columns. The table keeps its name, without the Shopper table prefix:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `first_name` | string | yes | null | First name |
+| `last_name` | string | no | - | Last name, renamed from `name` |
+| `email` | string | no | - | Email address, unique |
+| `email_verified_at` | timestamp | yes | null | Email verification date |
+| `password` | string | yes | null | Hashed password |
+| `gender` | string | yes | null | `GenderType` value |
+| `phone_number` | string | yes | null | Phone number |
+| `birth_date` | date | yes | null | Birth date |
+| `avatar_type` | string | no | `avatar_ui` | Source of the profile picture |
+| `avatar_location` | string | yes | null | Path of the uploaded picture on the media disk |
+| `timezone` | string | yes | null | Timezone of the user |
+| `opt_in` | boolean | no | false | Consent to marketing emails |
+| `last_login_at` | timestamp | yes | null | Last sign-in date |
+| `last_login_ip` | string | yes | null | Last sign-in IP address |
+| `store_two_factor_secret` | text | yes | null | Two-factor secret of a team member, see [Two-Factor Authentication](/3.x/two-factor) |
+| `store_two_factor_recovery_codes` | text | yes | null | Two-factor recovery codes of a team member |
+
+The `remember_token`, `created_at` and `updated_at` columns come from the Laravel skeleton. Shopper does not fill `timezone`, `last_login_at` or `last_login_ip` when a customer signs in: write them from a listener of Laravel's `Login` event if your store needs them.
+
+### Address Table
+
+Addresses are stored in the `sh_user_addresses` table (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)):
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `first_name` | string | no | - | First name |
+| `last_name` | string | no | - | Last name |
+| `company_name` | string | yes | null | Company name |
+| `street_address` | string | no | - | Street address |
+| `street_address_plus` | string | yes | null | Apartment, suite, building |
+| `postal_code` | string | no | - | Postal or ZIP code |
+| `city` | string | no | - | City |
+| `state` | string | yes | null | State, province or region |
+| `phone_number` | string | yes | null | Phone number |
+| `shipping_default` | boolean | no | false | Default shipping address of the customer |
+| `billing_default` | boolean | no | false | Default billing address of the customer |
+| `type` | string | yes | null | `AddressType` value |
+| `metadata` | jsonb | yes | null | Your own data |
+| `country_id` | bigint | yes | null | Foreign key to `sh_countries`, set to null when the country is deleted |
+| `user_id` | bigint | no | - | Foreign key to `users`, deleted with the user |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+The base model does not cast `metadata`: add an array cast in your own model, as shown in [Extending the Address Model](#extending-the-address-model).
+
+### Geolocation History
+
+`Shopper\Core\Models\Geolocation` maps the `sh_users_geolocation_history` table: a `user_id` deleted with the user, an `order_id` set to null when the order is deleted, and two JSON columns, `ip_api` and `extreme_ip_lookup`, cast to arrays. The model uses soft deletes and has `user()` and `order()` relations. Shopper creates the table but writes no rows to it; fill it from your own code, for example with the result of an IP lookup when an order is placed.
+
+## Gender Type
+
+The `gender` column is cast to the `Shopper\Core\Enum\GenderType` enum. The column is nullable, so a customer can leave it empty:
+
+| Case | Value |
+|------|-------|
+| `GenderType::Female` | `female` |
+| `GenderType::Male` | `male` |
+
+The enum implements `Shopper\Core\Contracts\HasLabel`: `getLabel()` returns the translated label shown in the admin panel.
+
+## Address Type
+
+The `type` column of an address is cast to the `Shopper\Core\Enum\AddressType` enum. It tells a billing address from a shipping address; the default flags are separate columns, described in [Managing Addresses](#managing-addresses):
+
+| Case | Value |
+|------|-------|
+| `AddressType::Billing` | `billing` |
+| `AddressType::Shipping` | `shipping` |
+
+## Relationships
+
+The trait adds three relations to your user model. The order and address relations read their class from `config('shopper.models.order')` and `config('shopper.models.address')`, so they return your own models after a [swap](/3.x/models#swapping-a-model).
+
+### Orders
+
+`orders()` is a `HasMany` relation on the `customer_id` column of the orders table. Deleting a user keeps its orders and sets their `customer_id` to `null`. The [Orders](/3.x/orders) page describes the order model:
+
+```php
+use Shopper\Core\Enum\OrderStatus;
+
+$recentOrders = $customer->orders()
+    ->latest()
+    ->take(5)
+    ->get();
+
+$completedOrders = $customer->orders()
+    ->where('status', OrderStatus::Completed)
+    ->count();
+```
+
+### Addresses
+
+`addresses()` is a `HasMany` relation on the `user_id` column of the address table. A customer has at most one default shipping address and one default billing address:
+
+```php
+$shippingAddress = $customer->addresses()
+    ->where('shipping_default', true)
+    ->first();
+
+$billingAddress = $customer->addresses()
+    ->where('billing_default', true)
+    ->first();
+```
+
+### Discounts
+
+`discounts()` is a `MorphToMany` relation to the discounts linked to the customer in the `sh_discountables` table. That link is how a discount is limited to selected customers: the cart only applies such a discount to a signed-in customer on the list. The [Discounts](/3.x/discounts) page covers eligibility.
+
+## Query Scopes
+
+`customers()` keeps the users who have neither the admin nor the manager role, plus every user with the `user` role. A user with no role at all matches it, and so does a team member whose only role is a custom role you created. `administrators()` keeps the users with the admin or the manager role. The role names come from [Role Configuration](#role-configuration):
+
+```php
+use App\Models\User;
+
+$customers = User::query()
+    ->customers()
+    ->latest()
+    ->paginate(25);
+
+$administrators = User::query()
+    ->administrators()
+    ->get();
+```
+
+The customer list of the admin panel uses `customers()`.
+
+## Role Checking
+
+Four methods answer questions about a user. `isAdmin()` and `isManager()` check the roles named in `config('shopper.admin.roles')`. `canAccessDashboard()` returns `true` for admins, managers and users with the `system.dashboard` permission. `isVerified()` returns `true` once `email_verified_at` is set:
+
+```php
+$user->isAdmin();
+$user->isManager();
+$user->canAccessDashboard();
+$user->isVerified();
+```
+
+## Computed Attributes
+
+Three attributes are computed from the columns:
+
+- `full_name` joins the first and last names, or returns the last name alone when there is no first name.
+- `roles_label` lists the display names of the user's roles, separated by commas with each word capitalized, or `N/A` when the user has no role. It runs a query each time it is read.
+- `picture` returns the profile picture URL. When `avatar_type` is `storage`, it is the URL of `avatar_location` on the disk set by `shopper.media.storage.disk_name`. Otherwise it is an avatar generated by the ui-avatars.com service from the full name, in the colors of `shopper.admin.avatar.color` and `shopper.admin.avatar.bg_color`.
+
+```php
+$customer->full_name;
+$customer->roles_label;
+$customer->picture;
+```
+
+`HasProfilePhoto` appends `picture` to the array and JSON form of the user, so it appears whenever you serialize a user.
+
+## Address Model
+
+The model configured for addresses is `Shopper\Core\Models\Address`. It implements the `Shopper\Core\Models\Contracts\Address` contract and is registered under the `address` key of `config/shopper/models.php`. It uses `HasPublicId`, so each address gets a ULID in `public_id`, and it guards no column: `create()` and `update()` accept every column.
+
+### Extending the Address Model
+
+To add your own casts or scopes, extend the core class:
+
+```php title="app/Models/Address.php"
+<?php
+
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Core\Enum\AddressType;
+use Shopper\Core\Models\Address as ShopperAddress;
+
+class Address extends ShopperAddress
+{
+    protected function casts(): array
+    {
+        return [
+            ...parent::casts(),
+            'metadata' => 'array',
+        ];
+    }
+
+    #[Scope]
+    protected function shipping(Builder $query): void
+    {
+        $query->where('type', AddressType::Shipping);
+    }
+}
+```
+
+Then point the `address` key of the configuration to your class:
+
+```php title="config/shopper/models.php"
+'address' => App\Models\Address::class,
+```
+
+The `addresses()` relation of your user model and the address observer follow the swap. The [Models](/3.x/models#swapping-a-model) page explains how swapping works.
+
+### Address Relationships
+
+Each address belongs to a user and, optionally, to a country. `user()` reads the user class from `config('auth.providers.users.model')`; `country()` returns a `Shopper\Core\Models\Country`, or `null` when the country was deleted:
+
+```php
+$address->user->email;
+$address->country?->translated_name;
+$address->country?->cca2;
+```
+
+### Address Methods
+
+`isShippingDefault()` and `isBillingDefault()` read the two default flags, and `full_name` joins the first and last names the same way as on the user:
+
+```php
+$address->isShippingDefault();
+$address->isBillingDefault();
+$address->full_name;
+```
+
+## Observer Behavior
+
+Two hooks keep the address book consistent.
+
+`Shopper\Core\Observers\AddressObserver` runs when an address is created or updated. When the address has `shipping_default` set, the observer removes the flag from the customer's previous default shipping address; it does the same for `billing_default`. The flags are exclusive per customer whatever the address type, so setting `shipping_default` on a billing address takes the flag from the shipping address that held it. The observer saves the previous default quietly: that address fires no model event.
+
+When a user is deleted, the `deleting` hook of `InteractsWithShopper` detaches all of its roles and deletes its addresses with a single query, so no address model event fires. Orders and carts stay, with their customer set to `null`.
+
+Deleting a default address leaves the customer without a default of that kind: Shopper promotes no other address.
+
+## Anonymization
+
+The admin panel anonymizes a customer instead of deleting the account, so orders keep their customer and the sales reports stay complete. A merchant with the `customers.delete` permission runs the Anonymize action from the customer page. In one transaction it:
+
+- replaces the first and last names with the translated `Deleted` and `Customer` (the `shopper::pages/customers.anonymize` keys);
+- replaces the email with `anonymized_{id}_{random}@anonymized.local`, where `{random}` is eight random characters;
+- sets `phone_number`, `gender`, `avatar_location`, `birth_date`, `email_verified_at`, `last_login_at`, `last_login_ip`, `store_two_factor_secret` and `store_two_factor_recovery_codes` to `null`;
+- sets `opt_in` to `false` and `avatar_type` to `gravatar`, so `picture` returns a generated avatar;
+- deletes all the customer's addresses.
+
+The user row stays, with its ID, public ID, password and roles. Each order keeps the email and the addresses captured when it was placed, in its own columns and in the order addresses table, and each cart keeps its email and its cart addresses. Shopper dispatches no event when it anonymizes a customer, and the action exists only in the admin panel: there is no action class, Artisan command or Store API endpoint for it.
+
+To offer a "Delete my account" page on your storefront, apply the same changes from your own code. This example also revokes the customer's Store API tokens:
+
+```php title="app/Http/Controllers/AccountDeletionController.php"
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
+
+class AccountDeletionController extends Controller
+{
+    public function destroy(Request $request): RedirectResponse
+    {
+        $customer = $request->user();
+
+        DB::transaction(function () use ($customer): void {
+            $customer->update([
+                'first_name' => __('shopper::pages/customers.anonymize.first_name'),
+                'last_name' => __('shopper::pages/customers.anonymize.last_name'),
+                'email' => 'anonymized_'.$customer->id.'_'.Str::random(8).'@anonymized.local',
+                'phone_number' => null,
+                'gender' => null,
+                'avatar_type' => 'gravatar',
+                'avatar_location' => null,
+                'birth_date' => null,
+                'email_verified_at' => null,
+                'last_login_at' => null,
+                'last_login_ip' => null,
+                'store_two_factor_secret' => null,
+                'store_two_factor_recovery_codes' => null,
+                'opt_in' => false,
+            ]);
+
+            $customer->addresses()->delete();
+            $customer->tokens()->delete();
+        });
+
+        Auth::guard('web')->logout();
+        $request->session()->invalidate();
+
+        return redirect('/');
+    }
+}
+```
+
+## Configuration
+
+Customers have no feature flag: the customers section of the admin panel is always registered. Their settings are the role names, the address model key described in [Extending the Address Model](#extending-the-address-model) and the admin components.
+
+### Role Configuration
+
+Role names are defined in `config/shopper/admin.php`. Shopper gives new customers the role named by `shopper.admin.roles.user`, and the scopes and role checks read the same keys:
+
+```php title="config/shopper/admin.php"
+'roles' => [
+    'admin' => 'administrator',
+    'manager' => 'manager',
+    'user' => 'user',
+],
+```
+
+Read the role through `config('shopper.admin.roles.user')` in your code rather than writing `'user'`. The [Access Control](/3.x/acl#roles) page describes what each role can do.
+
+### Components
+
+The customers section of the admin panel is made of three pages and three components. To replace one with your own Livewire component, publish the component file of the section:
+
+```bash
+php artisan shopper:component:publish customer
+```
+
+The command creates `config/shopper/components/customer.php`:
+
+```php title="config/shopper/components/customer.php"
+use Shopper\Livewire;
+use Shopper\Livewire\Components;
+
+return [
+    'pages' => [
+        'customer-index' => Livewire\Pages\Customers\Index::class,
+        'customer-create' => Livewire\Pages\Customers\Create::class,
+        'customer-show' => Livewire\Pages\Customers\Show::class,
+    ],
+    'components' => [
+        'customers.addresses' => Components\Customers\Addresses::class,
+        'customers.orders' => Components\Customers\Orders::class,
+        'customers.profile' => Components\Customers\Profile::class,
+    ],
+];
+```
+
+The [Configuration](/3.x/configuration#components) page explains how component overriding works.
+
+## Usage
+
+The examples below use `App\Models\User` for customers and resolve the address class from its contract, so they keep working after you swap the address model.
+
+### Creating Customers
+
+Create the user, give it the customer role and add its first address in one transaction. The admin panel and the Store API dispatch `CustomerRegistered` after creating a customer; dispatch it from your own sign-up code as well, so your listeners and webhooks see every new customer:
+
+```php
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
+use Shopper\Core\Enum\AddressType;
+use Shopper\Core\Enum\GenderType;
+use Shopper\Core\Events\Customers\CustomerRegistered;
+use Shopper\Core\Models\Country;
+
+$customer = DB::transaction(function () use ($request): User {
+    $customer = User::query()->create([
+        'first_name' => 'Jane',
+        'last_name' => 'Cooper',
+        'email' => 'jane.cooper@example.com',
+        'password' => Hash::make($request->string('password')),
+        'gender' => GenderType::Female,
+        'phone_number' => '+1 212 555 0148',
+        'opt_in' => true,
+    ]);
+
+    $customer->assignRole(config('shopper.admin.roles.user'));
+
+    $customer->addresses()->create([
+        'first_name' => 'Jane',
+        'last_name' => 'Cooper',
+        'street_address' => '350 Fifth Avenue',
+        'city' => 'New York',
+        'state' => 'NY',
+        'postal_code' => '10118',
+        'country_id' => Country::query()->where('cca2', 'US')->value('id'),
+        'type' => AddressType::Shipping,
+        'shipping_default' => true,
+    ]);
+
+    event(new CustomerRegistered($customer));
+
+    return $customer;
+});
+```
+
+`CustomerRegistered` waits for the transaction to commit before it reaches its listeners.
+
+### Retrieving Customers
+
+The `customers()` scope combines with any Eloquent query. A newsletter export keeps the customers who opted in and verified their email:
+
+```php
+use App\Models\User;
+
+$customers = User::query()
+    ->customers()
+    ->withCount('orders')
+    ->latest()
+    ->paginate(25);
+
+$newsletterAudience = User::query()
+    ->customers()
+    ->where('opt_in', true)
+    ->whereNotNull('email_verified_at')
+    ->get(['id', 'first_name', 'last_name', 'email']);
+
+$customer = User::findByPublicId($publicId);
+```
+
+To search customers by name or email, use Laravel Scout and restrict the results with the scope:
+
+```php
+use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
+
+$matches = User::search('cooper')
+    ->query(fn (Builder $query) => $query->customers())
+    ->get();
+```
+
+The admin customer page counts an order as paid when its status is `Processing` or `Completed` and its payment status is `Paid`, and sums the `price_amount` of those orders in the default currency of the store, returned by `shopper_currency()`. The same lifetime value in your code, in [cents](/3.x/money):
+
+```php
+use App\Models\User;
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Core\Enum\OrderStatus;
+use Shopper\Core\Enum\PaymentStatus;
+
+$paidOrders = fn (Builder $query) => $query
+    ->whereIn('status', [OrderStatus::Processing, OrderStatus::Completed])
+    ->where('payment_status', PaymentStatus::Paid)
+    ->where('currency_code', shopper_currency());
+
+$customer = User::query()
+    ->customers()
+    ->withCount(['orders as paid_orders_count' => $paidOrders])
+    ->withSum(['orders as lifetime_value' => $paidOrders], 'price_amount')
+    ->findOrFail($customerId);
+```
+
+### Managing Addresses
+
+Add an address through the `addresses()` relation, which fills `user_id`. Countries are referenced by ID; look one up by its two-letter `cca2` code. Pass `shipping_default` or `billing_default` to make the address the customer's default:
+
+```php
+use Shopper\Core\Enum\AddressType;
+use Shopper\Core\Models\Country;
+
+$address = $customer->addresses()->create([
+    'first_name' => 'Jane',
+    'last_name' => 'Cooper',
+    'company_name' => 'Cooper Studio',
+    'street_address' => '1600 Amphitheatre Parkway',
+    'city' => 'Mountain View',
+    'state' => 'CA',
+    'postal_code' => '94043',
+    'phone_number' => '+1 650 555 0199',
+    'country_id' => Country::query()->where('cca2', 'US')->value('id'),
+    'type' => AddressType::Billing,
+    'billing_default' => true,
+]);
+```
+
+To change the default, set the flag on the new address. The [observer](#observer-behavior) removes it from the previous default, so there is nothing to clear first:
+
+```php
+$address->update(['shipping_default' => true]);
+```
+
+When the address comes from a request, scope the lookup to the signed-in customer so that one customer can never read or change another's address. Look addresses up by public ID, as the Store API does:
+
+```php
+use Shopper\Core\Models\Contracts\Address;
+
+$address = resolve(Address::class)::query()
+    ->whereBelongsTo($request->user(), 'user')
+    ->wherePublicId($publicId)
+    ->firstOrFail();
+
+$address->delete();
+```
+
+The address book is separate from checkout. A cart stores its own shipping and billing addresses, with different field names, and placing an order copies the cart addresses to the order without writing to the address book. To prefill a checkout from a saved address, map the fields to the cart address fields described on the [Cart](/3.x/cart) page:
+
+| Address column | Cart address field |
+|----------------|--------------------|
+| `first_name` | `first_name` |
+| `last_name` | `last_name` |
+| `company_name` | `company` |
+| `street_address` | `address_1` |
+| `street_address_plus` | `address_2` |
+| `city` | `city` |
+| `state` | `state` |
+| `postal_code` | `postal_code` |
+| `phone_number` | `phone` |
+| `country->cca2` | `country_code` |
+
+### Storefront Example
+
+An account controller for a Blade storefront: the account page with orders and addresses, the profile form and the address form:
+
+```php title="app/Http/Controllers/AccountController.php"
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
+use Illuminate\View\View;
+use Shopper\Core\Enum\AddressType;
+use Shopper\Core\Enum\GenderType;
+
+class AccountController extends Controller
+{
+    public function show(Request $request): View
+    {
+        $customer = $request->user();
+
+        return view('account.show', [
+            'customer' => $customer,
+            'orders' => $customer->orders()->latest()->paginate(10),
+            'addresses' => $customer->addresses()->with('country')->get(),
+        ]);
+    }
+
+    public function updateProfile(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'first_name' => ['nullable', 'string', 'max:255'],
+            'last_name' => ['required', 'string', 'max:255'],
+            'phone_number' => ['nullable', 'string', 'max:255'],
+            'birth_date' => ['nullable', 'date', 'before:today'],
+            'gender' => ['nullable', Rule::enum(GenderType::class)],
+            'opt_in' => ['boolean'],
+        ]);
+
+        $request->user()->update($validated);
+
+        return back()->with('status', 'profile-updated');
+    }
+
+    public function storeAddress(Request $request): RedirectResponse
+    {
+        $validated = $request->validate([
+            'first_name' => ['required', 'string', 'max:255'],
+            'last_name' => ['required', 'string', 'max:255'],
+            'company_name' => ['nullable', 'string', 'max:255'],
+            'street_address' => ['required', 'string', 'max:255'],
+            'street_address_plus' => ['nullable', 'string', 'max:255'],
+            'city' => ['required', 'string', 'max:255'],
+            'state' => ['nullable', 'string', 'max:255'],
+            'postal_code' => ['required', 'string', 'max:255'],
+            'phone_number' => ['nullable', 'string', 'max:255'],
+            'country_id' => ['required', Rule::exists(shopper_table('countries'), 'id')],
+            'type' => ['required', Rule::enum(AddressType::class)],
+            'shipping_default' => ['boolean'],
+            'billing_default' => ['boolean'],
+        ]);
+
+        $request->user()->addresses()->create($validated);
+
+        return back()->with('status', 'address-added');
+    }
+}
+```
+
+`shopper_table()` adds the Shopper table prefix, so the `exists` rule checks `sh_countries`.
+
+## Events
+
+Shopper dispatches one customer event, `Shopper\Core\Events\Customers\CustomerRegistered`, with the new user in `public Authenticatable $customer`. It fires when a merchant creates a customer in the admin panel and when a customer signs up through the Store API, once the surrounding transaction commits. Your own sign-up code dispatches it itself, as shown in [Creating Customers](#creating-customers). The `customer.registered` [webhook](/3.x/webhooks) sends it to other systems:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Notifications\WelcomeCustomer;
+use Illuminate\Support\Facades\Event;
+use Shopper\Core\Events\Customers\CustomerRegistered;
+
+public function boot(): void
+{
+    Event::listen(function (CustomerRegistered $event): void {
+        $event->customer->notify(new WelcomeCustomer());
+    });
+}
+```
+
+Shopper also listens to `OrderCreated` and gives the customer of each new order the customer role. Addresses dispatch only the Eloquent model events. The [Events](/3.x/events#customer-events) page lists the sign-in events of the Store API.
+
+## Permissions
+
+The admin panel checks four permissions of the `customers` resource:
+
+| Permission | Allows |
+|------------|--------|
+| `customers.browse` | Opening the customers list, seeing the Customers sidebar item and the customer figures of the dashboard |
+| `customers.read` | Opening a customer page |
+| `customers.create` | Opening and saving the form for a new customer |
+| `customers.delete` | Anonymizing a customer |
+
+`customers.edit` is seeded with the others, but the admin panel never checks it: there is no form to edit a customer. Shopper 2.x named these permissions `browse_customers`, `add_customers` and so on; the [Access Control](/3.x/acl#upgrading-from-2x) page explains how the upgrade renames them.
+
+## In the Admin
+
+Merchants manage customers under Customers. The list shows each customer's name, email, the country of their first address, the number of paid orders and the registration date, filters by email verification and registration date, and sits under four figures: total customers, customers registered in the last 30 days, customers with a paid order, and the average lifetime value in the store currency. The create form takes the name, email, phone, gender, a password and a shipping address, with the marketing consent. The customer page shows the profile, the shipping and billing addresses, the orders and the paid order totals, and holds the Anonymize action. Merchants cannot edit a customer's profile or addresses. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API handles sign-up and the customer account under the `store` prefix, set by `SHOPPER_API_PREFIX`. Sign-up and sign-in return a Laravel Sanctum token in `meta.token`, which the storefront sends as a bearer token. Your `User` model needs Sanctum's `HasApiTokens` trait, which `php artisan shopper:api:install` offers to add. Tokens expire after `shopper.api.token_expiration` minutes (`SHOPPER_API_TOKEN_EXPIRATION`, 30 days by default).
+
+| Endpoint | Does |
+|----------|------|
+| `POST /store/auth/register` | Creates a customer with the `user` role, dispatches `CustomerRegistered` and answers 201 with a token. A guest `cart_id` sent with the request is attached to the new account |
+| `POST /store/auth/login` | Answers with a token. After `shopper.http.login_failures` failed attempts (5 by default) for one email and IP address, it refuses further attempts for one minute |
+| `POST /store/auth/logout` | Revokes the token of the request |
+| `POST /store/auth/forgot-password` | Sends a password reset link |
+| `POST /store/auth/reset-password` | Sets a new password from a reset token |
+
+A signed-in customer manages their account under `/store/customers/me`:
+
+| Endpoint | Does |
+|----------|------|
+| `GET /store/customers/me` | Returns the customer |
+| `PATCH /store/customers/me` | Updates `first_name`, `last_name`, `phone_number`, `birth_date`, `gender` and `opt_in` |
+| `POST /store/customers/me/avatar` | Uploads a profile picture, an image of up to 1024 KB |
+| `DELETE /store/customers/me/avatar` | Removes the picture, so `avatar` returns the generated one |
+| `GET /store/customers/me/addresses` | Lists the addresses, newest first |
+| `POST /store/customers/me/addresses` | Creates an address, with the country given as `country_code`, and answers 201 |
+| `PATCH /store/customers/me/addresses/{id}` | Updates an address of the customer |
+| `DELETE /store/customers/me/addresses/{id}` | Deletes an address of the customer and answers 204 |
+| `GET /store/customers/me/orders` | Lists the customer's orders, newest first |
+| `GET /store/customers/me/orders/{id}` | Returns one order of the customer |
+| `GET /store/customers/me/orders/{orderId}/items/{itemId}/files/{fileId}` | Returns a five-minute download link for a file of a paid order, described in [Downloadable Files](/3.x/products#downloadable-files) |
+
+A customer resource has the type `customers` and carries `first_name`, `last_name`, `email`, `avatar` (the `picture` URL), `avatar_type`, `phone_number`, `gender`, `birth_date`, `opt_in`, `email_verified` (a boolean) and `created_at`. An address resource has the type `addresses`, carries the address columns except `metadata`, with `country_code` in place of `country_id`, and is identified by its public ID. An address or an order of another customer answers 404.
+
+The Store API changes neither the email nor the password of a signed-in customer outside the reset flow, and has no endpoint to delete or anonymize an account. The [Storefront](/3.x/storefront) section documents the Store API.

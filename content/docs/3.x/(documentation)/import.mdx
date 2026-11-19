@@ -1,0 +1,408 @@
+---
+title: Import
+description: Import products, variants, prices, stock and images from a CSV file, from the admin panel or from your code, in queued batches.
+---
+
+Shopper imports products from a CSV file. One file creates or updates products with their variants, options, prices, stock, brand, categories, tags and images. Merchants start an import from the Products page of the admin panel, your code can start the same import, and an add-on can register another source, such as the export of another platform.
+
+An import runs on the queue. Shopper reads the file, groups its rows into products, and dispatches the products in chunks as a Laravel job batch. Each product is found by its handle, so importing the same file twice updates the products instead of duplicating them.
+
+## Requirements
+
+An import relies on three parts of your application:
+
+- A running queue worker, as described in [Queue Worker](/3.x/installation#queue-worker). On the `sync` connection, the whole import runs inside the request that starts it. On the `deferred` connection, it runs after the response is sent.
+- The `job_batches` table of Laravel job batches. The default jobs migration of a Laravel application creates it. If your application does not have it, create it with `php artisan make:queue-batches-table`, then run `php artisan migrate`. A batch needs this table on every queue connection, `sync` included.
+- A default inventory location. The imported quantities go to that location, and they are ignored when the store has none. The [Locations](/3.x/locations) page covers inventory locations.
+
+## The ProductImport Model
+
+Every import is a `Shopper\Core\Models\ProductImport` record in the `sh_product_imports` table. The model has no configuration key and no contract, so it is always loaded with its own class. `HasPublicId` fills `public_id` with a ULID when the import is created.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `id` | bigint | Primary key |
+| `public_id` | string(26), nullable | ULID set on creation |
+| `source` | string | The code of the import source, `csv` for a CSV file |
+| `disk` | string | The filesystem disk that holds the file |
+| `file_path` | string | The path of the file on that disk |
+| `status` | string | An `ImportStatus` value |
+| `total_products` | unsigned integer, default `0` | The number of products found in the file |
+| `imported_count` | unsigned integer, default `0` | The products created or updated |
+| `failed_count` | unsigned integer, default `0` | The products that could not be imported |
+| `mapping` | jsonb, nullable | The file column to read for each Shopper field |
+| `errors` | jsonb, nullable | A list of errors, each with a `handle` and a `message` |
+| `batch_id` | string, nullable | The ID of the Laravel job batch |
+| `user_id` | bigint, nullable | The ID of the user who started the import |
+| `started_at` | timestamp, nullable | When the rows were dispatched |
+| `finished_at` | timestamp, nullable | When the import ended |
+
+The model defines no relationship. `user_id` holds the ID of a record of your user model, without a foreign key constraint.
+
+### Import Status
+
+The `status` column is cast to the `Shopper\Core\Enum\ImportStatus` enum. An import starts as `Pending`, moves to `Processing` when its jobs are dispatched, and ends in one of the last three statuses:
+
+| Case | Value | Label | Color |
+|------|-------|-------|-------|
+| `Pending` | `pending` | Pending | gray |
+| `Processing` | `processing` | Processing | info |
+| `Completed` | `completed` | Completed | success |
+| `CompletedWithErrors` | `completed_with_errors` | Completed with errors | warning |
+| `Failed` | `failed` | Failed | danger |
+
+`isFinished()` returns `true` for `Completed`, `CompletedWithErrors` and `Failed`:
+
+```php
+use Shopper\Core\Models\ProductImport;
+
+$import = ProductImport::query()->latest()->first();
+
+if ($import->status->isFinished()) {
+    echo "{$import->imported_count} of {$import->total_products} products imported.";
+}
+```
+
+## File Format
+
+The CSV source reads a file whose first row holds the column names. The admin panel links a sample file, which `php artisan shopper:link` also publishes at `/vendor/shopper/templates/product-import.csv`. The `handle` and `name` columns are required: a file without one of them fails before any product is read. Every other column is optional, and a blank cell counts as empty.
+
+| Column | Read from | Description |
+|--------|-----------|-------------|
+| `handle` | Every row | Groups the rows of one product and becomes its slug |
+| `name` | First row | The product name |
+| `description` | First row | The product description |
+| `brand` | First row | A brand name |
+| `category` | First row | A category path, segments separated by `>` |
+| `tags` | First row | Tag names separated by commas |
+| `published` | First row | `TRUE` or `FALSE`, sets the visibility, `TRUE` when empty |
+| `seo_title`, `seo_description` | First row | The SEO fields |
+| `option1_name`, `option2_name`, `option3_name` | First row | Up to three option names, such as `Size` and `Color` |
+| `option1_value`, `option2_value`, `option3_value` | Variant rows | The option values of the variant |
+| `sku`, `barcode`, `ean`, `upc` | Variant rows | The identifiers. A standard product stores the SKU and the barcode |
+| `price`, `compare_at_price`, `cost_per_item` | Variant rows | Decimal amounts, such as `19.99` |
+| `currency` | Variant rows | A currency code, the store default currency when empty |
+| `quantity` | Variant rows | The stock, `0` when empty |
+| `weight_value`, `weight_unit` | Variant rows | The weight, in `kg`, `g` or `lbs` |
+| `image_url` | Any row | One image URL, or several separated by `;` |
+| `image_position` | Any row | The position of the images of the row |
+| `image_alt` | Any row | The alternative text of the images of the row |
+| `variant_image_url` | Variant rows | The image of the variant |
+
+The sample file also has a `requires_shipping` column. Shopper reads it but stores it nowhere: set the shipping of a product in the admin panel.
+
+### Products and Variants
+
+Consecutive rows with the same handle form one product, and rows with an empty handle are skipped. Keep the rows of a product together: when a handle comes back after another product, its new rows are read as a separate product, which fails when its first row has no name.
+
+The first row holds the product columns. The first row is also a variant row, and so is every other row of the product that has a `sku`, a `price` or an `option1_value`. A row with none of them only adds images.
+
+A product with a single variant row and no option name is a standard product: its SKU, barcode, weight, price and stock go to the product. Any other product is a variant product, and each variant row creates or updates a variant. The import sets one of these two types on every product it creates or updates.
+
+A variant is named after its option values, such as `Small / Green`, or after the product when it has no option value. Shopper finds an existing variant by its SKU, or by its name when the row has no SKU, and adds new variants after the existing ones. The sample file imports the "Graphic T-Shirt" with three variants:
+
+```csv
+handle,name,option1_name,option1_value,option2_name,option2_value,sku,price,quantity
+graphic-t-shirt,Graphic T-Shirt,Size,Small,Color,Green,TSHIRT-S-GREEN,19.99,47
+graphic-t-shirt,,,Medium,,Green,TSHIRT-M-GREEN,19.99,40
+graphic-t-shirt,,,Medium,,Red,TSHIRT-M-RED,19.99,56
+```
+
+Each option name becomes a select attribute and each option value an attribute value, created when missing, and each variant is linked to its values. The import does not attach the attributes to the product itself: the Attributes section of the product editor and the `options` include of the Store API stay empty for an imported product until the attributes are added to it, as described on the [Attributes](/3.x/attributes) page.
+
+### Brand, Categories and Tags
+
+The `brand` column holds a brand name. Shopper uses the brand with that name, or creates it, enabled, when none exists.
+
+The `category` column holds one path from a root category, such as `Apparel & Accessories > Clothing > T-Shirts`. Shopper looks up each segment by name under its parent, creates the missing ones, enabled, and attaches the product to the last one. The `tags` column holds tag names separated by commas, created when missing. Brands, categories and tags created by an import get a slug made from their name.
+
+The import adds categories and tags to a product and never removes the ones already attached.
+
+### Prices
+
+The `price`, `compare_at_price` and `cost_per_item` columns hold decimal amounts as merchants write them, such as `19.99`. Shopper multiplies them by 100 and rounds them to store them in cents, as described on the [Money](/3.x/money) page. The `currency` column takes the code of a currency enabled on the store, in any case. When it is empty, the price goes to the store default currency.
+
+A row with a price replaces the price of the product or variant in that currency, its compare-at and cost amounts included. A row without a price leaves the prices unchanged.
+
+<Warning>
+  The import multiplies every amount by 100, zero-decimal currencies included. A price of `15000` in XAF is stored as `1500000` and displays as 1,500,000 FCFA, while Shopper stores these currencies in whole units, as described in [Zero-Decimal Currencies](/3.x/money#zero-decimal-currencies). For a zero-decimal currency, divide the amounts of the file by 100, or set the prices in the admin panel after the import.
+</Warning>
+
+### Stock and Weight
+
+The `quantity` column sets the stock of the product or variant. Shopper records the difference with the current stock as a movement at the default inventory location, labeled "Product import" in the inventory history described in [Stock Management](/3.x/products#stock-management). An empty quantity counts as `0`, so importing a file without this column sets the stock of every product to 0.
+
+`weight_value` sets the weight in the unit of `weight_unit`: `kg`, `g` or `lbs`, in any case. An empty or unknown unit stores grams. A row without `weight_value` leaves the weight unchanged.
+
+### Images
+
+The `image_url` column holds one image URL, or several separated by `;`. Every row of a product can add images to its gallery. `image_position` sets the position of the images of the row, and images without a position follow the order of the file. `image_alt` becomes the name of the media, which the Store API returns as `name`.
+
+`variant_image_url` adds one image to the gallery of the variant of that row, on a product with variants only. Shopper downloads the images in queued jobs once the product is saved, as described in [Image Downloads](#image-downloads), and skips a URL already imported for the same product or variant.
+
+### Updating Products
+
+Shopper finds an existing product by its slug, which must equal the handle. Write handles as slugs, in lowercase letters, digits and hyphens, such as `graphic-t-shirt`. A new product stores its handle as its slug, and Shopper turns any other value into a URL-safe slug: `Graphic T-Shirt` is stored as `graphic-t-shirt`, so the next import of that handle does not find the product and creates a second one.
+
+An update writes every product column read from the file, empty cells included: an empty description, brand or SEO cell clears that value on the product. The SKU and barcode of a standard product, and the SKU, barcode, EAN and UPC of the variants, are replaced the same way. The publication date of a new product is the date of the import, and an existing product keeps its own. The import also turns off backorders on every standard product and every variant it saves.
+
+## How an Import Runs
+
+`Shopper\Core\Import\StartProductImport` starts an import from a `ProductImport` record in the `Pending` status:
+
+1. It resolves the source named in the `source` column, passes it the `mapping`, and reads the whole file from the path that `Storage::disk($import->disk)->path()` returns. The file must therefore sit on a local disk.
+2. It splits the products into chunks of `shopper.core.import.chunk_size` products, one `Shopper\Core\Jobs\ImportProductsChunkJob` per chunk, then sets the status to `Processing`, the `total_products` and the `started_at` date.
+3. It dispatches the jobs as a batch named `product-import-{id}` that allows failures, and stores its ID in `batch_id`.
+4. Each job imports its products one by one, each in a database transaction. A product that throws an exception is added to `errors` and `failed_count`, and the next product goes on. The job adds the created and updated products to `imported_count`, then adds the image downloads of its products to the batch.
+5. Once every job of the batch has run, the import gets the `CompletedWithErrors` status when it has errors or failed jobs, `Completed` otherwise, and its `finished_at` date. Shopper then dispatches the `ProductImportCompleted` event.
+
+A file with no product ends as `Completed` right away and dispatches the event as well. A job skips its products when the import has the `Failed` status or its batch is cancelled.
+
+Shopper indexes each product once it is saved, under the rules of the [Search](/3.x/search) page, and the imported products join the automatic [collections](/3.x/collections) whose rules they match, through the same queued sync as the products saved in the admin panel.
+
+### Image Downloads
+
+`Shopper\Core\Jobs\DownloadProductImageJob` downloads one image into the gallery collection of a product or variant, named by `shopper.media.storage.collection_name` and described on the [Media](/3.x/media) page. The job tries three times, 10 then 60 seconds apart, and only once on the `sync` connection. It does not retry an image the collection refuses, a 4xx response other than 429, or a file larger than the `media-library.max_file_size` limit of Spatie Media Library, 10 MB by default.
+
+Shopper downloads `http` and `https` URLs only, follows at most three redirects and waits 30 seconds at most. The image host must resolve to a public IP address. An image that still fails adds an error to the import, under the slug of the product, while the import holds fewer than 100 errors. Image errors do not change `failed_count`.
+
+## Errors
+
+An import meets two kinds of errors. A file error stops the whole import. A product error skips one product, and the import goes on with the others.
+
+A file error is a missing required column, an unknown source, a file that cannot be read, or a batch that cannot be dispatched. The import gets the `Failed` status, its `finished_at` date and a single error with `*` as handle, then `execute()` throws the exception again. No `ProductImportCompleted` event is dispatched. A missing column gives this message:
+
+```text
+The file does not match the product import template: missing the handle column.
+```
+
+Product errors keep the handle of the product and the message of the exception:
+
+| Message | Cause |
+|---------|-------|
+| `Product [graphic-t-shirt] has no name.` | The first row of the product has no `name` |
+| `Currency [EUR] is not enabled on this store.` | The `currency` column holds a currency the store does not sell in |
+| `Image [https://example.com/t-shirt.jpg] could not be imported: ...` | An image failed after its last attempt. The reason follows the colon, such as `Image host [example.com] is not a public address.` |
+
+Any other exception thrown while a product is saved is recorded with its own message. The admin panel does not display the errors, so read them from the model:
+
+```php
+use Shopper\Core\Enum\ImportStatus;
+use Shopper\Core\Models\ProductImport;
+
+$import = ProductImport::query()
+    ->where('status', ImportStatus::CompletedWithErrors)
+    ->latest()
+    ->first();
+
+foreach ($import->errors ?? [] as $error) {
+    echo "{$error['handle']}: {$error['message']}";
+}
+```
+
+## Configuration
+
+The number of products per job is set in `config/shopper/core.php`:
+
+```php title="config/shopper/core.php"
+'import' => [
+    'chunk_size' => 25,
+],
+```
+
+Each chunk runs in a single job, with its products, their categories, prices and stock. Lower the value when a chunk takes longer than the timeout of your queue worker.
+
+## Importing From Code
+
+Your code starts an import the way the admin panel does: store the file on a local disk, create a `ProductImport` in the `Pending` status, and pass it to `StartProductImport`. This controller imports the catalog a merchant uploads:
+
+```php title="app/Http/Controllers/CatalogImportController.php"
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Shopper\Core\Enum\ImportStatus;
+use Shopper\Core\Import\StartProductImport;
+use Shopper\Core\Models\ProductImport;
+
+class CatalogImportController extends Controller
+{
+    public function store(Request $request, StartProductImport $startImport): RedirectResponse
+    {
+        $request->validate(['catalog' => ['required', 'file', 'mimes:csv,txt']]);
+
+        $import = ProductImport::query()->create([
+            'source' => 'csv',
+            'disk' => 'local',
+            'file_path' => $request->file('catalog')->store('shopper/imports', 'local'),
+            'mapping' => ['name' => 'Title', 'handle' => 'Slug', 'price' => 'Retail Price'],
+            'status' => ImportStatus::Pending,
+            'user_id' => $request->user()->id,
+        ]);
+
+        $startImport->execute($import);
+
+        return back();
+    }
+}
+```
+
+The `mapping` keys are Shopper column names, and the values are the columns of your file. A column missing from the mapping is read under its own name, so a file that follows the sample needs no mapping. From code, you can map every column of the format, the options and images included; the admin panel offers 20 of them.
+
+`execute()` throws the exception of a file error after marking the import as failed. On a queue connection other than `sync`, it returns before the products are imported, and the `ProductImportCompleted` event tells you when the import ends.
+
+## Custom Import Sources
+
+A source reads a file and returns the products it holds. Shopper ships the `csv` source, `Shopper\Core\Import\Sources\CsvSource`, and resolves sources through the `Shopper\Core\Import\ImportManager` singleton, a Laravel manager. To import another format, implement `Shopper\Core\Import\Contracts\ImportSource`:
+
+| Method | Returns |
+|--------|---------|
+| `code()` | The code stored in the `source` column of an import |
+| `name()`, `description()`, `icon()` | The name, description and icon shown in the source picker of the admin panel |
+| `isConfigured()` | Whether the source can run. The admin panel lists configured sources only |
+| `read(string $path)` | A `LazyCollection` of `Shopper\Core\Import\ProductRow` objects |
+
+`read()` builds the products with three readonly classes of `Shopper\Core\Import`: `ProductRow` for a product, `VariantRow` for each variant, and `ImageRow` for each image. This source reads a JSON feed from a supplier:
+
+```php title="app/Import/SupplierFeedSource.php"
+<?php
+
+namespace App\Import;
+
+use Illuminate\Support\LazyCollection;
+use Shopper\Core\Import\Contracts\ImportSource;
+use Shopper\Core\Import\ImageRow;
+use Shopper\Core\Import\ProductRow;
+use Shopper\Core\Import\VariantRow;
+
+final class SupplierFeedSource implements ImportSource
+{
+    public function code(): string
+    {
+        return 'supplier-feed';
+    }
+
+    public function name(): string
+    {
+        return 'Supplier feed';
+    }
+
+    public function description(): string
+    {
+        return 'Import the products of the wholesale feed.';
+    }
+
+    public function icon(): string
+    {
+        return 'phosphor-truck-duotone';
+    }
+
+    public function isConfigured(): bool
+    {
+        return true;
+    }
+
+    public function read(string $path): LazyCollection
+    {
+        $feed = json_decode(file_get_contents($path), true);
+
+        return LazyCollection::make($feed['products'])
+            ->map(fn (array $product): ProductRow => new ProductRow(
+                handle: $product['slug'],
+                name: $product['title'],
+                description: $product['description'],
+                brand: $product['brand'],
+                published: true,
+                variants: [
+                    new VariantRow(
+                        sku: $product['sku'],
+                        price: $product['price'],
+                        quantity: $product['stock'],
+                    ),
+                ],
+                images: [new ImageRow(url: $product['image'])],
+            ));
+    }
+}
+```
+
+`ProductRow` and `VariantRow` take the same values as the CSV columns. `VariantRow` also takes `allowBackorder`, which the CSV source leaves at `false`. A product row with a single variant and no `optionNames` is a standard product. Register the source in the `boot()` method of a service provider:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Import\SupplierFeedSource;
+use Shopper\Core\Import\ImportManager;
+
+public function boot(): void
+{
+    resolve(ImportManager::class)->extend('supplier-feed', fn (): SupplierFeedSource => new SupplierFeedSource);
+}
+```
+
+An import whose `source` column holds `supplier-feed` now reads its file with this class. A source that also implements `Shopper\Core\Import\Contracts\SupportsColumnMapping` returns the columns of a file from `headers(string $path)` and receives the `mapping` of the import through `withMapping(array $mapping)`, which returns a configured copy of the source.
+
+In the admin panel, the **Import** action lists the configured sources and opens the slide-over registered as `slide-overs.import-{code}` for the one the merchant picks. Shopper ships the slide-over of the CSV source only. For your source, write a Livewire slide-over that stores the file and starts the import, as `Shopper\Livewire\SlideOvers\ImportCsv` does, publish the product components with `php artisan shopper:component:publish product`, and add your slide-over to the `components` array of `config/shopper/components/product.php`:
+
+```php title="config/shopper/components/product.php"
+'components' => [
+    'slide-overs.import-supplier-feed' => \App\Livewire\SlideOvers\ImportSupplierFeed::class,
+],
+```
+
+## Events
+
+An import dispatches two events from `Shopper\Core\Events\Products`:
+
+| Event | Dispatched when |
+|-------|-----------------|
+| `ProductCreated` | The import creates a new product |
+| `ProductImportCompleted` | The import ends with the `Completed` or `CompletedWithErrors` status |
+
+Updating an existing product dispatches no event, and a failed import dispatches none either. `ProductImportCompleted` carries the import as `public ProductImport $import`:
+
+```php title="app/Listeners/ReportProductImportErrors.php"
+<?php
+
+namespace App\Listeners;
+
+use Illuminate\Support\Facades\Log;
+use Shopper\Core\Enum\ImportStatus;
+use Shopper\Core\Events\Products\ProductImportCompleted;
+
+class ReportProductImportErrors
+{
+    public function handle(ProductImportCompleted $event): void
+    {
+        if ($event->import->status !== ImportStatus::CompletedWithErrors) {
+            return;
+        }
+
+        Log::warning('The product import finished with errors.', [
+            'import' => $event->import->public_id,
+            'errors' => $event->import->errors,
+        ]);
+    }
+}
+```
+
+When the database notifications of the admin panel are enabled, as described in [Notifications](/3.x/configuration#notifications), the `Shopper\Listeners\Notifications\SendProductImportCompletedNotification` listener stores a "Product import finished" notification for every administrator, with the number of products imported and failed. The listener is queued on the `notifications` queue, so your worker must listen to that queue. The [Events](/3.x/events#product-events) page lists the product events, and the [Notifications](/3.x/notifications) page lists the notifications.
+
+## Permissions
+
+The admin panel checks these permissions for imports:
+
+| Permission | Checked for |
+|------------|-------------|
+| `products.browse` | The Products page that holds the **Import** action |
+| `products.create` | The **Import** action and the CSV slide-over |
+
+`StartProductImport` checks no permission: your code authorizes the user before it starts an import. The [Access Control](/3.x/acl) page lists every permission.
+
+## In the Admin
+
+Merchants import products from the **Products** page. **Import** opens a dialog that lists the configured sources, and **Next** opens the slide-over of the chosen one. The CSV slide-over has three steps: **Upload** takes the file and links the sample file, **Columns** matches each Shopper field with a column of the file and preselects the columns named after a field, and **Review** shows the number of products, variants and stock units with a preview of the first 50 products. **Import products** stores the file on the `local` disk under `shopper/imports`, starts the import and confirms it with a notification. The product list does not refresh by itself: reload the page to see the imported products. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API does not expose imports. Imported products are regular products, and a storefront reads them as described on the [Storefront](/3.x/storefront) page.

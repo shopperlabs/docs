@@ -1,0 +1,561 @@
+---
+title: Fulfillment
+description: Shipments in Shopper, their statuses and transitions, packages split across carriers, carrier tracking events, returns and the fulfillment status of items.
+---
+
+Shopper fulfills an order through shipments. A shipment is one physical package sent to the customer: an `OrderShipping` row with its own carrier, tracking number, status and set of order items. An order ships in one package or in several, and each package moves through its own statuses until it is delivered or returned.
+
+Three statuses work together. Each package has a shipment status (`ShipmentStatus`) and a timeline of tracking events (`OrderShippingEvent`). Each order item has a fulfillment status (`FulfillmentStatus`). The order has a shipping status (`ShippingStatus`), computed from its items. Each time a package is picked up, delivered or returned, Shopper updates the items of the package and the shipping status of the order, whether the event comes from the admin panel, from your code or from the carrier.
+
+Carriers, shipping rates and carrier drivers are described on the [Carriers](/3.x/carriers) page. The order itself, its statuses and its items are on the [Orders](/3.x/orders) page.
+
+## Models
+
+A shipment is a `Shopper\Core\Models\OrderShipping`. It implements the `Shopper\Core\Models\Contracts\OrderShipping` contract, which declares the `order` and `carrier` relationships. Each entry of its timeline is a `Shopper\Core\Models\OrderShippingEvent`. Neither model has a key in `config/shopper/models.php`, so you cannot swap them: add a relationship to them with `resolveRelationUsing()`, as shown in [Models You Cannot Swap](/3.x/models#models-you-cannot-swap).
+
+Two traits change what you can do with a shipment. `HasFulfillmentTransitions` holds the allowed status changes and the methods described in [Shipment Transitions](#shipment-transitions). `HasPublicId` fills `public_id` with a ULID when a shipment is created, and the Store API identifies a shipment by it, as described in [Public IDs](/3.x/models#public-ids). Tracking events carry a `public_id` as well.
+
+`OrderShipping` casts `status` to `ShipmentStatus`, `shipped_at`, `received_at` and `returned_at` to dates, and `voucher` to an array. `OrderShippingEvent` casts `status` to `ShipmentStatus`, `source` to `ShipmentEventSource`, `occurred_at` to a date, `latitude` and `longitude` to `decimal:7`, and `metadata` to an array.
+
+## Database Schema
+
+Shipments and their tracking events are stored in two tables, `sh_order_shipping` and `sh_order_shipping_events` (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)). Two columns of `sh_order_items` link an item to its shipment.
+
+### OrderShipping Table
+
+The `sh_order_shipping` table holds one row per package:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `status` | string(32) | yes | null | Shipment status, cast to `ShipmentStatus`, indexed |
+| `order_id` | bigint | no | - | Order of the package. Deleting the order deletes its shipments |
+| `carrier_id` | bigint | yes | null | [Carrier](/3.x/carriers) of the package, set to `null` when the carrier is deleted |
+| `shipped_at` | datetime (with time zone) | yes | null | Date of the first event at or past Picked up, other than Returned |
+| `received_at` | datetime (with time zone) | yes | null | Date of the first Delivered event |
+| `returned_at` | datetime (with time zone) | yes | null | Date of the first Returned event |
+| `tracking_number` | string | yes | null | Carrier tracking number, indexed |
+| `tracking_url` | string | yes | null | Tracking page for the customer |
+| `voucher` | json | yes | null | Stored for your own code, such as label data. Shopper does not read it |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+### OrderShippingEvent Table
+
+The `sh_order_shipping_events` table holds the timeline of each package, one row per status report:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `order_shipping_id` | bigint | no | - | Shipment of the event. Deleting the shipment deletes its events |
+| `status` | string(32) | no | - | Shipment status the event reports, cast to `ShipmentStatus` |
+| `external_id` | string | yes | null | Carrier identifier of the event, unique per shipment |
+| `source` | string(16) | no | `manual` | `manual` or `carrier`, cast to `ShipmentEventSource` |
+| `causer_id` | bigint (unsigned) | yes | null | ID of the user authenticated when the event was recorded, without a foreign key |
+| `description` | text | yes | null | Event description |
+| `location` | string | yes | null | Location name |
+| `latitude` | decimal(11,7) | yes | null | GPS latitude |
+| `longitude` | decimal(10,7) | yes | null | GPS longitude |
+| `occurred_at` | datetime (with time zone) | no | - | When the event happened |
+| `metadata` | jsonb | yes | null | Extra event data, cast to an array |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+### OrderItem Fulfillment Columns
+
+Two columns of `sh_order_items` carry the fulfillment of each item:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `order_shipping_id` | bigint | yes | null | Shipment that carries the item, set to `null` when the shipment is deleted |
+| `fulfillment_status` | string | yes | null | Fulfillment status, cast to `FulfillmentStatus`. The model sets `pending` on every new item |
+
+## Relationships
+
+An order has many shipments, a shipment has many items and many tracking events, and an item belongs to one shipment at most.
+
+### Order to Shipments [#order--shipments]
+
+`$order->shippings` returns the packages of an order. Load their carrier, items and timeline in one query when you display them:
+
+```php
+$order->load('shippings.carrier', 'shippings.items', 'shippings.events');
+```
+
+Read the shipping progress of the whole order from its `shipping_status`, described in [Shipping Status (Order Level)](#shipping-status-order-level). `$order->isShipped()` is `true` while the shipping status is Shipped, and `$order->isShippingPending()` while it is Unfulfilled.
+
+### OrderShipping to Items and Events [#ordershipping--items--events]
+
+A shipment has five relationships: `order`, `carrier` (`null` when the package has no carrier), `items` (the order items in the package), `events` (its tracking timeline) and `taxLines` (the [tax lines](/3.x/taxes) charged on the package). The `events` relationship has no order of its own, so sort the timeline when you read it:
+
+```php
+$timeline = $shipment->events()->oldest('occurred_at')->get();
+```
+
+### OrderItem to Shipment [#orderitem--shipment]
+
+`$item->shipment` returns the package that carries an order item, or `null` while the item is not on a shipment:
+
+```php
+$item->shipment?->tracking_url;
+```
+
+## Fulfillment Status
+
+The `Shopper\Core\Enum\FulfillmentStatus` enum tracks each order item. A new item starts as Pending, and Shopper moves it when its package is picked up, delivered or returned:
+
+| Case | Value | Admin label | Set by |
+|------|-------|-------------|--------|
+| `Pending` | `pending` | Awaiting fulfillment | Every new order item |
+| `ForwardedToSupplier` | `forwarded_to_supplier` | Forwarded to Supplier | Your code, see [Dropshipping Workflow](#dropshipping-workflow) |
+| `Processing` | `processing` | Preparing | Your code |
+| `Shipped` | `shipped` | Shipped | The pickup of the item's package |
+| `Delivered` | `delivered` | Delivered | The delivery of the item's package |
+| `Cancelled` | `cancelled` | Cancelled | The return of the item's package |
+
+Shopper checks no transition between item statuses: your code can write `fulfillment_status` directly, then call [SyncOrderShippingStatusAction](#syncordershippingstatusaction) so the order follows. The pickup of a package moves only its Pending items to Shipped. An item you set to Processing or Forwarded to Supplier keeps that status until its package is delivered, so set it to Shipped yourself when its package is picked up. Such an item is also left out of the Create Shipping Label form of the admin panel, which lists Pending items only.
+
+## Shipping Status (Order Level)
+
+The `Shopper\Core\Enum\ShippingStatus` enum lives on the order, in its `shipping_status` column, and answers whether the order has shipped. A new order starts as Unfulfilled. Shopper computes the status from the fulfillment statuses of the items, as described in [SyncOrderShippingStatusAction](#syncordershippingstatusaction):
+
+| Case | Value | Meaning |
+|------|-------|---------|
+| `Unfulfilled` | `unfulfilled` | No item shipped or delivered yet |
+| `PartiallyShipped` | `partially_shipped` | Some items shipped, others still waiting |
+| `Shipped` | `shipped` | Every item shipped, none delivered or returned yet |
+| `PartiallyDelivered` | `partially_delivered` | Some items delivered |
+| `Delivered` | `delivered` | Every item delivered |
+| `PartiallyReturned` | `partially_returned` | Some items returned, all the others shipped or delivered |
+| `Returned` | `returned` | Every item returned |
+
+An order that is Delivered, Partially delivered, Returned or Partially returned can no longer be cancelled.
+
+## Shipment Status (Package Level)
+
+The `Shopper\Core\Enum\ShipmentStatus` enum lives on the shipment and tracks the delivery of one package. Each package of an order goes through these statuses on its own:
+
+| Case | Value | Admin label | Meaning |
+|------|-------|-------------|---------|
+| `Pending` | `pending` | Label created | The shipment exists, the carrier has not collected it |
+| `PickedUp` | `picked_up` | Picked up | The carrier collected the package |
+| `InTransit` | `in_transit` | In transit | On the way |
+| `AtSortingCenter` | `at_sorting_center` | At sorting center | At a sorting facility |
+| `OutForDelivery` | `out_for_delivery` | Out for delivery | With the local delivery driver |
+| `Delivered` | `delivered` | Delivered | Delivered to the customer |
+| `DeliveryFailed` | `delivery_failed` | Delivery failed | A delivery attempt failed |
+| `Returned` | `returned` | Returned | Back to the sender |
+
+`isFinal()` is `true` for Delivered and Returned, and `ShipmentStatus::open()` returns the six other cases. The tracking sync stops polling a package once its status is final, as described in [Tracking Sync](#tracking-sync).
+
+### Shipment Transitions
+
+The `HasFulfillmentTransitions` trait on `OrderShipping` lists the statuses a package can move to from each status. These transitions apply to the events recorded from the admin panel and from your code; carrier events follow the ranks described in [Tracking Events](#tracking-events):
+
+| From | Allowed next statuses |
+|------|-----------------------|
+| No status | Pending |
+| Pending | Picked up, Returned |
+| Picked up | In transit, Out for delivery, Delivery failed, Returned |
+| In transit | At sorting center, Out for delivery, Delivery failed, Returned |
+| At sorting center | In transit, Out for delivery, Delivery failed, Returned |
+| Out for delivery | Delivered, Delivery failed, Returned |
+| Delivered | Returned |
+| Delivery failed | In transit, Out for delivery, Returned |
+| Returned | None, the status is final |
+
+Only an Out for delivery package can be delivered, and every status except Returned can move to Returned. Three methods read the table:
+
+```php
+use Shopper\Core\Enum\ShipmentStatus;
+
+$shipment->canTransitionTo(ShipmentStatus::InTransit);
+
+$shipment->allowedTransitions();
+
+$shipment->canBeDelivered();
+```
+
+`allowedTransitions()` returns an array of `ShipmentStatus` cases, and `canBeDelivered()` is `canTransitionTo(ShipmentStatus::Delivered)`.
+
+### Transitioning Shipment Status
+
+Change the status of a package with `RecordShipmentEventAction`. It checks the transition, updates the status, writes the tracking event, then updates the items and the order and dispatches the shipment events, as described in [RecordShipmentEventAction](#recordshipmenteventaction):
+
+```php
+use Shopper\Core\Actions\RecordShipmentEventAction;
+use Shopper\Core\Enum\ShipmentStatus;
+
+resolve(RecordShipmentEventAction::class)->execute($shipment, ShipmentStatus::PickedUp, [
+    'description' => 'Package collected by UPS',
+    'location' => 'New York, NY',
+    'latitude' => 40.7128,
+    'longitude' => -74.006,
+]);
+```
+
+The model also has `transitionTo()`. It checks the transition, updates the status and writes the tracking event, and stops there: the items, the order, the `shipped_at`, `received_at` and `returned_at` dates and the shipment events stay as they were. When the transition is not allowed, it throws `Shopper\Core\Exceptions\InvalidShipmentStatusTransitionException` with a message such as `Cannot transition a shipment from "pending" to "delivered".`
+
+### Tracking Events
+
+Each shipment keeps a timeline of `OrderShippingEvent` rows: the Pending event written when the shipment is created, then one row for each status report. The `source` column tells who reported it. `ShipmentEventSource::Manual` marks the events recorded from the admin panel and from your code, and `ShipmentEventSource::Carrier` the events that come from the carrier. `causer_id` holds the ID of the authenticated user, if any.
+
+A manual event must follow the [transitions](#shipment-transitions), and its `occurred_at` cannot be earlier than the latest event of the shipment. `RecordShipmentEventAction` returns `null` and records nothing when either check fails.
+
+Carriers report scans late and out of order, so a carrier event skips the transitions check. Each status has a rank instead: Pending 0, Picked up 10, In transit and At sorting center 20, Out for delivery and Delivery failed 30, Delivered 40, Returned 100. A carrier event moves the package when its status ranks higher than the current one, or when it ranks the same, differs from the current status and is not older than the latest event of the current status. Any other carrier event joins the timeline without changing the status, and `OrderShipmentEventRecorded` fires with `$statusChanged` set to `false`. A carrier event whose `external_id` is already on the shipment is ignored.
+
+A carrier can therefore move a package from Pending straight to Delivered. The changes of the pickup still apply: `shipped_at` is set, the Pending items become Shipped and a New order moves to Processing before the delivery is recorded.
+
+`$shipment->logEvent()` adds a row to the timeline and changes nothing else, the same as creating the row through `$shipment->events()`. Use it for a note that does not change the status of the package:
+
+```php
+use Shopper\Core\Enum\ShipmentStatus;
+
+$shipment->logEvent(ShipmentStatus::InTransit, [
+    'description' => 'Delayed by weather in Memphis',
+    'location' => 'Memphis, TN',
+    'metadata' => ['facility_code' => 'MEM-04'],
+]);
+```
+
+## Carrier Tracking
+
+A carrier driver of the `shopper/shipping` package reports tracking in one of two ways: it pushes updates to a webhook, or Shopper asks it for the tracking of each open package on a schedule. Both paths hand a `Shopper\Shipping\DataTransferObjects\TrackingInfo` to `Shopper\Shipping\Actions\ApplyTrackingInfoAction`, which records each scan of the carrier through `RecordShipmentEventAction` as a carrier event.
+
+Each scan becomes one tracking event. Its `external_id` is the identifier the carrier gives the scan, or a fingerprint of its status, time and location when the carrier gives none, so a scan received twice is recorded once. A tracking answer without a list of scans becomes one event with the overall status of the package.
+
+The FedEx and UPS drivers support tracking. The USPS and manual drivers do not, and none of the drivers Shopper ships supports webhooks. A [custom shipping driver](/3.x/carriers#custom-shipping-drivers) can add both. Your own integration, such as a warehouse or a carrier without a driver, records carrier events with the same action:
+
+```php
+use Illuminate\Support\Carbon;
+use Shopper\Core\Actions\RecordShipmentEventAction;
+use Shopper\Core\Enum\ShipmentStatus;
+
+resolve(RecordShipmentEventAction::class)->execute(
+    $shipment,
+    ShipmentStatus::AtSortingCenter,
+    [
+        'external_id' => 'scan-58213',
+        'location' => 'Memphis, TN',
+        'occurred_at' => Carbon::parse('2026-11-16 22:41:00'),
+    ],
+    fromCarrier: true,
+);
+```
+
+### Carrier Webhooks
+
+The `shopper/api` package registers `POST /store/webhooks/shipping/{driver}` for carriers that push their updates, where `{driver}` is the name of the driver, such as `ups`, and `store` is the API prefix set by `config('shopper.http.prefix')`. The route passes the request to the `handleWebhook()` method of the driver, which verifies that the request comes from the carrier and returns a `TrackingInfo`, or `null` for a notification that has nothing to record.
+
+Shopper matches the package by its tracking number among the shipments whose carrier uses that driver. When several open packages share the tracking number, nothing is recorded and a warning is logged. The route answers `{"received": true}`, `404` for a driver that is unknown, not configured or without webhook support, and `400` when `handleWebhook()` throws.
+
+### Tracking Sync
+
+For carriers without webhooks, the scheduler runs `shopper:shipments:sync-tracking` every 30 minutes while `shopper.shipping.tracking.sync` is on. The command selects the configured drivers that support tracking and do not support webhooks, then queues one `Shopper\Shipping\Jobs\SyncShipmentTrackingJob` for each package that has a tracking number, a status other than Delivered or Returned, and a carrier using one of those drivers. Run it by hand to refresh the packages now:
+
+```bash
+php artisan shopper:shipments:sync-tracking
+```
+
+The job calls `track()` on the driver and applies the answer. It skips a package that reached Delivered or Returned after it was queued, and logs a warning when the carrier does not know the tracking number. The job is unique per package for one hour, so a slow queue never holds two refreshes of the same package, and it retries after the delays of `tracking.backoff`. A package that is already Delivered is no longer polled, so a return after delivery reaches Shopper through a webhook or a manual event. The [Scheduler](/3.x/installation#scheduler) section of the installation guide lists the scheduled tasks.
+
+## Configuration
+
+The tracking settings live under the `tracking` key of `config/shopper/shipping.php`, published with the `shopper-config` tag described in [Configuration Files](/3.x/configuration#configuration-files). The units and the rates cache of the same file belong to [Carriers](/3.x/carriers).
+
+| Key | Default | Description |
+|-----|---------|-------------|
+| `tracking.sync` | `true` (`SHIPPING_TRACKING_SYNC`) | Schedules `shopper:shipments:sync-tracking` every 30 minutes |
+| `tracking.queue` | `null` (`SHIPPING_TRACKING_QUEUE`) | Queue of the tracking jobs. `null` uses the default queue |
+| `tracking.backoff` | `[60, 300, 900]` | Seconds to wait before each retry of a failed tracking job. The job runs once more than the number of delays |
+
+A store with many packages in transit keeps the tracking jobs off the default queue, where they would wait in front of payment and order jobs. Name a queue and run a worker for it:
+
+```bash title=".env"
+SHIPPING_TRACKING_QUEUE=tracking
+```
+
+The carrier drivers keep their access tokens in the default cache store, so use a shared cache store when several servers run the queue.
+
+## Creating Shipments
+
+`Shopper\Core\Actions\CreateShipmentAction` creates a package for some or all items of an order. In one database transaction, it creates the shipment with the Pending status, writes the first tracking event, attaches the items and dispatches `OrderShipmentCreated`. The optional `description` becomes the description of that first event.
+
+The new package has no `shipped_at`, and its items keep their fulfillment status: both change when the carrier picks the package up. An item already on another shipment is skipped. When none of the items can be attached, the action throws `Shopper\Core\Exceptions\CannotCreateEmptyShipmentException` and the transaction rolls back, so no empty shipment is saved.
+
+### Single Shipment (All Items Together)
+
+When the whole order fits in one box, pass the IDs of all its items:
+
+```php
+use Shopper\Core\Actions\CreateShipmentAction;
+use Shopper\Core\Actions\RecordShipmentEventAction;
+use Shopper\Core\Enum\ShipmentStatus;
+use Shopper\Core\Models\Contracts\Order;
+
+$order = resolve(Order::class)::query()->with('items')->findOrFail($orderId);
+
+$shipment = resolve(CreateShipmentAction::class)->execute(
+    $order,
+    carrierId: $ups->id,
+    itemIds: $order->items->modelKeys(),
+    trackingNumber: '1Z999AA10123456784',
+    trackingUrl: 'https://www.ups.com/track?tracknum=1Z999AA10123456784',
+);
+
+resolve(RecordShipmentEventAction::class)->execute($shipment, ShipmentStatus::PickedUp);
+```
+
+Pass `null` as `carrierId` for a package without a [carrier](/3.x/carriers), such as a local delivery. Recording the pickup sets `shipped_at`, moves the items to Shipped and a New order to Processing, and sets the shipping status of the order to Shipped.
+
+### Partial Shipment (Split Across Packages)
+
+When the items leave from different warehouses or on different days, create one shipment per package, each with the items it carries and its own carrier. The items you leave out stay without a shipment and keep the Pending status, ready for a later package:
+
+```php
+use Shopper\Core\Actions\CreateShipmentAction;
+
+$createShipment = resolve(CreateShipmentAction::class);
+
+$firstPackage = $createShipment->execute(
+    $order,
+    carrierId: $colissimo->id,
+    itemIds: [$classicTShirt->id, $leatherBelt->id],
+    trackingNumber: 'LP123456789FR',
+    trackingUrl: 'https://www.laposte.fr/outils/suivre-vos-envois?code=LP123456789FR',
+);
+
+$secondPackage = $createShipment->execute(
+    $order,
+    carrierId: $ups->id,
+    itemIds: [$woolCoat->id],
+    trackingNumber: '1Z999AA10987654321',
+    trackingUrl: 'https://www.ups.com/track?tracknum=1Z999AA10987654321',
+);
+```
+
+Each package follows its own statuses, and the shipping status of the order follows the items: Partially shipped once the first package is picked up, Shipped once the second one is, then Partially delivered and Delivered as the packages arrive. When a package is delivered before the last one is picked up, the order goes from Partially shipped to Partially delivered and never reaches Shipped. The [Shipment Events](/3.x/events#shipment-events) section shows the events of a split order in the order they fire.
+
+### Marking as Delivered
+
+`MarkShipmentDeliveredAction` records the Delivered status on a package. It does nothing when the package cannot be delivered, which is the case for every status except Out for delivery:
+
+```php
+use Shopper\Core\Actions\MarkShipmentDeliveredAction;
+
+resolve(MarkShipmentDeliveredAction::class)->execute($shipment, [
+    'description' => 'Left with the building concierge',
+    'location' => 'Brooklyn, NY',
+]);
+```
+
+The delivery sets `received_at`, moves the items of the package to Delivered and computes the shipping status of the order again. When the order is in Processing, paid, and every one of its items is delivered, Shopper completes it and dispatches `OrderCompleted`. An order with a returned item is never completed this way, since a returned item is Cancelled.
+
+## Dropshipping Workflow
+
+The items of a supplier's product ship the same way, with the tracking number the supplier sends back. The [Dropshipping Workflow](/3.x/suppliers#dropshipping-workflow) of the Suppliers page covers marking the items as Forwarded to Supplier, creating their shipment, and recording the pickup and the delivery. An order that mixes your own products and supplier products takes one shipment per sender: create yours with the items you pack, and the supplier's once its tracking number arrives.
+
+## Querying Fulfillment Data
+
+Shipments, items and orders can be queried by their statuses. `OrderShipping` and `OrderItem` cannot be swapped, so query them directly. Resolve the order class from its contract so a swapped model is used.
+
+### Items by Status
+
+The items waiting for a package are the Pending items that are on no shipment, the same items the admin panel offers in its Create Shipping Label form:
+
+```php
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Core\Enum\FulfillmentStatus;
+use Shopper\Core\Models\OrderItem;
+
+$awaitingShipment = OrderItem::query()
+    ->whereNull('order_shipping_id')
+    ->where(fn (Builder $query) => $query
+        ->whereNull('fulfillment_status')
+        ->orWhere('fulfillment_status', FulfillmentStatus::Pending))
+    ->with('order.customer')
+    ->get();
+
+$awaitingSupplier = OrderItem::query()
+    ->where('fulfillment_status', FulfillmentStatus::ForwardedToSupplier)
+    ->with('product')
+    ->get();
+```
+
+### Orders Needing Attention
+
+The shipping status of the order tells which orders still have items to send, and the shipment status which packages need a follow-up with the carrier:
+
+```php
+use Shopper\Core\Enum\OrderStatus;
+use Shopper\Core\Enum\ShipmentStatus;
+use Shopper\Core\Enum\ShippingStatus;
+use Shopper\Core\Models\Contracts\Order;
+use Shopper\Core\Models\OrderShipping;
+
+$ordersToFulfill = resolve(Order::class)::query()
+    ->whereIn('status', [OrderStatus::New, OrderStatus::Processing])
+    ->whereIn('shipping_status', [ShippingStatus::Unfulfilled, ShippingStatus::PartiallyShipped])
+    ->with('items', 'shippings')
+    ->get();
+
+$failedDeliveries = OrderShipping::query()
+    ->where('status', ShipmentStatus::DeliveryFailed)
+    ->with('order', 'carrier')
+    ->get();
+```
+
+### Shipment History
+
+The packages of one customer, newest first, come from the `order` relationship of the shipment:
+
+```php
+use Shopper\Core\Models\OrderShipping;
+
+$customerShipments = OrderShipping::query()
+    ->whereRelation('order', 'customer_id', $customer->id)
+    ->with(['carrier', 'items', 'order'])
+    ->latest()
+    ->get();
+```
+
+## Handling Returns
+
+A package that comes back is recorded with the Returned status. Every status except Returned can move to Returned, so the same call records a package refused by the customer and a return after delivery:
+
+```php
+use Shopper\Core\Actions\RecordShipmentEventAction;
+use Shopper\Core\Enum\ShipmentStatus;
+
+resolve(RecordShipmentEventAction::class)->execute($shipment, ShipmentStatus::Returned, [
+    'description' => 'Returned by the customer: wrong size',
+]);
+```
+
+The return sets `returned_at`, moves every item of the package to Cancelled, computes the shipping status of the order again and dispatches `OrderShipmentReturned`. Returned is final: no status follows it. A return does not refund the customer nor put the products back in stock. Refund the payment as described on the [Payments](/3.x/payments) page, and adjust the stock as described on the [Products](/3.x/products) page.
+
+## Actions
+
+Shopper changes fulfillment data through actions of the `Shopper\Core\Actions` namespace. They keep the shipment, its items and the order consistent, and dispatch the events. Resolve them from the container.
+
+### RecordShipmentEventAction
+
+`execute(OrderShipping $shipment, ShipmentStatus $status, array $context = [], bool $fromCarrier = false)` records a tracking event and returns the `OrderShippingEvent`, or `null` when nothing was recorded. The context takes `description`, `location`, `latitude`, `longitude`, `occurred_at` (a Carbon date, now by default), `external_id`, `metadata` and `causer_id` (the authenticated user by default). `fromCarrier: true` records a carrier event, with the rules described in [Tracking Events](#tracking-events).
+
+The action runs in a database transaction and locks the shipment and its order, so an event from the carrier and an event from the admin panel never update the same order at the same time. When the status changes, the new status brings more changes:
+
+| Status reached | What else changes |
+|----------------|-------------------|
+| The first status at or past Picked up, except Returned | `shipped_at` is set, the Pending items of the package become Shipped, a New order moves to Processing, and the shipping status of the order is computed again |
+| Delivered | `received_at` is set, the items that are not Delivered or Cancelled become Delivered, the shipping status is computed again, the order is completed when it is in Processing, paid and fully delivered, and `OrderShipmentDelivered` fires |
+| Delivery failed | `OrderShipmentDeliveryFailed` fires |
+| Returned | `returned_at` is set, every item of the package becomes Cancelled, the shipping status is computed again, and `OrderShipmentReturned` fires |
+
+Each date is set from the `occurred_at` of the event, and only once. Every status change then dispatches `OrderShipmentEventRecorded` with `$statusChanged` set to `true`.
+
+### MarkShipmentDeliveredAction
+
+`execute(OrderShipping $shipment, array $context = [])` records the Delivered status with `RecordShipmentEventAction` when `canBeDelivered()` is `true`, and does nothing otherwise. Its context takes `description`, `location`, `latitude`, `longitude` and `metadata`, and the event is dated now. The admin panel calls it from its Mark as delivered action.
+
+### SyncOrderShippingStatusAction
+
+`execute(Order $order)` computes the `shipping_status` of an order from the fulfillment statuses of its items. Shopper runs it when a package is picked up, delivered or returned. Call it after your code writes `fulfillment_status` itself:
+
+```php
+use Shopper\Core\Actions\SyncOrderShippingStatusAction;
+
+resolve(SyncOrderShippingStatusAction::class)->execute($order);
+```
+
+The action counts the Shipped, Delivered and Cancelled items and keeps the first row that matches. It does nothing for an order without items:
+
+| Condition | Shipping status |
+|-----------|-----------------|
+| Every item cancelled | `Returned` |
+| Some items cancelled, all the others shipped or delivered | `PartiallyReturned` |
+| No item shipped or delivered | `Unfulfilled` |
+| Every item delivered | `Delivered` |
+| Some items delivered | `PartiallyDelivered` |
+| Every item shipped, delivered or cancelled | `Shipped` |
+| Any other case | `PartiallyShipped` |
+
+When the status becomes Shipped from another status, the action dispatches `OrderShipped`.
+
+## Events
+
+Shipments dispatch six events of the `Shopper\Core\Events\Orders` namespace: `OrderShipmentCreated`, `OrderShipmentEventRecorded`, `OrderShipmentDeliveryFailed`, `OrderShipmentDelivered` and `OrderShipmentReturned` for a package, and `OrderShipped` for the order. They are dispatched once the database transaction commits. The [Shipment Events](/3.x/events#shipment-events) section lists their payloads and the order in which they fire.
+
+Shopper sends no email when a package ships or arrives: listen to these events to notify the customer. Outgoing webhooks send five of them to your endpoints as `shipment.created`, `shipment.delivered`, `shipment.delivery_failed`, `shipment.returned` and `order.shipped`, as described on the [Webhooks](/3.x/webhooks) page.
+
+## Permissions
+
+Shipments use the permissions of the `orders` resource, described on the [Access Control](/3.x/acl) page:
+
+| Permission | Allows |
+|------------|--------|
+| `orders.browse` | Opening the Shipments page and seeing its sidebar item |
+| `orders.read` | Opening the detail of a shipment and the form to add a tracking event |
+| `orders.edit` | Creating a shipment from the order page, saving a tracking event, marking a shipment as delivered, editing its carrier and tracking details |
+
+## In the Admin
+
+The order page shows the fulfillment steps (New, Processing, Shipped, Completed) and a Create Shipping Label button while the order is not cancelled, archived or completed and some of its items are on no shipment. The button opens a slide-over with the carrier, preset to the carrier of the shipping option the customer chose, the tracking number and URL, and the items to fulfill, all the Awaiting fulfillment items by default: remove the ones that go in a later package. It records the shipment and does not buy a label from the carrier. The Shipments page, under Orders in the sidebar, lists every package with the tabs All, Label created, In transit, Delivered and Delivery failed, and filters by status, order and carrier. From a row, Mark as delivered appears once the package is Out for delivery, Edit changes the carrier and the tracking details, and Manage shipment opens the timeline, where Add event records one of the allowed next statuses with its date, location and description. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API exposes shipments read-only. A signed-in customer reads the packages of an order with `GET /store/customers/me/orders/{orderId}?include=shippings,shippings.events`, where each package comes with the name of its carrier, and the order itself carries its `shipping_status`. The order lookup at `GET /store/orders/{orderId}` does not include shipments.
+
+`GET /store/shipments/{shipmentId}?include=events` returns one package by its public ID. `events` is the only include it accepts, and the events come oldest first. A package is an `order-shippings` resource with the attributes `status`, `carrier_name`, `tracking_number`, `tracking_url`, `shipped_at`, `received_at` and `returned_at`. An event is an `order-shipping-events` resource with `status`, `description`, `location`, `latitude`, `longitude`, `occurred_at` and `created_at`. The [Storefront](/3.x/storefront) section documents the Store API.
+
+### Order Tracking Page
+
+A storefront rendered by Laravel reads the same data from the models. This controller shows the packages of an order to the customer who placed it:
+
+```php title="app/Http/Controllers/OrderTrackingController.php"
+namespace App\Http\Controllers;
+
+use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Http\Request;
+use Illuminate\View\View;
+use Shopper\Core\Models\Contracts\Order;
+
+class OrderTrackingController extends Controller
+{
+    public function show(Request $request, string $number): View
+    {
+        $order = resolve(Order::class)::query()
+            ->where('customer_id', $request->user()->id)
+            ->where('number', $number)
+            ->with([
+                'shippings.carrier',
+                'shippings.items',
+                'shippings.events' => fn (HasMany $events) => $events->latest('occurred_at'),
+            ])
+            ->firstOrFail();
+
+        return view('orders.tracking', ['order' => $order]);
+    }
+}
+```
+
+The view lists each package with its status, its items and the link to the carrier's tracking page:
+
+```blade title="resources/views/orders/tracking.blade.php"
+@foreach ($order->shippings as $shipment)
+    <section>
+        <h2>{{ $shipment->carrier?->name }}: {{ $shipment->status?->getLabel() }}</h2>
+
+        <ul>
+            @foreach ($shipment->items as $item)
+                <li>{{ $item->quantity }} x {{ $item->name }}</li>
+            @endforeach
+        </ul>
+
+        @if ($shipment->tracking_url)
+            <a href="{{ $shipment->tracking_url }}">Track {{ $shipment->tracking_number }}</a>
+        @endif
+    </section>
+@endforeach
+```

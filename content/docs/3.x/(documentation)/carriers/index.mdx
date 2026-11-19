@@ -1,0 +1,935 @@
+---
+title: Carriers
+description: Carriers and their shipping options per zone, shipping drivers and live carrier rates, failing carriers and custom shipping drivers in Shopper.
+---
+
+A carrier is a company or a service that delivers orders: UPS, FedEx, a local courier, in-store pickup. Shopper stores shipping on two levels: the carrier itself, and its shipping options, the services a customer picks at checkout ("Standard", "Express") with a price in each zone.
+
+A carrier gets its rates in one of two ways. A manual carrier offers the options the merchant enters for each zone, at a fixed price. A carrier connected to a shipping driver asks the carrier's API for live rates, computed from the shipment origin, the destination address and the packages. The `shopper/shipping` package holds the driver manager, the manual driver, the rate service and the driver contract; the UPS, FedEx and USPS drivers ship as separate packages.
+
+The zones a carrier serves are described on the [Zones](/3.x/zones) page. Shipments, labels and tracking are on the [Fulfillment](/3.x/fulfillment) page.
+
+## Models
+
+Shopper uses two models for shipping:
+
+| Model | Purpose |
+|-------|---------|
+| `Shopper\Core\Models\Carrier` | The carrier (UPS, FedEx, local delivery) and the driver that rates it |
+| `Shopper\Core\Models\CarrierOption` | A shipping option of a carrier in one zone, with its price |
+
+`Carrier` implements `Shopper\Core\Models\Contracts\Carrier` and uses the `HasPublicId`, `HasSlug` and `HasZones` traits. `CarrierOption` implements `Shopper\Core\Models\Contracts\CarrierOption` and uses `HasPublicId`. Neither model has a key in `config/shopper/models.php`, so you cannot swap them: add a relationship to them with `resolveRelationUsing()`, as shown in [Models You Cannot Swap](/3.x/models#models-you-cannot-swap). Both models carry a [public ID](/3.x/models#public-ids), and the morph map names them `carrier` and `carrier_option`.
+
+## Database Schema
+
+The two tables take the [table prefix](/3.x/configuration#database-table-prefix), so they are named `sh_carriers` and `sh_carrier_options` by default.
+
+### Carrier Table
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | auto | Public identifier (unique) |
+| `name` | string | no | - | Carrier name |
+| `slug` | string | yes | null | Unique identifier, such as `ups` or `local-delivery` |
+| `driver` | string | yes | null | Driver code: `manual`, `ups`, `fedex`, `usps` or a custom driver. `null` works as `manual` |
+| `link_url` | string | yes | null | Carrier website |
+| `description` | string | yes | null | Carrier description |
+| `shipping_amount` | integer | yes | null | An amount in cents kept for your own code. Shopper does not read it |
+| `is_enabled` | boolean | no | false | Whether the carrier quotes rates |
+| `metadata` | jsonb | yes | null | Your own data, cast to an array |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+### CarrierOption Table
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | auto | Public identifier (unique), used as the service code of the option |
+| `name` | string | no | - | Option name, unique within a zone |
+| `description` | string(255) | yes | null | Option description |
+| `price` | integer | no | - | Price in cents, in the currency of the zone |
+| `is_enabled` | boolean | no | false | Whether the option is offered |
+| `carrier_id` | bigint | no | - | Foreign key to the carrier |
+| `zone_id` | bigint | no | - | Foreign key to the zone |
+| `metadata` | jsonb | yes | null | Your own data, cast to an array |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+The foreign keys of `carrier_options` have no delete rule, so the database refuses to delete a carrier that still has shipping options: delete its options first. Orders point to a shipping option through `shipping_option_id` and shipments to a carrier through `carrier_id`; both are set to `null` when the option or the carrier is deleted. Carriers are attached to zones through the `zone_has_relations` table.
+
+## Shipping Drivers
+
+Shopper rates carriers through drivers, the way Laravel sends mail through mailers. `Shopper\Shipping\ShippingManager` is a Laravel manager: it creates a driver the first time it is asked for it and reuses that instance. The `driver` column of a carrier names its driver.
+
+### Available Drivers
+
+The manual driver ships with `shopper/shipping`. Each live driver is a separate Composer package that you install only for the carriers you use:
+
+| Driver | Code | Package | Rates | Tracking |
+|--------|------|---------|-------|----------|
+| Manual | `manual` | `shopper/shipping` | The shipping options of the zone | No |
+| UPS | `ups` | `shopper/ups` | Live, from the UPS API | Yes |
+| FedEx | `fedex` | `shopper/fedex` | Live, from the FedEx API | Yes |
+| USPS | `usps` | `shopper/usps` | Live, from the USPS API | No |
+
+Each driver has its own page with its installation, its credentials and its services: [UPS](/3.x/carriers/ups), [FedEx](/3.x/carriers/fedex) and [USPS](/3.x/carriers/usps).
+
+### Driver Configuration
+
+The shipping package merges its configuration under `shopper.shipping`. Publish it with the other Shopper configuration files to change a value:
+
+```bash
+php artisan vendor:publish --tag=shopper-config
+```
+
+This creates `config/shopper/shipping.php`, with these keys:
+
+| Key | Environment variable | Default | Description |
+|-----|----------------------|---------|-------------|
+| `units` | `SHIPPING_UNITS` | `metric` | Unit system of the package the Store API builds from a cart: `metric` (cm, kg) or `imperial` (in, lb) |
+| `rates_cache_ttl` | `SHIPPING_RATES_CACHE_TTL` | `600` | Seconds a live quote stays cached. `0` calls the carrier API on every request |
+| `tracking.sync` | `SHIPPING_TRACKING_SYNC` | `true` | Schedules the tracking sync command every thirty minutes |
+| `tracking.queue` | `SHIPPING_TRACKING_QUEUE` | `null` | Queue of the tracking jobs. `null` uses the default queue |
+| `tracking.backoff` | | `[60, 300, 900]` | Seconds to wait before each retry of a tracking job |
+
+The credentials of a live driver live in the configuration file of its package, merged under `shopper.ups`, `shopper.fedex` or `shopper.usps` and published with the `shopper-ups-config`, `shopper-fedex-config` or `shopper-usps-config` tag. Shopper 2.x kept them in a `drivers` array of `config/shopper/shipping.php`; 3.x no longer reads that array. Add the credentials to your `.env` file:
+
+```dotenv
+UPS_CLIENT_ID=your-client-id
+UPS_CLIENT_SECRET=your-client-secret
+UPS_USER_ID=your-user-id
+UPS_ACCOUNT_NUMBER=your-account-number
+SHIPPING_SANDBOX=true
+```
+
+A driver is configured when its `isConfigured()` method returns `true`, which the UPS, FedEx and USPS drivers do once every credential is filled in. That check decides everything: whether a carrier quotes live rates, whether the admin panel shows the driver as ready, whether its shipments are tracked and whether its webhook route answers. Each of their config files also has an `enabled` key (`SHIPPING_UPS_ENABLED`, `SHIPPING_FEDEX_ENABLED`, `SHIPPING_USPS_ENABLED`), which only `Shipping::configuredDrivers()` reads. To stop a carrier from quoting, disable the carrier.
+
+### Using the Shipping Facade
+
+The `Shipping` facade gives access to the shipping manager and to every registered driver:
+
+```php
+use Shopper\Shipping\Facades\Shipping;
+
+$driver = Shipping::driver('ups');
+
+$codes = Shipping::availableDrivers();
+
+$enabled = Shipping::configuredDrivers();
+
+$isReady = Shipping::isConfigured('fedex');
+```
+
+`availableDrivers()` returns the codes of the manual driver and of every driver registered with `extend()`. `configuredDrivers()` returns the drivers keyed by code: the manual driver, and each driver whose `shopper.{code}.enabled` key is `true`. `isConfigured()` returns `false` for a code that no driver is registered under, where `driver()` throws an `InvalidArgumentException`.
+
+### Carrier Driver Integration
+
+Shopper 2.x added `usesApiDriver()`, `getShippingDriver()` and `isDriverConfigured()` to the carrier model. In 3.x, the carrier only knows its driver code, and `Shopper\Shipping\Services\CarrierRateService` resolves the driver:
+
+```php
+use Shopper\Core\Models\Carrier;
+use Shopper\Shipping\Services\CarrierRateService;
+
+$carrier = Carrier::findBySlug('ups');
+$service = resolve(CarrierRateService::class);
+
+$driver = $service->resolveDriver($carrier);
+
+$isLive = $service->isDriverConfigured($carrier);
+
+$logo = $carrier->logo();
+```
+
+`resolveDriver()` returns `null` for a carrier without a driver or with the `manual` driver. A carrier rates live when its driver is configured. Otherwise, including when its driver is missing credentials, it falls back to its shipping options in the zone, as a manual carrier does. `logo()` returns the logo URL of the carrier's driver; the manual driver returns the local delivery image of the admin panel.
+
+`logo()` calls the resolver bound to `shopper.carrier.logo` in the service container, and returns `null` without `shopper/shipping` installed. Every manual carrier shows the same image. To give some carriers their own logo, bind your resolver in the `boot()` method of a service provider and fall back to the driver logo for the others:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Shopper\Core\Models\Carrier;
+use Shopper\Shipping\Facades\Shipping;
+
+public function boot(): void
+{
+    $this->app->bind('shopper.carrier.logo', fn () => fn (Carrier $carrier): ?string => match ($carrier->slug) {
+        'city-courier' => asset('images/carriers/city-courier.svg'),
+        'store-pickup' => asset('images/carriers/store-pickup.svg'),
+        default => Shipping::driver($carrier->driver ?? 'manual')->logo(),
+    });
+}
+```
+
+`CarrierRateService::getLogoUrl()` returns the same URL. The admin panel reads `logo()` in the carrier list, the zone shipping options, the order summary and the shipment details, so all of them show your image. The driver picker of the carrier form keeps the driver logos.
+
+## Calculating Shipping Rates
+
+`CarrierRateService` rates any carrier, manual or live, through the same methods. A rate request describes the shipment with three data objects from `Shopper\Shipping\DataTransferObjects`: the origin and destination `Address`, and the `Package` list. The country of an address is its ISO 3166-1 alpha-2 code, and a package is measured in centimeters and kilograms unless you pass `unit: 'imperial'`:
+
+```php title="app/Http/Controllers/CheckoutShippingController.php"
+use Shopper\Shipping\DataTransferObjects\Address;
+use Shopper\Shipping\DataTransferObjects\Package;
+use Shopper\Shipping\Services\CarrierRateService;
+
+$service = resolve(CarrierRateService::class);
+
+$from = new Address(
+    firstName: '',
+    lastName: 'Los Angeles Warehouse',
+    street: '1200 S Alameda St',
+    city: 'Los Angeles',
+    postalCode: '90021',
+    state: 'CA',
+    country: 'US',
+);
+
+$to = new Address(
+    firstName: 'Jane',
+    lastName: 'Cooper',
+    street: '350 Fifth Avenue',
+    city: 'New York',
+    postalCode: '10118',
+    state: 'NY',
+    country: 'US',
+    phone: '+1 212 736 3100',
+);
+
+$packages = [
+    new Package(length: 30, width: 20, height: 15, weight: 2.5),
+];
+```
+
+`Address` also accepts `company`, `street2`, `phone` and `email`.
+
+### Getting Rates for a Carrier
+
+`getRatesForCarrier()` rates one carrier. A carrier with a configured driver gets live rates from the carrier's API. Any other carrier returns its enabled shipping options in the zone you pass:
+
+```php
+$rates = $service->getRatesForCarrier(
+    carrier: $carrier,
+    from: $from,
+    to: $to,
+    packages: $packages,
+    zone: $zone,
+);
+```
+
+Pass the zone for a manual carrier: without one, the method returns every enabled option of the carrier, from every zone, and labels each rate with the store default currency, even when its zone uses another one. This method calls the carrier API directly, without the cache and the per-carrier isolation of the zone methods, so an API error reaches your code as an exception.
+
+### Getting Rates for a Zone
+
+`getRatesForZone()` collects the rates of every enabled carrier attached to the zone. `getZoneRates()` does the same and returns a `ZoneRateResult`, with the rates in `$result->rates` and the names of the carriers whose API failed in `$result->failedCarriers`:
+
+```php
+$rates = $service->getRatesForZone(
+    zone: $zone,
+    from: $from,
+    to: $to,
+    packages: $packages,
+);
+
+$result = $service->getZoneRates(
+    zone: $zone,
+    from: null,
+    to: null,
+    packages: $packages,
+);
+```
+
+`getZoneRates()` accepts `null` addresses. Manual rates only need the zone, while live carriers are skipped until both addresses are known, so a checkout can show the manual options before the customer enters an address.
+
+### ShippingRate DTO
+
+Both methods return a collection of `Shopper\Shipping\DataTransferObjects\ShippingRate` objects. Their values depend on where the rate comes from:
+
+| Property | Type | Manual rate | Live rate |
+|----------|------|-------------|-----------|
+| `serviceCode` | `string\|int` | Public ID of the shipping option | Service code of the carrier, such as `03` for UPS Ground |
+| `serviceName` | `string` | Name of the option | Service name returned by the carrier |
+| `amount` | `int` | Price of the option, in cents | Quoted price, in cents |
+| `currency` | `string` | Currency of the zone, or the store default currency when no zone is given | Currency of the quote |
+| `carrierCode` | `string` | Slug of the carrier, or its name when it has no slug | Code the driver sets, `ups` for the UPS driver |
+| `estimatedDays` | `?string` | `null` | Transit days, when the carrier returns them |
+| `estimatedDelivery` | `?string` | `null` | Delivery date, when the carrier returns it |
+| `priceType` | `string` | `flat` | `calculated` |
+
+```php
+foreach ($rates as $rate) {
+    echo $rate->serviceName.': '.$rate->formattedAmount();
+}
+```
+
+`formattedAmount()` formats the amount with `shopper_money_format()`, described on the [Money](/3.x/money) page, and `toArray()` returns the properties with snake_case keys. The Store API identifies a rate as `{carrierCode}:{serviceCode}`, such as `local-delivery:01J8Z3K2YB6Q9M4T5N7V0W1X2C` or `ups:03`.
+
+### Rate Caching
+
+Carrier APIs are slow and rate-limited, so `getZoneRates()` keeps each live quote in the default cache store for `config('shopper.shipping.rates_cache_ttl')` seconds. The cache key holds the driver code and a hash of the addresses and packages, so a new address or a change in the cart produces a new quote. Manual rates are read from the database on every request, a failed quote is never cached, and `getRatesForCarrier()` does not use the cache.
+
+## Failing Carriers
+
+`getZoneRates()` isolates each carrier. When a carrier API times out, answers with an error or returns a response the driver cannot read, the service catches the exception, logs a `Shipping rates unavailable for carrier.` warning with the carrier name, its driver and the error message, adds the carrier name to `failedCarriers`, and returns the rates of the other carriers. An outage at UPS never hides the local delivery options:
+
+```php
+$result = $service->getZoneRates(zone: $zone, from: $from, to: $to, packages: $packages);
+
+$warnings = array_map(
+    fn (string $carrier): string => "Rates from {$carrier} are temporarily unavailable.",
+    $result->failedCarriers,
+);
+
+return view('checkout.shipping', [
+    'rates' => $result->rates,
+    'warnings' => $warnings,
+]);
+```
+
+The Store API turns failed carriers into warnings, and answers `503` when the customer picks an option of a carrier that is failing, as described in [From a Storefront](#from-a-storefront).
+
+<Warning>
+The isolation covers the API call only. A carrier whose `driver` names a code that no driver is registered under, for example after its package was removed, throws an `InvalidArgumentException` that stops the quote of the whole zone. Switch those carriers to the `manual` driver before you remove a driver package.
+</Warning>
+
+## Custom Shipping Drivers
+
+A custom driver connects a carrier that has no driver package, such as DHL, Canada Post, Colissimo or a regional courier. Once registered, it appears in the carrier form of the admin panel and rates carriers like the built-in drivers.
+
+### Creating a Driver
+
+A driver implements the `Shopper\Shipping\Contracts\ShippingDriver` contract. Extend the abstract `Shopper\Shipping\Drivers\Driver` class, which implements the optional methods, and write the four required ones. `calculateRates()` returns amounts in cents, so convert the decimal prices of the carrier as described in [Converting Input](/3.x/money#converting-input):
+
+```php title="app/Shipping/DhlDriver.php"
+<?php
+
+namespace App\Shipping;
+
+use Illuminate\Support\Collection;
+use Illuminate\Support\Facades\Http;
+use Shopper\Shipping\DataTransferObjects\Address;
+use Shopper\Shipping\DataTransferObjects\Package;
+use Shopper\Shipping\DataTransferObjects\ShippingRate;
+use Shopper\Shipping\Drivers\Driver;
+use Shopper\Shipping\Exceptions\ShippingException;
+
+class DhlDriver extends Driver
+{
+    public function __construct(
+        private readonly ?string $apiKey,
+        private readonly ?string $accountNumber,
+        private readonly bool $sandbox = false,
+    ) {}
+
+    public function code(): string
+    {
+        return 'dhl';
+    }
+
+    public function name(): string
+    {
+        return 'DHL Express';
+    }
+
+    public function logo(): ?string
+    {
+        return asset('images/carriers/dhl.svg');
+    }
+
+    public function isConfigured(): bool
+    {
+        return filled($this->apiKey) && filled($this->accountNumber);
+    }
+
+    public function supportsLabels(): bool
+    {
+        return false;
+    }
+
+    public function calculateRates(Address $from, Address $to, array $packages): Collection
+    {
+        $response = Http::withHeaders(['DHL-API-Key' => $this->apiKey])
+            ->timeout(10)
+            ->post($this->apiUrl().'/rates', [
+                'accountNumber' => $this->accountNumber,
+                'originAddress' => $this->formatAddress($from),
+                'destinationAddress' => $this->formatAddress($to),
+                'packages' => $this->formatPackages($this->normalizePackages($packages)),
+            ]);
+
+        if ($response->failed()) {
+            throw ShippingException::apiError('dhl', $response->json('detail', 'HTTP '.$response->status()));
+        }
+
+        return collect($response->json('products', []))->map(function (array $product): ShippingRate {
+            $currency = strtoupper($product['priceCurrency']);
+
+            return new ShippingRate(
+                serviceCode: $product['productCode'],
+                serviceName: $product['productName'],
+                amount: is_no_division_currency($currency)
+                    ? (int) round($product['totalPrice'])
+                    : (int) round($product['totalPrice'] * 100),
+                currency: $currency,
+                carrierCode: 'dhl',
+                estimatedDays: $product['deliveryCapabilities']['estimatedDeliveryDays'] ?? null,
+            );
+        });
+    }
+
+    private function apiUrl(): string
+    {
+        return $this->sandbox
+            ? 'https://express.api.dhl.com/mydhlapi/test'
+            : 'https://express.api.dhl.com/mydhlapi';
+    }
+
+    private function formatAddress(Address $address): array
+    {
+        return [
+            'postalCode' => $address->postalCode,
+            'cityName' => $address->city,
+            'countryCode' => $address->country,
+        ];
+    }
+
+    private function formatPackages(array $packages): array
+    {
+        return array_map(fn (Package $package): array => [
+            'weight' => $package->weight,
+            'dimensions' => [
+                'length' => $package->length,
+                'width' => $package->width,
+                'height' => $package->height,
+            ],
+        ], $packages);
+    }
+}
+```
+
+Throw an exception when the carrier cannot quote: the zone methods catch it and report the carrier as failing. `Shopper\Shipping\Exceptions\ShippingException` has four named constructors:
+
+| Method | Message |
+|--------|---------|
+| `ShippingException::notConfigured($driver)` | The driver is missing its credentials |
+| `ShippingException::notSupported($method, $driver)` | The driver does not implement the method |
+| `ShippingException::apiError($driver, $message)` | The carrier API answered with an error |
+| `ShippingException::invalidResponse($driver)` | The carrier API answered with a response the driver cannot read |
+
+Carriers that authenticate with OAuth can use the `Shopper\Shipping\Concerns\InteractsWithCarrierApi` trait, as the UPS, FedEx and USPS drivers do. `cachedToken($key, $request)` keeps the token returned by the `$request` closure in the default cache store until 60 seconds before it expires, behind a cache lock so that concurrent requests fetch one token. `readToken($response)` reads `access_token` and `expires_in` (3600 seconds when absent) from a token response and throws `apiError()` or `invalidResponse()` when it cannot, and `carrierMessage($response)` extracts the error message of a failed response.
+
+### The Driver Contract
+
+The `ShippingDriver` contract declares these methods:
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `code()` | `string` | Driver code, the value of the carrier `driver` column |
+| `name()` | `string` | Name shown in the admin panel |
+| `logo()` | `?string` | URL of the carrier logo |
+| `isConfigured()` | `bool` | Whether the credentials are set |
+| `supportsRealTimeRates()` | `bool` | Whether the driver quotes live rates |
+| `supportsLabels()` | `bool` | Whether the driver creates shipping labels |
+| `supportsTracking()` | `bool` | Whether `track()` works |
+| `supportsWebhooks()` | `bool` | Whether `handleWebhook()` works |
+| `calculateRates($from, $to, $packages)` | `Collection` | The `ShippingRate` objects for the shipment |
+| `createShipment($from, $to, $packages, $serviceCode)` | `Shipment` | Books a shipment and returns its label |
+| `track($trackingNumber)` | `TrackingInfo` | The tracking of a package |
+| `handleWebhook($request)` | `?TrackingInfo` | The tracking update a carrier pushes |
+
+The abstract `Driver` class returns `null` from `logo()`, `true` from `supportsRealTimeRates()` and `supportsLabels()`, and `false` from `supportsTracking()` and `supportsWebhooks()`. Its `createShipment()`, `track()` and `handleWebhook()` throw `ShippingException::notSupported()`. Shopper calls `code()`, `name()`, `logo()`, `isConfigured()` and `calculateRates()`, plus the tracking and webhook methods described in [Driver Capabilities](#driver-capabilities). It does not call `supportsRealTimeRates()`, `supportsLabels()` or `createShipment()`: the admin panel records labels and tracking numbers by hand, as described on the [Fulfillment](/3.x/fulfillment) page.
+
+### Registering the Driver
+
+Register the driver in a service provider with the `extend()` method of the `Shipping` facade. The closure returns the driver, built from its configuration:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Shipping\DhlDriver;
+use Shopper\Shipping\Facades\Shipping;
+
+public function boot(): void
+{
+    Shipping::extend('dhl', fn (): DhlDriver => new DhlDriver(
+        apiKey: config('shopper.dhl.api_key'),
+        accountNumber: config('shopper.dhl.account_number'),
+        sandbox: (bool) config('shopper.dhl.sandbox', false),
+    ));
+}
+```
+
+Register the driver under the code its `code()` method returns, since carriers store that code in their `driver` column. The manager calls the closure the first time the driver is used. Once registered, the driver appears in the Driver field of the carrier form, with a "Not configured" badge while `isConfigured()` returns `false`.
+
+### Adding Configuration
+
+Keep the settings of the driver in `config/shopper/dhl.php`, which Laravel loads under the `shopper.dhl` key, the way the driver packages merge theirs under `shopper.ups` and `shopper.fedex`:
+
+```php title="config/shopper/dhl.php"
+<?php
+
+return [
+    'enabled' => env('SHIPPING_DHL_ENABLED', false),
+    'sandbox' => env('SHIPPING_SANDBOX', false),
+    'api_key' => env('DHL_API_KEY'),
+    'account_number' => env('DHL_ACCOUNT_NUMBER'),
+];
+```
+
+The `enabled` key follows the driver packages, so that `Shipping::configuredDrivers()` lists the driver once it is `true`.
+
+### Driver Capabilities
+
+The abstract `Driver` class provides `normalizePackages()`, which converts packages between metric and imperial units. Pass `'metric'` (the default) for a carrier that expects centimeters and kilograms, or `'imperial'` for one that expects inches and pounds:
+
+```php
+public function calculateRates(Address $from, Address $to, array $packages): Collection
+{
+    $packages = $this->normalizePackages($packages, 'imperial');
+
+    return $this->quote($from, $to, $packages);
+}
+```
+
+A driver reports tracking in one of two ways, both described in [Tracking Events](/3.x/fulfillment#tracking-events):
+
+- Polling: return `true` from `supportsTracking()` and implement `track()`. The `shopper:shipments:sync-tracking` command, scheduled every thirty minutes while `tracking.sync` is on, queues a tracking job for each open shipment that has a tracking number and whose carrier driver is configured, supports tracking and does not support webhooks.
+- Webhooks: return `true` from `supportsWebhooks()` and implement `handleWebhook()`. The Store API passes each `POST /store/webhooks/shipping/{driver}` request to it. The route is public, so `handleWebhook()` must verify that the request comes from the carrier (a signature or a shared secret) and throw when the check fails; the route then answers `400`. It returns a `TrackingInfo` to record, or `null` for a notification that carries nothing to record. The route answers `404` for a driver that is not registered, not configured, or does not support webhooks.
+
+## Relationships
+
+A carrier has many shipping options and belongs to many zones. A shipping option belongs to one carrier and one zone.
+
+### Carrier Options
+
+`options()` returns every shipping option of the carrier, in every zone:
+
+```php
+use Shopper\Core\Models\Carrier;
+
+$carrier = Carrier::findBySlug('local-delivery');
+
+$carrier->options;
+
+$carrier->options()->enabled()->get();
+
+$carrier->options()->create([
+    'name' => 'Express (2 hours)',
+    'price' => 1500,
+    'zone_id' => $zone->id,
+    'is_enabled' => true,
+]);
+```
+
+### Zones
+
+The `HasZones` trait gives the carrier a `zones()` relationship, stored in `zone_has_relations`. A carrier quotes in a zone only when it is attached to it, and a zone lists its carriers and its shipping options:
+
+```php
+$carrier->zones()->attach($zone);
+
+$carrier->zones;
+
+$zone->carriers;
+
+$zone->shippingOptions;
+```
+
+The [Zones](/3.x/zones) page describes the other relationships of a zone.
+
+### Zone (CarrierOption)
+
+`zone()` returns the zone of the option. Query the options of a zone directly:
+
+```php
+use Shopper\Core\Models\CarrierOption;
+
+$option->zone;
+
+CarrierOption::query()
+    ->where('zone_id', $zone->id)
+    ->enabled()
+    ->get();
+```
+
+### Carrier (CarrierOption)
+
+`carrier()` returns the carrier of the option:
+
+```php
+$option->carrier;
+```
+
+## Query Scopes
+
+Both models have an `enabled` scope, which keeps the rows where `is_enabled` is `true`:
+
+```php
+use Shopper\Core\Models\Carrier;
+use Shopper\Core\Models\CarrierOption;
+
+Carrier::query()->enabled()->get();
+
+CarrierOption::query()->enabled()->get();
+```
+
+## Price Handling
+
+The price of a shipping option is stored in cents, in the currency of its zone. Format it with that currency:
+
+```php
+use Shopper\Core\Models\CarrierOption;
+
+$option = CarrierOption::query()->create([
+    'name' => 'Standard Shipping',
+    'price' => 1000,
+    'zone_id' => $zone->id,
+    'carrier_id' => $carrier->id,
+    'is_enabled' => true,
+]);
+
+shopper_money_format($option->price, $option->zone->currency_code);
+```
+
+A zone has one currency, so a store that sells in euros and in dollars enters its prices in each zone. The [Money](/3.x/money) page covers cents and zero-decimal currencies.
+
+## Creating Carriers
+
+A carrier needs a name, a driver, the zones it serves and, for a manual carrier, a shipping option in each of those zones. Setting `slug` runs the value through `Str::slug()` and appends `-1`, `-2` when it is taken, and `Carrier::findBySlug()` returns the carrier of a slug.
+
+### Manual Carrier
+
+A manual carrier offers the options you create for each zone, at the price you set:
+
+```php
+use Shopper\Core\Models\Carrier;
+
+$carrier = Carrier::query()->create([
+    'name' => 'Local Delivery',
+    'slug' => 'local-delivery',
+    'driver' => 'manual',
+    'description' => 'Same-day delivery within city limits',
+    'is_enabled' => true,
+]);
+
+$carrier->zones()->attach($localZone);
+
+$carrier->options()->createMany([
+    [
+        'name' => 'Standard',
+        'price' => 500,
+        'zone_id' => $localZone->id,
+        'is_enabled' => true,
+    ],
+    [
+        'name' => 'Express (2 hours)',
+        'price' => 1500,
+        'zone_id' => $localZone->id,
+        'is_enabled' => true,
+    ],
+]);
+```
+
+### API-Connected Carrier
+
+A carrier with a live driver needs no shipping option: its rates come from the carrier's API once the driver is configured. Give it the driver code as its slug, because the Store API finds the carrier of a live rate by the driver code the rate carries. In the admin panel the slug follows the name, so name the carrier after the code, such as `UPS` for `ups`:
+
+```php
+use Shopper\Core\Models\Carrier;
+
+$carrier = Carrier::query()->create([
+    'name' => 'UPS',
+    'slug' => 'ups',
+    'driver' => 'ups',
+    'link_url' => 'https://www.ups.com',
+    'is_enabled' => true,
+]);
+
+$carrier->zones()->attach($domesticZone);
+```
+
+The shipping options of such a carrier are offered only while its driver is not configured.
+
+### Free Shipping Option
+
+Free shipping is a shipping option with a price of `0`:
+
+```php
+use Shopper\Core\Models\Carrier;
+
+$freeShipping = Carrier::query()->create([
+    'name' => 'Free Shipping',
+    'slug' => 'free-shipping',
+    'driver' => 'manual',
+    'description' => 'Free standard shipping',
+    'is_enabled' => true,
+]);
+
+$freeShipping->zones()->attach($domesticZone);
+
+$freeShipping->options()->create([
+    'name' => 'Free Standard Delivery',
+    'price' => 0,
+    'zone_id' => $domesticZone->id,
+    'is_enabled' => true,
+]);
+```
+
+Shopper offers the option to every cart of the zone: it has no minimum order amount.
+
+## Retrieving Carriers
+
+Load the enabled options with their carrier, in one query, to list the manual shipping choices of a zone:
+
+```php
+use Shopper\Core\Models\Carrier;
+use Shopper\Core\Models\CarrierOption;
+
+$carriers = Carrier::query()
+    ->enabled()
+    ->with(['options' => fn ($query) => $query->enabled()])
+    ->get();
+
+$carrier = Carrier::findBySlug('fedex');
+
+$options = CarrierOption::query()
+    ->where('zone_id', $zone->id)
+    ->enabled()
+    ->with('carrier')
+    ->orderBy('price')
+    ->get();
+
+$cheapest = CarrierOption::query()
+    ->where('zone_id', $zone->id)
+    ->enabled()
+    ->orderBy('price')
+    ->first();
+```
+
+These queries read the shipping options only. To get the price a customer pays, including live rates, use `CarrierRateService`.
+
+## Working with Orders
+
+When a cart becomes an order, the order keeps the shipping price in `shipping_amount`, in cents, and links the shipping option in `shipping_option_id`, as described in [Order Conversion](/3.x/cart#order-conversion). Only a manual rate links an option: an order placed with a live rate has a `null` `shipping_option_id` and keeps its price only.
+
+```php
+use Shopper\Core\Models\Contracts\Order;
+
+$order = resolve(Order::class)::query()
+    ->with('shippingOption.carrier')
+    ->findOrFail($orderId);
+
+$order->shippingOption?->carrier->name;
+
+shopper_money_format($order->shipping_amount ?? 0, $order->currency_code);
+```
+
+The packages sent for an order, their carrier and their tracking are shipments, described on the [Fulfillment](/3.x/fulfillment) page. The [Orders](/3.x/orders) page describes the order itself.
+
+## Storefront Example
+
+A Blade or Livewire storefront calls `CarrierRateService` itself; a storefront built on the Store API gets the same rates from the [shipping options endpoint](#from-a-storefront).
+
+### Checkout Shipping Selection
+
+The origin of a shipment is the inventory location it leaves from, described on the [Locations](/3.x/locations) page. This controller quotes the cart from the default location, offers the rates priced in the cart currency, and quotes again when the customer submits a choice, so the price stored on the cart comes from the server:
+
+```php title="app/Http/Controllers/CheckoutShippingController.php"
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\View\View;
+use Shopper\Cart\CartManager;
+use Shopper\Cart\Facades\Cart;
+use Shopper\Cart\Models\Cart as CartModel;
+use Shopper\Cart\Models\CartLine;
+use Shopper\Core\Models\Contracts\Inventory;
+use Shopper\Shipping\DataTransferObjects\Address;
+use Shopper\Shipping\DataTransferObjects\Package;
+use Shopper\Shipping\DataTransferObjects\ShippingRate;
+use Shopper\Shipping\Services\CarrierRateService;
+
+class CheckoutShippingController extends Controller
+{
+    public function __construct(
+        private readonly CarrierRateService $rateService,
+    ) {}
+
+    public function index(): View
+    {
+        $cart = Cart::current() ?? abort(404);
+
+        return view('checkout.shipping', [
+            'cart' => $cart,
+            'rates' => $this->quote($cart),
+        ]);
+    }
+
+    public function store(Request $request, CartManager $manager): RedirectResponse
+    {
+        $cart = Cart::current() ?? abort(404);
+
+        $rate = $this->quote($cart)->first(
+            fn (ShippingRate $rate): bool => $this->optionId($rate) === $request->input('option_id'),
+        );
+
+        if ($rate === null) {
+            return back()->withErrors(['option_id' => __('This shipping option is no longer available.')]);
+        }
+
+        $manager->setShippingMethod($cart, $this->optionId($rate), $rate->amount);
+
+        return redirect()->route('checkout.payment');
+    }
+
+    private function quote(CartModel $cart): Collection
+    {
+        return $this->rateService
+            ->getZoneRates(
+                zone: $cart->zone,
+                from: $this->origin(),
+                to: $this->destination($cart),
+                packages: $this->packages($cart),
+            )
+            ->rates
+            ->filter(fn (ShippingRate $rate): bool => $rate->currency === $cart->currency_code)
+            ->values();
+    }
+
+    private function optionId(ShippingRate $rate): string
+    {
+        return "{$rate->carrierCode}:{$rate->serviceCode}";
+    }
+
+    private function origin(): Address
+    {
+        $inventory = resolve(Inventory::class)::query()
+            ->with('country')
+            ->default()
+            ->firstOrFail();
+
+        return new Address(
+            firstName: '',
+            lastName: $inventory->name,
+            street: $inventory->street_address,
+            city: $inventory->city,
+            postalCode: $inventory->postal_code,
+            state: $inventory->state ?? '',
+            country: $inventory->country->cca2,
+            street2: $inventory->street_address_plus,
+            phone: $inventory->phone_number,
+            email: $inventory->email,
+        );
+    }
+
+    private function destination(CartModel $cart): ?Address
+    {
+        $address = $cart->shippingAddress();
+
+        if ($address?->country === null) {
+            return null;
+        }
+
+        return new Address(
+            firstName: $address->first_name ?? '',
+            lastName: $address->last_name,
+            street: $address->address_1,
+            city: $address->city,
+            postalCode: $address->postal_code,
+            state: $address->state ?? '',
+            country: $address->country->cca2,
+            company: $address->company,
+            street2: $address->address_2,
+            phone: $address->phone,
+        );
+    }
+
+    private function packages(CartModel $cart): array
+    {
+        $weight = $cart->lines->sum(
+            fn (CartLine $line): float => (float) $line->purchasable->weight_value * $line->quantity,
+        );
+
+        return [new Package(length: 40, width: 30, height: 20, weight: $weight)];
+    }
+}
+```
+
+The cart needs a zone before it can be quoted. Until the customer enters a shipping address, `destination()` returns `null` and the page offers the manual rates only. The example ships every order in one 40 by 30 by 20 cm box and assumes product weights are entered in kilograms; describe the boxes you really ship. `setShippingMethod()` is described in [Shipping and Payment](/3.x/cart).
+
+<Note>
+A store with several warehouses can ship from another location: pass the inventory you pick, such as the one nearest to the customer or the one that holds the stock, to `origin()`. A live quote depends on its origin, so quote again with the same origin when the customer confirms.
+</Note>
+
+## Use Cases
+
+These carriers and options cover the common shipping setups:
+
+| Carrier | Options |
+|---------|---------|
+| USPS | Priority Mail, Ground Advantage, Media Mail |
+| FedEx | Ground, Express, Overnight |
+| UPS | Ground, 2-Day, Next Day Air |
+| DHL | Express, Economy, Freight |
+| Local | Same-Day, Pick-up |
+
+| Scenario | Implementation |
+|----------|----------------|
+| Flat rate shipping | Manual carrier with one option at a fixed price |
+| Free shipping | Manual option with a price of `0` |
+| Zone-based pricing | One option per zone for each manual carrier |
+| Real-time rates | Assign a configured driver to the carrier |
+| Hybrid approach | Manual carriers for local delivery, live drivers for national and international shipping |
+| Carrier without a driver package | A [custom shipping driver](#custom-shipping-drivers) |
+
+## Events
+
+Shopper dispatches no carrier event of its own and registers no observer on carriers or shipping options. Listen to the Eloquent model events instead, for example to clear a cached list of carriers on a delivery information page:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Illuminate\Support\Facades\Cache;
+use Shopper\Core\Models\Carrier;
+use Shopper\Core\Models\CarrierOption;
+
+public function boot(): void
+{
+    Carrier::saved(fn () => Cache::forget('storefront.delivery-options'));
+    CarrierOption::saved(fn () => Cache::forget('storefront.delivery-options'));
+    CarrierOption::deleted(fn () => Cache::forget('storefront.delivery-options'));
+}
+```
+
+A tracking update from a carrier driver dispatches the shipment events listed in [Shipment Events](/3.x/events#shipment-events).
+
+## Permissions
+
+The admin panel checks one permission for shipping, `system.settings`. It opens the Carriers page and allows creating, editing, enabling and deleting a carrier, and adding, editing and deleting the shipping options of a zone. The [Access Control](/3.x/acl#access-by-section) page lists the permission of each section.
+
+## In the Admin
+
+Merchants manage carriers under Settings, Carriers, in the Shipping group. The list shows each carrier with its logo, name, driver, status toggle and last update. The driver badge is gray for the manual driver, green for a configured live driver and amber for a live driver missing its credentials. The carrier form holds the name, which also sets the slug, the driver (`Manual` by default, the others listed with a "Not configured" badge until their credentials are set), the website and the description. Shipping options are managed on each zone, in its Shipping Options section: the Add Option slide-over takes a name, a price in the zone currency, a carrier among those of the zone, a description, the visibility and metadata. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API quotes and stores the shipping choice of a cart under the `store` prefix, set by `SHOPPER_API_PREFIX`:
+
+| Endpoint | Does |
+|----------|------|
+| `GET /store/carts/{cartId}/shipping-options` | Lists the shipping options of the cart and their rates |
+| `POST /store/carts/{cartId}/shipping-method` | Chooses an option by `option_id` |
+| `POST /store/webhooks/shipping/{driver}` | Receives the tracking updates a carrier pushes, as described in [Driver Capabilities](#driver-capabilities) |
+
+The shipping options endpoint quotes the zone of the cart with `getZoneRates()`, and answers `422` when the cart has no zone. A cart that holds only virtual or external products gets no options. Manual rates are quoted at once; live rates need a shipping address on the cart and an origin, which is the default inventory location, or the location with the lowest `priority` when none is the default. A shipping address outside the zone returns no options. Options priced in another currency than the cart are left out.
+
+A shipping option resource has the type `shipping-options` and the ID `{carrier_code}:{service_code}`. It carries `name`, `carrier_name`, `carrier_code`, `service_code`, `amount` (in cents), `currency`, `price_type`, `estimated_days` and `estimated_delivery`. The response lists in `meta.warnings` what kept options out: a failing carrier, a missing origin, a currency mismatch or an address outside the zone.
+
+The amounts of the list are for display. Choosing an option quotes the cart again and stores the price of that quote, and the payment session and the cart completion quote it once more. These requests answer with an error code when the shipping choice no longer holds:
+
+| Code | Status | When |
+|------|--------|------|
+| `shipping_method_required` | 422 | The cart needs shipping and has no shipping option |
+| `shipping_option_unavailable` | 422 | The option is not, or no longer, among the quotes of the cart |
+| `shipping_price_changed` | 422 | The quote rose since the option was chosen. Choose the option again to accept the new price |
+| `shipping_provider_unavailable` | 503 | The carrier of the option is failing. The response carries `Retry-After: 5` |
+
+A lower quote replaces the stored price without an error. Once the payment provider may have collected the payment, the cart keeps the price it was charged. The [Cart](/3.x/cart) page describes the rest of the checkout, and the [Storefront](/3.x/storefront) section documents the Store API.

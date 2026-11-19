@@ -1,0 +1,434 @@
+---
+title: Payment Methods
+description: The PaymentMethod model in Shopper, the zones where a method is offered, and how each method maps to a payment driver.
+---
+
+A payment method is a way customers pay at checkout, as the merchant sets it up: "Credit Card" processed by Stripe, "Bank Transfer" with the store's IBAN in its instructions, "Cash on Delivery" collected by the courier. Each method holds the texts customers read, the zones where it is offered and the payment driver that processes it.
+
+The method is the configuration merchants manage. The driver is the code that talks to the payment provider: [Payments](/3.x/payments) describes drivers, payment sessions, captures and refunds. This page covers the model, its availability per zone and how it maps to a driver.
+
+## Model
+
+The model is `Shopper\Core\Models\PaymentMethod`, which implements the `Shopper\Core\Models\Contracts\PaymentMethod` contract. It cannot be swapped through `config/shopper/models.php`; [Models You Cannot Swap](/3.x/models#models-you-cannot-swap) shows how to add a relation to it with `resolveRelationUsing()`.
+
+The model uses three traits. `HasPublicId` fills the `public_id` column with a ULID, the identifier the Store API exposes, as described in [Public IDs](/3.x/models#public-ids). `HasSlug` makes the slug you set unique, appending `-1`, `-2` and so on when it is taken, and adds a `findBySlug()` method. It does not build a slug from the title: the admin form copies the title into the slug, code has to set it. `HasZones` adds the `zones()` relation.
+
+## Database Schema
+
+Payment methods are stored in the `sh_payment_methods` table (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)). Their zones go through the pivot table of zones.
+
+### PaymentMethod Table
+
+The table has these columns:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `title` | string | no | - | Name customers see, such as "Credit Card" |
+| `slug` | string | yes | null | URL identifier, unique |
+| `logo` | string | yes | null | Not read by Shopper: the logo comes from the driver, see [Logo Handling](#logo-handling) |
+| `link_url` | string | yes | null | Website or documentation of the provider. The Store API does not return it |
+| `description` | text | yes | null | Shown to customers when they choose a payment method |
+| `instructions` | text | yes | null | Shown to customers after they place an order |
+| `is_enabled` | boolean | no | false | Whether carts can offer the method |
+| `driver` | string | yes | null | Code of the payment driver, such as `stripe`. `null` means `manual` |
+| `metadata` | jsonb | yes | null | Your own data. The model has no cast for it: write a JSON string and decode it when you read it |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+The `driver` column is added by the `shopper/payment` migrations. Orders, carts and payment transactions reference a method through their own `payment_method_id` column, as described in [Orders](#orders).
+
+## Contract
+
+The contract declares one relation, the zones where the method is offered:
+
+```php
+namespace Shopper\Core\Models\Contracts;
+
+use Illuminate\Database\Eloquent\Relations\MorphToMany;
+
+interface PaymentMethod
+{
+    public function zones(): MorphToMany;
+}
+```
+
+## Relationships
+
+A payment method relates to the zones where it is offered, and to the carts, orders and payment transactions that use it.
+
+### Zones
+
+A payment method is offered in the zones it is attached to, through the polymorphic pivot described in [Zones](/3.x/zones#pivot-table). When a cart asks for its payment methods, Shopper applies these rules:
+
+- A cart in a zone offers the enabled methods attached to that zone whose driver is configured. A method attached to no zone is not offered there.
+- A cart without a zone offers every enabled method whose driver is configured, attached to a zone or not.
+
+A cart gets a zone from the `X-Shopper-Zone` header or from the default zone of the Store API, as described in [Resolving a Zone](/3.x/zones#resolving-a-zone). The Cash on delivery method created by the Shopper seeders is attached to no zone, so carts in a zone do not offer it until you attach it. Moving a cart to another zone clears the payment method it had selected.
+
+```php
+$creditCard->zones;
+
+$creditCard->zones()->syncWithoutDetaching([$europe->id, $northAmerica->id]);
+
+$creditCard->zones()->detach($northAmerica->id);
+```
+
+The pivot table has no unique index, so `attach()` stores a second row when the method is already in the zone: use `sync()` or `syncWithoutDetaching()`. In the admin panel, the payment methods of a zone are picked in the zone form.
+
+### Orders
+
+Orders, carts and payment transactions each define a `paymentMethod()` relation. The checkout copies the method of the cart to the order it creates:
+
+```php
+$cart->paymentMethod;
+
+$order->paymentMethod;
+```
+
+The payment method defines no inverse relation. Query orders by their foreign key:
+
+```php
+use Shopper\Core\Models\Order;
+
+$orders = Order::query()
+    ->where('payment_method_id', $bankTransfer->id)
+    ->latest()
+    ->get();
+```
+
+The three foreign keys are nullable and set to `null` when the method is deleted, as described in [Deleting Payment Methods](#deleting-payment-methods).
+
+## Query Scopes
+
+The `enabled` scope keeps the methods whose `is_enabled` flag is set:
+
+```php
+use Shopper\Core\Models\PaymentMethod;
+
+$methods = PaymentMethod::query()->enabled()->get();
+```
+
+## Logo Handling
+
+A payment method has no logo of its own: `logo()` returns the logo of its driver. The Stripe driver returns the Stripe logo and the `manual` driver a cash on delivery icon, so a bank transfer and a cash on delivery method show the same icon. Without `shopper/payment` installed, `logo()` returns `null`.
+
+```php
+$creditCard->logo();
+```
+
+`PaymentProcessingService::getLogoUrl()` returns the same URL. The admin table and the `logo` attribute of the Store API both read it.
+
+`logo()` calls the resolver bound to `shopper.payment.logo` in the service container. To give some methods their own logo, bind your resolver in the `boot()` method of a service provider and fall back to the driver logo for the others:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Shopper\Core\Models\PaymentMethod;
+use Shopper\Payment\Facades\Payment;
+
+public function boot(): void
+{
+    $this->app->bind('shopper.payment.logo', fn () => fn (PaymentMethod $method): ?string => match ($method->slug) {
+        'bank-transfer' => asset('images/payments/bank-transfer.svg'),
+        'mobile-money' => asset('images/payments/mobile-money.svg'),
+        default => Payment::driver($method->driver ?? 'manual')->logo(),
+    });
+}
+```
+
+## Payment Drivers
+
+The `driver` column holds the code of the payment driver that processes the method. Drivers are registered on the payment manager, behind the `Shopper\Payment\Facades\Payment` facade. `shopper/payment` ships the `manual` driver, used when `driver` is `null`, for payments collected outside Shopper: cash on delivery, bank transfer or a check that the merchant marks as paid. The [Stripe driver](/3.x/payments/stripe) registers the `stripe` driver.
+
+```php
+use Shopper\Payment\Facades\Payment;
+
+Payment::availableDrivers();
+
+Payment::isConfigured('stripe');
+
+Payment::driver($creditCard->driver ?? 'manual')->name();
+```
+
+`availableDrivers()` returns the registered driver codes, such as `['manual', 'stripe']`. `isConfigured()` returns `false` for a driver that lacks its credentials, such as Stripe without its secret key and webhook secret, and for a code no driver is registered under. A cart offers a method only when its driver is configured, so an enabled method whose driver is not configured stays hidden from customers. The admin form lists the registered drivers and marks the ones that are not configured with a "Not configured" badge.
+
+For a provider Shopper has no driver for, such as a mobile money aggregator, register your own driver with `Payment::extend()` as described in [Custom Drivers](/3.x/payments#custom-drivers), then set its code in the `driver` column. Keep the driver registered while methods use it: the payment methods page of the admin panel fails to load when a method names a driver that is no longer registered.
+
+## Configuration
+
+Payment methods have no feature flag and no key in `config/shopper/models.php`. The settings of the payment package live in `config/shopper/payment.php`, described in [Payments](/3.x/payments). To hide the payment methods page from the settings screen, set `Items\PaymentSetting::class` to `false` in `config/shopper/settings.php`, as shown in [Settings](/3.x/configuration#settings).
+
+### Components
+
+The payment methods page of the admin panel is part of the settings components. To replace it with your own Livewire component, publish the settings component file:
+
+```bash
+php artisan shopper:component:publish setting
+```
+
+The command creates `config/shopper/components/setting.php`. This entry belongs to payment methods:
+
+```php title="config/shopper/components/setting.php"
+use Shopper\Livewire\Pages;
+
+return [
+    'pages' => [
+        'payment-methods' => Pages\Settings\PaymentMethods::class,
+    ],
+];
+```
+
+The [Configuration](/3.x/configuration#components) page explains how component overriding works.
+
+## Usage
+
+The examples below set up the payment methods of a store that sells in Europe and West Africa.
+
+### Creating Payment Methods
+
+Create payment methods with Eloquent and set `is_enabled`: the column defaults to `false`, and a disabled method is offered to no cart.
+
+#### Basic Payment Method
+
+A card payment processed by Stripe, offered in the European zone:
+
+```php
+use Shopper\Core\Models\PaymentMethod;
+use Shopper\Core\Models\Zone;
+
+$creditCard = PaymentMethod::query()->create([
+    'title' => 'Credit Card',
+    'slug' => 'credit-card',
+    'driver' => 'stripe',
+    'link_url' => 'https://stripe.com',
+    'description' => 'Pay securely with your credit or debit card.',
+    'instructions' => 'Your card is charged when your order is confirmed.',
+    'is_enabled' => true,
+]);
+
+$creditCard->zones()->sync([Zone::findBySlug('europe')->id]);
+```
+
+#### Cash on Delivery
+
+Offline methods use the `manual` driver. The merchant marks the order as paid once the courier has collected the money:
+
+```php
+$cod = PaymentMethod::query()->create([
+    'title' => 'Cash on Delivery',
+    'slug' => 'cash-on-delivery',
+    'driver' => 'manual',
+    'description' => 'Pay in cash when your order is delivered.',
+    'instructions' => 'Have the exact amount ready for the courier.',
+    'is_enabled' => true,
+]);
+```
+
+#### Bank Transfer
+
+The `instructions` text tells customers where to send the money after they place the order:
+
+```php
+$bankTransfer = PaymentMethod::query()->create([
+    'title' => 'Bank Transfer',
+    'slug' => 'bank-transfer',
+    'driver' => 'manual',
+    'description' => 'Pay by direct bank transfer.',
+    'instructions' => 'Transfer the order total to IBAN FR76 3000 6000 0112 3456 7890 189 and use your order number as the payment reference.',
+    'is_enabled' => true,
+]);
+```
+
+#### Zone-Scoped Payment Method
+
+A method attached to one zone is offered to the carts of that zone only. Mobile money for the West African market, collected manually:
+
+```php
+$mobileMoney = PaymentMethod::query()->create([
+    'title' => 'Mobile Money',
+    'slug' => 'mobile-money',
+    'driver' => 'manual',
+    'description' => 'Pay with Orange Money or MTN Mobile Money.',
+    'instructions' => 'Send the order total to +225 07 00 00 00 00 with your order number as the reference.',
+    'is_enabled' => true,
+]);
+
+$mobileMoney->zones()->sync([Zone::findBySlug('west-africa')->id]);
+```
+
+### Retrieving Payment Methods
+
+To list the enabled methods and to find one by slug:
+
+```php
+use Shopper\Core\Models\PaymentMethod;
+
+$methods = PaymentMethod::query()->enabled()->get();
+
+$creditCard = PaymentMethod::findBySlug('credit-card');
+```
+
+`findBySlug()` throws a `ModelNotFoundException` when no method has the slug. To get the methods a cart in a zone offers, with the rules described in [Zones](#zones), use the payment processing service:
+
+```php
+use Shopper\Payment\Services\PaymentProcessingService;
+
+$methods = resolve(PaymentProcessingService::class)->getMethodsForZone($europe);
+```
+
+The methods attached to no zone are offered only to carts without a zone:
+
+```php
+$unzoned = PaymentMethod::query()
+    ->enabled()
+    ->whereDoesntHave('zones')
+    ->get();
+```
+
+### Updating Payment Methods
+
+Update a method like any Eloquent model:
+
+```php
+$bankTransfer->update([
+    'instructions' => 'Transfer the order total to IBAN FR76 3000 6000 0112 3456 7890 189 within 7 days.',
+]);
+
+$cod->update(['is_enabled' => false]);
+```
+
+A disabled method is no longer offered and can no longer be selected for a cart. The orders already placed with it keep it.
+
+### Deleting Payment Methods
+
+Deleting a method sets `payment_method_id` to `null` on its orders, carts and payment transactions.
+
+<Warning>
+Shopper captures, refunds and records provider webhooks through the payment method of the order. Once the method is deleted, its orders can no longer be captured or refunded from Shopper. Disable a method that customers have used instead of deleting it.
+</Warning>
+
+### Working with Orders
+
+The order keeps the method the customer selected on the cart. Show its title and instructions on the order confirmation page or email. The relation is `null` when the method was deleted:
+
+```php
+$order->paymentMethod?->title;
+
+$order->paymentMethod?->instructions;
+```
+
+### Storefront Example
+
+A storefront built with Blade, without the Store API, reads and sets the payment method of a cart with Shopper's PHP classes.
+
+#### Checkout Payment Selection
+
+A Blade storefront lists the methods of the session cart with the same rules as the Store API, then stores the choice with the cart manager. `CartManager::setPaymentMethod()` does not check the zone, so the controller checks that the chosen method is in the list:
+
+```php title="app/Http/Controllers/CheckoutPaymentController.php"
+namespace App\Http\Controllers;
+
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
+use Illuminate\Validation\ValidationException;
+use Illuminate\View\View;
+use Shopper\Cart\CartManager;
+use Shopper\Cart\Facades\Cart;
+use Shopper\Cart\Models\Cart as ShopperCart;
+use Shopper\Core\Models\PaymentMethod;
+use Shopper\Payment\Facades\Payment;
+use Shopper\Payment\Services\PaymentProcessingService;
+
+class CheckoutPaymentController extends Controller
+{
+    public function __construct(
+        private readonly PaymentProcessingService $payments,
+        private readonly CartManager $carts,
+    ) {}
+
+    public function edit(): View
+    {
+        $cart = Cart::current() ?? abort(404);
+
+        return view('checkout.payment', [
+            'cart' => $cart,
+            'paymentMethods' => $this->availableMethods($cart),
+        ]);
+    }
+
+    public function update(Request $request): RedirectResponse
+    {
+        $cart = Cart::current() ?? abort(404);
+
+        $method = $this->availableMethods($cart)->firstWhere('public_id', $request->input('payment_method'));
+
+        if (! $method) {
+            throw ValidationException::withMessages([
+                'payment_method' => 'This payment method is not available for your order.',
+            ]);
+        }
+
+        $this->carts->setPaymentMethod($cart, $method->id);
+
+        return to_route('checkout.review');
+    }
+
+    private function availableMethods(ShopperCart $cart): Collection
+    {
+        if ($cart->zone) {
+            return $this->payments->getMethodsForZone($cart->zone);
+        }
+
+        return PaymentMethod::query()
+            ->enabled()
+            ->get()
+            ->filter(fn (PaymentMethod $method): bool => Payment::isConfigured($method->driver ?? 'manual'))
+            ->values();
+    }
+}
+```
+
+### Use Cases
+
+Common setups and how to build them:
+
+| Scenario | Implementation |
+|----------|----------------|
+| Card payments | A method with the `stripe` driver from the [Stripe driver](/3.x/payments/stripe) |
+| Offline payments | A method with the `manual` driver and the payment steps in `instructions` |
+| Methods per market | Attach each method to the zones where it is sold |
+| A provider Shopper has no driver for | Register a [custom driver](/3.x/payments#custom-drivers) and set its code in `driver` |
+| One logo per method | Bind a resolver to `shopper.payment.logo`, see [Logo Handling](#logo-handling) |
+| Retiring a method | Disable it, keep it for the orders that use it |
+
+## Events
+
+Shopper dispatches no payment method event and registers no observer on the model. Listen to the Eloquent events of `PaymentMethod`, such as `saved` and `deleted`, for your own code. The events of the payment lifecycle, such as `OrderPaid` and `PaymentFailed`, are listed in [Payment Events](/3.x/events#payment-events).
+
+## Permissions
+
+The payment methods page checks one permission, `system.settings`, when it opens and on every action: creating, editing, enabling or disabling and deleting a method. The [Access Control](/3.x/acl#system-permissions) page lists the system permissions.
+
+## In the Admin
+
+Merchants manage payment methods under Settings, in the Selling group, as Payment methods (`/cpanel/setting/payment-methods`). The table shows the logo, title, driver (gray for `manual`, green for a configured driver, orange otherwise), the live or test mode of the driver, the zones, a status toggle and the date of the last change. The form asks for the title (labeled "Provider"), the driver, a provider documentation URL, the description and the instructions. A new method starts disabled: turn on its status toggle in the table. Zones are not set in this form: the zone form picks the payment methods of each zone. The setup guide of the dashboard marks its payment step as done once an enabled method exists. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API lists the methods a cart offers and sets the method of a cart:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /store/carts/{cartId}/payment-methods` | The methods the cart offers, with the rules described in [Zones](#zones) |
+| `POST /store/carts/{cartId}/payment-method` | Sets the method of the cart, by public ID |
+
+A payment method resource has the type `payment-methods`, its public ID as `id`, and carries `title`, `slug`, `description`, `instructions`, `driver` and `logo`. To select a method, send its ID as `payment_method_id`:
+
+```bash
+curl -X POST "https://example.com/store/carts/01JD8Z3K4M5N6P7Q8R9S0T1V2W/payment-method" \
+  -H "Content-Type: application/json" \
+  -d '{"payment_method_id": "01JD9A2B3C4D5E6F7G8H9J0K1M"}'
+```
+
+The response is the cart. An enabled method the cart does not offer returns a 422 response with the `payment_method_unavailable` code. Switching methods releases the payment session opened for the previous one, and is refused once that session is paid. Carts and orders accept `include=paymentMethod`. The next step of the checkout opens a payment session for the selected method, as described in [Payments](/3.x/payments). The [Storefront](/3.x/storefront) section documents the Store API.

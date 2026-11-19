@@ -21,14 +21,33 @@ The package pulls in `shopper/core`, `shopper/cart`, `shopper/payment`, `shopper
 
 ## Prepare Your User Model
 
-The admin panel signs users in with your application's `User` model. Add the `InteractsWithShopper` trait and implement the `ShopperUser` interface:
+The admin panel signs users in with your application's `User` model. Add the `InteractsWithShopper` trait, implement the `ShopperUser` interface and replace the fillable columns with the ones Shopper writes:
 
 ```php title="app/Models/User.php"
+use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
 use Shopper\Models\Contracts\ShopperUser;
 use Shopper\Traits\InteractsWithShopper;
 
+#[Fillable([
+    'first_name',
+    'last_name',
+    'email',
+    'password',
+    'phone_number',
+    'gender',
+    'birth_date',
+    'opt_in',
+    'email_verified_at',
+    'avatar_type',
+    'avatar_location',
+    'last_login_at',
+    'last_login_ip',
+    'store_two_factor_secret',
+    'store_two_factor_recovery_codes',
+])]
 #[Hidden([
     'password',
     'remember_token',
@@ -38,10 +57,13 @@ use Shopper\Traits\InteractsWithShopper;
 class User extends Authenticatable implements ShopperUser
 {
     use InteractsWithShopper;
+    use Notifiable;
 }
 ```
 
-The trait gives the model roles and permissions, orders, addresses, discounts, a profile photo and a public ID, and makes users searchable with Laravel Scout. Scout's default `collection` driver searches the database, so it needs no setup. The two extra hidden attributes hold the two-factor authentication secret and recovery codes, which must never appear in a JSON response. A model created before Laravel 13 lists its hidden attributes in a `$hidden` property instead: add the two names to that array.
+The trait gives the model roles and permissions, orders, addresses, discounts, a profile photo and a public ID, and makes users searchable with Laravel Scout. Scout's default `collection` driver searches the database, so it needs no setup.
+
+Shopper creates and updates users with mass assignment, so the fillable list replaces Laravel's default `name`, `email` and `password`: a Shopper migration renames the `name` column to `last_name` and adds `first_name`. The [Customers](/3.x/customers#user-model-integration) page explains each column. `Notifiable` sends the welcome and password reset emails. The two extra hidden attributes hold the two-factor authentication secret and recovery codes, which must never appear in a JSON response. A model created before Laravel 13 lists these columns in the `$fillable` and `$hidden` properties instead.
 
 Two-factor authentication and passkeys need more contracts and traits on the model, described on the [Two-Factor Authentication](/3.x/two-factor) page.
 
@@ -102,9 +124,7 @@ On the first login, a setup wizard asks for the store details in three steps:
 2. Address: the street address, postal code, state, city and phone number of the store.
 3. Social Links: the store's social media pages. This step is optional.
 
-<Frame>
-  ![First step of the setup wizard, with the store name, email, country and currencies](/images/v3/initialization-step-1.png)
-</Frame>
+<Screenshot src="/images/v3/initialization-step-1.png" alt="First step of the setup wizard, with the store name, email, country and currencies" />
 
 The admin panel opens once the wizard is saved. Until the store has an email and a street address, every admin page sends you back to the wizard, as described in [Access Requirements](/3.x/dashboard#access-requirements).
 
@@ -128,16 +148,16 @@ In development, run `php artisan schedule:work` in a terminal instead. The sched
 | `shopper:webhooks:redispatch` | Every 15 minutes | Requeues the webhook deliveries that never reached the queue or were lost by a worker that stopped |
 | `model:prune` | Daily | Deletes successful webhook deliveries after 7 days and the other deliveries after 90 days, then the webhook events older than 90 days that have no delivery left |
 | `shopper:prune-carts` | Daily | Deletes the carts abandoned for more than 30 days, set by `prune_after_days` in `config/shopper/cart.php` |
-| `shopper:payments:reconcile --pull` | Every 15 minutes | Applies the payment provider events that arrived before their order existed, and queues a check of pending payments with the provider. Set `PAYMENT_RECONCILE_SCHEDULE=false` to turn it off |
+| `shopper:payments:reconcile --pull` | Every 15 minutes | Applies the payment provider events that arrived before their order existed, queues a check of pending payments with the provider, and settles the refunds still pending with the drivers that can look them up. Set `PAYMENT_RECONCILE_SCHEDULE=false` to turn it off |
 | `model:prune` | Daily | Deletes the payment provider events older than 90 days, except the authorizations and captures never applied to an order nor marked orphaned |
-| `shopper:shipments:sync-tracking` | Every 30 minutes | Queues a tracking refresh for every undelivered shipment whose carrier supports tracking. Set `SHIPPING_TRACKING_SYNC=false` to turn it off |
+| `shopper:shipments:sync-tracking` | Every 30 minutes | Queues a tracking refresh for every shipment with a tracking number that is neither delivered nor returned, when its carrier supports tracking and sends no tracking webhooks. Set `SHIPPING_TRACKING_SYNC=false` to turn it off |
 
 ### Queue Worker
 
-Shopper queues the work that should not slow down a request: order notifications, product imports, product image downloads, collection syncs, discount assignments, stock restores and webhook deliveries. Webhooks go to their own `webhooks` queue, so the worker listens to it as well as the default queue:
+Shopper queues the work that should not slow down a request: order notifications, product imports, product image downloads, collection syncs, discount assignments, stock restores and webhook deliveries. Webhooks go to their own `webhooks` queue and the admin notifications to a `notifications` queue, so the worker listens to both as well as the default queue:
 
 ```bash
-php artisan queue:work --queue=default,webhooks
+php artisan queue:work --queue=default,webhooks,notifications
 ```
 
 Change the name of the webhook queue with `SHOPPER_WEBHOOKS_QUEUE`. In production, keep the worker running with Supervisor or Laravel Horizon, as the [Laravel queue documentation](https://laravel.com/docs/queues#supervisor-configuration) explains.

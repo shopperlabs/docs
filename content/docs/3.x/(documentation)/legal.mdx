@@ -1,0 +1,254 @@
+---
+title: Legal
+description: The Legal model behind a store's refund, privacy, terms and shipping pages, enabling them, and reading them in Blade or through the Store API.
+---
+
+Customers expect a store to publish its terms of use, its privacy policy, and how refunds and shipping work. Shopper keeps these texts as legal pages: each one has a title, a slug and rich text content that the merchant writes in the admin panel and enables when it is ready.
+
+Shopper does not render legal pages or register routes for them on your storefront. Your application reads the enabled pages and displays them, from Blade with the model or from any frontend through the Store API.
+
+## Model
+
+Legal pages use the `Shopper\Core\Models\Legal` model. It has no key in `config/shopper/models.php`, so it is always loaded with its own class, as explained in [Models You Cannot Swap](/3.x/models#models-you-cannot-swap). The `Shopper\Core\Models\Contracts\Legal` interface it implements declares no method.
+
+The model uses the `HasSlug` trait, described in [Slugs](#slugs), and casts `is_enabled` to a boolean.
+
+### Database Schema
+
+Legal pages are stored in the `sh_legals` table (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)):
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `title` | string | no | - | Page title |
+| `slug` | string | yes | null | URL identifier, unique |
+| `content` | longtext | yes | null | Page content, HTML from the rich text editor |
+| `is_enabled` | boolean | no | false | Whether the page is published |
+| `created_at` | timestamp | yes | null | Creation date |
+| `updated_at` | timestamp | yes | null | Last update date |
+
+The table has no unique index on `title`. The admin form refuses a title that another page already uses.
+
+## Default Legal Pages
+
+The installer seeds four legal pages, through `Shopper\Core\Database\Seeders\LegalsPageTableSeeder`:
+
+| Slug | Title |
+|------|-------|
+| `refund` | Refund policy |
+| `privacy` | Privacy policy |
+| `terms` | Terms of use |
+| `shipping` | Shipping policy |
+
+The titles are translated in the application locale at the time the installer runs. The four pages start enabled and without content: write their content before you link them from the storefront, or disable them until they are ready.
+
+## Slugs
+
+The slug identifies a page in your routes and in the Store API. When you assign a slug, `HasSlug` turns it into a URL-safe value with `Str::slug()` and appends `-1`, `-2` and so on when another page already uses it. The trait does not build a slug from the title, so pass one when you create a page.
+
+`findBySlug()` returns the page with that slug, enabled or not, and throws a `ModelNotFoundException` when there is none:
+
+```php
+use Shopper\Core\Models\Legal;
+
+$privacy = Legal::findBySlug('privacy');
+```
+
+The admin form keeps the slug when a merchant saves a page, so renaming "Terms of use" to "Terms and conditions" leaves the URL of the page unchanged.
+
+## Enabling a Legal Page
+
+The `is_enabled` column decides whether a page is published. The `enabled` scope keeps the published pages, for a list of links in the footer:
+
+```php
+use Shopper\Core\Models\Legal;
+
+$legalPages = Legal::query()
+    ->enabled()
+    ->orderBy('title')
+    ->get(['title', 'slug']);
+```
+
+A disabled page stays in the admin panel, and the Store API leaves it out. To publish a page from code, update the column:
+
+```php
+use Shopper\Core\Models\Legal;
+
+Legal::findBySlug('shipping')->update(['is_enabled' => true]);
+```
+
+## Adding a Legal Page
+
+The admin panel edits the existing pages and has no button to create one. Add a page, such as a cookie policy, from a seeder:
+
+```php title="database/seeders/CookiePolicySeeder.php"
+<?php
+
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use Shopper\Core\Models\Legal;
+
+class CookiePolicySeeder extends Seeder
+{
+    public function run(): void
+    {
+        Legal::query()->firstOrCreate(
+            ['slug' => 'cookies'],
+            ['title' => 'Cookie policy', 'is_enabled' => false],
+        );
+    }
+}
+```
+
+The page appears as a new tab of the Legal settings page. The admin panel reads the label of that tab and the heading of its form from the translation key `shopper::pages/settings/global.legal.{slug}`. Add the key to your application's translations so the tab reads "Cookie policy":
+
+```php title="lang/vendor/shopper/en/pages/settings/global.php"
+<?php
+
+return [
+    'legal' => [
+        'cookies' => 'Cookie policy',
+    ],
+];
+```
+
+Laravel merges this file with the translations of the package, so the other keys keep their values.
+
+## Retrieve Data
+
+A storefront route loads an enabled page by its slug. Querying with the `enabled` scope and `firstOrFail()` answers with a 404 for a disabled page or an unknown slug:
+
+```php title="app/Http/Controllers/LegalController.php"
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\View\View;
+use Shopper\Core\Models\Legal;
+
+class LegalController extends Controller
+{
+    public function show(string $slug): View
+    {
+        $legal = Legal::query()
+            ->enabled()
+            ->where('slug', $slug)
+            ->firstOrFail();
+
+        return view('legal.show', ['legal' => $legal]);
+    }
+}
+```
+
+### Routes
+
+One route serves every legal page. The controller already rejects the slugs that are not published, so the route needs no constraint:
+
+```php title="routes/web.php"
+use App\Http\Controllers\LegalController;
+use Illuminate\Support\Facades\Route;
+
+Route::get('/legal/{slug}', [LegalController::class, 'show'])->name('legal.show');
+```
+
+Link to a page by its slug, for example `route('legal.show', 'privacy')` for the privacy policy.
+
+### Views
+
+The content is the HTML the merchant wrote in the rich text editor. Sanitize it before you print it unescaped, for example with the `sanitizeHtml()` string method that Filament registers:
+
+```blade title="resources/views/legal/show.blade.php"
+<x-layouts.app :title="$legal->title">
+    <article class="prose">
+        <h1>{{ $legal->title }}</h1>
+        <p>Last updated on {{ $legal->updated_at->toFormattedDateString() }}</p>
+
+        {!! str($legal->content)->sanitizeHtml() !!}
+    </article>
+</x-layouts.app>
+```
+
+The footer links to the enabled pages loaded in [Enabling a Legal Page](#enabling-a-legal-page):
+
+```blade title="resources/views/components/footer.blade.php"
+<nav>
+    @foreach ($legalPages as $page)
+        <a href="{{ route('legal.show', $page->slug) }}">{{ $page->title }}</a>
+    @endforeach
+</nav>
+```
+
+## Events
+
+Shopper dispatches no legal page event of its own. Listen to the Eloquent model events of `Shopper\Core\Models\Legal` instead, for example to clear a cached footer when a merchant saves a page:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Illuminate\Support\Facades\Cache;
+use Shopper\Core\Models\Legal;
+
+public function boot(): void
+{
+    Legal::saved(fn () => Cache::forget('storefront.footer'));
+}
+```
+
+## Permissions
+
+The Legal settings page checks the `system.settings` permission when it opens, and the form checks it again when a merchant saves a page. The [System Permissions](/3.x/acl#system-permissions) section lists what `system.settings` gives access to.
+
+## In the Admin
+
+Merchants edit legal pages under **Settings**, **Legal**, at `/cpanel/setting/legal`. Each page has its own tab, with its title, an **Enabled** toggle and a rich text editor for the content. The title and the content are required, and saving a page keeps its slug. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API exposes the enabled legal pages under the `store` prefix, set by `SHOPPER_API_PREFIX`, without authentication:
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /store/legals` | The enabled legal pages, paginated. Filter with `filter[title]` (partial match), sort with `sort=title` or `sort=updated_at` |
+| `GET /store/legals/{slug}` | One enabled legal page, or a 404 for a disabled page or an unknown slug |
+
+A legal page resource has the type `legals` and carries `title`, `slug`, `content` (the stored HTML) and `updated_at` (ISO 8601). Legal pages have no public ID, so the resource `id` is the primary key. The endpoints take no `include`:
+
+```json
+{
+    "data": {
+        "id": "2",
+        "type": "legals",
+        "attributes": {
+            "title": "Privacy policy",
+            "slug": "privacy",
+            "content": "<h2>What we collect</h2><p>We collect your name, email and shipping address to deliver your orders.</p>",
+            "updated_at": "2026-03-02T10:15:00+00:00"
+        }
+    }
+}
+```
+
+The filters and sorts come from the `resources.legal` entry of `config/shopper/api.php`:
+
+```php title="config/shopper/api.php"
+'resources' => [
+    'legal' => [
+        'filters' => ['title' => 'partial'],
+        'sorts' => ['title', 'updated_at'],
+        'includes' => [],
+    ],
+],
+```
+
+The JavaScript SDK wraps both endpoints:
+
+```ts
+import Shopper from '@shopperlabs/shopper-sdk'
+
+const sdk = new Shopper({ baseUrl: 'https://example.com' })
+
+const { data: legalPages } = await sdk.store.legal.list({ sort: ['title'] })
+
+const privacy = await sdk.store.legal.retrieve('privacy')
+```
+
+The [Storefront](/3.x/storefront) section documents the Store API.

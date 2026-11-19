@@ -1,0 +1,217 @@
+---
+title: Themes
+description: The color themes of the admin panel, the CSS tokens a theme sets, and how to register a theme of your own from your application or a package.
+---
+
+The admin panel ships with three color themes: Default (zinc grays and a blue accent), Midnight (a navy top bar, slate grays and a sky blue accent) and Evergreen (stone grays and a sage green accent). A theme changes the colors of the admin panel: the layout and the components stay the same. A merchant picks one on the **Appearance** page of the settings, and it applies to every user of the admin panel.
+
+Dark mode is separate from the theme. Each user switches between light, dark and system in the account menu, and the choice is kept in their browser. Each built-in theme has a dark variant.
+
+Themes only cover the admin panel. Your storefront has its own design, built by your application.
+
+## Configuration
+
+`config/shopper/themes.php` registers the themes the Appearance page offers and names the default one:
+
+```php title="config/shopper/themes.php"
+return [
+
+    'default' => 'default',
+
+    'registered' => [
+        'default' => [
+            'name' => 'Default',
+            'author' => 'Shopper',
+            'has_dark' => true,
+        ],
+        'midnight' => [
+            'name' => 'Midnight',
+            'author' => 'Shopper',
+            'has_dark' => true,
+        ],
+        'evergreen' => [
+            'name' => 'Evergreen',
+            'author' => 'Shopper',
+            'has_dark' => true,
+        ],
+    ],
+
+];
+```
+
+`default` is the theme the admin panel uses until a merchant saves one on the Appearance page. When it names a theme that is not registered, the first registered theme is used.
+
+Each key of `registered` is the theme ID, and its array accepts these keys:
+
+| Key | Type | Default | Description |
+|-----|------|---------|-------------|
+| `name` | string | The ID in headline case | Name shown on the Appearance page |
+| `author` | string | `Shopper` | Shown after the name, as in "Default by Shopper" |
+| `has_dark` | bool | `true` | Whether the theme defines dark mode colors. The admin panel shows and applies the theme the same way either way |
+| `css` | string | `null` | URL of a stylesheet the admin panel loads while the theme is active, see [Creating a Theme](#creating-a-theme) |
+
+## The Active Theme
+
+The Appearance page saves the ID of the chosen theme in the `admin_theme` setting, described on the [Settings](/3.x/settings#setting-keys) page. Users who hold the `system.settings` permission can open it, as listed in [System Permissions](/3.x/acl#system-permissions). Clicking a theme previews it at once, and the Save button applies it.
+
+`Shopper\Theme\ThemeManager` holds the registered themes. Shopper binds it as a singleton and fills it from `config('shopper.themes.registered')`. Resolve it to read the active theme:
+
+```php
+use Shopper\Theme\ThemeManager;
+
+$theme = resolve(ThemeManager::class)->active();
+```
+
+`active()` returns the theme saved in `admin_theme`, or the default theme when the setting is empty or names a theme that is no longer registered. Removing a theme from the configuration therefore never leaves the admin panel without one.
+
+| Method | Returns |
+|--------|---------|
+| `active()` | The theme in use |
+| `default()` | The theme named in `config('shopper.themes.default')` |
+| `all()` | A collection of every registered theme |
+| `find(string $id)` | The theme with this ID, or `null` |
+| `has(string $id)` | Whether a theme with this ID is registered |
+| `register(Theme $theme)` | Adds a theme, or replaces the one with the same ID |
+| `registerMany(array $themes)` | Adds themes from an array shaped like `registered` |
+
+Each theme is a `Shopper\Theme\Theme` object with the `id`, `name`, `author`, `hasDark` and `css` properties.
+
+## How a Theme Works
+
+The admin layout writes the ID of the active theme on the `<html>` element, as in `<html data-theme="midnight">`. A theme is a block of CSS custom properties scoped to `[data-theme='midnight']`, and every color of the admin panel reads one of these properties. The default theme declares its values on `:root` too, so a property that another theme leaves out keeps its default value.
+
+| Properties | Colors |
+|------------|--------|
+| `--theme-sh-header`, `--theme-sh-header-border`, `--theme-sh-header-fg`, `--theme-sh-header-fg-muted`, `--theme-sh-header-hover` | Top bar: background, bottom border, text, secondary text, hovered items |
+| `--theme-sh-body` | Page background |
+| `--theme-sh-sidebar`, `--theme-sh-sidebar-hover`, `--theme-sh-sidebar-active`, `--theme-sh-settings-sidebar-hover` | Sidebar background, hovered and active items, hovered items of the settings menu. The last two fall back to `--theme-sh-sidebar-hover` |
+| `--theme-sh-surface`, `--theme-sh-card`, `--theme-sh-table-header` | Panels, cards and table headers |
+| `--theme-sh-muted`, `--theme-sh-muted-strong`, `--theme-sh-skeleton` | Light fills, stronger fills, loading placeholders |
+| `--theme-sh-border` | Borders |
+| `--theme-sh-fg`, `--theme-sh-fg-secondary`, `--theme-sh-fg-muted` | Text, secondary text, muted text |
+| `--theme-sh-accent`, `--theme-sh-accent-fg` | Accent color and the text on it. The default theme sets them to the primary color |
+| `--primary-50` to `--primary-950`, `--color-primary-50` to `--color-primary-950` | Primary color of buttons, links and focus rings. The built-in themes set both ramps to the same values |
+| `--gray-50` to `--gray-950` | Grays of the Filament components: form fields, tables, modals |
+
+Dark mode adds the `dark` class to `<html>`. The dark colors of a theme go in a `.dark[data-theme='id']` block. A theme that changes the page, sidebar or card colors must also set them in that block: otherwise its light values stay in place in dark mode, because the theme block takes precedence over the dark colors of the default theme.
+
+## Creating a Theme
+
+A theme of your own is a stylesheet that sets these properties, registered with its `css` key. The admin panel adds the stylesheet after its own, on the pages where the theme is active. Its stylesheet is compiled with Tailwind CSS and only holds the color variables it uses, so write your colors as literal values rather than `var(--color-orange-500)`.
+
+This Sunset theme gives the top bar a dark brown, the primary color an orange, and the grays a warm stone tint:
+
+```css title="public/css/admin-themes/sunset.css"
+[data-theme='sunset'] {
+  --primary-50: #fff7ed;
+  --primary-100: #ffedd5;
+  --primary-200: #fed7aa;
+  --primary-300: #fdba74;
+  --primary-400: #fb923c;
+  --primary-500: #f97316;
+  --primary-600: #ea580c;
+  --primary-700: #c2410c;
+  --primary-800: #9a3412;
+  --primary-900: #7c2d12;
+  --primary-950: #431407;
+
+  --color-primary-50: #fff7ed;
+  --color-primary-100: #ffedd5;
+  --color-primary-200: #fed7aa;
+  --color-primary-300: #fdba74;
+  --color-primary-400: #fb923c;
+  --color-primary-500: #f97316;
+  --color-primary-600: #ea580c;
+  --color-primary-700: #c2410c;
+  --color-primary-800: #9a3412;
+  --color-primary-900: #7c2d12;
+  --color-primary-950: #431407;
+
+  --theme-sh-header: #431407;
+  --theme-sh-header-fg: #fafaf9;
+  --theme-sh-header-fg-muted: #fdba74;
+  --theme-sh-header-hover: #7c2d12;
+
+  --theme-sh-body: #fafaf9;
+  --theme-sh-sidebar: #f5f5f4;
+  --theme-sh-sidebar-hover: #e7e5e4;
+  --theme-sh-border: #e7e5e4;
+  --theme-sh-card: #f5f5f4;
+  --theme-sh-table-header: #f5f5f4;
+
+  --gray-50: #fafaf9;
+  --gray-100: #f5f5f4;
+  --gray-200: #e7e5e4;
+  --gray-300: #d6d3d1;
+  --gray-400: #a8a29e;
+  --gray-500: #78716c;
+  --gray-600: #57534e;
+  --gray-700: #44403c;
+  --gray-800: #292524;
+  --gray-900: #1c1917;
+  --gray-950: #0c0a09;
+}
+
+.dark[data-theme='sunset'] {
+  --theme-sh-body: #0c0a09;
+  --theme-sh-sidebar: #0c0a09;
+  --theme-sh-sidebar-hover: #1c1917;
+  --theme-sh-border: #292524;
+  --theme-sh-card: #0c0a09;
+  --theme-sh-table-header: #0c0a09;
+}
+```
+
+The theme leaves out the text, surface and muted colors, so it keeps those of the default theme, in light and dark mode. The accent follows the new primary color.
+
+Register the theme with the path of the stylesheet, as a new entry of the `registered` array after the built-in themes:
+
+```php title="config/shopper/themes.php"
+'sunset' => [
+    'name' => 'Sunset',
+    'author' => 'Northwind Apparel',
+    'has_dark' => true,
+    'css' => '/css/admin-themes/sunset.css',
+],
+```
+
+Sunset now shows on the Appearance page. Because its stylesheet is only loaded while it is the active theme, its card and its preview on that page do not show its colors until you save it and reload the page. Set `'default' => 'sunset'` to use it before anyone picks a theme.
+
+## Registering a Theme from a Package
+
+A package registers its themes at runtime, in the `boot` method of its service provider, with an absolute URL or the public path of its published stylesheet:
+
+```php title="src/ThemesServiceProvider.php"
+namespace Northwind\AdminThemes;
+
+use Illuminate\Support\ServiceProvider;
+use Shopper\Theme\Theme;
+use Shopper\Theme\ThemeManager;
+
+class ThemesServiceProvider extends ServiceProvider
+{
+    public function boot(): void
+    {
+        $this->publishes([
+            __DIR__ . '/../resources/css' => public_path('vendor/northwind-themes'),
+        ], 'northwind-themes');
+
+        resolve(ThemeManager::class)->register(new Theme(
+            id: 'sunset',
+            name: 'Sunset',
+            author: 'Northwind',
+            css: '/vendor/northwind-themes/sunset.css',
+        ));
+    }
+}
+```
+
+`register()` replaces a theme with the same ID, so a package can also restyle `midnight` or `evergreen` this way.
+
+## In the Admin
+
+Merchants choose the theme under Settings, Appearance: a card per registered theme, with a preview of the top bar, the sidebar and the page in the theme colors, its name and its author. The [User Guide](/3.x/user-guide) walks through the settings screens.
+
+## From a Storefront
+
+Admin themes have no effect on a storefront, and the Store API does not expose the `admin_theme` setting. The [Storefront](/3.x/storefront) page covers what the Store API returns.

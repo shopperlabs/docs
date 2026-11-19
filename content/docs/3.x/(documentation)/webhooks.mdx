@@ -1,0 +1,522 @@
+---
+title: Webhooks
+description: Signed HTTP requests Shopper sends to external systems on order, shipment, product, customer and checkout events, with retries.
+---
+
+Outgoing webhooks send an HTTP request to an external system when something happens in your store: an order is paid, a package is delivered, a product changes. An ERP, a warehouse, a marketing tool or another Laravel application receives the event without access to your database or your code. Inside your own application, listen to the [events](/3.x/events) instead: a listener runs in your process and receives the models themselves.
+
+This page covers the webhooks your store sends. The webhooks a payment provider or a carrier sends to your store are covered on the [Payments](/3.x/payments#webhooks) and [Carriers](/3.x/carriers) pages.
+
+A webhook subscription is an HTTPS URL, the events it listens to and a signing secret. When a subscribed event fires, Shopper builds the payload once, stores it, and queues one delivery per subscription on the `webhooks` queue. A queued job signs each delivery, posts it, and retries it when the endpoint fails. Without a worker on that queue nothing is sent, see [Queue Worker](/3.x/installation#queue-worker).
+
+The payload is built during the request that fired the event, after its database transaction commits (see [Dispatched After Commit](/3.x/events#dispatched-after-commit)). An error while preparing webhooks never breaks that request: Shopper logs it as `Webhook fan-out failed.` and the order or the product is saved as usual.
+
+## Available Events
+
+A subscription picks events by their public name, the string the receiver gets in the `event` field. Shopper registers fourteen, listed by the `Shopper\Core\Enum\WebhookEventType` enum:
+
+| Name | Event class | Sent when | Data |
+|------|-------------|-----------|------|
+| `order.created` | `OrderCreated` | An order is created, at checkout or by your code | [Order](#order-data) |
+| `order.paid` | `OrderPaid` | The payment status of the order becomes Paid | [Order](#order-data) |
+| `order.cancelled` | `OrderCancelled` | The order is cancelled | [Order](#order-data) |
+| `order.shipped` | `OrderShipped` | The shipping status of the order becomes Shipped | [Order](#order-data) |
+| `order.completed` | `OrderCompleted` | The order moves to Completed | [Order](#order-data) |
+| `shipment.created` | `OrderShipmentCreated` | A package is created for the order | [Shipment](#shipment-data) |
+| `shipment.delivered` | `OrderShipmentDelivered` | A package reaches Delivered | [Shipment](#shipment-data) |
+| `shipment.delivery_failed` | `OrderShipmentDeliveryFailed` | A package reaches Delivery failed | [Shipment](#shipment-data) |
+| `shipment.returned` | `OrderShipmentReturned` | A package reaches Returned | [Shipment](#shipment-data) |
+| `product.created` | `ProductCreated` | A product is created in the admin panel or by a CSV import | [Product](#product-data) |
+| `product.updated` | `ProductUpdated` | The main product form is saved in the admin panel | [Product](#product-data) |
+| `product.deleted` | `ProductDeleted` | A product is deleted from the admin panel | [Product](#product-data) |
+| `customer.registered` | `CustomerRegistered` | A customer is created in the admin panel or signs up through the Store API | [Customer](#customer-data) |
+| `cart.completed` | `CartCompleted` | The checkout turns a cart into an order | [Order](#order-data) |
+
+The [Events](/3.x/events#all-events-reference) page gives the namespace of each class and the exact moments it fires. `product.updated` only follows the main product form: saving the pricing, inventory, media or SEO of a product sends nothing, as [Product Events](/3.x/events#product-events) explains.
+
+The first thirteen names come from the `events` key of `config/shopper/webhooks.php`. The `shopper/cart` package registers `cart.completed` itself, so the name exists only when that package is installed. Its data is the order the cart became. Your own events join the list through [Registering Custom Events](#registering-custom-events).
+
+## Payload
+
+Shopper sends a `POST` request with a JSON body and these headers:
+
+| Header | Value |
+|--------|-------|
+| `Content-Type` | `application/json` |
+| `X-Shopper-Event` | The event name, such as `order.paid` |
+| `X-Shopper-Event-Id` | The public ID of the event, the same for every subscription and every attempt |
+| `X-Shopper-Delivery-Id` | The public ID of the delivery to this subscription |
+| `X-Shopper-Signature` | The signature of the body, see [Signatures](#signatures) |
+
+The body wraps the data of the resource in an envelope. An `order.paid` request looks like this:
+
+```json
+{
+    "id": "01JZ9C3M8R2T6V4X7B1N5Q0WKD",
+    "event": "order.paid",
+    "created_at": "2026-11-17T14:32:08+00:00",
+    "attempt": 1,
+    "resource": {
+        "type": "order",
+        "id": "01JZ8Q4V6S3W9D2M7K5T1B8XNC"
+    },
+    "data": {
+        "id": "01JZ8Q4V6S3W9D2M7K5T1B8XNC",
+        "number": "ORD-20261117-000042",
+        "status": "new",
+        "payment_status": "paid",
+        "shipping_status": "unfulfilled",
+        "price_amount": 6498,
+        "tax_amount": 1000,
+        "shipping_amount": 500,
+        "currency_code": "USD",
+        "email": "jane@example.com",
+        "created_at": "2026-11-17T14:30:51+00:00"
+    }
+}
+```
+
+| Field | Description |
+|-------|-------------|
+| `id` | Public ID of the event, a ULID. Store it to skip an event you already processed |
+| `event` | Event name |
+| `created_at` | When the event fired, in ISO 8601 |
+| `attempt` | Attempt number of this delivery, starting at 1 |
+| `resource.type` | Type of the resource, see below |
+| `resource.id` | [Public ID](/3.x/models#public-ids) of the resource. Find the record with `findByPublicId()` |
+| `data` | The attributes of the resource, listed below |
+
+The payload is a snapshot. Shopper serializes the resource when the event fires and stores the result on the event: a retry sends the same `data` with a higher `attempt`, even when the order has changed since.
+
+Orders and products are identified by their morph alias, `order` and `product`. Shipments and customers have no alias in the [morph map](/3.x/models#morph-map), so their `resource.type` is a class name: `Shopper\Core\Models\OrderShipping`, and your user model class for customers, such as `App\Models\User`. Route requests on the `event` field.
+
+### Order Data
+
+The `order.*` events and `cart.completed` send the order. Amounts are integers in cents, see [Money](/3.x/money).
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Public ID of the order |
+| `number` | string | Order number |
+| `status` | string | `new`, `processing`, `completed`, `cancelled` or `archived` |
+| `payment_status` | string | `pending`, `authorized`, `paid`, `partially_refunded`, `refunded` or `voided` |
+| `shipping_status` | string | `unfulfilled`, `partially_shipped`, `shipped`, `partially_delivered`, `delivered`, `partially_returned` or `returned` |
+| `price_amount` | integer | Order total |
+| `tax_amount` | integer | Tax total |
+| `shipping_amount` | integer or null | Shipping cost |
+| `currency_code` | string | ISO 4217 code of the order currency |
+| `email` | string or null | Email of the customer |
+| `created_at` | string | Creation date, in ISO 8601 |
+
+### Shipment Data
+
+The `shipment.*` events send the package, an `OrderShipping` record, with a reference to its order.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Public ID of the package |
+| `order_id` | string | Public ID of the order |
+| `order_number` | string | Order number |
+| `status` | string | `pending`, `picked_up`, `in_transit`, `at_sorting_center`, `out_for_delivery`, `delivered`, `delivery_failed` or `returned` |
+| `carrier` | string or null | Name of the carrier |
+| `carrier_driver` | string or null | Driver of the carrier, `null` for a carrier without one |
+| `tracking_number` | string or null | Tracking number |
+| `tracking_url` | string or null | Tracking page of the carrier |
+| `shipped_at` | string or null | Date the package left, in ISO 8601 |
+| `received_at` | string or null | Date the package was delivered, in ISO 8601 |
+| `returned_at` | string or null | Date the package was returned, in ISO 8601 |
+
+### Product Data
+
+The `product.*` events send the product. `product.deleted` carries the product as it was just before the deletion.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Public ID of the product |
+| `name` | string | Product name |
+| `slug` | string | URL slug |
+| `sku` | string or null | SKU |
+| `type` | string | `standard`, `variant`, `virtual` or `external` |
+| `is_visible` | boolean | Whether the product is visible on the storefront |
+| `published_at` | string | Publication date, in ISO 8601 |
+| `updated_at` | string | Date of the last update, in ISO 8601 |
+
+### Customer Data
+
+`customer.registered` sends the customer. A field without a value is left out of the object.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Public ID of the customer |
+| `email` | string | Email address |
+| `first_name` | string | First name |
+| `last_name` | string | Last name |
+| `created_at` | string | Registration date, in ISO 8601 |
+
+## Signatures
+
+Every request carries an `X-Shopper-Signature` header that proves it comes from your store and was not changed on the way:
+
+```text
+X-Shopper-Signature: t=1794925928,v1=f930421f7fd276df4af2e4c0ad2b465fb31174122fc554d928e7a03f2f4d23cb
+```
+
+`t` is the Unix time at which the attempt was sent. `v1` is the HMAC-SHA256, in lowercase hexadecimal, of the timestamp, a period and the raw request body, keyed with the secret of the subscription. Shopper signs each attempt when it sends it, so `t` stays recent on the tenth retry as on the first.
+
+A receiver verifies a request in four steps:
+
+1. Read the raw body before decoding it. A body decoded and encoded again no longer matches the signature.
+2. Read `t` and `v1` from the header, which matches `/^t=(\d+),v1=([a-f0-9]{64})$/`.
+3. Refuse a timestamp more than 300 seconds away from the current time, so a captured request cannot be replayed later.
+4. Compute the HMAC-SHA256 of `{t}.{body}` with the secret and compare it with `v1` in constant time.
+
+This controller does it in another Laravel application, with the secret stored under `shopper.webhook_secret` in its `config/services.php`. It hands the event to a queued job and answers at once:
+
+```php title="app/Http/Controllers/ShopperWebhookController.php"
+namespace App\Http\Controllers;
+
+use App\Jobs\SyncShopperEvent;
+use Illuminate\Http\Request;
+use Illuminate\Http\Response;
+
+class ShopperWebhookController
+{
+    public function __invoke(Request $request): Response
+    {
+        $payload = $request->getContent();
+        $header = (string) $request->header('X-Shopper-Signature');
+
+        if (! preg_match('/^t=(\d+),v1=([a-f0-9]{64})$/', $header, $matches)) {
+            abort(401);
+        }
+
+        [, $timestamp, $signature] = $matches;
+
+        if (abs(time() - (int) $timestamp) > 300) {
+            abort(401);
+        }
+
+        $expected = hash_hmac('sha256', "{$timestamp}.{$payload}", config('services.shopper.webhook_secret'));
+
+        if (! hash_equals($expected, $signature)) {
+            abort(401);
+        }
+
+        SyncShopperEvent::dispatch(json_decode($payload, true));
+
+        return response()->noContent();
+    }
+}
+```
+
+Register the controller on the URL you give the subscription:
+
+```php title="routes/web.php"
+use App\Http\Controllers\ShopperWebhookController;
+use Illuminate\Support\Facades\Route;
+
+Route::post('/webhooks/shopper', ShopperWebhookController::class);
+```
+
+Laravel checks a CSRF token on the routes of `routes/web.php`, which Shopper cannot send. Exclude the webhook route from that check:
+
+```php title="bootstrap/app.php"
+->withMiddleware(function (Middleware $middleware): void {
+    $middleware->validateCsrfTokens(except: [
+        'webhooks/shopper',
+    ]);
+})
+```
+
+A Laravel application that has `shopper/core` installed can call `Shopper\Core\Webhooks\WebhookSignature::verify($header, $payload, $secret)` instead. It runs the same checks and reads the tolerance from `signature_tolerance` in `config/shopper/webhooks.php`, 300 seconds by default.
+
+### Responding to a Delivery
+
+Shopper reads the status code of the answer. A 2xx code marks the delivery succeeded. A 4xx code marks it rejected, and Shopper never retries it. Any other code, a redirect, or no answer within 10 seconds counts as a failure and schedules a retry. Do the work in a queued job, as the controller above does, so the answer comes back well within the timeout.
+
+A receiver can get the same event more than once: a retry after a timeout on a request it had processed, or a redelivery from the admin panel. Keep the `id` of the events you processed and skip the ones you have seen. Each delivery is its own queued job, so a retried `order.paid` can arrive after `order.shipped`: compare `created_at` before overwriting newer data.
+
+### Signing Secret
+
+The secret is a random 40-character string, shown once when the subscription is created in the admin panel and never again. Regenerating it from the admin panel shows the new secret once, and the old one stops working at once, for retries too, since every attempt is signed when it is sent. Update the receiver with the new secret right away. Shopper stores the secret encrypted with your application key.
+
+## Deliveries and Retries
+
+Each subscription gets its own delivery of an event, sent by its own job, so a failing endpoint never stops the deliveries to the others. The `status` of a delivery, a `Shopper\Core\Enum\WebhookDeliveryStatus` case, records how it went:
+
+| Status | Meaning |
+|--------|---------|
+| `pending` | Queued, not sent yet |
+| `succeeded` | The endpoint answered with a 2xx code |
+| `failed` | The endpoint answered with another code or did not answer in time. Retried until the attempts run out |
+| `rejected` | The endpoint answered with a 4xx code, or its URL no longer passes the [endpoint checks](#endpoint-restrictions). Never retried |
+| `dispatch_failed` | The delivery could not be pushed to the queue. The [redispatch command](#redispatching) queues it again |
+
+A failed delivery is retried after the delays of the `backoff` key: 10 seconds, 30 seconds, 1 minute, 5 minutes, 30 minutes, then 1, 2, 4, 8 and 12 hours. That makes 11 attempts over about 28 hours. While attempts remain, the delivery keeps the `failed` status with no `completed_at`. The last attempt sets `completed_at`.
+
+Shopper does not follow redirects: point the subscription at the final URL of the endpoint, since a 3xx answer counts as a failure.
+
+When a delivery runs out of attempts and the 15 most recent succeeded or failed deliveries of its subscription have all failed, Shopper deactivates the subscription. Change the threshold with `disable_after_failures`. Shopper creates no delivery for an inactive subscription: switch it back on in the admin panel once the endpoint works again.
+
+## Redispatching
+
+A delivery can miss the queue. The queue connection may be down when the event fires, which leaves the delivery `dispatch_failed`, or a worker may stop in the middle of a job and lose it, which leaves the delivery `pending`. The `shopper:webhooks:redispatch` command queues again every `dispatch_failed` delivery, and every `pending` delivery created more than 15 minutes ago. Shopper schedules it every 15 minutes (see [Scheduler](/3.x/installation#scheduler)). Run it by hand after a queue outage:
+
+```bash
+php artisan shopper:webhooks:redispatch
+```
+
+The command prints how many deliveries it queued again. It leaves `failed` deliveries alone: their retries are already scheduled, or they have used all their attempts.
+
+### Pruning
+
+The `model:prune` command, which Shopper schedules daily, deletes the succeeded deliveries after 7 days and the other deliveries after 90 days. It then deletes the events older than 90 days that have no delivery left. The `prune.succeeded_after_days` and `prune.failed_after_days` keys change both delays.
+
+## Configuration
+
+`config/shopper/webhooks.php` holds the event map and the delivery settings. Publish it with the other Shopper config files through the `shopper-config` tag:
+
+```bash
+php artisan vendor:publish --tag=shopper-config
+```
+
+| Key | Environment variable | Default | Description |
+|-----|----------------------|---------|-------------|
+| `events` | | The 13 core events | Event class to public name. Remove a line to stop offering that event |
+| `database.connection` | `SHOPPER_WEBHOOKS_DB_CONNECTION` | Default connection | Connection of the webhook subscriptions, events and deliveries |
+| `allowed_hosts` | `SHOPPER_WEBHOOKS_ALLOWED_HOSTS` | Empty | Comma-separated hosts webhooks may be sent to. Empty allows any public host |
+| `max_subscriptions` | `SHOPPER_WEBHOOKS_MAX_SUBSCRIPTIONS` | `50` | Maximum number of subscriptions the admin panel creates. `0` removes the limit |
+| `queue` | `SHOPPER_WEBHOOKS_QUEUE` | `webhooks` | Queue of the delivery jobs |
+| `backoff` | | `[10, 30, 60, 300, 1800, 3600, 7200, 14400, 28800, 43200]` | Seconds to wait before each retry. A delivery gets one attempt more than the number of entries |
+| `disable_after_failures` | | `15` | Failed deliveries in a row that deactivate a subscription |
+| `timeout` | | `10` | Seconds Shopper waits for the endpoint to answer |
+| `signature_tolerance` | | `300` | Seconds `WebhookSignature::verify()` accepts between the signature timestamp and the current time |
+| `prune.succeeded_after_days` | | `7` | Age at which succeeded deliveries are deleted |
+| `prune.failed_after_days` | | `90` | Age at which the other deliveries, then the events, are deleted |
+
+A store that sends many webhooks can move the three webhook tables to a dedicated database with `SHOPPER_WEBHOOKS_DB_CONNECTION`, so their writes never compete with orders and payments. The migration creates the tables on that connection.
+
+### Endpoint Restrictions
+
+Shopper only sends webhooks over HTTPS to public addresses. The URL is checked when a subscription is saved in the admin panel, then again before each attempt: every address the host resolves to must be public, which rules out `localhost`, private networks and link-local addresses, and the request connects to the address that passed the check. A delivery whose URL fails the check at send time is marked `rejected`. To try webhooks against an application on your machine, expose it through a public HTTPS tunnel, such as Expose or ngrok, and subscribe the tunnel URL.
+
+`allowed_hosts` limits deliveries to the integrations you know. A listed host also allows its subdomains:
+
+```bash title=".env"
+SHOPPER_WEBHOOKS_ALLOWED_HOSTS=erp.example.com,hooks.example.org
+```
+
+## Models
+
+The three webhook models live in `Shopper\Core\Models`. They have no configuration key, so they are always loaded with their own class, and they use the connection set by `database.connection`.
+
+### Webhook Subscription
+
+`WebhookSubscription` is an endpoint and the events it listens to.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `url` | string | HTTPS URL of the endpoint |
+| `events` | json | Event names, cast to an array |
+| `secret` | text | Signing secret, encrypted with your application key |
+| `is_active` | boolean | Whether the subscription receives deliveries, `true` by default |
+| `description` | text | Free note, such as the name of the integration |
+
+`WebhookSubscription::active()` returns the active subscriptions, cached for an hour so that dispatching an event adds no query to the checkout. Saving or deleting a subscription through Eloquent clears the cache. `listensTo('order.paid')` tells whether the subscription takes an event, and `deliveries()` returns its deliveries. Deleting a subscription deletes its deliveries.
+
+### Webhook Event
+
+`WebhookEvent` is one occurrence of an event, shared by all its deliveries.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `public_id` | string | ULID, sent as the `id` of the payload |
+| `name` | string | Event name, such as `order.paid` |
+| `resource_type` | string | Sent as `resource.type` |
+| `resource_id` | string | Sent as `resource.id` |
+| `payload` | longText | The `data` object, encrypted with your application key and cast to an array |
+
+`deliveries()` returns the deliveries of the event.
+
+### Webhook Delivery
+
+`WebhookDelivery` is the sending of an event to one subscription.
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `public_id` | string | ULID, sent in the `X-Shopper-Delivery-Id` header |
+| `webhook_event_id` | foreign key | The event |
+| `webhook_subscription_id` | foreign key | The subscription |
+| `attempt_number` | integer | Number of the last attempt |
+| `status` | string | A `WebhookDeliveryStatus` case |
+| `response_code` | integer | Status code of the last answer, `null` when the endpoint did not answer |
+| `response_body` | text | First 1,000 characters of the last failed or rejected answer, or the reason of the failure |
+| `completed_at` | timestamp | When the delivery reached a final outcome |
+
+`event()` and `subscription()` return the event and the subscription.
+
+## Usage
+
+The admin panel is the usual place to manage subscriptions. Code can create them too, from a seeder or a deploy script. The model checks nothing by itself: validate the URL with `WebhookUrl::isSafe()`, which runs the [endpoint checks](#endpoint-restrictions), and set the secret the receiver expects. The `max_subscriptions` limit applies to the admin panel only.
+
+```php title="database/seeders/WebhookSubscriptionSeeder.php"
+namespace Database\Seeders;
+
+use Illuminate\Database\Seeder;
+use InvalidArgumentException;
+use Shopper\Core\Models\WebhookSubscription;
+use Shopper\Core\Webhooks\WebhookUrl;
+
+class WebhookSubscriptionSeeder extends Seeder
+{
+    public function run(): void
+    {
+        $url = 'https://erp.example.com/webhooks/shopper';
+
+        if (! WebhookUrl::isSafe($url)) {
+            throw new InvalidArgumentException("The webhook url [{$url}] must use https and resolve to a public address.");
+        }
+
+        WebhookSubscription::query()->create([
+            'url' => $url,
+            'events' => ['order.paid', 'order.cancelled', 'shipment.delivered'],
+            'secret' => config('services.erp.webhook_secret'),
+            'description' => 'ERP order sync',
+        ]);
+    }
+}
+```
+
+To list the events a subscription can take, call `Webhooks::events()`. It returns the public names keyed by event class, the core events, `cart.completed` and yours:
+
+```php
+use Shopper\Core\Webhooks\Facades\Webhooks;
+
+$names = array_values(Webhooks::events());
+```
+
+Deliveries are plain Eloquent models. This query returns the deliveries that ended in a failure, with the answer of the endpoint:
+
+```php
+use Shopper\Core\Enum\WebhookDeliveryStatus;
+use Shopper\Core\Models\WebhookDelivery;
+
+$failures = WebhookDelivery::query()
+    ->with(['event', 'subscription'])
+    ->whereIn('status', [WebhookDeliveryStatus::Failed, WebhookDeliveryStatus::Rejected])
+    ->whereNotNull('completed_at')
+    ->latest()
+    ->get();
+```
+
+## Registering Custom Events
+
+Any Laravel event can become a webhook. Register it in the `boot` method of a service provider with the `Shopper\Core\Webhooks\Facades\Webhooks` facade, giving the event class and its public name:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Shopper\Core\Events\Orders\OrderArchived;
+use Shopper\Core\Webhooks\Facades\Webhooks;
+
+public function boot(): void
+{
+    Webhooks::register(OrderArchived::class, 'order.archived');
+}
+```
+
+The name then appears in the event list of the admin form. Without a serializer, Shopper looks for a public `shipment`, `order`, `product`, `customer` or `cart` property on the event, in this order, and sends the data of the first one it finds. `OrderArchived` carries `$order`, so `order.archived` sends the [order data](#order-data). An event with none of these properties sends an empty `data` and logs a warning.
+
+A public name belongs to one event. Registering a name another event already uses is ignored, with a warning in the log, and registering the same class twice under two names throws a `LogicException`. The entries of the `events` config key are defaults: `register()` can rename one of them or give it a serializer.
+
+Webhooks are built as soon as the event is dispatched. Events that implement `ShouldDispatchAfterCommit` are dispatched once the database transaction commits, so a checkout that rolls back sends nothing. Give your own events this contract, as Shopper's are.
+
+### Custom Payloads
+
+The third argument of `register()` is the serializer. A closure receives the event and returns the `resource_type`, `resource_id` and `data` keys. This one turns failed payments into a `payment.failed` webhook:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Shopper\Core\Webhooks\Facades\Webhooks;
+use Shopper\Payment\Events\PaymentFailed;
+
+public function boot(): void
+{
+    Webhooks::register(PaymentFailed::class, 'payment.failed', fn (PaymentFailed $event): array => [
+        'resource_type' => $event->order->getMorphClass(),
+        'resource_id' => $event->order->public_id,
+        'data' => [
+            'order_number' => $event->order->number,
+            'transaction_type' => $event->type->value,
+            'reason' => $event->reason,
+        ],
+    ]);
+}
+```
+
+A serializer class implements `Shopper\Core\Contracts\WebhookPayloadSerializer`. Shopper resolves it from the container, so it can wrap `DefaultWebhookPayloadSerializer`, a final class, to add fields to the default data. This one adds the order lines to `order.paid`:
+
+```php title="app/Webhooks/OrderPaidPayload.php"
+namespace App\Webhooks;
+
+use Shopper\Core\Contracts\WebhookPayloadSerializer;
+use Shopper\Core\Models\OrderItem;
+use Shopper\Core\Webhooks\DefaultWebhookPayloadSerializer;
+
+class OrderPaidPayload implements WebhookPayloadSerializer
+{
+    public function __construct(
+        private DefaultWebhookPayloadSerializer $default,
+    ) {}
+
+    public function serialize(object $event): array
+    {
+        $payload = $this->default->serialize($event);
+
+        $payload['data']['items'] = $event->order->items
+            ->map(fn (OrderItem $item): array => [
+                'sku' => $item->sku,
+                'name' => $item->name,
+                'quantity' => $item->quantity,
+                'unit_price_amount' => $item->unit_price_amount,
+            ])
+            ->all();
+
+        return $payload;
+    }
+}
+```
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Webhooks\OrderPaidPayload;
+use Shopper\Core\Events\Orders\OrderPaid;
+use Shopper\Core\Webhooks\Facades\Webhooks;
+
+public function boot(): void
+{
+    Webhooks::register(OrderPaid::class, 'order.paid', OrderPaidPayload::class);
+}
+```
+
+The payload leaves your store and stays in the database until it is pruned. Name each field you send, as the default serializer does, so that a column added later never reaches a third party, and never send secrets, tokens or card data.
+
+To change the data of every event that has no serializer of its own, bind your class to the `WebhookPayloadSerializer` contract in the `register` method of a service provider:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Webhooks\StorePayloadSerializer;
+use Shopper\Core\Contracts\WebhookPayloadSerializer;
+
+public function register(): void
+{
+    $this->app->singleton(WebhookPayloadSerializer::class, StorePayloadSerializer::class);
+}
+```
+
+## Permissions
+
+The webhooks page of the admin panel and each of its actions check the `system.settings` permission, described in [System Permissions](/3.x/acl#system-permissions).
+
+## In the Admin
+
+Webhooks sit under Settings, in the Store group. The page lists the subscriptions with their URL, their events, an active toggle and the date of the last change. Add webhook opens a form with the URL, the events and a description, and shows the signing secret once after saving; the button is disabled when the store reaches `max_subscriptions`. The actions of a row show its last 25 deliveries with their event, date, attempt, response code and status, redeliver its latest event as a new delivery, regenerate its secret, edit it or delete it. Redelivery is refused when the resource of the event no longer exists. To hide the page, remove it from `config/shopper/settings.php` as [Settings](/3.x/configuration#settings) describes. The [User Guide](/3.x/user-guide) walks through the screen.
+
+## From a Storefront
+
+The Store API does not expose webhook subscriptions or deliveries: you manage them from the admin panel or from your code. Its `/store/webhooks/...` routes receive the events of payment providers and carriers, which are incoming webhooks. The [Storefront](/3.x/storefront) page covers the Store API.

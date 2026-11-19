@@ -353,7 +353,7 @@ Products have three media collections. The core model declares them, and `Shoppe
 | Thumbnail | `shopper.media.storage.thumbnail_collection`, `thumbnail` by default | One | `shopper.media.accepts_mime_types` |
 | Files | `files`, not configurable | Several | `shopper.media.accepts_file_types` |
 
-Every collection is stored on the disk named in `shopper.media.storage.disk_name`, `public` by default. Each image gets the resized copies listed under `shopper.media.conversions`: `large` (800 by 800) and `medium` (500 by 500) by default.
+The gallery and the thumbnail are stored on the disk named in `shopper.media.storage.disk_name`, `public` by default, and the files on the private disk of `shopper.media.storage.files_disk`, `local` by default. Each image gets the resized copies listed under `shopper.media.conversions`: `large` (800 by 800) and `medium` (500 by 500) by default.
 
 To add images, read the collection name from the configuration:
 
@@ -377,6 +377,8 @@ Load the `media` relation with your products to avoid one query per product in a
 
 The `files` collection holds the files of a virtual product: an ebook in PDF, a ZIP of fonts, a spreadsheet template. The admin panel shows the **Files** section on virtual products only. The accepted types come from `shopper.media.accepts_file_types`, which leaves out HTML, SVG and JavaScript so an uploaded file cannot run a script on your domain.
 
+These files are stored apart from the images, on the disk named in `shopper.media.storage.files_disk`. The default, `local`, keeps them in `storage/app/private` with the disk configuration Laravel ships, out of reach of any public URL. Point it to another disk without public access, such as a private S3 bucket, as described in [Storage Disk](/3.x/media#storage-disk). A file added from your code goes to the same disk:
+
 ```php
 $product->addMedia(storage_path('app/ebooks/sneaker-care-guide.pdf'))
     ->toMediaCollection('files');
@@ -384,9 +386,76 @@ $product->addMedia(storage_path('app/ebooks/sneaker-care-guide.pdf'))
 $product->getMedia('files');
 ```
 
-<Warning>
-  Shopper does not deliver these files after a purchase. They are stored on the media disk like the images, and the Store API returns their URLs in the `files` attribute of every virtual product, to any visitor. Keep content that customers pay for out of this collection, and serve it from your own code after checking the order.
-</Warning>
+The Store API never returns the URL of these files. A virtual product carries `files`, with the `id` (the UUID of the media), `name`, `extension` and `size` in bytes of each file, so the product page can show what the customer gets:
+
+```json
+{
+    "files": [
+        {
+            "id": "4b1f0c2e-8d6a-4f3e-9a51-6c2d7e9b0a13",
+            "name": "sneaker-care-guide",
+            "extension": "pdf",
+            "size": 2483012
+        }
+    ]
+}
+```
+
+A signed-in customer downloads the files of an order in two calls. `GET /store/customers/me/orders/{orderId}?include=items` returns the items, and each item of a virtual product carries the same `files` attribute once the payment status of the order is Paid or Partially refunded. The storefront then asks for a link to one file, with the public IDs of the order and the item and the `id` of the file:
+
+```bash
+curl "https://example.com/store/customers/me/orders/01JQ8Z6N4W2T5V3K9R7M1H0XAB/items/01JQ8Z6N5C8E2D4F6G1J3K5M7P/files/4b1f0c2e-8d6a-4f3e-9a51-6c2d7e9b0a13" \
+  -H "Authorization: Bearer 1|customer-token"
+```
+
+The response holds the link and the moment it expires:
+
+```json
+{
+    "data": {
+        "url": "https://example.com/store/files/4b1f0c2e-8d6a-4f3e-9a51-6c2d7e9b0a13?expires=1773308767&signature=3bd70b02156440e6703239eb610bc1d851c2682d68acd1fd2dc3dafca9a2a9cb",
+        "expires_at": "2026-03-12T09:46:07+00:00"
+    }
+}
+```
+
+The link works for five minutes, a duration with no configuration key: request a new one for each download and send the browser to its `url` right away. When the file is stored on a disk that uses the `s3` driver, `url` is a presigned URL of the bucket that downloads the file as an attachment. On any other disk, it points to `GET /store/files/{fileId}`, the route named `shopper.store.files.download`, which streams the file as an attachment and answers 403 when the signature is missing, altered or expired. Shopper does not count downloads: the customer can ask for a new link as often as needed.
+
+The link request answers with an error in these cases:
+
+| Status | When |
+|--------|------|
+| 401 | The request has no customer token |
+| 403 | The payment status of the order is Pending, Authorized, Refunded or Voided. The error code is `forbidden` |
+| 404 | The order does not exist or belongs to another customer, the item is not part of the order, the item's product is deleted or no longer virtual, or the file is not one of the current files of that product |
+
+The endpoint reads the orders of the signed-in customer only, so the Store API gives no download link for a guest order.
+
+The JavaScript SDK wraps the link request in `fileLink()`, which takes the three IDs and returns the `url` and `expires_at`. The `ProductFile` type of `@shopperlabs/shopper-types` describes a file, in `Product.files` and `OrderItem.files`:
+
+```ts
+import Shopper from '@shopperlabs/shopper-sdk'
+
+const sdk = new Shopper({ baseUrl: 'https://example.com' })
+
+await sdk.auth.login({ email: 'amara@example.com', password: 'correct-horse-battery-staple' })
+
+const { url } = await sdk.store.customer.fileLink(
+  '01JQ8Z6N4W2T5V3K9R7M1H0XAB',
+  '01JQ8Z6N5C8E2D4F6G1J3K5M7P',
+  '4b1f0c2e-8d6a-4f3e-9a51-6c2d7e9b0a13',
+)
+
+window.location.assign(url)
+```
+
+To move files stored on another disk to `files_disk`, run the command below. `php artisan shopper:upgrade` runs it as its last step, and you run it yourself after you change `files_disk`:
+
+```bash
+php artisan shopper:files:secure
+```
+
+The command copies each file to `files_disk` and deletes the original, so a moved file gets a new `id`.
 
 ## Pricing
 
@@ -563,7 +632,8 @@ Media settings live in `config/shopper/media.php`:
 |-----|---------|----------|
 | `storage.collection_name` | `uploads` | Name of the gallery collection |
 | `storage.thumbnail_collection` | `thumbnail` | Name of the thumbnail collection |
-| `storage.disk_name` | `public` | Disk of every product media, files included |
+| `storage.disk_name` | `public` | Disk of the gallery and the thumbnail |
+| `storage.files_disk` | `local` | Disk of the `files` collection, which must not be public |
 | `accepts_mime_types` | JPEG, PNG, WebP, AVIF | Images accepted in the gallery and the thumbnail |
 | `accepts_file_types` | PDF, ZIP, RAR, 7z, Word, Excel, text, CSV | Files accepted in the `files` collection |
 | `max_size.thumbnail` | `1024` | Maximum size of a thumbnail upload in the admin panel, in kilobytes |
@@ -763,7 +833,7 @@ The Store API exposes products read-only, and only published products:
 | `GET /store/products/{slug}` | One published product, or a 404 |
 | `GET /store/products/{slug}/reviews` | The approved reviews of the product |
 
-A product resource has the `products` type and its public ID as `id`. Its attributes are the name, slug, SKU, barcode, summary, description, `featured`, type, publication date, SEO fields, metadata, images, thumbnail, prices in every enabled currency and calculated price in the request currency (none for a variant product), and the stock: `stock` and `in_stock` for a standard or virtual product, `in_stock` alone for a variant or external product. A virtual product adds its `files`, an external product its `external_id`.
+A product resource has the `products` type and its public ID as `id`. Its attributes are the name, slug, SKU, barcode, summary, description, `featured`, type, publication date, SEO fields, metadata, images, thumbnail, prices in every enabled currency and calculated price in the request currency (none for a variant product), and the stock: `stock` and `in_stock` for a standard or virtual product, `in_stock` alone for a variant or external product. A virtual product adds its `files`, without URLs (see [Downloadable Files](/3.x/products#downloadable-files)), an external product its `external_id`.
 
 The list endpoint accepts these parameters. The filters, sorts and includes other than `currency`, `price_min` and `price_max` are set under `resources.product` in `config/shopper/api.php`, so you can add or remove them:
 

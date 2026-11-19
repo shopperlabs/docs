@@ -1,0 +1,406 @@
+---
+title: Campaigns
+description: The Campaign model in Shopper, campaign status, shared spend and usage budgets, budget movements, and how a campaign caps its discounts.
+---
+
+A campaign groups discounts under one name, one currency, a schedule and an optional shared budget. A "Summer Sale 2026" campaign can hold a `SUMMER20` code, a `BEACH15` code and an automatic discount on sandals, and stop all three once they have given $5,000.00 of discounts or been used on 1,000 orders.
+
+Each discount keeps its own rules, dates and usage limits, described on the [Discounts](/3.x/discounts) page. The campaign adds the cap they share: the cart stops applying the campaign's discounts once its budget is used, the checkout reserves budget for each order, and a cancellation or a full refund gives it back. Every reservation and release is recorded as a budget movement. The models live in `shopper/core`, and the admin panel shows campaigns behind the `campaign` feature flag.
+
+## Model
+
+Campaigns use `Shopper\Core\Models\Campaign`, which implements the `Shopper\Core\Models\Contracts\Campaign` contract. Budget movements use `Shopper\Core\Models\CampaignBudgetMovement`. Neither model has a key in `config/shopper/models.php`, so both are always loaded with their own class. To add a relationship to one of them, register it with `resolveRelationUsing()`, as shown in [Models You Cannot Swap](/3.x/models#models-you-cannot-swap).
+
+The `HasPublicId` trait fills the `public_id` of a campaign with a ULID when it is created, so you can find a campaign with `Campaign::findByPublicId()` or the `wherePublicId()` scope, described in [Public IDs](/3.x/models#public-ids). Budget movements have no public ID.
+
+### Campaign Table
+
+The `sh_campaigns` table holds one row per campaign (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)):
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `is_active` | boolean | no | `true` | Turns the campaign off without deleting it |
+| `name` | string | no | - | Campaign name, such as "Summer Sale 2026" |
+| `currency_code` | string | no | - | ISO code of the budget currency, such as `USD` |
+| `budget_type` | string | no | `none` | Caps the campaign enforces, cast to `CampaignBudgetType` |
+| `budget_amount` | unsigned bigint | yes | null | Spend cap, in cents |
+| `budget_count` | unsigned integer | yes | null | Usage cap, in orders |
+| `spent_amount` | unsigned bigint | no | 0 | Discount amount reserved by orders, in cents |
+| `used_count` | unsigned integer | no | 0 | Orders that reserved budget |
+| `metadata` | jsonb | yes | null | Your own data, cast to an array |
+| `starts_at` | datetime | no | - | Start of the campaign |
+| `ends_at` | datetime | yes | null | End of the campaign, null when it has none |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+`starts_at` has no default, so pass it when you create a campaign. Shopper updates `spent_amount` and `used_count` when it reserves and releases budget; leave them out of your own writes. The amounts follow the rules of [Money](/3.x/money).
+
+The `sh_discounts` table has a nullable `campaign_id` column, a foreign key to `sh_campaigns`. A discount belongs to one campaign at most.
+
+### CampaignBudgetMovement Table
+
+The `sh_campaign_budget_movements` table holds one row per reservation or release:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `campaign_id` | bigint | no | - | Foreign key to the campaign, movements are deleted with it |
+| `order_id` | bigint | yes | null | Foreign key to the order, set to null when the order is deleted |
+| `direction` | string | no | `reserve` | `reserve` or `release`, cast to `CampaignBudgetDirection` |
+| `amount` | bigint | no | - | Cents reserved (positive) or released (negative) |
+| `balance_after` | unsigned bigint | no | - | `spent_amount` of the campaign after the movement, in cents |
+| `actor` | string | yes | null | What released the budget, see [Budget Movements](#budget-movements) |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+A unique key on `campaign_id`, `order_id` and `direction` allows one reservation and one release per campaign and order.
+
+### Relationships
+
+`discounts()` returns the discounts of a campaign, a `HasMany` on `campaign_id`. The `Shopper\Core\Models\Discount` model has the inverse `campaign()` relationship, and a budget movement has `campaign()` too:
+
+```php
+use Shopper\Core\Models\Campaign;
+use Shopper\Core\Models\Discount;
+
+$summerSale = Campaign::query()->withCount('discounts')->where('name', 'Summer Sale 2026')->firstOrFail();
+
+$summerSale->discounts_count;
+
+Discount::query()->where('code', 'SUMMER20')->first()->campaign?->name;
+```
+
+A campaign has no relationship to its budget movements, and a movement has none to its order. Query `CampaignBudgetMovement` by `campaign_id` or `order_id` instead, as shown in [Budget Movements](#budget-movements).
+
+### Methods
+
+The model has no query scope besides `wherePublicId()`. Two methods and one attribute read its budget and dates:
+
+| Member | Returns |
+|--------|---------|
+| `hasReachedBudget()` | `true` when a cap of the budget type is reached: `spent_amount` is at or above `budget_amount`, or `used_count` is at or above `budget_count` |
+| `canAbsorb(int $spend)` | `true` when `$spend` more cents fit under the spend cap, always `true` for a campaign without one |
+| `status` | The `CampaignStatus` of the campaign, computed when you read it |
+
+## Campaign Status
+
+The `status` attribute is not stored. Shopper computes it from the other columns each time you read it and returns a `Shopper\Core\Enum\CampaignStatus` case. The cases are checked in the order of this table, and the first that matches wins:
+
+| Case | Value | Admin label | When |
+|------|-------|-------------|------|
+| `Draft` | `draft` | Draft | The campaign is not saved yet |
+| `Disabled` | `disabled` | Disabled | `is_active` is `false` |
+| `Expired` | `expired` | Expired | `ends_at` is in the past |
+| `BudgetExhausted` | `budget_exhausted` | Budget exhausted | `hasReachedBudget()` returns `true` |
+| `Scheduled` | `scheduled` | Scheduled | `starts_at` is in the future |
+| `Active` | `active` | Active | None of the above |
+
+A disabled campaign stays Disabled after its end date, and an expired campaign shows as Expired even when its budget is used up. Since the status is computed in PHP, a query cannot filter on it: filter on `is_active`, `starts_at` and `ends_at`, which share an index, as shown in [Listing Running Campaigns](#listing-running-campaigns).
+
+The status drives the badges of the admin panel. The cart reads the budget and the currency of a campaign, as described in [Campaigns and Discounts](#campaigns-and-discounts), and does not read `is_active`, `starts_at` or `ends_at`: each discount applies according to its own active flag and [dates](/3.x/discounts#dates).
+
+## Budgets
+
+The `budget_type` column decides which caps a campaign enforces. It is cast to the `Shopper\Core\Enum\CampaignBudgetType` enum:
+
+| Case | Value | Admin label | Caps |
+|------|-------|-------------|------|
+| `None` | `none` | No budget | None. The campaign still counts the amount and the orders |
+| `Spend` | `spend` | Spend cap | `budget_amount` |
+| `Count` | `count` | Usage cap | `budget_count` |
+| `SpendAndCount` | `spend_and_count` | Spend and usage cap | Both, and the first one reached stops the campaign |
+
+`hasSpendCap()` and `hasCountCap()` on the enum tell which caps a type has. A cap whose column is null is not enforced, so a `Spend` campaign without a `budget_amount` has no limit. The admin form requires the column of each cap of the selected type and sets the other one to null when it saves.
+
+The spend cap is the total discount the campaign gives, in cents of its currency: a `budget_amount` of `500000` stops a USD campaign after $5,000.00 of discounts. Each order adds the amount its campaign discounts took off to `spent_amount`.
+
+The usage cap counts orders. An order that uses two discounts of the same campaign, such as `SUMMER20` and the automatic sandals discount, adds one to `used_count`.
+
+### Reserving and Releasing Budget
+
+When a cart becomes an order, Shopper reserves the budget with `Shopper\Core\Actions\ReserveCampaignBudget`: one reservation per campaign and per order, for the sum of the campaign's discounts on that order. The update only goes through while the reservation fits under the caps, so two checkouts that race for the end of a budget cannot both pass. The one that no longer fits throws the [Budget Exceeded Exception](#budget-exceeded-exception) and its order is not created.
+
+`Shopper\Core\Actions\ReleaseCampaignBudget` gives the budget of an order back. Shopper calls it when an order is cancelled, and when a settled refund leaves the payment of an order fully refunded, through `PaymentProcessingService::refund()` or a refund webhook ([Refunding a Payment](/3.x/payments#refunding-a-payment)). A partial refund keeps the reservation, and a pending refund releases nothing until the provider confirms it. A refund the provider reports as failed after the release does not reserve the budget again. The release subtracts the exact amount reserved for the order and one use, without going below zero, and records a release movement. A second release for the same order does nothing, so a retried webhook cannot give the budget back twice.
+
+| Action | Method | What it does |
+|--------|--------|--------------|
+| `ReserveCampaignBudget` | `execute(Campaign $campaign, int $spend, ?int $orderId = null, ?string $actor = null, bool $overdraw = false)` | Adds `$spend` cents and one use, records a reserve movement, and throws `CampaignBudgetExceededException` when a cap would be passed |
+| `ReleaseCampaignBudget` | `execute(Campaign $campaign, int $orderId, ?string $actor = null)` | Gives one campaign back what it reserved for the order |
+| `ReleaseCampaignBudget` | `releaseOrder(int $orderId, ?string $actor = null)` | Gives back the budget of every campaign that reserved for the order |
+
+<Note>
+  When the payment of a cart was already collected by the payment provider, the checkout honors the discounts the customer paid with. It reserves with `overdraw: true`, which skips the caps, so `spent_amount` and `used_count` can end above `budget_amount` and `budget_count`.
+</Note>
+
+## Budget Movements
+
+Each reservation and release adds a `CampaignBudgetMovement` row, so the movements of a campaign tell which order used how much of its budget and when it came back. The `direction` column is cast to the `Shopper\Core\Enum\CampaignBudgetDirection` enum:
+
+| Case | Value | `amount` |
+|------|-------|----------|
+| `Reserve` | `reserve` | Positive, the cents the order reserved |
+| `Release` | `release` | Negative, the cents given back |
+
+`actor` records what released the budget: `order-cancelled` for a cancellation and `order-refunded` for a full refund. Reservations made by the checkout have no actor. When you call the actions yourself, pass your own actor, as shown in [Releasing Budget by Hand](#releasing-budget-by-hand).
+
+To show the history of a campaign, query the movements by `campaign_id`:
+
+```php
+use Shopper\Core\Enum\CampaignBudgetDirection;
+use Shopper\Core\Models\CampaignBudgetMovement;
+
+$history = CampaignBudgetMovement::query()
+    ->where('campaign_id', $summerSale->id)
+    ->latest('id')
+    ->get();
+
+$cancelledOrders = CampaignBudgetMovement::query()
+    ->where('campaign_id', $summerSale->id)
+    ->where('direction', CampaignBudgetDirection::Release->value)
+    ->where('actor', 'order-cancelled')
+    ->count();
+```
+
+<Warning>
+  Deleting a campaign deletes its budget movements and sets `campaign_id` to null on its discounts, which then apply without a shared budget. To end a campaign that has run and keep its history, turn `is_active` off and deactivate its discounts.
+</Warning>
+
+## Budget Exceeded Exception
+
+`Shopper\Core\Exceptions\CampaignBudgetExceededException` extends `RuntimeException`. `ReserveCampaignBudget` throws it when a reservation does not fit under a cap. The checkout prices the cart again just before it creates the order, unless a provider payment session holds the total, and drops a discount whose campaign has already run out, so the exception only reaches a checkout that lost a race: the cart was priced while the budget still had room, and another order took that room first. Its message names the campaign:
+
+```text
+The campaign "Summer Sale 2026" has reached its budget and can no longer be applied.
+```
+
+The order is not created and the cart keeps the discount until it is priced again. The Store API catches the exception, releases the payment session of the cart, prices the cart again so the discount drops, and answers with the `promotion_budget_reached` error described in [From a Storefront](#from-a-storefront). A checkout of your own that calls `CreateOrderFromCartAction` does the same, with a message that does not show the campaign name:
+
+```php title="app/Http/Controllers/CheckoutController.php"
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\RedirectResponse;
+use Shopper\Cart\Actions\CreateOrderFromCartAction;
+use Shopper\Cart\CartManager;
+use Shopper\Cart\Facades\Cart;
+use Shopper\Core\Exceptions\CampaignBudgetExceededException;
+
+class CheckoutController extends Controller
+{
+    public function store(CreateOrderFromCartAction $createOrder, CartManager $cartManager): RedirectResponse
+    {
+        $cart = Cart::current() ?? abort(404);
+
+        try {
+            $order = $createOrder->execute($cart);
+        } catch (CampaignBudgetExceededException) {
+            $cartManager->releasePaymentSession($cart);
+            $cartManager->calculate($cart->unsetRelations());
+
+            return back()->withErrors([
+                'promotion' => __('shopper-cart::messages.discount.campaign_budget_reached'),
+            ]);
+        }
+
+        return to_route('orders.confirmation', $order);
+    }
+}
+```
+
+The translation reads "This promotion is no longer available." The [Cart](/3.x/cart#order-conversion) page covers the other checks of the checkout.
+
+## Campaigns and Discounts
+
+Codes and automatic discounts can both join a campaign through their `campaign_id`. On top of the discount's own rules, described in [Discount Eligibility](/3.x/discounts#discount-eligibility), the cart checks two things on its campaign:
+
+- The currency: the discount applies only to carts in the currency of the campaign.
+- The budget: the discount stops applying once `hasReachedBudget()` returns `true`.
+
+A discount whose amount does not fit in the rest of the spend budget is suppressed, never applied in part. The discounts of one campaign on the same cart share what is left: Shopper applies them in the order described in [Priority and Combination](/3.x/discounts#priority-and-combination), keeps a running total per campaign, and suppresses each discount that would pass the cap. A suppressed discount stays on the cart with an amount of 0 and does not count against `config('shopper.cart.max_promotions')`, so the next discount can take its place.
+
+The admin panel locks the campaign of a discount once the discount has been used, so that the orders it was used on stay counted against the campaign that reserved their budget. Moving a used discount from your own code breaks that link: keep `campaign_id` unchanged once `total_use` is above 0.
+
+## Configuration
+
+Campaigns are on by default. Their settings are the feature flag and the admin components; the model has no configuration key.
+
+### Disabling Campaigns
+
+If your store does not use campaigns, disable the feature in `config/shopper/features.php`:
+
+```php title="config/shopper/features.php"
+use Shopper\Enum\FeatureState;
+
+return [
+    'campaign' => FeatureState::Disabled,
+];
+```
+
+The campaign pages are no longer registered and the Campaigns item leaves the Sales group of the sidebar. The flag only changes the admin panel: the models, the cart checks and the budget reservations stay in place, so a discount already attached to a campaign keeps its budget. The [Configuration](/3.x/configuration#feature-flags) page lists every feature flag.
+
+### Components
+
+The campaigns section of the admin panel is made of three pages. To replace any of them with your own Livewire component, publish the component file of the section:
+
+```bash
+php artisan shopper:component:publish campaign
+```
+
+The command creates `config/shopper/components/campaign.php`:
+
+```php title="config/shopper/components/campaign.php"
+use Shopper\Livewire;
+
+return [
+    'pages' => [
+        'campaign-index' => Livewire\Pages\Campaign\Index::class,
+        'campaign-create' => Livewire\Pages\Campaign\Create::class,
+        'campaign-edit' => Livewire\Pages\Campaign\Edit::class,
+    ],
+];
+```
+
+The create and edit pages convert the spend cap to cents, require the columns of the selected caps and never write `spent_amount` or `used_count`. A replacement page must do the same. The [Configuration](/3.x/configuration#components) page explains how component overriding works.
+
+## Usage
+
+The examples below work with the core models directly, from a seeder, a command or the controllers of a storefront.
+
+### Creating a Campaign
+
+Create the campaign with its currency, its caps in cents and its dates:
+
+```php
+use Shopper\Core\Enum\CampaignBudgetType;
+use Shopper\Core\Models\Campaign;
+
+$summerSale = Campaign::query()->create([
+    'name' => 'Summer Sale 2026',
+    'currency_code' => shopper_currency(),
+    'budget_type' => CampaignBudgetType::SpendAndCount,
+    'budget_amount' => 500000,
+    'budget_count' => 1000,
+    'starts_at' => '2026-06-21 00:00:00',
+    'ends_at' => '2026-08-31 23:59:59',
+]);
+```
+
+`shopper_currency()` returns the code of the store default currency. A campaign in another currency only applies its discounts to carts in that currency.
+
+### Attaching Discounts
+
+Attach a discount before it is used, from the discount side of the relationship:
+
+```php
+use Shopper\Core\Models\Discount;
+
+$discount = Discount::query()->where('code', 'SUMMER20')->firstOrFail();
+
+$discount->campaign()->associate($summerSale)->save();
+```
+
+To take a discount out of its campaign before its first use, call `$discount->campaign()->dissociate()->save()`.
+
+### Listing Running Campaigns
+
+A storefront banner shows the campaigns that are running. Filter on the indexed columns, then drop the campaigns whose budget is used up:
+
+```php title="app/Http/Controllers/HomeController.php"
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Contracts\View\View;
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Support\Facades\Cache;
+use Shopper\Core\Models\Campaign;
+
+class HomeController extends Controller
+{
+    public function __invoke(): View
+    {
+        $campaigns = Cache::remember('storefront.campaigns', now()->addMinutes(10), function () {
+            return Campaign::query()
+                ->where('is_active', true)
+                ->where('starts_at', '<=', now())
+                ->where(fn (Builder $query) => $query->whereNull('ends_at')->orWhere('ends_at', '>', now()))
+                ->get()
+                ->reject(fn (Campaign $campaign) => $campaign->hasReachedBudget());
+        });
+
+        return view('home', ['campaigns' => $campaigns]);
+    }
+}
+```
+
+To show how many orders a campaign with a usage cap still accepts, subtract `used_count` from `budget_count`. An overdraw can push `used_count` above the cap, so floor the result at zero:
+
+```blade
+@if ($campaign->budget_type->hasCountCap())
+    <p>Only {{ max(0, $campaign->budget_count - $campaign->used_count) }} orders left at {{ $campaign->name }} prices.</p>
+@endif
+```
+
+[Events](#events) shows how to clear the cache when the budget moves.
+
+### Releasing Budget by Hand
+
+Shopper releases budget when an order is cancelled through `OrderCancelled` and when its payment is fully refunded. When your code voids an order another way, release its budget yourself and name the actor:
+
+```php
+use Shopper\Core\Actions\ReleaseCampaignBudget;
+
+resolve(ReleaseCampaignBudget::class)->releaseOrder($order->id, actor: 'support');
+```
+
+The actor lands in the `actor` column of the release movement. Calling it for an order that was already released does nothing.
+
+## Events
+
+Shopper dispatches no campaign event: nothing fires when a campaign is created, reaches its budget or gets budget back, as noted in [Cart and Discount Events](/3.x/events#cart-and-discount-events). Shopper listens to `OrderCancelled` with `Shopper\Core\Listeners\Orders\ReleaseCampaignBudgetListener`, which runs on the default queue ([Listeners Shopper Registers](/3.x/events#listeners-shopper-registers)), so the budget of a cancelled order comes back once a queue worker runs the listener.
+
+To react to budget changes, listen to the Eloquent `created` event of `CampaignBudgetMovement`. The reservation updates the campaign row with a query, so the `updated` event of `Campaign` does not fire when budget is reserved:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Illuminate\Support\Facades\Cache;
+use Shopper\Core\Models\CampaignBudgetMovement;
+
+public function boot(): void
+{
+    CampaignBudgetMovement::created(fn () => Cache::forget('storefront.campaigns'));
+}
+```
+
+The movement is created inside the checkout transaction. The [Events](/3.x/events#listening-to-events) page covers listeners and queues.
+
+## Permissions
+
+The admin panel checks four permissions of the `campaigns` resource, in the Sales group:
+
+| Permission | Allows |
+|------------|--------|
+| `campaigns.browse` | Opening the campaigns page and seeing the Campaigns sidebar item |
+| `campaigns.create` | Opening the form for a new campaign and saving it |
+| `campaigns.edit` | Opening the edit page and saving changes |
+| `campaigns.delete` | Deleting a campaign, from the list (one at a time or in bulk) or from its edit page |
+
+`campaigns.read` is seeded with the others, but the admin panel never checks it. Attaching a discount to a campaign happens in the discount form, under the discount permissions. The `campaigns` resource is new in 3.x: a store upgraded from 2.x must generate its permissions, as described in [Upgrading from 2.x](/3.x/acl#upgrading-from-2x).
+
+## In the Admin
+
+Merchants manage campaigns under Sales, Campaigns. The list shows each campaign with its name, status, budget use, number of attached promotions and dates, and filters by active state and budget type. The form has four sections: General (name, currency from the store currencies, active toggle), Budget (budget type, spend cap as a decimal amount, usage cap), Schedule (start date, end date on or after it) and Advanced (metadata). The currency locks once the campaign has reserved budget. The edit page adds a summary, a consumption bar for each cap and the list of attached promotions. A discount joins a campaign from the Campaign section of the discount form or from the add promotion wizard. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API has no campaign endpoint, and its responses never name a campaign. Campaigns show through the promotions of a cart:
+
+| Request | Campaign effect |
+|---------|-----------------|
+| `POST /store/carts/{cartId}/promotion` | A code whose campaign has run out, uses another currency or cannot absorb the discount is refused with a 422 error, code `promotion_not_applicable`. The response does not say why |
+| `GET /store/carts/{cartId}` | Each item of the `promotions` attribute has a `status`: `applied`, or `suppressed` with an `amount` of 0 when the discount applies nothing, for example because its campaign budget is used up |
+| `POST /store/carts/{cartId}/complete` | When another order took the last of the budget, a 422 error with code `promotion_budget_reached` on the `/data/attributes/promotion` pointer. The cart is priced again without the discount: show the new total and let the customer confirm |
+
+The `store` prefix is set by `SHOPPER_API_PREFIX`. The [Storefront](/3.x/storefront) page covers the Store API and its errors.

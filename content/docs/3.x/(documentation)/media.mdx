@@ -1,0 +1,271 @@
+---
+title: Media
+description: Store catalog images with Spatie Media Library, and configure the disk, collections, accepted types, upload sizes and conversions.
+---
+
+Shopper stores the images of products, variants, brands, categories, collections and attribute swatches with [Spatie Media Library](https://spatie.be/docs/laravel-medialibrary). Each image is a row of the `media` table attached to its model, a file on a storage disk and a set of resized copies called conversions. The `config/shopper/media.php` file sets the disks, the collection names, the accepted types, the upload sizes and the conversions.
+
+The core models declare their collections, and the admin models of the `Shopper\Models` namespace register them with Spatie Media Library. Only the admin classes have media methods such as `addMedia()`, `getMedia()` and `getThumbnailUrl()`: read [Core Models and Admin Models](/3.x/models#core-models-and-admin-models) before you swap one of these models.
+
+## Configuration
+
+The `shopper:install` command publishes `config/shopper/media.php` with the other Shopper configuration files. It also publishes the migration of the `media` table, and runs `php artisan shopper:link`, which links `public/storage` to the `public` disk and `public/vendor/shopper` to the assets of the admin panel.
+
+### Storage Disk
+
+The `storage` keys name the two image collections every catalog model has, a gallery that holds several images and a thumbnail that holds one, the disk of the images, and the disk of the files sold with virtual products.
+
+```php title="config/shopper/media.php"
+'storage' => [
+    'collection_name' => 'uploads',
+    'thumbnail_collection' => 'thumbnail',
+    'disk_name' => 'public',
+    'files_disk' => 'local',
+],
+```
+
+`disk_name` is any disk of `config/filesystems.php`. To keep the images on Amazon S3, install the `league/flysystem-aws-s3-v3` package, fill the `AWS_*` variables of the `s3` disk, and point Shopper to it:
+
+```php title="config/shopper/media.php"
+'disk_name' => 's3',
+```
+
+The disk applies to new uploads. Images already stored keep the disk recorded on their `media` row, so move their files and update that column yourself when you change it on a live store. Rename the collections before the first upload for the same reason: Shopper reads images by collection name, and the rows already stored keep the old one.
+
+`files_disk` holds the `files` collection of virtual products: the ebooks, font packs and templates that customers download after paying, through the temporary links described in [Downloadable Files](/3.x/products#downloadable-files). Keep it on a disk without public access, such as `local` or a private S3 bucket, never on `public`. The admin panel previews these files through temporary URLs, which the `local` disk serves when its `serve` option is `true`, as in the `config/filesystems.php` that Laravel ships. After you change `files_disk`, move the files already stored with `php artisan shopper:files:secure`.
+
+### Accepts Mime Types
+
+The `accepts_mime_types` list sets the image formats the gallery and the thumbnail collections accept on products, variants, brands, categories and collections. The admin panel applies the same list to the avatar of a team member and to the logo and cover of the store.
+
+```php title="config/shopper/media.php"
+'accepts_mime_types' => [
+    'image/jpeg',
+    'image/png',
+    'image/webp',
+    'image/avif',
+],
+```
+
+The collections refuse any other type, whether the file comes from the admin panel, a [product import](/3.x/import) or your code: Spatie Media Library throws `Spatie\MediaLibrary\MediaCollections\Exceptions\FileUnacceptableForCollection`. Attribute swatches accept the same four formats, from a list of their own that this key does not change.
+
+<Warning>
+  SVG is left out of the default list. An SVG file can embed scripts that run when someone opens the file from your storage URL, which lets a staff account attack the session of an administrator. Only add `image/svg+xml` if you understand and accept that risk.
+</Warning>
+
+The `accepts_file_types` key lists the formats of the downloadable files of virtual products, described in [Downloadable Files](/3.x/products#downloadable-files).
+
+### Media Filesize
+
+The `max_size` keys set the largest image the admin panel accepts, in kilobytes:
+
+```php title="config/shopper/media.php"
+'max_size' => [
+    'thumbnail' => 1024,
+    'images' => 2048,
+],
+```
+
+| Key | Default | Upload fields |
+|-----|---------|---------------|
+| `thumbnail` | `1024` | Thumbnail of a product or variant, image of a brand, category or collection, attribute swatch |
+| `images` | `2048` | Gallery of a product or variant |
+
+The logo and cover of the store and the avatar of a team member have a fixed limit of 1024 kilobytes. These keys apply to the admin forms only. Files added from your code or by an import are checked against the `max_file_size` key of Spatie Media Library, 10 MB by default. Publish its configuration to change it:
+
+```bash
+php artisan vendor:publish --tag=medialibrary-config
+```
+
+### Image Conversions
+
+The `conversions` keys list the resized copies generated for every image. Shopper ships two, `large` (800 by 800) and `medium` (500 by 500):
+
+```php title="config/shopper/media.php"
+'conversions' => [
+    'large' => [
+        'width' => 800,
+        'height' => 800,
+    ],
+    'medium' => [
+        'width' => 500,
+        'height' => 500,
+    ],
+],
+```
+
+Every conversion uses `Fit::Fill` and keeps the format of the original. The image is scaled down to fit inside the box without cropping, then centered on a white canvas of the exact size: a 1200 by 600 photo becomes a 500 by 250 image on a 500 by 500 square for `medium`. A smaller image is never enlarged.
+
+Add an entry to get another size, here a `small` copy for product cards:
+
+```php title="config/shopper/media.php"
+'conversions' => [
+    'large' => ['width' => 800, 'height' => 800],
+    'medium' => ['width' => 500, 'height' => 500],
+    'small' => ['width' => 200, 'height' => 200],
+],
+```
+
+New uploads get the new conversion. Generate it for the images already stored with the command of Spatie Media Library:
+
+```bash
+php artisan media-library:regenerate --only=small
+```
+
+Spatie Media Library queues conversions by default, on the connection of `QUEUE_CONNECTION`. Keep a worker running, as described in [Queue Worker](/3.x/installation#queue-worker): until the job runs, the conversion does not exist and the helpers below return the original image. Conversions use GD unless you set `IMAGE_DRIVER=imagick`, as the [PHP Extensions](/3.x/requirements#php-extensions) section explains.
+
+## Media Collections
+
+Each model declares its collections in `getMediaCollections()`, which returns `Shopper\Core\Media\MediaCollectionConfig` objects keyed by collection name. The admin model registers each one with Spatie Media Library, with its disk, its accepted types and its fallback URL.
+
+| Model | Collection | Name | Images |
+|-------|------------|------|--------|
+| Product, ProductVariant, Brand, Category, Collection | Gallery | `shopper.media.storage.collection_name`, `uploads` by default | Several |
+| Product, ProductVariant, Brand, Category, Collection | Thumbnail | `shopper.media.storage.thumbnail_collection`, `thumbnail` by default | One |
+| AttributeProduct | Swatch | `swatch` | One |
+
+Adding an image to a single-image collection replaces the previous one. Every image of these models gets the conversions of `shopper.media.conversions`.
+
+Add images from an upload or from a URL, reading the collection name from the configuration:
+
+```php title="app/Http/Controllers/BrandLogoController.php"
+<?php
+
+namespace App\Http\Controllers;
+
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Shopper\Core\Models\Contracts\Brand;
+
+class BrandLogoController extends Controller
+{
+    public function update(Request $request, int $brandId): RedirectResponse
+    {
+        $request->validate([
+            'logo' => ['required', 'image', 'mimetypes:'.implode(',', config('shopper.media.accepts_mime_types'))],
+        ]);
+
+        $brand = resolve(Brand::class)::query()->findOrFail($brandId);
+
+        $brand->addMedia($request->file('logo'))
+            ->toMediaCollection(config('shopper.media.storage.thumbnail_collection'));
+
+        return back();
+    }
+}
+```
+
+```php
+$product->addMediaFromUrl('https://cdn.example.com/classic-t-shirt-back.jpg')
+    ->toMediaCollection(config('shopper.media.storage.collection_name'));
+```
+
+## Retrieving Images
+
+The admin models add two methods. `getThumbnail()` returns the `Media` of the thumbnail collection, or else the first image of the gallery, or `null` when the model has neither. `getThumbnailUrl()` returns the URL of the same image, and the URL of the [placeholder image](#placeholder-image) when there is none. Pass a conversion name to get the resized copy; when that conversion has not been generated yet, it returns the original:
+
+```blade title="resources/views/products/_card.blade.php"
+<img src="{{ $product->getThumbnailUrl('medium') }}" alt="{{ $product->name }}">
+```
+
+For the gallery, read the collection with the methods of Spatie Media Library. `getAvailableUrl()` returns the first generated conversion of the list, or the original:
+
+```blade title="resources/views/products/show.blade.php"
+@foreach ($product->getMedia(config('shopper.media.storage.collection_name')) as $image)
+    <img src="{{ $image->getAvailableUrl(['large']) }}" alt="{{ $image->name }}">
+@endforeach
+```
+
+`getFirstMediaUrl()` returns the URL of the first image of a collection. On an empty gallery or thumbnail collection, it returns the placeholder image:
+
+```php
+$bannerUrl = $category->getFirstMediaUrl(config('shopper.media.storage.collection_name'), 'large');
+```
+
+Load the `media` relation with your models to avoid one query per model in a listing:
+
+```php
+use Shopper\Core\Models\Contracts\Product as ProductContract;
+
+$products = resolve(ProductContract::class)::query()
+    ->with('media')
+    ->latest()
+    ->limit(12)
+    ->get();
+```
+
+## Placeholder Image
+
+When a gallery or thumbnail collection is empty, `getThumbnailUrl()` and `getFirstMediaUrl()` return the URL given by the `shopper_fallback_url()` helper: `/vendor/shopper/images/placeholder.jpg` on your application URL. The file ships with the admin panel and is served through the `public/vendor/shopper` link that `php artisan shopper:link` creates. When the placeholder answers 404, run that command again.
+
+The placeholder is the same for every model and has no configuration key. To show your own image, test `getThumbnail()`, which returns `null` instead of the placeholder:
+
+```blade title="resources/views/products/_card.blade.php"
+<img
+    src="{{ $product->getThumbnail()?->getAvailableUrl(['medium']) ?? asset('images/no-product-image.jpg') }}"
+    alt="{{ $product->name }}"
+>
+```
+
+The swatch collection has no placeholder: `getFirstMediaUrl('swatch')` returns an empty string when the attribute value has no swatch.
+
+## Advanced Customization
+
+To add a collection, swap the admin model as described in [Swapping a Model](/3.x/models#swapping-a-model) and merge your collection into `getMediaCollections()`. This product model adds a single-image size guide:
+
+```php title="app/Models/Product.php"
+<?php
+
+namespace App\Models;
+
+use Shopper\Core\Media\MediaCollectionConfig;
+use Shopper\Models\Product as ShopperProduct;
+
+class Product extends ShopperProduct
+{
+    public function getMediaCollections(): array
+    {
+        return array_merge(parent::getMediaCollections(), [
+            'size-guide' => new MediaCollectionConfig(
+                name: 'size-guide',
+                disk: config('shopper.media.storage.disk_name'),
+                singleFile: true,
+                acceptsMimeTypes: config('shopper.media.accepts_mime_types'),
+            ),
+        ]);
+    }
+}
+```
+
+`MediaCollectionConfig` takes the collection name, the disk (`public` by default), `singleFile` (`false` by default), the accepted types (an empty array accepts every type) and a fallback URL (none by default). The admin model registers the new collection like the others, and its images get the configured conversions:
+
+```php
+$product->addMedia($request->file('size_guide'))->toMediaCollection('size-guide');
+
+$sizeGuideUrl = $product->getFirstMediaUrl('size-guide', 'large');
+```
+
+The admin panel shows no field for a collection you add. Add one in your own Livewire component, or publish the component configuration of the product section with `php artisan shopper:component:publish product` as described in [Components](/3.x/configuration#components).
+
+## In the Admin
+
+The **Media** page of a product holds the thumbnail and the gallery, and **Choose from images** copies a gallery image into the thumbnail collection. Variants have the same two fields, brands, categories and collections have one image field that fills their thumbnail collection, and the attributes page of a product has a swatch upload for each attribute value. The store logo and cover sit in the general settings, the avatar in the account page. The [user guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The [Store API](/3.x/storefront) returns each image as an object with its `id` (the UUID of the media), `url`, `conversions` (the URL of each conversion already generated, keyed by name), `name`, `extension`, `created_at` and `updated_at`. Products and variants carry `images`, the gallery, and `thumbnail`, which falls back to the first gallery image. Brands, categories and collections carry `thumbnail` only, without that fallback. A model without an image returns `null`: the Store API never sends the placeholder. The `files` of a virtual product are not images and carry no URL, as described in [Downloadable Files](/3.x/products#downloadable-files).
+
+```json
+{
+    "id": "9d4f6f0e-6a3b-4b8e-9b1e-2f7c1d2a5e10",
+    "url": "https://shop.example.com/storage/42/classic-t-shirt-front.jpg",
+    "conversions": {
+        "large": "https://shop.example.com/storage/42/conversions/classic-t-shirt-front-large.jpg",
+        "medium": "https://shop.example.com/storage/42/conversions/classic-t-shirt-front-medium.jpg"
+    },
+    "name": "classic-t-shirt-front",
+    "extension": "jpg",
+    "created_at": "2026-03-12T09:41:07+00:00",
+    "updated_at": "2026-03-12T09:41:09+00:00"
+}
+```

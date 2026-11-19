@@ -1,0 +1,257 @@
+---
+title: Two-Factor Authentication
+description: Authenticator app codes, recovery codes and passkeys for admin users, what the User model needs, and the events Shopper dispatches.
+---
+
+Shopper offers two optional ways to protect the admin panel sign-in. Two-factor authentication asks for a one-time code from an authenticator app after the password. Passkeys replace the password with Face ID, Touch ID, Windows Hello or a hardware security key. Both are off on a fresh install.
+
+Once a method is enabled in the configuration, each team member turns it on for their own account from their profile page. An administrator cannot turn it on or off for another team member from the admin panel.
+
+<Note>
+Both methods protect the sign-in of the admin panel. The Store API signs customers in with its own endpoints, described in [From a Storefront](#from-a-storefront).
+</Note>
+
+## Configuration
+
+Two keys of `config/shopper/auth.php` make each method available, and both read an environment variable:
+
+```php title="config/shopper/auth.php"
+return [
+    '2fa_enabled' => env('SHOPPER_ENABLED_TWO_FACTOR', false),
+    'passkeys_enabled' => env('SHOPPER_ENABLED_PASSKEYS', false),
+];
+```
+
+Set the variables in your `.env` file:
+
+```bash title=".env"
+SHOPPER_ENABLED_TWO_FACTOR=true
+SHOPPER_ENABLED_PASSKEYS=true
+```
+
+When `2fa_enabled` is `false`, the profile page hides the Two Factor Authentication section and the sign-in asks for no code, even from users who turned it on before. Their secrets stay in the database, so setting the key back to `true` brings the code prompt back for them. The [Configuration](/3.x/configuration#authentication) page lists the other keys of this file.
+
+## Preparing the User Model
+
+The profile page shows the Two Factor Authentication section only when your `User` model implements `HasStoreAuthentication`, and the Passkeys section only when it implements `PasskeyUser` from `laravel/passkeys`. Shopper provides a trait for each contract:
+
+```php title="app/Models/User.php"
+use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Laravel\Passkeys\Contracts\PasskeyUser;
+use Laravel\Passkeys\PasskeyAuthenticatable;
+use Shopper\Contracts\HasStoreAuthentication;
+use Shopper\Contracts\HasStoreAuthenticationRecovery;
+use Shopper\Models\Contracts\ShopperUser;
+use Shopper\Traits\InteractsWithShopper;
+use Shopper\Traits\InteractsWithStoreAuthentication;
+use Shopper\Traits\InteractsWithStoreAuthenticationRecovery;
+
+#[Hidden([
+    'password',
+    'remember_token',
+    'store_two_factor_secret',
+    'store_two_factor_recovery_codes',
+])]
+class User extends Authenticatable implements HasStoreAuthentication, HasStoreAuthenticationRecovery, PasskeyUser, ShopperUser
+{
+    use InteractsWithShopper;
+    use InteractsWithStoreAuthentication;
+    use InteractsWithStoreAuthenticationRecovery;
+    use PasskeyAuthenticatable;
+}
+```
+
+Implement both two-factor contracts together: the profile page shows the recovery codes of every user who turns two-factor authentication on. Leave out `PasskeyUser` and `PasskeyAuthenticatable` while passkeys stay off. The `ShopperUser` contract and the hidden attributes come from [Prepare Your User Model](/3.x/installation#prepare-your-user-model).
+
+### Database Columns
+
+The `shopper/core` migrations add two nullable `text` columns to the `users` table. The traits encrypt both values with Laravel's encrypter before saving them:
+
+| Column | Content |
+|--------|---------|
+| `store_two_factor_secret` | The secret shared with the authenticator app, encrypted |
+| `store_two_factor_recovery_codes` | The recovery codes, as an encrypted JSON array |
+
+Shopper 2.x named these columns `two_factor_secret` and `two_factor_recovery_codes`. A 3.x migration renames them, so they no longer collide with the columns of Laravel Fortify, and skips the rename when the old columns are missing. The `shopper-upgrade-two-factor-auth` skill, listed in [Upgrade Skills](/3.x/ai-tools#upgrade-skills), updates a 2.x `User` model to the contracts above.
+
+## Enabling Two-Factor Authentication
+
+A team member turns two-factor authentication on from the My profile page, at `/cpanel/profile` with the default prefix:
+
+<Steps>
+  <Step title="Start the activation">
+    In the Two Factor Authentication section, click **Enable Two Factor** and confirm the account password.
+  </Step>
+  <Step title="Scan the QR code">
+    Scan the QR code with an authenticator app that supports time-based one-time passwords (TOTP), such as Google Authenticator, Microsoft Authenticator or 1Password.
+  </Step>
+  <Step title="Store the recovery codes">
+    Copy the recovery codes shown below the QR code to a password manager.
+  </Step>
+</Steps>
+
+Two-factor authentication is active as soon as the QR code appears: the next sign-in asks for a code. Scan the code and store the recovery codes before leaving the page.
+
+The app lists the account under the value of `config('app.name')` and the user's email address, so set `APP_NAME` to the name of the store. Each action of the section asks for the password once: after a confirmation, the next actions skip the prompt for the number of seconds set in `config('auth.password_timeout')`, 10800 in Laravel's default configuration.
+
+## Recovery Codes
+
+Recovery codes let a team member sign in without the authenticator app, for example after losing their phone. Shopper generates eight codes, each made of two random strings of 10 characters joined by a hyphen.
+
+Each code works once. Signing in with a recovery code replaces that code with a new one, so the list always holds eight codes. From the profile page, **Show Recovery Codes** displays the current list, and **Regenerate Recovery Codes** replaces all eight: the previous codes stop working at once. Both buttons ask for the password.
+
+## Logging In with Two-Factor Authentication
+
+When a user with two-factor authentication enters a correct email and password, the login page shows an Authenticate Your Account screen instead of signing them in. They type the 6-digit code from their app, or click **Use a recovery code** to type one of their recovery codes. **Back to login** returns to the email and password form.
+
+The password is checked again with the code, and the form allows five attempts per minute across both steps. After a password reset, a user with two-factor authentication goes back to the login page and signs in with a code, instead of being signed in by the reset.
+
+## Disabling Two-Factor Authentication
+
+The **Disable** button of the Two Factor Authentication section asks for the password, then deletes the secret and the recovery codes. The next sign-in asks for the password only. Turning two-factor authentication on again creates a new secret, so the user scans a new QR code.
+
+A team member who lost both their device and their recovery codes cannot sign in. Turn two-factor authentication off for them from `php artisan tinker`, with the action the profile page uses:
+
+```php
+use App\Models\User;
+use Shopper\Actions\Auth\DisableTwoFactorAuthentication;
+
+$user = User::query()->where('email', 'jane@example.com')->firstOrFail();
+
+app(DisableTwoFactorAuthentication::class)($user);
+```
+
+## Passkeys
+
+A passkey is a credential stored on the user's device or in their password manager. Signing in with it takes a fingerprint, a face scan or the device PIN, and no password. Shopper uses [laravel/passkeys](https://github.com/laravel/passkeys) for the WebAuthn exchange.
+
+A passkey sign-in replaces both the password and the code: a user who also has two-factor authentication is not asked for a code after a passkey, because the passkey already proves both the device and the person.
+
+### Setting Up Passkeys
+
+Passkeys need a database table, the model contract and a relying party that matches the admin panel URL:
+
+<Steps>
+  <Step title="Enable passkeys">
+    Set `SHOPPER_ENABLED_PASSKEYS=true` in your `.env` file.
+  </Step>
+  <Step title="Prepare the model">
+    Add the `PasskeyUser` contract and the `PasskeyAuthenticatable` trait to your `User` model, as shown in [Preparing the User Model](#preparing-the-user-model).
+  </Step>
+  <Step title="Create the passkeys table">
+    The installer does not publish this migration. Publish it from `laravel/passkeys`, then run it:
+
+    ```bash
+    php artisan vendor:publish --tag=passkeys-migrations
+    php artisan migrate
+    ```
+  </Step>
+  <Step title="Check the application URL">
+    Browsers bind a passkey to a domain. `laravel/passkeys` reads it from the host of `config('app.url')`, so `APP_URL` must match the domain of the admin panel. When the admin panel runs on another domain, publish the configuration with `php artisan vendor:publish --tag=passkeys-config` and set `relying_party_id` and `allowed_origins` in `config/passkeys.php`.
+  </Step>
+</Steps>
+
+Browsers offer passkeys only on HTTPS pages and on `localhost`.
+
+### Registering a Passkey
+
+The Passkeys section of the profile page lists the user's passkeys, newest first, with the name, the date it was added and the date it was last used. **Add passkey** asks for a name, such as "MacBook Pro", and the account password, then hands over to the browser, which creates the passkey. The button is disabled in a browser without passkey support.
+
+Each passkey has a **Delete** action, which asks for the password. A deleted passkey can no longer sign in.
+
+### Signing In with a Passkey
+
+The login page shows a **Sign in with a passkey** button below the form, and the email field offers the saved passkeys through the browser's autofill. A successful passkey sign-in regenerates the session and redirects like a password sign-in.
+
+Shopper registers its own routes under the admin panel prefix:
+
+| Method | URI | Name | Access |
+|--------|-----|------|--------|
+| `GET` | `/cpanel/passkeys/login/options` | `shopper.passkeys.login-options` | Guests, 6 requests per minute |
+| `POST` | `/cpanel/passkeys/login` | `shopper.passkeys.login` | Guests, 6 requests per minute |
+| `GET` | `/cpanel/passkeys/options` | `shopper.passkeys.registration-options` | Signed-in users who confirmed their password |
+| `POST` | `/cpanel/passkeys` | `shopper.passkeys.store` | Signed-in users who confirmed their password |
+
+While `passkeys_enabled` is `true`, Shopper calls `Passkeys::ignoreRoutes()`, so the routes of `laravel/passkeys` are not registered. A storefront that offers passkeys to customers with the same package defines its own routes.
+
+## Developer Integration
+
+The traits cover the usual setup. To store the secret elsewhere or verify codes another way, implement the contracts yourself or replace the code provider.
+
+### Contracts and Traits
+
+`Shopper\Contracts\HasStoreAuthentication` is implemented by `Shopper\Traits\InteractsWithStoreAuthentication`:
+
+| Method | Returns |
+|--------|---------|
+| `getStoreAuthenticationSecret()` | The secret as stored, encrypted, or `null` when two-factor authentication is off |
+| `saveStoreAuthenticationSecret(?string $secret)` | Saves the secret encrypted, or clears it with `null` |
+| `getStoreAuthenticationHolderName()` | The account name shown in the authenticator app, the email address by default |
+| `getStoreAuthenticationQrCodeSvg()` | The QR code as a 192 pixel SVG |
+| `getStoreAuthenticationQrCodeUrl()` | The `otpauth://` URL the QR code encodes |
+
+`Shopper\Contracts\HasStoreAuthenticationRecovery` is implemented by `Shopper\Traits\InteractsWithStoreAuthenticationRecovery`:
+
+| Method | Returns |
+|--------|---------|
+| `getStoreAuthenticationRecoveryCodes()` | The decrypted list of codes, or `null` |
+| `saveStoreAuthenticationRecoveryCodes(?array $codes)` | Saves the codes encrypted, or clears them with `null` |
+| `replaceStoreAuthenticationRecoveryCode(string $code)` | Swaps a used code for a new one |
+
+The login page reads the encrypted secret from the `store_two_factor_secret` attribute when it checks a code. A custom implementation of `HasStoreAuthentication` keeps the secret in that attribute, encrypted with Laravel's encrypter.
+
+### Code Provider
+
+`Shopper\Contracts\TwoFactorAuthenticationProvider` generates the secrets, builds the QR code URL and verifies the codes. The default implementation wraps [pragmarx/google2fa](https://github.com/antonioribeiro/google2fa):
+
+| Method | Purpose |
+|--------|---------|
+| `generateSecretKey(): string` | Creates a new secret when a user turns two-factor authentication on |
+| `qrCodeUrl(string $companyName, string $companyEmail, string $secret): string` | Builds the `otpauth://` URL |
+| `verify(string $secret, string $code): bool\|int` | Checks a code typed on the login page |
+
+Bind your own implementation in a service provider to replace it everywhere Shopper uses it:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Auth\TimeBasedCodeProvider;
+use Shopper\Contracts\TwoFactorAuthenticationProvider;
+
+public function register(): void
+{
+    $this->app->singleton(TwoFactorAuthenticationProvider::class, TimeBasedCodeProvider::class);
+}
+```
+
+## Events
+
+Shopper dispatches `Shopper\Events\TwoFactor\TwoFactorAuthenticationEnabled` when a user turns two-factor authentication on from their profile page. The event carries the user in `$event->user`. A store that keeps a security log records it with a listener:
+
+```php title="app/Listeners/RecordTwoFactorActivation.php"
+namespace App\Listeners;
+
+use Illuminate\Support\Facades\Log;
+use Shopper\Events\TwoFactor\TwoFactorAuthenticationEnabled;
+
+class RecordTwoFactorActivation
+{
+    public function handle(TwoFactorAuthenticationEnabled $event): void
+    {
+        Log::info('Two-factor authentication enabled', [
+            'user_id' => $event->user->getKey(),
+        ]);
+    }
+}
+```
+
+`Shopper\Events\TwoFactor\TwoFactorAuthenticationDisabled` also exists, but Shopper does not dispatch it when a user turns two-factor authentication off, so a listener on it never runs.
+
+Passkeys dispatch the events of `laravel/passkeys`: `Laravel\Passkeys\Events\PasskeyRegistered` and `PasskeyDeleted` carry the user and the passkey, and `PasskeyVerified` fires on each passkey sign-in. The [Events](/3.x/events#admin-panel-events) page lists the other events of the admin panel.
+
+## In the Admin
+
+Each team member manages both methods from the My profile page, opened from the account menu of the top bar: the Two Factor Authentication section with its QR code and recovery codes, and the Passkeys section with the list of passkeys. On a customer's page, a badge shows whether two-factor authentication is enabled or disabled for that account. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API does not expose two-factor authentication or passkeys: no endpoint enables them, lists recovery codes or registers a passkey. Its `/store/auth/login` endpoint signs customers in with an email address and a password. A storefront that wants a second factor for customers builds it in the application, for example with Laravel Fortify, whose columns no longer collide with Shopper's. The [Storefront](/3.x/storefront) section documents the Store API.

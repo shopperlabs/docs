@@ -5,15 +5,13 @@ description: The widgets on the admin dashboard, the setup guide for new stores,
 
 The dashboard is the first screen after login. A new store sees a setup guide that walks through the first products, shipping, payments and taxes. Once the guide is done, the dashboard shows the month's revenue, orders and customers, a 12-month revenue chart, the best-selling products and the latest orders.
 
-<Frame>
-  ![Dashboard of a clothing store with the revenue, products, orders and customers cards, the monthly revenue chart, the top selling products and the recent orders](/images/v3/dashboard.png)
-</Frame>
+<Screenshot src="/images/v3/dashboard.png" alt="Dashboard of a clothing store with the revenue, products, orders and customers cards, the monthly revenue chart, the top selling products and the recent orders" />
 
 ## Widgets
 
 The dashboard page renders four Livewire components. The stat cards, the top products and the recent orders load lazily: the page shows a placeholder for each and fills it once the first paint is done, so a slow query never holds the whole page.
 
-Revenue is counted the same way in the stat card and the chart: the order totals with a payment status of Paid, Partially refunded or Refunded, minus the refunds that were settled. An order refunded in full therefore adds nothing to the revenue.
+Revenue is counted the same way in the stat card and the chart: the order totals with a payment status of Paid, Partially refunded or Refunded, minus the settled `OrderRefund` records of the period. Shopper's payment service does not create these records, so a refund only lowers the revenue once your application records it, as described in [Order Refunds](/3.x/payments#order-refunds).
 
 ### Stat Cards
 
@@ -46,9 +44,7 @@ The revenue chart, the top products and the recent orders are shown only to user
 
 A new store sees a checklist in place of the widgets. Each step is ticked automatically when the matching data exists in the database, and links to the screen where the merchant creates it:
 
-<Frame>
-  ![Setup guide of a new store at 1 of 5 completed, with the Add your first product step open](/images/v3/dashboard-setup-guide.png)
-</Frame>
+<Screenshot src="/images/v3/dashboard-setup-guide.png" alt="Setup guide of a new store at 1 of 5 completed, with the Add your first product step open" />
 
 | Step | Completed when | Permission |
 |------|----------------|------------|

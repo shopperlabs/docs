@@ -1,0 +1,696 @@
+---
+title: Orders
+description: The Order model of Shopper 3.x, its items and addresses, the order, payment and shipping statuses, order numbers and the reclaim of unpaid orders.
+---
+
+An order is the record of a purchase. When a customer checks out, Shopper copies everything the purchase needs into the order: the items with their price at that moment, the shipping and billing addresses, the discounts, the tax lines and the totals, all in [cents](/3.x/money). The order stays correct when the cart is gone, a product is renamed or a price changes.
+
+An order carries three statuses: `status` for the order itself (New, Processing, Completed, Cancelled, Archived), `payment_status` for the money and `shipping_status` for the packages. Each order item also has a fulfillment status. The payment and the shipments have their own pages: [Payments](/3.x/payments) and [Fulfillment](/3.x/fulfillment).
+
+## Models
+
+The order is stored by five models of the `Shopper\Core\Models` namespace:
+
+| Model | Table | Holds |
+|-------|-------|-------|
+| `Order` | `orders` | The order, its statuses, its totals and the snapshot of its main discount |
+| `OrderItem` | `order_items` | One purchased product or variant, with its name, SKU, quantity and unit price at checkout |
+| `OrderAddress` | `order_addresses` | A copy of the shipping or billing address |
+| `OrderPromotion` | `order_promotions` | One discount applied at checkout, see [Discounts](/3.x/discounts) |
+| `OrderTaxLine` | `order_tax_lines` | One tax applied to an order item, see [Taxes](/3.x/taxes) |
+
+Shipments (`OrderShipping` and `OrderShippingEvent`) are described on the [Fulfillment](/3.x/fulfillment) page, refunds (`OrderRefund`) on the [Payments](/3.x/payments) page.
+
+The `Order` model implements the `Shopper\Core\Models\Contracts\Order` contract. Its traits change what you can do with an order:
+
+- `HasOrderStatusTransitions` adds `canTransitionTo()` and `transitionTo()`, covered in [Order Status](#order-status).
+- `HasPaymentStatusTransitions` adds `canTransitionPaymentTo()` and `transitionPaymentTo()`, covered in [Payment Status](#payment-status).
+- `HasPublicId` fills `public_id` with a ULID when the order is created, as described in [Public IDs](/3.x/models#public-ids). Use it in URLs and emails instead of the `id`.
+- `Searchable` indexes the order for the admin search, as described in [Orders and Customers](/3.x/search#orders-and-customers).
+- `SoftDeletes`: deleting an order sets `deleted_at` and keeps the row.
+
+### Extending the Model
+
+The class configured by default under the `order` key of `config/shopper/models.php` is `Shopper\Core\Models\Order`. To add your own methods, extend it:
+
+```php title="app/Models/Order.php"
+namespace App\Models;
+
+use Shopper\Core\Models\Order as ShopperOrder;
+
+class Order extends ShopperOrder
+{
+    public function hasFreeShipping(): bool
+    {
+        return $this->shipping_amount === 0;
+    }
+}
+```
+
+Then point the configuration to your class:
+
+```php title="config/shopper/models.php"
+'order' => App\Models\Order::class,
+```
+
+Shopper binds the contract to the configured class, so `resolve(Shopper\Core\Models\Contracts\Order::class)`, `$item->order`, `$customer->orders` and the checkout all return your model. Keep the class name `Order`: the `items`, `shippings` and `refund` relations derive their `order_id` foreign key from it. If your class overrides `booted()`, call `parent::booted()`, which sets the [order number](#order-number-generation). The [Models](/3.x/models#swapping-a-model) page explains how swapping works.
+
+`OrderItem`, `OrderAddress`, `OrderPromotion` and `OrderTaxLine` have no configuration key: `$order->items` always returns `Shopper\Core\Models\OrderItem` instances. [Models You Cannot Swap](/3.x/models#models-you-cannot-swap) shows how to add a relation to them.
+
+## Database Schema
+
+The tables use the `sh_` prefix by default, as described in [Database Table Prefix](/3.x/configuration#database-table-prefix). Every amount is an integer in [cents](/3.x/money).
+
+### Order Table
+
+The `sh_orders` table has soft deletes:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `number` | string(32) | yes | generated | Order number such as `ORD-20261117-000124`, unique |
+| `price_amount` | integer | yes | null | Amount charged to the customer, taxes and shipping included |
+| `tax_amount` | unsigned integer | yes | null | Total tax of the order |
+| `shipping_amount` | integer | yes | null | Shipping cost |
+| `status` | string(32) | no | `new` | A `Shopper\Core\Enum\OrderStatus` value, set by the model |
+| `payment_status` | string(32) | no | `pending` | A `Shopper\Core\Enum\PaymentStatus` value |
+| `shipping_status` | string(32) | no | `unfulfilled` | A `Shopper\Core\Enum\ShippingStatus` value |
+| `currency_code` | string | no | - | Currency of every amount of the order |
+| `email` | string | yes | null | Email the customer gave at checkout, the only contact of a guest order |
+| `notes` | text | yes | null | Private note written in the admin panel |
+| `metadata` | jsonb | yes | null | Your own data |
+| `parent_order_id` | bigint | yes | null | Parent order, see [Parent/Child Orders](#parentchild-orders) |
+| `payment_method_id` | bigint | yes | null | Payment method chosen at checkout |
+| `channel_id` | bigint | yes | null | Sales channel of the order |
+| `customer_id` | bigint | yes | null | Customer, null for a guest order |
+| `zone_id` | bigint | yes | null | Zone of the customer |
+| `billing_address_id` | bigint | yes | null | Billing `OrderAddress` |
+| `shipping_address_id` | bigint | yes | null | Shipping `OrderAddress` |
+| `shipping_option_id` | bigint | yes | null | Carrier option chosen at checkout |
+| `discount_id` | bigint | yes | null | Discount with the largest amount, see [Discount](#discount) |
+| `discount_code` | string | yes | null | Code of that discount |
+| `discount_type` | string(32) | yes | null | Type of that discount when it was applied |
+| `discount_value_at_apply` | unsigned integer | yes | null | Value of that discount when it was applied |
+| `discount_currency_code` | char(3) | yes | null | Currency of the discounts, set when one was applied |
+| `cancelled_at` | timestamp | yes | null | Set when the order moves to Cancelled |
+| `archived_at` | timestamp | yes | null | Set when the order moves to Archived |
+| `created_at` | timestamp | yes | null | Date the order was placed |
+| `updated_at` | timestamp | yes | null | Last update |
+| `deleted_at` | timestamp | yes | null | Soft delete date |
+
+Every foreign key is set to null when the referenced row is deleted, so deleting a customer or a payment method keeps their orders. The table is indexed on `(status, created_at)` and `(payment_status, currency_code, created_at)` for the admin lists and the reports.
+
+The model does not cast `metadata`. To read it as an array, extend the model and add `'metadata' => 'array'` to its casts.
+
+### OrderItem Table
+
+The `sh_order_items` table has no soft deletes. Its rows are deleted with their order when the order is force deleted:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `name` | string | yes | null | Name at checkout, such as "Classic T-Shirt / Blue / L" for a variant |
+| `sku` | string | yes | null | SKU at checkout, indexed |
+| `product_type` | string | no | - | Morph type of the product or the variant |
+| `product_id` | bigint | no | - | ID of the product or the variant |
+| `quantity` | integer | no | - | Quantity ordered |
+| `unit_price_amount` | integer | no | - | Unit price at checkout |
+| `tax_amount` | unsigned integer | no | 0 | Tax of the line |
+| `discount_amount` | unsigned integer | no | 0 | Discount of the line |
+| `pricing` | json | yes | null | What a [custom price resolver](/3.x/pricing#custom-price-resolver) returned for the line |
+| `metadata` | jsonb | yes | null | Metadata copied from the cart line, such as an engraving text |
+| `order_id` | bigint | no | - | Order |
+| `fulfillment_status` | string | yes | `pending` | A `Shopper\Core\Enum\FulfillmentStatus` value, set by the model |
+| `order_shipping_id` | bigint | yes | null | Shipment that carries the item |
+| `created_at` | timestamp | yes | null | Creation date |
+| `updated_at` | timestamp | yes | null | Last update |
+
+The model casts `pricing` and `metadata` to arrays and `fulfillment_status` to the enum.
+
+### OrderAddress Table
+
+An `OrderAddress` is a copy of the address used at checkout, so editing an address in the customer's book never changes a past order. The `sh_order_addresses` table has no soft deletes:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `customer_id` | bigint | yes | null | Customer, null for a guest order |
+| `first_name` | string | no | - | First name |
+| `last_name` | string | no | - | Last name |
+| `company` | string | yes | null | Company name |
+| `street_address` | string | no | - | Street and number |
+| `street_address_plus` | string | yes | null | Apartment, floor, building |
+| `postal_code` | string | no | - | Postal code |
+| `city` | string | no | - | City |
+| `state` | string | yes | null | State or region |
+| `phone` | string | yes | null | Phone number |
+| `country_name` | string | yes | null | Country name at checkout |
+| `created_at` | timestamp | yes | null | Creation date |
+| `updated_at` | timestamp | yes | null | Last update |
+
+The `full_name` attribute joins the first and last names.
+
+### OrderPromotion Table
+
+The `sh_order_promotions` table keeps one row per discount applied at checkout, with the amount it took off:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `order_id` | bigint | no | - | Order, deleted with it |
+| `discount_id` | bigint | yes | null | Discount, null once the discount is deleted |
+| `code` | string | yes | null | Code entered by the customer, null for an automatic discount |
+| `type` | string(32) | no | - | Type of the discount when it was applied |
+| `value_at_apply` | unsigned integer | no | - | Value of the discount when it was applied |
+| `amount` | unsigned integer | no | - | Amount the discount took off the order |
+| `currency_code` | char(3) | no | - | Currency of the amount |
+| `created_at` | timestamp | yes | null | Creation date |
+| `updated_at` | timestamp | yes | null | Last update |
+
+## Relationships
+
+The examples on this page use `Shopper\Core\Models\Order`. If you swapped the model, use your own class.
+
+### Customer
+
+`customer` returns the user who placed the order, an instance of the class set in `auth.providers.users.model`. It is null for a guest order, which keeps the buyer's email in `email`. The `InteractsWithShopper` trait of your `User` model adds the inverse relation:
+
+```php
+$order->customer?->email;
+
+$customer->orders()->latest()->get();
+```
+
+### Items
+
+`items` returns the order items. Each item points to the product or the variant it was bought from through the polymorphic `product` relation, and its `total` attribute is `unit_price_amount * quantity - discount_amount`:
+
+```php
+foreach ($order->items as $item) {
+    echo $item->name.' x '.$item->quantity.': '.$item->total;
+}
+
+$item->product;
+$item->order;
+```
+
+### Addresses
+
+`shippingAddress` and `billingAddress` return the `OrderAddress` rows the order points to through `shipping_address_id` and `billing_address_id`. The checkout creates one row for each:
+
+```php
+$order->shippingAddress?->full_name;
+$order->billingAddress?->city;
+```
+
+### Shipping
+
+`shippings` returns the packages of the order, `shippingOption` the carrier option the customer chose at checkout, and `$item->shipment` the package that carries an item. An order can ship in several packages, as shown in [Partial Shipment (Split Across Packages)](/3.x/fulfillment#partial-shipment-split-across-packages). The [Fulfillment](/3.x/fulfillment) page covers shipments.
+
+### Refund
+
+`refund` returns the `OrderRefund` of the order, or null. Refunds are described in [Refunding a Payment](/3.x/payments#refunding-a-payment).
+
+### Channel and Zone
+
+`channel` returns the [sales channel](/3.x/channels) the order was placed on, `zone` the zone of the customer, which decided the currency, the carriers and the payment methods, and `paymentMethod` the payment method chosen at checkout:
+
+```php
+$order->channel?->name;
+$order->zone?->name;
+$order->paymentMethod?->title;
+```
+
+### Discount
+
+An order keeps every discount applied at checkout in `promotions`, one `OrderPromotion` row per discount with the amount it took off. The discount with the largest amount is also copied to the order columns `discount_id`, `discount_code`, `discount_type` and `discount_value_at_apply`, and `discount` returns it. To count the orders that used a discount, count its `OrderPromotion` rows, since `Discount::orders()` only returns the orders where it took the largest amount:
+
+```php
+use Shopper\Core\Models\OrderPromotion;
+
+$order->discount?->code;
+
+$order->promotions->sum('amount');
+
+OrderPromotion::query()->where('discount_id', $summerSale->id)->count();
+```
+
+The checkout records each use against the discount's limits and charges the budget of its [campaign](/3.x/campaigns), as described in [Usage Limit Enforcement](/3.x/discounts#usage-limit-enforcement).
+
+### Tax Lines
+
+Taxes are stored per item: `$item->taxLines` returns the `OrderTaxLine` rows of an item, one per tax rate with its code, name, rate and amount. `tax_amount` on the item and on the order hold the totals. The [Taxes](/3.x/taxes) page covers how they are computed, and [Tax Rates](/3.x/taxes#tax-rates) where the rates come from.
+
+```php
+$order->load('items.taxLines');
+
+foreach ($order->items as $item) {
+    foreach ($item->taxLines as $taxLine) {
+        echo $taxLine->name.' ('.$taxLine->rate.'%): '.$taxLine->amount;
+    }
+}
+```
+
+### Parent/Child Orders
+
+`parent` and `children` link orders through `parent_order_id`. Shopper never sets it; use it to split an order, for example one child order per supplier:
+
+```php
+$order->children;
+$childOrder->parent;
+```
+
+## Query Scopes
+
+The Order model has three scopes, and `HasPublicId` adds a fourth:
+
+```php
+use Shopper\Core\Models\Order;
+
+Order::query()->notArchived()->latest()->get();
+Order::query()->archived()->get();
+Order::query()->awaitingPayment()->get();
+Order::query()->wherePublicId('01JZ8Q4V6S3W9D2M7K5T1B8XNC')->first();
+```
+
+`awaitingPayment` returns the New orders whose payment is still Pending, the ones [Reclaiming Pending Orders](#reclaiming-pending-orders) works on.
+
+## Order Total
+
+`$order->total()` sums the `total` of the items: unit prices times quantities, minus the line discounts. It leaves out taxes and shipping. The amount the customer paid is `price_amount`, which the checkout sets to the cart total: the subtotal minus the discounts, plus the taxes when the prices exclude tax, plus shipping.
+
+```php
+$order->total();
+$order->price_amount;
+$order->tax_amount;
+$order->shipping_amount;
+```
+
+Format these amounts with the [Money](/3.x/money) helpers and the order's `currency_code`.
+
+## Order Status
+
+A new order starts as New, with a Pending payment and an Unfulfilled shipping status. The model sets these three values when you create an order without a `status`. Each status is a backed enum of the `Shopper\Core\Enum` namespace, and the order and payment statuses refuse a move their enum does not allow.
+
+### Order Status
+
+The `OrderStatus` enum follows the order from checkout to the end of its life:
+
+| Case | Value | Admin label | Can move to |
+|------|-------|-------------|-------------|
+| `New` | `new` | New | Processing, Completed, Cancelled, Archived |
+| `Processing` | `processing` | Processing | Completed, Cancelled, Archived |
+| `Completed` | `completed` | Completed | Cancelled, Archived |
+| `Cancelled` | `cancelled` | Cancelled | Archived |
+| `Archived` | `archived` | Archived | None |
+
+`$order->transitionTo()` moves the order and throws `Shopper\Core\Exceptions\InvalidOrderStatusTransitionException` for a move the table does not allow. Moving to Cancelled sets `cancelled_at`, moving to Archived sets `archived_at`. `transitionTo()` dispatches no event: the code that moves the order dispatches the matching one, so your listeners and the webhooks see the change.
+
+A customer can cancel an order from their account while it is still waiting for its payment. Release the payment at the provider first, so it can no longer be collected:
+
+```php title="app/Http/Controllers/CancelOrderController.php"
+use Illuminate\Http\RedirectResponse;
+use Shopper\Core\Contracts\PaymentSessionGateway;
+use Shopper\Core\Enum\OrderStatus;
+use Shopper\Core\Events\Orders\OrderCancelled;
+use Shopper\Core\Models\Order;
+
+public function __invoke(Order $order, PaymentSessionGateway $payments): RedirectResponse
+{
+    abort_unless($order->customer_id === auth()->id(), 404);
+
+    if (! $order->isAwaitingPayment() || ! $order->canBeCancelled() || ! $payments->releaseOrder($order)) {
+        return back()->with('error', __('This order can no longer be cancelled.'));
+    }
+
+    $order->transitionTo(OrderStatus::Cancelled);
+
+    OrderCancelled::dispatch($order);
+
+    return back();
+}
+```
+
+`releaseOrder()` returns false when the payment was, or may have been, collected. Writing `status` with `update()` skips the transition check, the timestamps and the events: use `transitionTo()`.
+
+### Payment Status
+
+The `PaymentStatus` enum follows the money of the order:
+
+| Case | Value | Admin label | Can move to | Set by |
+|------|-------|-------------|-------------|--------|
+| `Pending` | `pending` | Payment pending | Authorized, Paid, Voided | Every new order |
+| `Authorized` | `authorized` | Authorized | Paid, Voided | An authorization at the provider |
+| `Paid` | `paid` | Paid | Partially refunded, Refunded | A capture, a payment webhook, or Mark as paid in the admin panel |
+| `PartiallyRefunded` | `partially_refunded` | Partially refunded | Partially refunded, Refunded | A refund smaller than the captured amount |
+| `Refunded` | `refunded` | Refunded | None | Refunds that reach the captured amount |
+| `Voided` | `voided` | Voided | None | A payment cancelled at the provider |
+
+`$order->transitionPaymentTo()` throws `Shopper\Core\Exceptions\InvalidPaymentStatusTransitionException` for a move the table does not allow, and dispatches `OrderPaid` when the new status is Paid. The payment package checks `canTransitionPaymentTo()` first and skips a move it does not allow, because provider webhooks can arrive out of order: a late "captured" never pulls a refunded order back to Paid. `PaymentStatus::revenueBearing()` returns Paid, Partially refunded and Refunded, the statuses that count as revenue.
+
+A refund the provider reports as failed is the one move outside the table: Shopper steps a Refunded or Partially refunded payment back to what the remaining refunds give, Paid when none is left, and dispatches `PaymentFailed` but not `OrderPaid`. [Pending Refunds](/3.x/payments#pending-refunds) describes when a provider reports it.
+
+Whether a payment is authorized first or captured at once depends on the payment method, as described in [Capture Methods](/3.x/payments#capture-methods). The [Webhooks](/3.x/payments#webhooks) section of the Payments page covers how the provider reports each change.
+
+### Shipping Status
+
+The `ShippingStatus` enum answers whether the order has shipped. It has no transition table: `Shopper\Core\Actions\SyncOrderShippingStatusAction` computes it from the fulfillment statuses of the items each time a package is picked up, delivered or returned. The first rule that matches wins:
+
+| Items | Shipping status |
+|-------|-----------------|
+| Every item returned | `Returned` |
+| Some items returned, all the others shipped or delivered | `PartiallyReturned` |
+| No item shipped or delivered | `Unfulfilled` |
+| Every item delivered | `Delivered` |
+| At least one item delivered | `PartiallyDelivered` |
+| Every item shipped | `Shipped` |
+| Otherwise | `PartiallyShipped` |
+
+The action dispatches `OrderShipped` when the status becomes Shipped. When your code changes the fulfillment status of items, run the action so the order follows:
+
+```php
+use Shopper\Core\Actions\SyncOrderShippingStatusAction;
+
+(new SyncOrderShippingStatusAction)->execute($order);
+```
+
+The carrier events that move the items are described in [Tracking Events](/3.x/fulfillment#tracking-events).
+
+### Status Check Methods
+
+The model has a method for each check the admin panel and the storefront need:
+
+| Method | True when |
+|--------|-----------|
+| `isNew()` | The status is New |
+| `isProcessing()` | The status is Processing |
+| `isCompleted()` | The status is Completed |
+| `isArchived()` | The status is Archived |
+| `isNotCancelled()` | The status is anything but Cancelled |
+| `canBeCancelled()` | The status is neither Cancelled nor Archived, and no item was delivered or returned |
+| `isPaid()` | The payment is Paid |
+| `allowsDownloads()` | The payment is Paid or Partially refunded |
+| `isPaymentPending()` | The payment is Pending |
+| `isPaymentAuthorized()` | The payment is Authorized |
+| `isAwaitingPayment()` | The status is New and the payment is Pending |
+| `isRefunded()` | The payment is Refunded |
+| `isShipped()` | The shipping status is Shipped |
+| `isShippingPending()` | The shipping status is Unfulfilled |
+
+`isPaid()` turns false once a refund is made, since the payment moves to Partially refunded or Refunded. `allowsDownloads()` stays true after a partial refund: the Store API checks it before it lists the files of an order or gives a [download link](/3.x/products#downloadable-files). `canBeCancelled()` does not look at the payment: check `isPaid()` or `isPaymentAuthorized()` as well before you let a customer cancel.
+
+## Order Status Flow
+
+Shopper moves the order status in these places. Every other move is up to your code:
+
+| Move | Triggered by | Event |
+|------|--------------|-------|
+| Created as New | The checkout, or your code | `OrderCreated` |
+| New to Processing | Start processing or Mark as paid in the admin panel, or the carrier picking up a package | None |
+| Processing to Completed | Mark complete in the admin panel, or automatically once the order is paid and every item is delivered | `OrderCompleted` |
+| New or Processing to Cancelled | Cancel Order in the admin panel, or [Reclaiming Pending Orders](#reclaiming-pending-orders) for a New order | `OrderCancelled` |
+| Any status that allows it to Cancelled | A payment cancellation reported by the payment provider, unless the payment is Paid or `canBeCancelled()` is false | `OrderCancelled` |
+| New, Processing or Cancelled to Archived | Archive in the admin panel, unless the payment is Paid | `OrderArchived` |
+
+The automatic completion runs when the last package of a paid order is delivered, and when an order whose items are all delivered gets paid, through the `OrderPaid` listener Shopper registers. A payment captured through the provider leaves a New order as New until its first package is picked up or someone starts processing it.
+
+The admin panel shows each action of the order page only when it applies:
+
+| Action | Shown when | Does |
+|--------|------------|------|
+| Start processing | The order is New | Moves it to Processing |
+| Mark as paid | The payment is Pending | Sets the payment to Paid, and moves a New order to Processing |
+| Capture payment | The payment is Authorized and the order is neither Cancelled nor Archived | Captures the authorization through the payment provider |
+| Mark complete | The order is Processing and Paid | Moves it to Completed |
+| Cancel Order | The order can be cancelled (see [Status Check Methods](#status-check-methods)) and is not Completed | Moves it to Cancelled |
+| Archive | The order is neither Completed, Paid nor Archived | Moves it to Archived and returns to the order list |
+
+Cancelling an order changes its status only. The listeners of `OrderCancelled` put the reserved stock back on sale and give the discount amount back to the campaign budget, but a payment that was authorized or collected stays as it is: void or refund it through the payment provider, as described in [Refunding a Payment](/3.x/payments#refunding-a-payment). Archiving an order runs no listener, so cancel an order before you archive it when its stock must return to sale.
+
+## Fulfillment Status
+
+Each order item has a `fulfillment_status`, a `Shopper\Core\Enum\FulfillmentStatus` value. A new item starts as Pending (admin label "Awaiting fulfillment"). The pickup of its package moves it to Shipped, the delivery to Delivered, and a return to Cancelled, which is how a returned item is stored. Forwarded to Supplier and Preparing are there for your own workflow. Shopper checks no transition between item statuses. The [Fulfillment](/3.x/fulfillment) page lists the statuses and the dropshipping workflow.
+
+```php
+use Shopper\Core\Enum\FulfillmentStatus;
+
+$order->items()->where('fulfillment_status', FulfillmentStatus::Pending)->get();
+```
+
+## Order Number Generation
+
+Shopper numbers every order once its row is inserted: a `created` hook on the model calls the global `generate_number()` helper with the order ID and saves the result in `number`. Because the sequence comes from the auto-increment ID, two checkouts that finish at the same time never get the same number, and a unique index on `number` backs it up. With the default configuration, the order with ID 124 placed on November 17, 2026 gets `ORD-20261117-000124`.
+
+The prefix, the separator, the date format, the padding and the offset of the sequence are set under `generator` in `config/shopper/orders.php`, described in [Orders](/3.x/configuration#orders) on the Configuration page. To format a number yourself, for an invoice that follows the same scheme, pass the sequence:
+
+```php
+$invoiceNumber = generate_number($invoice->id);
+```
+
+An order created with a `number` keeps it: the hook only fills an empty one. Use this to import the orders of another platform with their original numbers.
+
+## Reclaiming Pending Orders
+
+The checkout reserves stock for every item when it creates the order, before the payment is confirmed. An order whose payment never lands would hold that stock forever, so the `shopper:orders:reclaim` command cancels unpaid orders after a delay. A failed payment attempt never cancels an order on its own: the customer may still retry with another card.
+
+Shopper schedules the command every hour, without overlapping runs, when `reclaim_pending_after_hours` in `config/shopper/orders.php` has a value. The default is 24 hours. Your server must run the Laravel scheduler, as described in [Run the Scheduler and a Queue Worker](/3.x/installation#run-the-scheduler-and-a-queue-worker).
+
+```php title="config/shopper/orders.php"
+'reclaim_pending_after_hours' => 24,
+```
+
+The command cancels an order when all of these hold:
+
+- The order is New and its payment is Pending (the `awaitingPayment` scope).
+- It was created more than `reclaim_pending_after_hours` hours ago.
+- Its payment method has a driver other than `manual`. Orders paid offline, by bank transfer or cash on delivery, and orders without a payment method are never reclaimed.
+- `canBeCancelled()` is true.
+- The payment provider confirms the payment can no longer be collected. An order whose payment was collected or is still processing is skipped, and so is an order whose provider cannot be reached; the next run tries it again.
+
+Each reclaimed order moves to Cancelled and dispatches `OrderCancelled`. Its listeners are queued: a queue worker puts the reserved stock back on sale and gives the discount amounts back to the campaign budgets.
+
+Run the command by hand with another delay through `--hours`:
+
+```shell
+php artisan shopper:orders:reclaim --hours=48
+```
+
+Set `reclaim_pending_after_hours` to `null` to turn the reclaim off. Shopper then leaves the command out of the schedule, and the command does nothing unless you pass `--hours`.
+
+## Configuration
+
+Orders have no feature flag: the orders section of the admin panel is always on. The model is swapped through the `order` key of `config/shopper/models.php`, as shown in [Extending the Model](#extending-the-model).
+
+`config/shopper/orders.php` holds two settings:
+
+| Key | Default | Used for |
+|-----|---------|----------|
+| `generator` | prefix `ORD`, separator `-`, date `Ymd`, sequence from 0, padded to 6 digits with `0` | The [order number](#order-number-generation) format |
+| `reclaim_pending_after_hours` | `24` | The delay before [an unpaid order is reclaimed](#reclaiming-pending-orders), `null` to turn it off |
+
+The order pages of the admin panel are Livewire components you can replace. `php artisan shopper:component:publish order` creates `config/shopper/components/order.php`, which lists the pages (`order-index`, `order-detail`, `order-shipments`, `order-abandoned-carts`), the sections of the order page (`order-customer`, `order-fulfillment`, `order-items`, `order-notes`, `order-summary`) and the slide-overs, as described in [Components](/3.x/configuration#components).
+
+## Creating Orders
+
+Most orders come from a cart at checkout. Creating one by hand is for imports, phone orders or orders coming from a marketplace.
+
+### From a Cart
+
+`Shopper\Cart\Actions\CreateOrderFromCartAction` turns a cart into an order in one database transaction:
+
+```php title="app/Http/Controllers/CheckoutController.php"
+use Illuminate\Http\RedirectResponse;
+use Shopper\Cart\Actions\CreateOrderFromCartAction;
+use Shopper\Cart\Facades\Cart;
+
+public function store(): RedirectResponse
+{
+    $cart = Cart::current();
+
+    abort_if($cart === null, 404);
+
+    $order = resolve(CreateOrderFromCartAction::class)->execute($cart);
+
+    Cart::forget();
+
+    return redirect()->route('orders.show', $order->public_id);
+}
+```
+
+The action prices every line again, copies the addresses, creates the items and their tax lines, reserves the stock, records the discounts and marks the cart as completed. Any exception, such as a price that went up or stock that ran out, rolls everything back. The [Order Conversion](/3.x/cart#order-conversion) section of the Cart page lists each step and exception, and [Stock Reservation](/3.x/cart#stock-reservation) explains how the stock is held.
+
+### Complete Order with Items and Addresses
+
+An order created by hand gets its number and its three statuses from the model. Wrap the inserts in a transaction: `OrderCreated` is dispatched after the transaction commits, so listeners and webhooks see the order with its items.
+
+```php title="app/Actions/CreatePhoneOrder.php"
+use Illuminate\Support\Facades\DB;
+use Shopper\Core\Models\Order;
+use Shopper\Core\Models\OrderAddress;
+use Shopper\Models\Product;
+
+$tshirt = Product::query()->where('slug', 'classic-t-shirt')->firstOrFail();
+
+$order = DB::transaction(function () use ($customer, $tshirt): Order {
+    $address = OrderAddress::query()->create([
+        'customer_id' => $customer->id,
+        'first_name' => 'Amina',
+        'last_name' => 'Ngono',
+        'street_address' => '24 Rue Joffre',
+        'postal_code' => '69002',
+        'city' => 'Lyon',
+        'country_name' => 'France',
+        'phone' => '+33 6 12 34 56 78',
+    ]);
+
+    $order = Order::query()->create([
+        'customer_id' => $customer->id,
+        'email' => $customer->email,
+        'currency_code' => 'EUR',
+        'price_amount' => 5990,
+        'shipping_amount' => 990,
+        'shipping_address_id' => $address->id,
+        'billing_address_id' => $address->id,
+    ]);
+
+    $order->items()->create([
+        'name' => $tshirt->name,
+        'sku' => $tshirt->sku,
+        'quantity' => 2,
+        'unit_price_amount' => 2500,
+        'product_type' => $tshirt->getMorphClass(),
+        'product_id' => $tshirt->id,
+    ]);
+
+    return $order;
+});
+```
+
+An order created this way reserves no stock, writes no tax lines and records no discount use: the amounts are the ones you pass. To reserve stock, call the `Shopper\Core\Contracts\StockReserver` contract the checkout uses, described in [Stock Reservation](/3.x/cart#stock-reservation).
+
+## Retrieving Orders
+
+A customer's order history reads the `orders` relation of the user, newest first:
+
+```php title="app/Http/Controllers/AccountOrderController.php"
+use Illuminate\Http\Request;
+use Illuminate\View\View;
+
+public function index(Request $request): View
+{
+    $orders = $request->user()
+        ->orders()
+        ->with('items')
+        ->latest()
+        ->paginate(10);
+
+    return view('account.orders.index', ['orders' => $orders]);
+}
+```
+
+Load an order by its public ID in URLs, so a customer cannot guess the next one. Type-hint the Shopper class or yours, as described in [Route Model Binding](/3.x/models#route-model-binding), and check that the order belongs to the signed-in customer:
+
+```php title="routes/web.php"
+Route::get('/orders/{order:public_id}', [OrderController::class, 'show'])->name('orders.show');
+```
+
+```php title="app/Http/Controllers/OrderController.php"
+use Illuminate\Http\Request;
+use Illuminate\View\View;
+use Shopper\Core\Models\Order;
+
+public function show(Request $request, Order $order): View
+{
+    abort_unless($order->customer_id === $request->user()?->id, 404);
+
+    return view('orders.show', [
+        'order' => $order->load(['items.product', 'shippingAddress', 'billingAddress', 'shippings']),
+    ]);
+}
+```
+
+`Order::findByPublicId()` does the same lookup in your own code. Combine the [query scopes](#query-scopes) and the status columns for back-office queries:
+
+```php
+use Shopper\Core\Enum\PaymentStatus;
+use Shopper\Core\Enum\ShippingStatus;
+use Shopper\Core\Models\Order;
+
+$toShip = Order::query()
+    ->notArchived()
+    ->where('payment_status', PaymentStatus::Paid)
+    ->where('shipping_status', ShippingStatus::Unfulfilled)
+    ->with(['items', 'shippingAddress'])
+    ->oldest()
+    ->get();
+
+$order = Order::query()->where('number', 'ORD-20261117-000124')->firstOrFail();
+```
+
+## Events
+
+Order events live in the `Shopper\Core\Events\Orders` namespace. Each one is dispatched after the database transaction commits:
+
+| Event | Dispatched by |
+|-------|---------------|
+| `OrderCreated` | The model observer, whenever an order row is inserted |
+| `OrderItemCreated` | The model observer, whenever an order item row is inserted |
+| `OrderPaid` | `transitionPaymentTo()` when the payment becomes Paid |
+| `OrderShipped` | `SyncOrderShippingStatusAction` when the shipping status becomes Shipped |
+| `OrderCompleted` | Mark complete in the admin panel, or the automatic completion |
+| `OrderCancelled` | Cancel Order in the admin panel, a payment cancellation reported by the provider, or `shopper:orders:reclaim` |
+| `OrderArchived` | Archive in the admin panel |
+| `OrderNoteAdded` | Saving the private note of an order in the admin panel |
+| `OrderDeleted` | The model observer, when an order is deleted |
+
+`OrderCreated`, `OrderItemCreated` and `OrderDeleted` come from observers, so your own inserts dispatch them too. The others are dispatched by the code that makes the change: when your code moves an order with `transitionTo()`, dispatch the matching event yourself. Shopper listens to three of them: `OrderCreated` gives the order's customer the customer role, `OrderCancelled` restores the reserved stock and the campaign budget through queued listeners, and `OrderPaid` completes an order whose items are all delivered.
+
+The [Events](/3.x/events#order-events) page lists the payloads and the [order lifecycle](/3.x/events#order-lifecycle), the [payment events](/3.x/events#payment-events), the [shipment events](/3.x/events#shipment-events) and the [listeners Shopper registers](/3.x/events#listeners-shopper-registers). `OrderCreated`, `OrderPaid`, `OrderCancelled`, `OrderShipped` and `OrderCompleted` are also sent as the `order.created`, `order.paid`, `order.cancelled`, `order.shipped` and `order.completed` [webhooks](/3.x/webhooks).
+
+## Permissions
+
+The admin panel checks these permissions on the order pages:
+
+| Permission | Checked for |
+|------------|-------------|
+| `orders.browse` | The Orders, Shipments and Abandoned Carts pages, their sidebar entries, and the order widgets of the dashboard |
+| `orders.read` | The order page and the shipment details |
+| `orders.edit` | Every action of the order page, the private note, shipping labels and shipment events |
+
+`orders.create` and `orders.delete` are seeded and not checked: the admin panel neither creates nor deletes orders. The [Access Control](/3.x/acl#access-by-section) page lists every permission by section.
+
+## In the Admin
+
+The **Orders** page lists the orders under the All, Open (New or Processing, not shipped yet), Paid, Fulfilled, Cancelled and Archived tabs, and filters them by number, customer, status, payment status, shipping status and date. The order page shows the items, the summary, the customer and the addresses, the private note and the fulfillment, with the actions of [Order Status Flow](#order-status-flow) and the forms to create shipping labels and record shipment events. The **Shipments** page lists every package, and the **Abandoned Carts** page lists the carts that never became orders. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API places orders and lets customers read them. Orders are returned by their public ID:
+
+| Endpoint | Returns |
+|----------|---------|
+| `POST /store/carts/{cartId}/complete` | The order placed from the cart: 201 when it is created, 200 with the same order when the cart was already completed |
+| `GET /store/orders/{orderId}` | One order, for the confirmation page. A customer's order is returned only to that signed-in customer, a guest order to whoever holds its ID. Accepts `include=items` only |
+| `GET /store/customers/me/orders` | The orders of the signed-in customer, paginated, newest first |
+| `GET /store/customers/me/orders/{orderId}` | One order of the signed-in customer, or a 404 |
+| `GET /store/customers/me/orders/{orderId}/items/{itemId}/files/{fileId}` | A temporary download link for a file of a virtual product in a paid order, described in [Downloadable Files](/3.x/products#downloadable-files) |
+
+An order resource has the `orders` type and its public ID as `id`. Its attributes are `number`, `status`, `payment_status`, `shipping_status`, `total` (the [order total](#order-total) of the items), `tax_amount`, `shipping_amount`, `price_amount`, `currency_code`, `email` (read it from the account endpoints) and `created_at`. When `GET /store/customers/me/orders/{orderId}` includes `items` and the payment status is Paid or Partially refunded, each item of a virtual product also carries `files`: the `id`, `name`, `extension` and `size` of each file, which the download endpoint above takes.
+
+The account endpoints read these parameters from `resources.order` in `config/shopper/api.php`. The list accepts all three, a single order accepts `include`:
+
+| Parameter | Values |
+|-----------|--------|
+| `filter[status]` | An `OrderStatus` value |
+| `sort` | `created_at` (prefix with `-` for descending) |
+| `include` | `items`, `shippingAddress`, `billingAddress`, `paymentMethod`, `shippings`, `shippings.events`, `refund` |
+
+```bash
+curl "https://example.com/store/customers/me/orders?filter[status]=processing&include=items" \
+  -H "Authorization: Bearer 1|customer-token"
+```
+
+The Store API has no endpoint to cancel or change an order: build it in your application, as in [Order Status](#order-status). The [Storefront](/3.x/storefront) section covers the Store API.

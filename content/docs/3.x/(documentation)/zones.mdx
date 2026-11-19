@@ -1,0 +1,409 @@
+---
+title: Zones
+description: The Zone model in Shopper, the countries, currency, carriers and payment methods of a zone, and how the Store API resolves the zone of a request.
+---
+
+A zone is a market your store sells to: a group of countries with one currency, the carriers that deliver there and the payment methods customers can use there. A store that ships across Europe and West Africa can have a "Europe" zone in EUR with Colissimo and Stripe, and a "West Africa" zone in XOF with a local courier and cash on delivery.
+
+The Store API reads the zone of each request from the `X-Shopper-Zone` header, which carries a zone code. The zone sets the currency of new carts and of the prices the API returns, the shipping options and payment methods a cart offers, and the discounts that apply to it. Taxes do not use these zones: they have their own tax zones, described in [Taxes](/3.x/taxes).
+
+## Model
+
+The model is `Shopper\Core\Models\Zone`, which implements the `Shopper\Core\Models\Contracts\Zone` contract. The contract declares `isEnabled()` and the `currency`, `countries`, `paymentMethods`, `carriers` and `shippingOptions` relations. Zones and countries (`Shopper\Core\Models\Country`) cannot be swapped through `config/shopper/models.php`; [Models You Cannot Swap](/3.x/models#models-you-cannot-swap) shows how to add a relation to them with `resolveRelationUsing()`.
+
+The model uses two traits. `HasPublicId` fills the `public_id` column with a ULID, as described in [Public IDs](/3.x/models#public-ids). `HasSlug` makes the slug you set unique, appending `-1`, `-2` and so on when it is taken, and adds a `findBySlug()` method. It does not build a slug from the name: a zone created without a slug has none.
+
+## Database Schema
+
+Zones are stored in the `sh_zones` table (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)):
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `name` | string | no | - | Zone name, unique |
+| `slug` | string | yes | null | URL identifier, unique |
+| `code` | string | yes | null | Code the Store API matches against the `X-Shopper-Zone` header, unique |
+| `is_enabled` | boolean | no | false | Whether the zone is active. The Store API ignores disabled zones |
+| `currency_id` | bigint | no | - | Foreign key to `sh_currencies` |
+| `metadata` | jsonb | yes | null | Your own data, cast to an array |
+| `created_at` | timestamp | yes | null | Creation timestamp |
+| `updated_at` | timestamp | yes | null | Last update timestamp |
+
+Every zone needs a currency, and the `currency_id` foreign key cascades: deleting a currency deletes the zones that use it.
+
+### Pivot Table
+
+The `sh_zone_has_relations` table links a zone to its countries, carriers, payment methods and collections through a polymorphic relation:
+
+| Column | Type | Description |
+|--------|------|-------------|
+| `zone_id` | bigint | Foreign key to `sh_zones`, deleted with the zone |
+| `zonable_type` | string | Morph alias of the related model: `country`, `carrier`, `payment_method` or `collection` |
+| `zonable_id` | bigint | ID of the related row |
+
+The table has no unique index, so `attach()` stores a second row when a country is already in the zone. Use `sync()` or `syncWithoutDetaching()`, as the admin panel does.
+
+## Relationships
+
+The relations below are defined on the zone. Countries, carriers and payment methods define the inverse `zones()` relation with the [HasZones Trait](#haszones-trait).
+
+### Currency
+
+A zone belongs to one currency through `currency_id`. That currency is the default currency of the carts created in the zone, of the product prices the Store API returns for it, and of the shipping options and fixed-amount discounts of the zone, as described in [Money](/3.x/money). `currency_code` returns its ISO code, such as `EUR`:
+
+```php
+$zone->currency;
+
+$zone->currency_code;
+```
+
+The `Currency` model has a global scope that hides disabled currencies. When the currency of a zone is disabled, `$zone->currency` is `null` and reading `currency_code` throws an error.
+
+### Countries
+
+Countries come from the `sh_countries` table, which the Shopper installer seeds with every country and its ISO codes (`cca2`, `cca3`). Look them up by code and attach them by ID:
+
+```php
+use Shopper\Core\Models\Country;
+use Shopper\Core\Models\Zone;
+
+$europe = Zone::findBySlug('europe');
+
+$europe->countries()->syncWithoutDetaching(
+    Country::query()->whereIn('cca2', ['FR', 'DE', 'BE'])->pluck('id')
+);
+```
+
+The database lets a country belong to several zones. The admin panel does not: its zone form disables the countries that already belong to another zone. A country model has `translated_name`, its name in the application locale (Shopper ships English, French and Swedish names), and `svg_flag`, the URL of its flag.
+
+### Carriers
+
+A carrier delivers in the zones it is attached to. When a cart asks for shipping options, Shopper collects the rates of the enabled carriers of the cart zone and of no other carrier. [Carriers](/3.x/carriers#calculating-shipping-rates) describes how rates are calculated.
+
+```php
+$europe->carriers()->sync([$colissimo->id, $dhl->id]);
+```
+
+### Payment Methods
+
+A cart in a zone offers only the enabled payment methods attached to that zone. [Payment Methods](/3.x/payment-methods#zones) describes the rules.
+
+```php
+$europe->paymentMethods()->sync([$creditCard->id, $bankTransfer->id]);
+```
+
+### Shipping Options
+
+`shippingOptions()` is a `HasMany` relation to `Shopper\Core\Models\CarrierOption`: the flat rates the merchant sets for a carrier in this zone, priced in cents in the zone currency. For a carrier without a live-rate driver, a cart lists the enabled options of its zone before the customer enters an address, because they need nothing but the zone:
+
+```php
+$europe->shippingOptions()->where('is_enabled', true)->get();
+```
+
+### Collections
+
+Collections can be attached to zones. Shopper stores the link, but neither the models nor the Store API filter collections by zone, as described in [Collections](/3.x/collections#zones).
+
+```php
+$europe->collections;
+```
+
+## Query Scopes
+
+The `enabled` scope keeps the zones whose `is_enabled` flag is set:
+
+```php
+use Shopper\Core\Models\Zone;
+
+$zones = Zone::query()->enabled()->get();
+```
+
+## Computed Attributes
+
+Three accessors join the names of related rows with commas, capitalize each word, and return `N/A` when there is none: `countries_name` (the translated country names), `carriers_name` and `payments_name` (the payment method titles). Each one loads its relation, so eager load the relations before reading them in a loop:
+
+```php
+use Shopper\Core\Models\Zone;
+
+$zones = Zone::query()
+    ->with(['currency', 'countries', 'carriers', 'paymentMethods'])
+    ->get();
+
+$summary = $zones->map(fn (Zone $zone): string => "{$zone->name} ({$zone->currency_code}): {$zone->countries_name}");
+```
+
+## HasZones Trait
+
+The `Shopper\Core\Models\Traits\HasZones` trait adds the inverse relation, `zones()`, a `MorphToMany` on the pivot table. `Country`, `Carrier` and `PaymentMethod` use it, and `Collection` defines the same relation itself. Add it to a model of your own to scope it to zones, for example the promotional banners of a storefront:
+
+```php title="app/Models/Banner.php"
+namespace App\Models;
+
+use Illuminate\Database\Eloquent\Model;
+use Shopper\Core\Models\Traits\HasZones;
+
+class Banner extends Model
+{
+    use HasZones;
+}
+```
+
+```php
+use App\Models\Banner;
+use Illuminate\Database\Eloquent\Builder;
+
+$banner->zones()->sync([$europe->id]);
+
+$banners = Banner::query()
+    ->whereHas('zones', fn (Builder $query) => $query->where('code', 'EU'))
+    ->get();
+```
+
+## Resolving a Zone
+
+The Store API sets the zone of a request from the `X-Shopper-Zone` header, which carries the `code` of a zone. The example below uses `store`, the default prefix of the Store API routes, set by `SHOPPER_API_PREFIX`:
+
+```bash
+curl https://example.com/store/products \
+  -H "X-Shopper-Zone: EU"
+```
+
+The `Shopper\Http\Middleware\ResolveZone` middleware runs on every route of the `shopper:store` and `shopper:store-auth` groups. It resolves the zone in this order:
+
+1. The enabled zone whose code matches the header.
+2. When the header is missing, unknown, longer than 64 characters or names a disabled zone: the enabled zone whose code is set in `SHOPPER_API_DEFAULT_ZONE`.
+3. Otherwise no zone. The request goes on without one and the API returns no error.
+
+The default resolver never looks at the customer's address. A cart whose shipping address is outside its zone gets no shipping option and a warning that asks the customer to choose the zone of their country.
+
+<Warning>
+  Set `SHOPPER_API_DEFAULT_ZONE` before you open the Store API. A cart created without a zone uses the store default currency, offers every enabled payment method of the store whose driver is configured, and gets a `422` error when it asks for shipping options.
+</Warning>
+
+The settings live in `config/shopper/http.php`:
+
+```php title="config/shopper/http.php"
+'zone' => [
+    'resolver' => Shopper\Http\Zone\DefaultZoneResolver::class,
+    'header' => 'X-Shopper-Zone',
+    'default_code' => env('SHOPPER_API_DEFAULT_ZONE'),
+    'cache_ttl' => 60,
+],
+```
+
+The resolver caches each zone it finds, with its currency, for `cache_ttl` seconds, and forgets it when the zone is saved or deleted. Set `cache_ttl` to `0` to query the database on every request. Every response adds the header name to `Vary`, so a shared cache keeps one copy per zone.
+
+### What the Zone Changes
+
+When a zone is resolved:
+
+- `POST /store/carts` records it on the new cart and, when the request sends no `currency_code`, gives the cart the zone currency. The order placed from the cart keeps the zone.
+- The product endpoints return prices in the zone currency when the request has no `filter[currency]`, as described in [Pricing](/3.x/pricing).
+- The pricing context passed to the price resolver carries its ID in `Shopper\Core\Pricing\PricingContext::$zoneId`. The default resolver ignores it; a custom one can set prices per zone.
+
+The zone recorded on the cart, not the header, drives the rest of the checkout:
+
+- `GET /store/carts/{cartId}/shipping-options` returns the rates of the zone's carriers, and answers `422` for a cart without a zone.
+- `GET /store/carts/{cartId}/payment-methods` returns the payment methods of the zone.
+- A discount limited to a zone applies only to carts in that zone. A fixed-amount discount of a zone is in the zone currency and does not apply to a cart in another currency.
+
+To move a cart to another zone, send the new code in `zone_code`:
+
+```bash
+curl -X PATCH "https://example.com/store/carts/01JD8Z3K4M5N6P7Q8R9S0T1V2W" \
+  -H "Content-Type: application/json" \
+  -d '{"zone_code": "WA"}'
+```
+
+The code must belong to an enabled zone. Shopper prices the lines again for the new zone, removes the shipping option and the payment method of the cart, and checks its discount codes again. The cart keeps its currency: send `currency_code` in the same request to change it as well.
+
+### Reading the Zone in Your Own Endpoints
+
+The middleware stores the zone in the `shopper_zone` request attribute, as an instance of the zone contract or `null`. A route registered inside `Shopper\Http\Facades\ShopperApi::store()` runs the same middleware and can read it with `$request->attributes->get('shopper_zone')`. [Channels](/3.x/channels#reading-the-channel-in-your-own-endpoints) shows a complete endpoint and its route.
+
+### Custom Resolver
+
+To find the zone another way, from the country of the visitor or a domain per market, implement `Shopper\Http\Contracts\ZoneResolver` and set it as the `resolver`. This resolver keeps the header when the storefront sends one, and otherwise picks the zone of the country Cloudflare detected in the `CF-IPCountry` header:
+
+```php title="app/Http/CountryZoneResolver.php"
+namespace App\Http;
+
+use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\Request;
+use Shopper\Core\Models\Contracts\Zone as ZoneContract;
+use Shopper\Core\Models\Zone;
+use Shopper\Http\Contracts\ZoneResolver;
+use Shopper\Http\Zone\DefaultZoneResolver;
+
+final class CountryZoneResolver implements ZoneResolver
+{
+    public function __construct(private readonly DefaultZoneResolver $codeResolver) {}
+
+    public function resolve(Request $request): ?ZoneContract
+    {
+        $country = $request->headers->get('CF-IPCountry');
+
+        if ($request->headers->has(config('shopper.http.zone.header')) || blank($country)) {
+            return $this->codeResolver->resolve($request);
+        }
+
+        return Zone::query()
+            ->enabled()
+            ->with('currency')
+            ->whereHas('countries', fn (Builder $query) => $query->where('cca2', $country))
+            ->first() ?? $this->codeResolver->resolve($request);
+    }
+}
+```
+
+Set `App\Http\CountryZoneResolver::class` as the `resolver` key of the `zone` array in `config/shopper/http.php`. The cache and the `Vary` header of the default resolver cover the zone header only. Responses that depend on `CF-IPCountry` need that header in `Vary` too when a shared cache sits in front of the API.
+
+## Configuration
+
+Zones have no feature flag and no key in `config/shopper/models.php`. The Store API settings are described in [Resolving a Zone](#resolving-a-zone).
+
+### Components
+
+The zones page of the admin panel is part of the settings components. To replace one of them with your own Livewire component, publish the settings component file:
+
+```bash
+php artisan shopper:component:publish setting
+```
+
+The command creates `config/shopper/components/setting.php`. These entries belong to zones:
+
+```php title="config/shopper/components/setting.php"
+use Shopper\Livewire;
+
+return [
+    'pages' => [
+        'zones' => Livewire\Pages\Settings\Zones::class,
+    ],
+    'components' => [
+        'settings.zones.detail' => Livewire\Components\Settings\Zones\Detail::class,
+        'settings.zones.shipping-options' => Livewire\Components\Settings\Zones\ZoneShippingOptions::class,
+
+        'slide-overs.zone-form' => Livewire\SlideOvers\ZoneForm::class,
+        'slide-overs.shipping-option-form' => Livewire\SlideOvers\ShippingOptionForm::class,
+    ],
+];
+```
+
+The [Configuration](/3.x/configuration#components) page explains how component overriding works.
+
+## Usage
+
+The examples below set up the zones of a store that sells in Europe and West Africa.
+
+### Creating Zones
+
+A zone needs a name and a currency. Give it a code as well: the Store API finds zones by code only, so a zone without one can be reached by a custom resolver alone. To create a zone for the European market:
+
+```php
+use Shopper\Core\Models\Carrier;
+use Shopper\Core\Models\Country;
+use Shopper\Core\Models\Currency;
+use Shopper\Core\Models\PaymentMethod;
+use Shopper\Core\Models\Zone;
+
+$europe = Zone::query()->create([
+    'name' => 'Europe',
+    'slug' => 'europe',
+    'code' => 'EU',
+    'is_enabled' => true,
+    'currency_id' => Currency::query()->where('code', 'EUR')->value('id'),
+]);
+
+$europe->countries()->sync(
+    Country::query()->whereIn('cca2', ['FR', 'DE', 'BE', 'NL', 'ES', 'IT'])->pluck('id')
+);
+
+$europe->carriers()->sync(Carrier::query()->whereIn('slug', ['colissimo', 'dhl'])->pluck('id'));
+
+$europe->paymentMethods()->sync(PaymentMethod::query()->where('slug', 'credit-card')->pluck('id'));
+```
+
+The admin form requires a code of 10 characters at most, at least one country, one carrier and one payment method. The model checks none of these.
+
+### Retrieving Zones
+
+To find the zone of a shipping address, match its country:
+
+```php
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Core\Models\Zone;
+
+$zone = Zone::query()
+    ->enabled()
+    ->whereHas('countries', fn (Builder $query) => $query->where('cca2', 'FR'))
+    ->first();
+```
+
+To find a zone by the code a storefront sends, and to list the enabled zones with their currency:
+
+```php
+$zone = Zone::query()->enabled()->where('code', 'EU')->first();
+
+$zones = Zone::query()->enabled()->with('currency')->get();
+```
+
+### Updating Zones
+
+Update a zone like any Eloquent model, and sync its relations to replace them:
+
+```php
+$europe->update(['name' => 'European Union']);
+
+$europe->paymentMethods()->sync([$creditCard->id, $paypal->id]);
+```
+
+Saving the zone clears the resolver cache for its code, and for its previous code when the code changed. Carts already in the zone see the new payment methods and carriers the next time they ask for them. A disabled zone is no longer resolved from the header and `PATCH /store/carts/{cartId}` refuses its code, but the carts already in it keep it.
+
+### Deleting Zones
+
+Deleting a zone sets `zone_id` to `null` on its carts, orders and discounts. A discount limited to the zone then applies in every zone, so disable a zone that customers have used instead of deleting it. The database refuses to delete a zone that still has shipping options: delete them first.
+
+## Events
+
+Shopper dispatches no zone event of its own and registers no observer on zones or countries. `shopper/http` listens to the Eloquent `saved` and `deleted` events of zones to clear the resolver cache. Listen to the same Eloquent events for your own code:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Illuminate\Support\Facades\Cache;
+use Shopper\Core\Models\Zone;
+
+public function boot(): void
+{
+    Zone::saved(fn () => Cache::forget('storefront.markets'));
+    Zone::deleted(fn () => Cache::forget('storefront.markets'));
+}
+```
+
+Moving a cart to another zone can dispatch `CartLinesRepriced` and `CouponRemoved`, described in [Cart and Discount Events](/3.x/events#cart-and-discount-events).
+
+## Permissions
+
+The zones page checks one permission, `system.settings`, when it opens and on every action: creating, editing and deleting a zone, and adding, editing and deleting a shipping option. The [Access Control](/3.x/acl#system-permissions) page lists the system permissions.
+
+## In the Admin
+
+Merchants manage zones under Settings, Zones. The page lists the zones with their status and number of countries, with a search field that matches a zone name or a country name. Selecting a zone shows its countries, currency, payment methods, carriers and metadata, and its shipping options, which are added, edited and deleted there. The zone form opens in a slide-over: name, slug, code, countries, a currency picked from the currencies enabled in the store settings, the enabled toggle, payment methods, carriers and metadata. The setup guide of the dashboard marks its zones step as done once an enabled zone exists. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API exposes the enabled zones and the countries under the `store` prefix, set by `SHOPPER_API_PREFIX`:
+
+| Endpoint | Returns |
+|----------|---------|
+| `GET /store/zones` | The enabled zones, paginated. Filter with `filter[name]` (partial match) and `filter[code]`, sort with `sort=name` |
+| `GET /store/zones/{code}` | One enabled zone, by code |
+| `GET /store/countries` | The countries, paginated. Filter with `filter[name]`, `filter[cca2]`, `filter[cca3]`, `filter[region]` and `filter[zone]` (a zone code) |
+| `GET /store/countries/{code}` | One country, by `cca2` or `cca3` code |
+
+A zone resource has the type `zones` and carries `name`, `slug`, `code`, `currency_code`, `metadata`, `created_at` and `updated_at`, with `include=currency,countries` for its relations. A storefront lists the zones to build a market or country picker, then sends the chosen code in the `X-Shopper-Zone` header of every request:
+
+```bash
+curl "https://example.com/store/zones?include=countries"
+```
+
+When the customer picks another market during checkout, move the cart with `PATCH /store/carts/{cartId}` and `zone_code`, as described in [What the Zone Changes](#what-the-zone-changes). The [Storefront](/3.x/storefront) section documents the Store API.

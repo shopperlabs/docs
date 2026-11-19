@@ -1,0 +1,205 @@
+---
+title: Currencies
+description: The Currency model in Shopper, enabled currencies, the store currencies and default currency, and how a store sells in several currencies.
+---
+
+A currency is a monetary unit your store can price products in, such as the US Dollar or the Euro. Shopper ships with 158 currencies, and the merchant picks the ones the store sells in, with one of them as the store default currency. Each [price](/3.x/pricing) and each [zone](/3.x/zones) is linked to a currency, and each cart and order records the code of the currency it is in.
+
+Shopper never converts an amount from one currency to another. A store that sells in USD and EUR sets a USD price and a EUR price for each product, as described in [Selling in Several Currencies](#selling-in-several-currencies). How amounts are stored in cents and formatted is covered on the [Money](/3.x/money) page.
+
+## Model
+
+The model is `Shopper\Core\Models\Currency`. It implements the `Shopper\Core\Models\Contracts\Currency` contract, which declares the `zone` relationship. The currency model cannot be swapped through `config/shopper/models.php`; [Models You Cannot Swap](/3.x/models#models-you-cannot-swap) shows how to add a relationship to it with `resolveRelationUsing()`.
+
+The model has a global scope named `enabled` that hides disabled currencies from every query, as described in [Enabled Currencies](#enabled-currencies). The `HasPublicId` trait fills `public_id` with a ULID when a currency is created, and adds `findByPublicId()` and the `wherePublicId` scope, as described in [Public IDs](/3.x/models#public-ids). The model casts `exchange_rate` to a float and `is_enabled` to a boolean.
+
+### Database Schema
+
+Currencies are stored in the `sh_currencies` table (`sh_` is the default [table prefix](/3.x/configuration#database-table-prefix)). The table has no timestamps:
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `public_id` | ulid | yes | generated | Public identifier, unique |
+| `name` | string | no | - | Currency name, such as "US Dollar" |
+| `code` | string(10) | no | - | ISO 4217 code, such as `USD`, unique |
+| `symbol` | string(25) | no | - | Currency symbol, such as `$` |
+| `format` | string(50) | no | - | Display pattern, such as `$1,0.00` |
+| `exchange_rate` | decimal(10,2) | yes | null | Exchange rate entered by the merchant |
+| `is_enabled` | boolean | no | true | Whether the currency is available |
+
+Shopper stores `format` and `exchange_rate` and returns them in the Store API, but uses neither. Amounts are formatted from the currency code and the application locale, as described in [Formatting Amounts](/3.x/money#formatting-amounts), and no price is ever computed from an exchange rate.
+
+The `currency_id` foreign keys of the prices and zones tables cascade on delete: deleting a currency deletes every price in that currency and every zone that uses it. Disable a currency instead of deleting it.
+
+## How Currencies are Created
+
+The currencies come from the `database/data/currencies.json` file of the `shopper/core` package. When you run `php artisan shopper:install` and answer yes to "Run database migrations and seeders?", the `Shopper\Core\Database\Seeders\CurrenciesTableSeeder` seeder inserts the 158 currencies of that file, all enabled, with an exchange rate of `0`. If you skipped that step, run the seeders yourself:
+
+```bash
+php artisan db:seed --class="Shopper\Core\Database\Seeders\ShopperSeeder"
+```
+
+`ShopperSeeder` also seeds the countries, legal pages, default channel, carriers and payment methods. To add a currency the file does not have, such as the Sierra Leonean leone introduced in 2022 (`SLE`), create it from a migration or a seeder of your application:
+
+```php title="database/migrations/2026_09_01_000000_add_sierra_leonean_leone_currency.php"
+<?php
+
+use Illuminate\Database\Migrations\Migration;
+use Shopper\Core\Models\Currency;
+
+return new class extends Migration
+{
+    public function up(): void
+    {
+        Currency::query()->create([
+            'name' => 'Sierra Leonean Leone',
+            'code' => 'SLE',
+            'symbol' => 'Le',
+            'format' => 'Le1,0.00',
+            'is_enabled' => true,
+        ]);
+    }
+};
+```
+
+Create the row through the model so that `public_id` is filled.
+
+## Enabled Currencies
+
+A currency is either enabled or disabled. The `enabled` global scope keeps disabled currencies out of every query on the model, so they are missing from the admin currency pickers, from `shopper_currency()`, from the `currency` relationship of a zone and from the Store API. Only the `currency` relationship of a price ignores the scope, so a price keeps its currency after the currency is disabled.
+
+Remove the scope to list or enable a disabled currency:
+
+```php
+use Shopper\Core\Models\Currency;
+
+$disabled = Currency::query()
+    ->withoutGlobalScope('enabled')
+    ->where('is_enabled', false)
+    ->orderBy('name')
+    ->get();
+
+Currency::query()
+    ->withoutGlobalScope('enabled')
+    ->where('code', 'NGN')
+    ->update(['is_enabled' => true]);
+```
+
+The installer enables every currency. A store that sells in a few of them can disable the others, which also shortens the list a storefront gets from `GET /store/currencies`.
+
+<Warning>
+Nothing prevents disabling a currency the store still uses. When the default currency is disabled, `shopper_currency()` returns `USD` once its one-hour cache expires. When the currency of a zone is disabled, the zone has no currency: the Store API returns prices in the store default currency for that zone, and creating a cart in that zone without a `currency_code` fails. Remove a currency from the store currencies and from its zones before you disable it.
+</Warning>
+
+## Store Currencies [#how-setup-store-currencies]
+
+The merchant picks the store currencies and the default currency in the setup wizard, then changes them in the Store currency section of the **General** settings page. Both lists offer the enabled currencies only, and the default currency is chosen among the selected ones. Shopper stores the choice in two [settings](/3.x/settings#setting-keys): `currencies`, an array of currency IDs, and `default_currency_id`.
+
+The store currencies decide which currencies the merchant prices in: the admin price form shows one row for each, as described in [Pricing](/3.x/pricing#configuration). The default currency is the fallback for every amount that comes without a currency, as described in [Default Currency](/3.x/money#default-currency).
+
+To read them in your code, load the currencies from the IDs, and use `shopper_currency()` for the default currency code:
+
+```php
+use Shopper\Core\Models\Currency;
+
+$storeCurrencies = Currency::query()
+    ->whereIn('id', (array) shopper_setting('currencies'))
+    ->orderBy('name')
+    ->get();
+
+$defaultCode = shopper_currency();
+```
+
+`shopper_currency()` returns `USD` when no default currency is set, and caches the code for one hour. The [Settings](/3.x/settings#writing-settings) page shows how to write both keys from code and which cache keys to forget.
+
+## Zero-Decimal Currencies
+
+Some currencies have no subunit, such as the Japanese yen (`JPY`) and the Central African CFA franc (`XAF`): Shopper stores their amounts in whole units instead of cents. The list of these currencies, the helpers that detect them and the upgrade command for data from Shopper 2.x are on the [Money](/3.x/money#zero-decimal-currencies) page.
+
+## Selling in Several Currencies
+
+A store sells in several currencies by pricing each product in each currency and by telling the storefront which currency a customer shops in. To open a store in EUR next to USD:
+
+1. Add the Euro to the store currencies in the General settings. The admin price form of each product and variant then shows a EUR row.
+2. Set a EUR price on each product, from the admin panel or in code as shown in [Multi-Currency Pricing](/3.x/pricing#multi-currency-pricing).
+3. Create a [zone](/3.x/zones) for the countries that pay in EUR and give it the Euro as currency. The zone form offers the store currencies only, which is why step 1 comes first.
+
+A storefront that sends the zone of the customer gets prices in the zone currency, and the carts it creates are in that currency. It can also ask for a currency explicitly, as described in [From a Storefront](#from-a-storefront). A cart keeps its currency until the storefront changes it, and the order placed from it records the same `currency_code`: changing the default currency later changes no existing order.
+
+A product without a price in the currency of a cart cannot be added to it: the Store API answers `422` with the `price_missing` code. Shopper does not fall back to another currency or convert a price. If you want prices derived from an exchange rate, compute them in your own code and save them as prices.
+
+## Relation to Other Entities
+
+A currency is referenced by the store settings, by zones and by prices through its ID, and by carts and orders through its code.
+
+### Store
+
+The store holds its currencies and its default currency as settings, described in [Store Currencies](#how-setup-store-currencies).
+
+### Zone
+
+Each zone has exactly one currency, and a currency can be used by several zones. `currency` on a zone returns the currency, and `currency_code` its code:
+
+```php
+$zone->currency;
+
+$zone->currency_code;
+```
+
+The `zone` relationship of a currency is a `HasOne` and returns a single zone even when several use the currency. To list them all, query the zones:
+
+```php
+use Shopper\Core\Models\Zone;
+
+$euroZones = Zone::query()
+    ->whereRelation('currency', 'code', 'EUR')
+    ->get();
+```
+
+The [Zones](/3.x/zones) page covers zones and how the Store API resolves the zone of a request.
+
+### Price
+
+Each price belongs to one currency. `currency` on a price returns it, disabled or not, and `currency_code` returns its code. The [Pricing](/3.x/pricing#relationships) page covers prices per currency.
+
+## Events
+
+Shopper dispatches no currency event. The currency model fires the usual Eloquent events when you save it, but the enable and disable bulk actions of the admin panel run a single update query, which fires none. The [Events](/3.x/events) page lists the events Shopper dispatches.
+
+## Permissions
+
+The Currencies page, the General settings page and the setup wizard all require the `system.settings` permission. There is no permission of its own for currencies. The [Access Control](/3.x/acl#access-by-section) page lists the permissions by section.
+
+## In the Admin
+
+Merchants manage currencies under Settings, Currencies, at `/cpanel/setting/currencies`. The page lists every currency, enabled or not, with its name, code, symbol, exchange rate and a status toggle, searches by name or code, and filters by status. A row action edits the exchange rate, and bulk actions enable or disable the selected currencies. The store currencies and the default currency are set in the Store currency section of the General settings page. The [User Guide](/3.x/user-guide) walks through these screens.
+
+## From a Storefront
+
+The Store API lists the enabled currencies on `GET /store/currencies`, paginated, 15 per page by default. It filters by `filter[name]` (partial match) and `filter[code]` (exact match) and sorts by `name` or `code`. `GET /store/currencies/{code}` returns one currency by its code, in any case, and answers `404` for a disabled or unknown code:
+
+```json
+{
+  "data": {
+    "id": "01JD3XQ5Z8K2M4N6P8R0T2V4W6",
+    "type": "currencies",
+    "attributes": {
+      "name": "US Dollar",
+      "code": "USD",
+      "symbol": "$",
+      "format": "$1,0.00",
+      "exchange_rate": 0
+    }
+  }
+}
+```
+
+These endpoints return every enabled currency, including those that are not store currencies. To build a currency switcher, read `currencies` and `default_currency` from `GET /store/settings` instead: they hold the codes of the store currencies and the default currency code, as described in [Settings](/3.x/settings#store-api).
+
+The currency of a request is chosen per endpoint:
+
+- The product endpoints return prices in the currency of `filter[currency]`, then in the currency of the zone of the request, then in the store default currency. An unknown or disabled code in `filter[currency]` answers `422` with the `currency_unknown` code. The [Pricing](/3.x/pricing#from-a-storefront) page shows the response.
+- `POST /store/carts` takes an optional `currency_code`, which must be an enabled store currency. Without it, the cart takes the zone currency, then the store default currency. `PATCH` on the cart changes the currency with the same rule.
+
+The [Storefront](/3.x/storefront) section documents the Store API.
