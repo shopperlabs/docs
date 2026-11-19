@@ -1,0 +1,184 @@
+---
+title: FedEx
+description: Quote live FedEx rates at checkout and track FedEx packages with the shopper/fedex driver, its credentials, sandbox mode and services.
+---
+
+The `shopper/fedex` package connects a Shopper store to the FedEx APIs. A carrier that uses it quotes live FedEx rates at checkout, computed from the shipment origin, the customer address and the packages, and Shopper refreshes the tracking of every FedEx package from the FedEx tracking API.
+
+The package registers the `fedex` driver on the shipping manager of `shopper/shipping`. The manager, the carrier model and the rate service are described on the [Carriers](/3.x/carriers) page. This page covers what is specific to FedEx. Shopper also ships drivers for UPS (`shopper/ups`) and USPS (`shopper/usps`); each section below says where they work differently.
+
+## Installation
+
+Install the package with Composer:
+
+```bash
+composer require shopper/fedex
+```
+
+Laravel discovers `Shopper\FedEx\FedExServiceProvider`. The provider merges the package configuration under `shopper.fedex` and registers the `fedex` driver with `Shipping::extend()`, built from that configuration. The driver reads its values from environment variables, so you only publish the file to change how a value is read:
+
+```bash
+php artisan vendor:publish --tag=shopper-fedex-config
+```
+
+This creates `config/shopper/fedex.php`.
+
+## Configuration
+
+Every key of the file comes from an environment variable:
+
+| Key | Environment variable | Default | Description |
+|-----|----------------------|---------|-------------|
+| `enabled` | `SHIPPING_FEDEX_ENABLED` | `false` | Lists the driver in `Shipping::configuredDrivers()` |
+| `sandbox` | `SHIPPING_SANDBOX` | `false` | Sends the requests to `https://apis-sandbox.fedex.com` instead of `https://apis.fedex.com` |
+| `client_id` | `FEDEX_CLIENT_ID` | `null` | API key of your FedEx project |
+| `client_secret` | `FEDEX_CLIENT_SECRET` | `null` | Secret key of your FedEx project |
+| `account_number` | `FEDEX_ACCOUNT_NUMBER` | `null` | FedEx account the rates are quoted against |
+
+Add the values to your `.env` file:
+
+```dotenv
+SHIPPING_SANDBOX=true
+FEDEX_CLIENT_ID=your-api-key
+FEDEX_CLIENT_SECRET=your-secret-key
+FEDEX_ACCOUNT_NUMBER=your-account-number
+```
+
+The driver is ready once `client_id`, `client_secret` and `account_number` are all filled in: its `isConfigured()` method then returns `true`, carriers that use it quote FedEx rates, the admin panel stops showing it as "Not configured" and the tracking sync picks up its packages. The `enabled` key takes no part in that check. Only `Shipping::configuredDrivers()` reads it, as described in [Driver Configuration](/3.x/carriers#driver-configuration), so set it to `true` for code that lists the configured drivers. To stop FedEx from quoting, disable the carrier or remove a credential.
+
+`SHIPPING_SANDBOX` is shared by the FedEx, UPS and USPS drivers: one variable switches all three. To run FedEx against the sandbox while another driver stays in production, publish the file and set its `sandbox` key to `true`.
+
+### Credentials
+
+FedEx issues the API key and the secret key in its Developer Portal, for a project you create there. The API key, your `client_id`, is shown on the project overview page. The secret key, your `client_secret`, is shown when the project is created, and you can regenerate it later. The project needs access to the rate and tracking APIs, the two the driver calls. The account number is the number of your FedEx shipping account.
+
+The driver exchanges the key and the secret for an OAuth access token with the client credentials grant, posting both in the form body to `/oauth/token`. It keeps the token in the default cache store until a minute before it expires, under a key that holds the client ID and the environment, and a cache lock stops two requests from asking for a token at the same time. The UPS driver sends its key and secret with HTTP Basic authentication and needs a fourth value, a user ID. The USPS driver needs no account number.
+
+## Enabling the Carrier
+
+Installing the package adds no carrier to the store. A merchant creates one under Settings, Carriers: name it `FedEx` and pick FedEx as its driver. The name sets the slug, `fedex`, which must equal the driver code because the Store API finds the carrier of a live rate by that code, as [API-Connected Carrier](/3.x/carriers#api-connected-carrier) explains. Then add the carrier to each zone it serves, from the zone form, and keep it enabled. The [User Guide](/3.x/user-guide) walks through these screens.
+
+The driver select lists every installed driver, whatever its `enabled` key says: FedEx shows there once the package is installed, with a "Not configured" badge until the three credentials are filled in. Until then the carrier offers its shipping options in the zone, as a manual carrier does. Once the driver is configured, the carrier quotes FedEx rates and no longer reads those options, so a FedEx carrier needs no shipping option.
+
+## Shipping Rates
+
+The driver quotes a shipment with one call to the FedEx rate API, `POST /rate/v1/rates/quotes`. Shopper calls it through `CarrierRateService` when the Store API lists the shipping options of a cart, as described in [Calculating Shipping Rates](/3.x/carriers#calculating-shipping-rates). The Store API takes the origin from the [default inventory location](/3.x/locations#default-location), or the location with the lowest priority when none is the default, and needs its country and street address. It sends one package per cart, with the summed weight of the items and their largest dimensions, in the unit system of `shopper.shipping.units`.
+
+The request holds these values:
+
+| FedEx field | Value |
+|-------------|-------|
+| `accountNumber` | The `account_number` of the configuration |
+| `shipper`, `recipient` | The origin and destination: `street` and `street2` as street lines, `city`, `state` as the state or province code, `postalCode` and `country` |
+| `pickupType` | `DROPOFF_AT_FEDEX_LOCATION` |
+| `packagingType` | `YOUR_PACKAGING` |
+| `rateRequestType` | `ACCOUNT` and `LIST` |
+| `requestedPackageLineItems` | One line per package, in kilograms and centimeters rounded to two decimals |
+
+The driver converts a package measured in inches and pounds to centimeters and kilograms before sending it. FedEx answers with one entry per service, and each becomes a `ShippingRate`:
+
+| `ShippingRate` property | FedEx value |
+|-------------------------|-------------|
+| `serviceCode` | The service type, `serviceType` |
+| `serviceName` | The service name, or the service type when FedEx gives none |
+| `amount` | The `totalNetCharge` of the account rate, or of the first rate when FedEx returns no account rate, in cents |
+| `currency` | The currency of that rate, in uppercase |
+| `estimatedDays` | Not set |
+
+A currency without decimals keeps its amount as is, as described in [Zero-Decimal Currencies](/3.x/money#zero-decimal-currencies). A service without an amount, or with an amount of zero, is left out and logged as a `Discarded an unusable FedEx rate.` warning with the service type and the reason. The Store API leaves out the options priced in another currency than the cart and says so in its warnings, so the FedEx account currency must match the currency of the carts it quotes.
+
+Quotes are cached for `shopper.shipping.rates_cache_ttl` seconds, per driver, addresses and packages, as described in [Rate Caching](/3.x/carriers#rate-caching). The UPS driver also sends metric units and is the only one that returns transit days. The USPS driver sends pounds and inches and quotes retail prices in US dollars.
+
+## Labels
+
+The driver does not create shipments or buy labels at FedEx: its `supportsLabels()` method returns `false`, as do those of the UPS and USPS drivers. Buy the label from your FedEx account, then record the package on the order: the Create Shipping Label slide-over of the order page takes the FedEx carrier, the tracking number and the tracking URL, as described in [In the Admin](/3.x/fulfillment#in-the-admin).
+
+## Tracking
+
+The driver supports tracking and no webhook, so Shopper asks FedEx for the tracking of each open package. The scheduled `shopper:shipments:sync-tracking` command queues a refresh every 30 minutes for each package of a FedEx carrier that has a tracking number and is neither Delivered nor Returned, as described in [Tracking Sync](/3.x/fulfillment#tracking-sync). Run it by hand to refresh the packages now:
+
+```bash
+php artisan shopper:shipments:sync-tracking
+```
+
+The driver calls `POST /track/v1/trackingnumbers` with the detailed scans and turns each scan into a tracking event, with the FedEx description and a location made of the city, the state and the country of the scan. It reads the derived status code of the scan, or its event type when the scan has none:
+
+| FedEx code | Shipment status |
+|------------|-----------------|
+| `OC` | `ShipmentStatus::Pending` |
+| `PU` | `ShipmentStatus::PickedUp` |
+| `AR` | `ShipmentStatus::AtSortingCenter` |
+| `OD` | `ShipmentStatus::OutForDelivery` |
+| `DL` | `ShipmentStatus::Delivered` |
+| `DE`, `SE` | `ShipmentStatus::DeliveryFailed` |
+| `RS` | `ShipmentStatus::Returned` |
+| Any other code | `ShipmentStatus::InTransit` |
+
+When FedEx reports an actual delivery date without a delivery scan, the driver adds a Delivered event at that date. Each scan carries an external ID built from its time and event type, so a scan read twice is recorded once. A tracking number FedEx does not know is logged as a `The carrier has no record of this tracking number.` warning and the package stays as it is. Any other FedEx error fails the job, which retries after the delays of `shopper.shipping.tracking.backoff`.
+
+The UPS driver tracks its packages the same way. The USPS driver does not track.
+
+## Errors
+
+A failing FedEx call never hides the other carriers. Each request times out after 15 seconds, and a request that cannot connect is tried up to three times, 200 milliseconds apart. The driver throws a `Shopper\Shipping\Exceptions\ShippingException` when the connection still fails, when FedEx answers with an error, including a refused token request, or when the answer holds no usable rate. The message names the driver and the error FedEx returned, such as `API error from [fedex]: ...`, or the HTTP status when FedEx gives no message.
+
+`CarrierRateService` catches the exception, logs a `Shipping rates unavailable for carrier.` warning and reports the carrier as failing. The Store API turns it into a warning on the shipping options and answers `503` when the customer picks a FedEx option, as described in [Failing Carriers](/3.x/carriers#failing-carriers).
+
+## Testing
+
+Test the driver against the FedEx sandbox before the store quotes real shipments.
+
+### Sandbox Mode
+
+Set `SHIPPING_SANDBOX=true` to send every request to `https://apis-sandbox.fedex.com`, with credentials the FedEx sandbox accepts. The access token is cached per environment, so a sandbox token is never sent to production.
+
+<Warning>
+The quote cache key holds the driver, the addresses and the packages, without the environment. After you switch from the sandbox to production, run `php artisan cache:clear` or wait `shopper.shipping.rates_cache_ttl` seconds, or the Store API can serve a sandbox quote.
+</Warning>
+
+### Quoting a Test Shipment
+
+Call the driver directly to check the credentials without a cart or a carrier. This Artisan command asks for the rates of one package from a Los Angeles warehouse to a New York customer:
+
+```php title="routes/console.php"
+use Illuminate\Support\Facades\Artisan;
+use Shopper\Shipping\DataTransferObjects\Address;
+use Shopper\Shipping\DataTransferObjects\Package;
+use Shopper\Shipping\Facades\Shipping;
+
+Artisan::command('shipping:quote-fedex', function (): void {
+    $rates = Shipping::driver('fedex')->calculateRates(
+        from: new Address(
+            firstName: '',
+            lastName: 'Los Angeles Warehouse',
+            street: '1200 S Alameda St',
+            city: 'Los Angeles',
+            postalCode: '90021',
+            state: 'CA',
+            country: 'US',
+        ),
+        to: new Address(
+            firstName: 'Jane',
+            lastName: 'Cooper',
+            street: '350 Fifth Avenue',
+            city: 'New York',
+            postalCode: '10118',
+            state: 'NY',
+            country: 'US',
+        ),
+        packages: [
+            new Package(length: 30, width: 20, height: 15, weight: 2.5),
+        ],
+    );
+
+    foreach ($rates as $rate) {
+        $this->line("{$rate->serviceCode}: {$rate->serviceName}, {$rate->formattedAmount()}");
+    }
+});
+```
+
+Run `php artisan shipping:quote-fedex`. Each line is a FedEx service with its price. A `ShippingException` carries the FedEx error, for example a refused token when a credential is wrong. This call skips the quote cache, so it always reaches FedEx.
+
+## Events
+
+The driver dispatches no event of its own. The tracking it reports is recorded through `RecordShipmentEventAction`, which dispatches the shipment events: `OrderShipmentEventRecorded` for each new scan, and `OrderShipmentDelivered`, `OrderShipmentDeliveryFailed` or `OrderShipmentReturned` when the package reaches that status. [Shipment Events](/3.x/events#shipment-events) lists their payloads.

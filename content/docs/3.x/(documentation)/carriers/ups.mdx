@@ -1,0 +1,197 @@
+---
+title: UPS
+description: Quote live UPS rates at checkout and track UPS packages with the shopper/ups driver, its credentials, sandbox mode and services.
+---
+
+The `shopper/ups` package connects a Shopper store to the UPS APIs. A carrier that uses it quotes live UPS rates at checkout, computed from the shipment origin, the customer address and the packages, and Shopper refreshes the tracking of every UPS package from the UPS tracking API.
+
+The package registers the `ups` driver on the shipping manager of `shopper/shipping`. The manager, the carrier model and the rate service are described on the [Carriers](/3.x/carriers) page. This page covers what is specific to UPS. Shopper also ships drivers for FedEx (`shopper/fedex`) and USPS (`shopper/usps`); each section below says where they work differently.
+
+## Installation
+
+Install the package with Composer:
+
+```bash
+composer require shopper/ups
+```
+
+Laravel discovers `Shopper\Ups\UpsServiceProvider`. The provider merges the package configuration under `shopper.ups` and registers the `ups` driver with `Shipping::extend()`, built from that configuration. The driver reads its values from environment variables, so you only publish the file to change how a value is read:
+
+```bash
+php artisan vendor:publish --tag=shopper-ups-config
+```
+
+This creates `config/shopper/ups.php`.
+
+## Configuration
+
+Every key of the file comes from an environment variable:
+
+| Key | Environment variable | Default | Description |
+|-----|----------------------|---------|-------------|
+| `enabled` | `SHIPPING_UPS_ENABLED` | `false` | Lists the driver in `Shipping::configuredDrivers()` |
+| `sandbox` | `SHIPPING_SANDBOX` | `false` | Sends the requests to the UPS Customer Integration Environment, `https://wwwcie.ups.com`, instead of `https://onlinetools.ups.com` |
+| `client_id` | `UPS_CLIENT_ID` | `null` | Client ID of your UPS app |
+| `client_secret` | `UPS_CLIENT_SECRET` | `null` | Client secret of your UPS app |
+| `user_id` | `UPS_USER_ID` | `null` | User ID of your UPS account |
+| `account_number` | `UPS_ACCOUNT_NUMBER` | `null` | UPS account number, sent as the shipper number |
+
+Add the values to your `.env` file:
+
+```dotenv
+SHIPPING_SANDBOX=true
+UPS_CLIENT_ID=your-client-id
+UPS_CLIENT_SECRET=your-client-secret
+UPS_USER_ID=your-user-id
+UPS_ACCOUNT_NUMBER=your-account-number
+```
+
+The driver is ready once `client_id`, `client_secret`, `user_id` and `account_number` are all filled in: its `isConfigured()` method then returns `true`, carriers that use it quote UPS rates, the admin panel stops showing it as "Not configured" and the tracking sync picks up its packages. The `enabled` key takes no part in that check. Only `Shipping::configuredDrivers()` reads it, as described in [Driver Configuration](/3.x/carriers#driver-configuration), so set it to `true` for code that lists the configured drivers. To stop UPS from quoting, disable the carrier or remove a credential.
+
+`SHIPPING_SANDBOX` is shared by the FedEx, UPS and USPS drivers: one variable switches all three. To run UPS against the sandbox while another driver stays in production, publish the file and set its `sandbox` key to `true`.
+
+### Credentials
+
+UPS issues the client ID and the client secret for an app you create in its developer portal; both are listed on the app info page. The account number is your UPS shipper number. The user ID is the one of your UPS account: `isConfigured()` requires it, but no request of the driver sends it.
+
+The driver exchanges the client ID and the secret for an OAuth access token with the client credentials grant, sending them with HTTP Basic authentication to `/security/v1/oauth/token`. It keeps the token in the default cache store until a minute before it expires, under a key that holds the client ID and the environment, and a cache lock stops two requests from asking for a token at the same time. Each rate and tracking request also carries a `transId` header, a new identifier per request, and a `transactionSrc` header set to `shopper`. The FedEx and USPS drivers post their key and secret in the form body instead, and the USPS driver needs no account number.
+
+## Enabling the Carrier
+
+Installing the package adds no carrier to the store. A merchant creates one under Settings, Carriers: name it `UPS` and pick UPS as its driver. The name sets the slug, `ups`, which must equal the driver code because the Store API finds the carrier of a live rate by that code, as [API-Connected Carrier](/3.x/carriers#api-connected-carrier) explains. Then add the carrier to each zone it serves, from the zone form, and keep it enabled. The [User Guide](/3.x/user-guide) walks through these screens.
+
+The driver select lists every installed driver, whatever its `enabled` key says: UPS shows there once the package is installed, with a "Not configured" badge until the four credentials are filled in. Until then the carrier offers its shipping options in the zone, as a manual carrier does. Once the driver is configured, the carrier quotes UPS rates and no longer reads those options, so a UPS carrier needs no shipping option.
+
+## Shipping Rates
+
+The driver quotes a shipment with one call to the UPS rating API, `POST /api/rating/v2409/Shop`, which returns a rate for every UPS service between the two addresses. Shopper calls it through `CarrierRateService` when the Store API lists the shipping options of a cart, as described in [Calculating Shipping Rates](/3.x/carriers#calculating-shipping-rates). The Store API takes the origin from the [default inventory location](/3.x/locations#default-location), or the location with the lowest priority when none is the default, and needs its country and street address. It sends one package per cart, with the summed weight of the items and their largest dimensions, in the unit system of `shopper.shipping.units`.
+
+The request holds these values:
+
+| UPS field | Value |
+|-----------|-------|
+| `PickupType` | `01`, daily pickup |
+| `CustomerClassification` | `01`, daily rates |
+| `Shipper` | The `account_number` as `ShipperNumber`, the company of the origin address or its name as `Name`, and the origin address |
+| `ShipFrom`, `ShipTo` | The origin and destination: `street` and `street2` as address lines, `city`, `state` as the state or province code, `postalCode` and `country` |
+| `Package` | One entry per package, with the packaging type `02`, dimensions in `CM` and weight in `KGS`, rounded to two decimals |
+
+The driver converts a package measured in inches and pounds to centimeters and kilograms before sending it. UPS answers with one rated shipment per service, and each becomes a `ShippingRate`:
+
+| `ShippingRate` property | UPS value |
+|-------------------------|-----------|
+| `serviceCode` | The service code, `Service.Code` |
+| `serviceName` | The service description, or the name of the code from the table below |
+| `amount` | `TotalCharges.MonetaryValue`, in cents |
+| `currency` | `TotalCharges.CurrencyCode`, in uppercase |
+| `estimatedDays` | `GuaranteedDelivery.BusinessDaysInTransit`, when UPS guarantees the service |
+
+When UPS sends no description, the driver names the service from its code:
+
+| Code | Service | Code | Service |
+|------|---------|------|---------|
+| `01` | UPS Next Day Air | `13` | UPS Next Day Air Saver |
+| `02` | UPS 2nd Day Air | `14` | UPS Next Day Air Early |
+| `03` | UPS Ground | `54` | UPS Worldwide Express Plus |
+| `07` | UPS Worldwide Express | `59` | UPS 2nd Day Air A.M. |
+| `08` | UPS Worldwide Expedited | `65` | UPS Saver |
+| `11` | UPS Standard | `71` | UPS Worldwide Express Freight Midday |
+| `12` | UPS 3 Day Select | `75` | UPS Heavy Goods |
+| `96` | UPS Worldwide Express Freight | | |
+
+Any other code is named `UPS` followed by the code. The driver does not ask for negotiated rates: it reads `TotalCharges`, so a discount negotiated on your UPS account does not show in the quotes.
+
+A currency without decimals keeps its amount as is, as described in [Zero-Decimal Currencies](/3.x/money#zero-decimal-currencies). A service without an amount, or with an amount of zero, is left out and logged as a `Discarded an unusable UPS rate.` warning with the service code and the reason. The Store API leaves out the options priced in another currency than the cart and says so in its warnings, so the currency UPS quotes in must match the currency of the carts.
+
+Quotes are cached for `shopper.shipping.rates_cache_ttl` seconds, per driver, addresses and packages, as described in [Rate Caching](/3.x/carriers#rate-caching). UPS is the only one of the three drivers that returns transit days. The FedEx driver also sends metric units, and the USPS driver sends pounds and inches and quotes retail prices in US dollars.
+
+## Labels
+
+The driver does not create shipments or buy labels at UPS: its `supportsLabels()` method returns `false`, as do those of the FedEx and USPS drivers. Buy the label from your UPS account, then record the package on the order: the Create Shipping Label slide-over of the order page takes the UPS carrier, the tracking number and the tracking URL, as described in [In the Admin](/3.x/fulfillment#in-the-admin).
+
+## Tracking
+
+The driver supports tracking and no webhook, so Shopper asks UPS for the tracking of each open package. The scheduled `shopper:shipments:sync-tracking` command queues a refresh every 30 minutes for each package of a UPS carrier that has a tracking number and is neither Delivered nor Returned, as described in [Tracking Sync](/3.x/fulfillment#tracking-sync). Run it by hand to refresh the packages now:
+
+```bash
+php artisan shopper:shipments:sync-tracking
+```
+
+The driver calls `GET /api/track/v1/details/{trackingNumber}` and turns each activity of the package into a tracking event, with the UPS description and a location made of the city, the state and the country of the activity. The time of an activity is read in UTC, or from its local time and offset when UPS gives no UTC time. The status comes from the type of the activity:
+
+| UPS activity type | Shipment status |
+|-------------------|-----------------|
+| `M` | `ShipmentStatus::Pending` |
+| `P` | `ShipmentStatus::PickedUp` |
+| `D` | `ShipmentStatus::OutForDelivery` |
+| `X` | `ShipmentStatus::DeliveryFailed` |
+| Any other type | `ShipmentStatus::InTransit` |
+
+When UPS reports a delivery date, the driver adds a Delivered event at the time of the last activity of that day. No activity type maps to Returned, so record a package UPS sends back yourself, as described in [Handling Returns](/3.x/fulfillment#handling-returns). Each activity carries an external ID built from its time and status code, so an activity read twice is recorded once. A tracking number UPS answers with a `404` and an error code is logged as a `The carrier has no record of this tracking number.` warning and the package stays as it is. Any other UPS error fails the job, which retries after the delays of `shopper.shipping.tracking.backoff`.
+
+The FedEx driver tracks its packages the same way. The USPS driver does not track.
+
+## Errors
+
+A failing UPS call never hides the other carriers. Each request times out after 15 seconds, and a request that cannot connect is tried up to three times, 200 milliseconds apart. The driver throws a `Shopper\Shipping\Exceptions\ShippingException` when the connection still fails, when UPS answers with an error, including a refused token request, or when the answer holds no usable rate. The message names the driver and the error UPS returned, such as `API error from [ups]: ...`, or the HTTP status when UPS gives no message.
+
+`CarrierRateService` catches the exception, logs a `Shipping rates unavailable for carrier.` warning and reports the carrier as failing. The Store API turns it into a warning on the shipping options and answers `503` when the customer picks a UPS option, as described in [Failing Carriers](/3.x/carriers#failing-carriers).
+
+## Testing
+
+Test the driver against the UPS Customer Integration Environment before the store quotes real shipments.
+
+### Sandbox Mode
+
+Set `SHIPPING_SANDBOX=true` to send every request to `https://wwwcie.ups.com`. The access token is cached per environment, so a sandbox token is never sent to production.
+
+<Warning>
+The quote cache key holds the driver, the addresses and the packages, without the environment. After you switch from the sandbox to production, run `php artisan cache:clear` or wait `shopper.shipping.rates_cache_ttl` seconds, or the Store API can serve a sandbox quote.
+</Warning>
+
+### Quoting a Test Shipment
+
+Call the driver directly to check the credentials without a cart or a carrier. This Artisan command asks for the rates of one package from a Los Angeles warehouse to a New York customer:
+
+```php title="routes/console.php"
+use Illuminate\Support\Facades\Artisan;
+use Shopper\Shipping\DataTransferObjects\Address;
+use Shopper\Shipping\DataTransferObjects\Package;
+use Shopper\Shipping\Facades\Shipping;
+
+Artisan::command('shipping:quote-ups', function (): void {
+    $rates = Shipping::driver('ups')->calculateRates(
+        from: new Address(
+            firstName: '',
+            lastName: 'Los Angeles Warehouse',
+            street: '1200 S Alameda St',
+            city: 'Los Angeles',
+            postalCode: '90021',
+            state: 'CA',
+            country: 'US',
+        ),
+        to: new Address(
+            firstName: 'Jane',
+            lastName: 'Cooper',
+            street: '350 Fifth Avenue',
+            city: 'New York',
+            postalCode: '10118',
+            state: 'NY',
+            country: 'US',
+        ),
+        packages: [
+            new Package(length: 30, width: 20, height: 15, weight: 2.5),
+        ],
+    );
+
+    foreach ($rates as $rate) {
+        $this->line("{$rate->serviceCode}: {$rate->serviceName}, {$rate->formattedAmount()}");
+    }
+});
+```
+
+Run `php artisan shipping:quote-ups`. Each line is a UPS service with its price. A `ShippingException` carries the UPS error, for example a refused token when a credential is wrong. This call skips the quote cache, so it always reaches UPS.
+
+## Events
+
+The driver dispatches no event of its own. The tracking it reports is recorded through `RecordShipmentEventAction`, which dispatches the shipment events: `OrderShipmentEventRecorded` for each new activity, and `OrderShipmentDelivered` or `OrderShipmentDeliveryFailed` when the package reaches that status. [Shipment Events](/3.x/events#shipment-events) lists their payloads.

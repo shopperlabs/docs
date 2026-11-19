@@ -1,0 +1,318 @@
+---
+title: Stripe
+description: Accept card payments in Shopper with Stripe PaymentIntents, 3D Secure, manual or automatic capture, refunds and signed webhooks.
+---
+
+The `shopper/stripe` package connects a Shopper store to Stripe. It registers a payment driver named `stripe` on the payment manager of [`shopper/payment`](/3.x/payments): the driver creates a Stripe PaymentIntent for each payment, Stripe.js confirms it in the customer's browser with a 3D Secure check when the card asks for one, and Stripe's webhooks move the payment of the order to Authorized, Paid, Refunded or Voided. Capture can be manual or automatic, and refunds full or partial.
+
+This page covers what is specific to Stripe. The payment manager, the processing service, payment sessions and the way Shopper applies provider events are described on [Payments](/3.x/payments).
+
+## Installation
+
+Install the package with Composer:
+
+```bash
+composer require shopper/stripe
+```
+
+The package requires `shopper/payment` and Stripe's PHP library, `stripe/stripe-php`. Laravel discovers `Shopper\Stripe\StripeServiceProvider`, which merges the package configuration under `shopper.stripe` and registers the `stripe` driver with `Payment::extend()`, built from that configuration.
+
+Publish the configuration file to `config/shopper/stripe.php`:
+
+```bash
+php artisan vendor:publish --tag=shopper-stripe-config
+```
+
+## Configuration
+
+Every value of `config/shopper/stripe.php` comes from an environment variable:
+
+| Key | Env | Default | Purpose |
+|-----|-----|---------|---------|
+| `enabled` | `PAYMENT_STRIPE_ENABLED` | `false` | Lists `stripe` in `Payment::configuredDrivers()` |
+| `secret_key` | `STRIPE_SECRET_KEY` | `null` | Secret API key, used for every call to Stripe. Its prefix sets the [test mode](#test-mode) |
+| `publishable_key` | `STRIPE_PUBLISHABLE_KEY` | `null` | Publishable key returned to the storefront with each payment, for Stripe.js |
+| `webhook_secret` | `STRIPE_WEBHOOK_SECRET` | `null` | Signing secret of the webhook endpoint, used to verify each event |
+| `capture_method` | `STRIPE_CAPTURE_METHOD` | `manual` | `manual` or `automatic`, as described in [Capture Method](#capture-method) |
+
+Copy the secret and publishable keys from the API keys page of your Stripe Dashboard. The webhook signing secret is shown on the webhook endpoint once you create it, as described in [Setting Up](#setting-up):
+
+```bash title=".env"
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+STRIPE_CAPTURE_METHOD=manual
+```
+
+The driver is configured when both the secret key and the webhook secret are set. Shopper reads that check everywhere else: until both are set, the admin panel marks Stripe "Not configured", carts do not offer the payment methods that use it, opening a payment session answers `503 payment_method_not_configured`, and the webhook route answers `404`. `PAYMENT_STRIPE_ENABLED` only affects the list returned by `Payment::configuredDrivers()`, which neither the admin panel nor the Store API reads: the flag does not show or hide Stripe. The publishable key is not part of the check, but the storefront cannot load the Payment Element without it.
+
+<Warning>
+Keep the Stripe keys in your environment and out of version control.
+</Warning>
+
+## Capture Method
+
+The `capture_method` setting decides when Stripe collects the customer's funds. The driver passes it to every PaymentIntent it creates:
+
+| Value | Behavior | Use case |
+|-------|----------|----------|
+| `manual` | The card is authorized at checkout and captured later, from the admin panel or in code | Physical goods, checking stock before charging |
+| `automatic` | The card is charged when the customer confirms | Digital products, instant fulfillment |
+
+Manual capture is the default. The payment status of the order moves from Pending to Authorized when the customer confirms, then to Paid when the store captures. With automatic capture, it moves from Pending to Paid. [Capture Methods](/3.x/payments#capture-methods) describes both strategies.
+
+A capture can collect less than the authorized amount: the driver passes the amount to Stripe as `amount_to_capture`, and Stripe releases the rest of the hold. A PaymentIntent is captured once, so capture the amount the order needs in one call.
+
+<Note>
+Stripe keeps an authorization for a limited time, generally 7 days for online card payments, depending on the card network. When the authorization expires, Stripe cancels the PaymentIntent, and its `payment_intent.canceled` webhook voids the payment and cancels the order when it is unpaid and still cancellable.
+</Note>
+
+## Payment Method Setup
+
+Customers pay with Stripe through a payment method whose `driver` is `stripe`. Create it in the admin panel under Settings, Payment methods, where the Driver field lists every driver registered with `Payment::extend()`: Stripe shows there once the package is installed, marked "Not configured" until the secret key and the webhook secret are set. You can also create it with Eloquent, then attach it to the zones where it is offered:
+
+```php
+use Shopper\Core\Models\PaymentMethod;
+use Shopper\Core\Models\Zone;
+
+$creditCard = PaymentMethod::query()->create([
+    'title' => 'Credit Card',
+    'slug' => 'credit-card',
+    'driver' => 'stripe',
+    'description' => 'Pay securely with your credit or debit card.',
+    'is_enabled' => true,
+]);
+
+$creditCard->zones()->sync([Zone::findBySlug('europe')->id]);
+```
+
+A cart offers the method only while the driver is configured. The settings list shows the method with a green Stripe badge once the secret key and the webhook secret are set, and its Live or Test mode. [Payment Methods](/3.x/payment-methods) describes the model and its zones, and the [User Guide](/3.x/user-guide) the settings screen.
+
+## Payment Flow
+
+A Stripe payment follows the PaymentIntent flow: Shopper creates the PaymentIntent on the server, the customer confirms it in the browser with Stripe.js, and Stripe reports the outcome through its webhooks. The steps below follow a checkout with manual capture.
+
+### 1. Initiate at Checkout
+
+With the Store API, the storefront opens a [payment session](/3.x/payments#payment-sessions) once the customer has chosen the Stripe payment method:
+
+```text
+POST /store/carts/{cartId}/payment-session
+```
+
+The driver creates a PaymentIntent for the cart total [in cents](/3.x/money), with the currency code in lowercase, the configured capture method, the cart's public ID in `metadata.cart_id` and the idempotency key of the session. The response of a new session carries the two values Stripe.js needs: `client_secret`, and the publishable key in `data.publishable_key`. The session ID is the PaymentIntent ID, such as `pi_3QJ7xYLkdIwHu7ix0Zb5Rk1T`. A call that resumes the open session answers with the same `client_secret` but without `data.publishable_key`, so give the storefront the publishable key in its own configuration as well.
+
+Code that manages orders without the Store API initiates the payment of an existing order with the processing service:
+
+```php
+use Shopper\Payment\Services\PaymentProcessingService;
+
+$result = resolve(PaymentProcessingService::class)->initiate($order, [
+    'metadata' => ['order_number' => $order->number],
+]);
+
+return view('checkout.payment', [
+    'clientSecret' => $result->clientSecret,
+    'publishableKey' => $result->data['publishable_key'],
+]);
+```
+
+The driver reads four keys from the context: `payment_method`, `customer` (a Stripe customer ID), `metadata` and `idempotency_key`. Without an idempotency key, it generates one. A Stripe API error is thrown as a `Shopper\Stripe\Exceptions\StripeException`, which extends `PaymentException`.
+
+### 2. Confirm on the Frontend
+
+The payment page mounts Stripe's Payment Element with the client secret and confirms the payment with `stripe.confirmPayment()`:
+
+```blade title="resources/views/checkout/payment.blade.php"
+<form id="payment-form">
+    <div id="payment-element"></div>
+    <button type="submit">Pay now</button>
+    <p id="payment-message" role="alert"></p>
+</form>
+
+<script src="https://js.stripe.com/endive/stripe.js"></script>
+<script>
+    const stripe = Stripe(@js($publishableKey))
+    const elements = stripe.elements({ clientSecret: @js($clientSecret) })
+
+    elements.create('payment').mount('#payment-element')
+
+    document.getElementById('payment-form').addEventListener('submit', async (event) => {
+        event.preventDefault()
+
+        const { error } = await stripe.confirmPayment({
+            elements,
+            confirmParams: {
+                return_url: @js(route('checkout.confirmation')),
+            },
+        })
+
+        document.getElementById('payment-message').textContent = error.message
+    })
+</script>
+```
+
+Stripe runs the 3D Secure check when the card requires it, then redirects the customer to `return_url` with the `payment_intent` and `payment_intent_client_secret` query parameters. `confirmPayment()` returns only when the confirmation fails before the redirect, with the error to show.
+
+### 3. Handle the Callback
+
+With the Store API, the page behind `return_url` completes the cart:
+
+```text
+POST /store/carts/{cartId}/complete
+```
+
+Shopper creates the order with an `initiate` transaction that holds the PaymentIntent ID, applies the Stripe events that arrived before the order existed, and queues a provider check when `reconciliation.pull_on_completion` is on. The webhook then moves the payment status: `payment_intent.amount_capturable_updated` to Authorized with manual capture, `payment_intent.succeeded` to Paid with automatic capture. The confirmation page can show the order as pending payment for the few seconds before the webhook lands. [Payment Sessions](/3.x/payments#payment-sessions) lists the answers of the complete call.
+
+An order initiated in code already holds the PaymentIntent ID in its transactions, so the same webhooks update it. Stripe.js has confirmed the PaymentIntent, so the callback does not call `authorize()`, which would confirm it a second time. To show the outcome before the webhook arrives, read the PaymentIntent from Stripe:
+
+```php
+use Shopper\Payment\Facades\Payment;
+use Shopper\Payment\Services\PaymentProcessingService;
+
+$reference = resolve(PaymentProcessingService::class)->getLatestReference($order);
+
+$payment = Payment::driver('stripe')->retrievePayment($reference);
+
+$payment->status;
+```
+
+The driver maps the status of the PaymentIntent to these values:
+
+| Stripe status | `status` |
+|---------------|----------|
+| `requires_payment_method`, `requires_confirmation` | `pending` |
+| `requires_action` | `requires_action` |
+| `processing` | `processing` |
+| `requires_capture` | `authorized` |
+| `succeeded` | `captured` |
+| `canceled` | `canceled` |
+
+`authorize()` is for a server-side confirmation, where your code passes a `payment_method` and a `return_url`, as described in [Authorizing a Payment](/3.x/payments#authorizing-a-payment).
+
+### 4. Capture from the Admin Panel
+
+When the order is ready to ship, the merchant clicks Capture payment on the order page. The action shows on an authorized order that is neither cancelled nor archived, needs the `orders.edit` permission, and captures the full amount with the order's latest successful reference. The payment status moves from Authorized to Paid, which dispatches `OrderPaid`.
+
+Code captures the same way, in full or in part, with [`capture()`](/3.x/payments#capturing-a-payment).
+
+## Webhooks
+
+Stripe reports the outcome of each PaymentIntent and each refund through webhooks. The driver verifies the event, turns it into a `WebhookResult`, and Shopper applies it to the order that holds the PaymentIntent, once per event, as described in [Webhooks](/3.x/payments#webhooks).
+
+### Setting Up
+
+The Store API receives Stripe's webhooks on the driver's route, under the prefix set by `SHOPPER_API_PREFIX` (`store` by default). The [Install the Store API](/3.x/installation#install-the-store-api) section sets it up.
+
+<Steps>
+  <Step title="Create the endpoint">
+    In the Stripe Dashboard, add a webhook endpoint with the URL `https://example.com/store/webhooks/stripe` and select the seven events listed in [Handled Events](#handled-events).
+  </Step>
+  <Step title="Copy the signing secret">
+    Copy the endpoint's signing secret, which starts with `whsec_`, into `STRIPE_WEBHOOK_SECRET`.
+  </Step>
+</Steps>
+
+The route needs no CSRF exclusion and answers `200` with `{"received": true}` once the event is accepted. A store without the Store API registers its own route, as shown at the end of [The Event Journal](/3.x/payments#the-event-journal).
+
+### Handled Events
+
+The driver handles seven Stripe events:
+
+| Stripe Event | Action | Effect on the order |
+|--------------|--------|---------------------|
+| `payment_intent.amount_capturable_updated` | `Authorized` | The payment status moves to Authorized, for the amount Stripe can capture |
+| `payment_intent.succeeded` | `Captured` | The payment status moves to Paid, for the amount received |
+| `payment_intent.payment_failed` | `Failed` | On an order still pending payment, a failed transaction and `PaymentFailed` with Stripe's error message |
+| `payment_intent.canceled` | `Canceled` | The payment status moves to Voided, and an unpaid order that can still be cancelled moves to Cancelled |
+| `refund.created`, `refund.updated`, `refund.failed` with the refund status `succeeded` | `Refunded` | The pending refund is settled, or the refund is recorded, and the payment status moves to Partially refunded or Refunded |
+| `refund.created`, `refund.updated`, `refund.failed` with the refund status `failed` or `canceled` | `RefundFailed` | The refund is marked failed, its amount goes back to the refundable balance, and `PaymentFailed` is dispatched with Stripe's failure reason |
+
+Every other event, and a refund event with another status, such as `pending`, is ignored and still answered with `200`. Refund events let Shopper record a refund made from the Stripe Dashboard and settle the refunds Stripe has not finished, as described in [Refunds](#refunds). A refund made through Shopper is not counted twice: the event carries the Stripe refund ID and the idempotency key stored in the refund's metadata, and Shopper applies it to the refund it already recorded.
+
+Authorization and capture events also carry the `cart_id` stored in the PaymentIntent metadata, which lets Shopper find the cart of a customer who paid and left before the storefront completed it, as described in [Orphaned Payments](/3.x/payments#orphaned-payments).
+
+### Signature Verification
+
+The driver verifies every webhook before it reads it. It needs the raw request body, passed as `_raw_body`, and the `Stripe-Signature` header, and checks the signature with the webhook secret through Stripe's PHP library. A missing body or header, or a signature that does not match, throws a `StripeException`, and the route answers `400` with `{"error": "Invalid webhook payload."}`. Without a webhook secret the driver also throws, but the Store API route answers `404` before it reaches the driver, as described in [Configuration](#configuration). A route of your own must pass the body exactly as Stripe sent it.
+
+## Refunds
+
+Refund a captured payment with the processing service. The amount is in cents and can be less than the captured amount:
+
+```php
+use Shopper\Payment\Services\PaymentProcessingService;
+
+$payments = resolve(PaymentProcessingService::class);
+
+$result = $payments->refund(
+    order: $order,
+    reference: $reference,
+    amount: 2000,
+    reason: 'requested_by_customer',
+    idempotencyKey: $refundKey,
+);
+```
+
+The reference is the PaymentIntent ID, which [Refunding a Payment](/3.x/payments#refunding-a-payment) shows how to read from the capture transaction, along with how to generate `$refundKey`. The `reason` goes to Stripe, which accepts `duplicate`, `fraudulent` and `requested_by_customer`: any other value makes Stripe reject the refund and the call throw a `StripeException`. Leave it `null` to send no reason.
+
+The driver creates a Stripe refund for the PaymentIntent. It sends the idempotency key of the refund, yours or the UUID the service generates without one, as the key of the Stripe request, and stores it in the refund's metadata under `idempotency_key`, so the refund events carry it back to the store. Stripe forgets a request key after 24 hours: past that delay, retrying a refund whose answer was lost and whose events have not reached the store yet creates a second refund. Shopper records both and reports the duplicate to your exception handler.
+
+Shopper reads the status of the Stripe refund from its answer:
+
+| Stripe refund status | Recorded as | Payment status |
+|----------------------|-------------|----------------|
+| `succeeded` | A successful refund | Moves to Partially refunded or Refunded |
+| `pending`, `requires_action` | A [pending refund](/3.x/payments#pending-refunds) | Unchanged until the refund settles |
+| `failed`, `canceled` | A failed refund, with Stripe's failure reason | Unchanged, and `PaymentFailed` is dispatched |
+
+A pending refund settles when the `refund.updated` event confirms it, and `refund.failed` marks it failed and gives its amount back to the refundable balance. Without the refund events, it settles only when `php artisan shopper:payments:reconcile --pull` asks Stripe for its state with the driver's `retrieveRefund()`, once it has been pending for the `--minutes` delay (15 by default), as described in [Reconciling Payments](/3.x/payments#reconciling-payments). A refund that fails after Stripe confirmed it steps the payment status back, as described in [Status Transitions](/3.x/payments#status-transitions).
+
+The service creates no `OrderRefund` record: [Order Refunds](/3.x/payments#order-refunds) shows how to keep one.
+
+<Note>
+When `reconciliation.orphans` is `refund`, Shopper refunds an [orphaned payment](/3.x/payments#orphaned-payments) whose cart it could not complete. That refund has no transaction for the reconcile command to check, so its failure is only known from the `refund.failed` event, which Shopper reports to your exception handler.
+</Note>
+
+## Cancellation
+
+Cancel an authorized payment before capture to release the hold on the customer's card. The driver cancels the PaymentIntent, no funds are collected and no refund is needed:
+
+```php
+$result = $payments->cancel($order, $reference);
+```
+
+A successful cancellation moves the payment status to Voided. Cancel Order in the admin panel changes the order status only and leaves the authorization in place: cancel the payment in code, or from the Stripe Dashboard, whose `payment_intent.canceled` webhook voids it. An order whose payment never lands is cancelled by `shopper:orders:reclaim`, which releases the payment at Stripe first, as described in [Reclaiming Pending Orders](/3.x/orders#reclaiming-pending-orders).
+
+## Testing
+
+Stripe keeps test data apart from live data. With test keys, every call goes to your test account and no card is charged.
+
+### Stripe Test Cards
+
+Pay with Stripe's [test cards](https://docs.stripe.com/testing), with any future expiry date and any three-digit CVC:
+
+| Card Number | Scenario |
+|-------------|----------|
+| `4242 4242 4242 4242` | Successful payment |
+| `4000 0025 0000 3155` | Requires 3D Secure authentication |
+| `4000 0000 0000 9995` | Declined (insufficient funds) |
+| `4000 0000 0000 0002` | Declined (generic) |
+
+### Webhook Testing
+
+Use the Stripe CLI to forward the events of your test account to your local application:
+
+```bash
+stripe listen --forward-to localhost:8000/store/webhooks/stripe
+```
+
+The CLI prints a signing secret that starts with `whsec_`. Set it as `STRIPE_WEBHOOK_SECRET` while you develop, then run a checkout with a test card: the CLI shows each event and the answer of the route.
+
+### Test Mode
+
+The driver reads its mode from the prefix of the secret key: `sk_test_` is test mode and `sk_live_` live mode. The payment methods list in the admin panel shows the mode of each method, so a store still on test keys is visible at a glance. A key with any other prefix shows no mode. Test and live webhook endpoints have their own signing secrets: change `STRIPE_WEBHOOK_SECRET` with the keys.
+
+## Events
+
+The driver dispatches no event of its own. As Shopper applies Stripe's results, it dispatches the payment events: `OrderPaid` when a capture succeeds, `PaymentFailed` when a payment or a refund fails, with Stripe's error message or failure reason as its reason, `OrderCancelled` when Stripe cancels the payment of an unpaid order, `PaymentOrphaned` for a collected payment that still has no order, and `OrphanedPaymentRefunded` when Stripe reports a refund of a payment that has no order. [Payment Events](/3.x/events#payment-events) lists their arguments and how to listen to them.

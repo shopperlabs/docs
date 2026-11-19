@@ -15,6 +15,11 @@
     "permanent": false
   },
   {
+    "source": "/3.x/addons/stripe",
+    "destination": "/3.x/payments/stripe",
+    "permanent": true
+  },
+  {
     "source": "/v2/inertia-starter-kit",
     "destination": "/2.x/starter-kits",
     "permanent": true

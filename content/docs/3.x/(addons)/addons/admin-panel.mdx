@@ -1,0 +1,549 @@
+---
+title: Extending the Admin Panel
+description: Register routes, Livewire pages, sidebar entries, settings pages, product sections, permissions, render hooks and assets from a Shopper add-on.
+---
+
+An add-on extends the admin panel from its `register()` method, through the `addon*` methods of the `Shopper\ShopperPanel` instance it receives. Each method returns the panel, so the calls chain. A [disabled](/3.x/addons#disabling-an-addon) add-on is never registered, so nothing on this page applies to it.
+
+The examples continue the `acme/loyalty` add-on of [Creating an Add-on](/3.x/addons/creating), built on the skeleton: its views and translations use the `shopper-loyalty` namespace, and its permissions start with `loyalty.`.
+
+## What an Add-on Can Register [#what-an-addon-can-register]
+
+The panel keeps what each add-on registers, then applies it at three different moments:
+
+| Method | Registers | Applied |
+|--------|-----------|---------|
+| `addonRoutes(Closure $routes)` | Routes inside the admin route group | When Shopper boots, before the add-ons' `boot()` |
+| `addonLivewireComponents(array $components)` | Livewire components, under a `shopper-` alias | When Shopper boots |
+| `addonSidebar(string $sidebarClass)` | A class that adds groups and entries to the sidebar | When Shopper boots |
+| `addonViews(string $namespace, string $path)` | A Blade view namespace | When Shopper boots |
+| `addonSettingItems(array $items)` | Entries of the settings screen | When Shopper boots |
+| `addonProductSections(array $sections)` | Tabs of the product edit page | When Shopper boots |
+| `addonStyles(array $styles)` | Stylesheets in the `<head>` of every admin page | On each page render |
+| `addonScripts(array $scripts)` | Scripts at the end of every admin page | On each page render |
+| `renderHook(string $hook, Closure $callback)` | HTML at a named place of the layout or of a page | On each page render |
+
+Call all of them from `register()`. Shopper's service provider loads the routes while it boots, before it calls the add-ons' `boot()` methods, so `addonRoutes()` called from `boot()` is ignored. The other methods still apply when called from `boot()`.
+
+### Routes
+
+`addonRoutes()` takes a closure that declares routes with the `Route` facade. Shopper loads it inside its admin route group, after its own routes and the store's [custom route file](/3.x/configuration#custom-routes):
+
+```php title="src/LoyaltyAddon.php"
+use Acme\Loyalty\Livewire\LoyaltyIndex;
+use Illuminate\Support\Facades\Route;
+use Shopper\ShopperPanel;
+
+public function register(ShopperPanel $panel): void
+{
+    $panel->addonRoutes(function (): void {
+        Route::prefix('loyalty')
+            ->as('loyalty.')
+            ->group(function (): void {
+                Route::get('/', LoyaltyIndex::class)->name('index');
+            });
+    });
+}
+```
+
+Do not add the admin prefix, the `shopper.` name prefix or the admin middleware yourself: each route already gets them. The route above answers at `/cpanel/loyalty` and is named `shopper.loyalty.index`. In detail, every add-on route gets:
+
+- The admin domain and prefix, from `shopper.admin.domain` and `shopper.admin.prefix` (`cpanel` by default).
+- The `shopper.` prefix on its name.
+- The middleware of the admin pages: cookies, session, CSRF protection and route model binding, Shopper's serving and locale middleware, authentication with the Shopper guard, the dashboard check, the sidebar resolver and the ones listed in `shopper.routes.middleware` (see [Middleware](/3.x/configuration#middleware)). The dashboard check sends users who cannot access the admin panel to its forbidden page, and everyone to the setup screen until the store has an email and an address.
+
+The routes do not check any permission. Each page checks its own, the way the skeleton's `LoyaltyIndex` calls `$this->authorize('loyalty.browse')` in `mount()`: a failed check sends the user to the admin panel's forbidden page. To check a permission on a group of routes instead, add the `can:` middleware, as the product sections below do.
+
+Keep your URLs and route names under your add-on's ID, so they do not collide with Shopper's or another add-on's. Two kinds of pages follow Shopper's own paths instead, so that its layouts recognize them: [settings pages](#settings-items) under `setting/`, and [product sections](#product-sections) under `products/{product}/edit/`.
+
+Shopper reads the add-on routes when it loads its own routes. With cached routes, the cache keeps the routes that existed when it was built, so run `php artisan optimize` (or `php artisan route:cache`) again after adding, enabling or disabling an add-on.
+
+### Livewire Components
+
+`addonLivewireComponents()` registers Livewire components, keyed by name. Shopper registers each one with a `shopper-` prefix, like its own components:
+
+```php title="src/LoyaltyAddon.php"
+use Acme\Loyalty\Livewire\LoyaltyForm;
+use Acme\Loyalty\Livewire\LoyaltyIndex;
+
+$panel->addonLivewireComponents([
+    'loyalty.index' => LoyaltyIndex::class,
+    'loyalty.form' => LoyaltyForm::class,
+]);
+```
+
+A view renders the second one with `<livewire:shopper-loyalty.form />`. Give every name your add-on's ID as its first segment, for the same reason as the routes.
+
+The admin panel opens forms in slide-over panels. A slide-over is a component that extends `Laravelcm\LivewireSlideOvers\SlideOverComponent`, and any component opens it by its registered name, with the arguments of its `mount()` method:
+
+```php title="src/Livewire/LoyaltyIndex.php"
+$this->dispatch('openPanel', 'shopper-loyalty.form', ['memberId' => $member->id]);
+```
+
+Page components extend `Shopper\Livewire\Pages\AbstractPageComponent`, which renders them inside the admin layout, with the header and the sidebar. Settings pages and product sections use their own layouts, shown below. Leave your components open to extension, without `final`, so that a store can [replace one](/3.x/addons#customizing-an-addons-screens) with a subclass.
+
+### Sidebar Navigation
+
+`addonSidebar()` takes a class that extends `Shopper\Sidebar\AbstractAdminSidebar`. Shopper calls its `extendWith()` method with the menu each time it builds the sidebar of an admin page, and `$this->user` holds the signed-in user:
+
+```php title="src/LoyaltyAddon.php"
+use Acme\Loyalty\Sidebar\LoyaltySidebar;
+
+$panel->addonSidebar(LoyaltySidebar::class);
+```
+
+The skeleton's sidebar class adds a **Loyalty** group of its own, as shown in [Creating an Add-on](/3.x/addons/creating#from-the-skeleton-to-an-admin-page). The menu merges groups and entries by label: `$menu->group()` with the label of an existing group adds to that group, and `$group->item()` with the label of an existing entry changes that entry. To place your entry in a group of Shopper, use the translation key Shopper uses for that group's label:
+
+```php title="src/Sidebar/LoyaltySidebar.php"
+namespace Acme\Loyalty\Sidebar;
+
+use Shopper\Sidebar\AbstractAdminSidebar;
+use Shopper\Sidebar\Contracts\Builder\Group;
+use Shopper\Sidebar\Contracts\Builder\Item;
+use Shopper\Sidebar\Contracts\Builder\Menu;
+
+final class LoyaltySidebar extends AbstractAdminSidebar
+{
+    public function extendWith(Menu $menu): Menu
+    {
+        $menu->group(__('shopper::pages/customers.menu'), function (Group $group): void {
+            $group->item(__('shopper-loyalty::messages.menu'), function (Item $item): void {
+                $item->weight(3);
+                $item->setAuthorized($this->user->can('loyalty.browse'));
+                $item->route('shopper.loyalty.index');
+                $item->setIcon('phosphor-gift');
+                $item->useSpa();
+            });
+        });
+
+        return $menu;
+    }
+}
+```
+
+The entry now sits in the **Customers** group, after Shopper's own entries. Weights order the groups and the entries in them, lowest first: Shopper gives its groups 1 (Dashboard), 2 (Catalog), 3 (Sales and Customers) and 10 (Settings). `route()` takes the full route name, `shopper.` included, and `useSpa()` opens the page without a full reload.
+
+Hide entries with `setAuthorized()` and `can()`. `hasPermissionTo()` throws an exception when the permission does not exist yet, which breaks every admin page between the deployment of the add-on and its install command.
+
+### Blade Views
+
+`addonViews()` registers a view namespace while the add-on is enabled:
+
+```php title="src/LoyaltyAddon.php"
+$panel->addonViews('loyalty', __DIR__.'/../resources/views');
+```
+
+`view('loyalty::dashboard.top-members')` then renders `resources/views/dashboard/top-members.blade.php`. An add-on built on the skeleton does not need it: its service provider already registers the `resources/views` folder under the `shopper-loyalty` namespace, as described in [Translations and Config](#translations-and-config). That namespace exists whether the add-on is enabled or not, since the provider always runs. Use `addonViews()` for views that only make sense while the add-on is enabled, under a namespace of their own.
+
+### Settings Items
+
+`addonSettingItems()` adds entries to the settings screen. Each entry is a class that extends `Shopper\Navigation\Setting\Setting`, as described in [Adding a Settings Page](/3.x/configuration#adding-a-settings-page):
+
+```php title="src/Navigation/LoyaltySetting.php"
+namespace Acme\Loyalty\Navigation;
+
+use BackedEnum;
+use Mckenziearts\Icons\Untitledui\Enums\Untitledui;
+use Shopper\Enum\SettingGroup;
+use Shopper\Navigation\Setting\Setting;
+
+final class LoyaltySetting extends Setting
+{
+    public function name(): string
+    {
+        return __('shopper-loyalty::messages.settings.menu');
+    }
+
+    public function description(): string
+    {
+        return __('shopper-loyalty::messages.settings.description');
+    }
+
+    public function icon(): BackedEnum
+    {
+        return Untitledui::Gift;
+    }
+
+    public function url(): string
+    {
+        return route('shopper.settings.loyalty');
+    }
+
+    public function order(): int
+    {
+        return 50;
+    }
+
+    public function group(): string
+    {
+        return SettingGroup::Selling->value;
+    }
+}
+```
+
+`group()` returns one of the `SettingGroup` values (`store`, `selling`, `shipping` and `team`) or a string of your own, and `order()` sorts the entries of a group, lowest first. Add a `permission()` method that returns a permission name to hide the entry from users who do not hold it.
+
+Register the class with `true`, and the page's route under the `setting` prefix and the `settings.` name prefix, like Shopper's own settings pages. The entry of the main sidebar then stays highlighted on your page:
+
+```php title="src/LoyaltyAddon.php"
+use Acme\Loyalty\Livewire\LoyaltySettings;
+use Acme\Loyalty\Navigation\LoyaltySetting;
+use Illuminate\Support\Facades\Route;
+
+$panel
+    ->addonSettingItems([
+        LoyaltySetting::class => true,
+    ])
+    ->addonRoutes(function (): void {
+        Route::prefix('setting')
+            ->as('settings.')
+            ->group(function (): void {
+                Route::get('/loyalty', LoyaltySettings::class)->name('loyalty');
+            });
+    });
+```
+
+The boolean is the entry's initial state: `false` registers the entry hidden, and `Shopper\Navigation\Setting\SettingManager` shows it later with `enable()`. The page answers at `/cpanel/setting/loyalty`. Its component uses the settings layout, which lists every settings page next to yours, and a trait that adds the Settings breadcrumb:
+
+```php title="src/Livewire/LoyaltySettings.php"
+namespace Acme\Loyalty\Livewire;
+
+use Illuminate\Contracts\View\View;
+use Livewire\Attributes\Layout;
+use Livewire\Component;
+use Shopper\Livewire\Concerns\WithSettingsBreadcrumbs;
+use Shopper\Sidebar\Breadcrumbs\Breadcrumb;
+use Shopper\Traits\HandlesAuthorizationExceptions;
+
+#[Layout('shopper::components.layouts.setting')]
+class LoyaltySettings extends Component
+{
+    use HandlesAuthorizationExceptions;
+    use WithSettingsBreadcrumbs;
+
+    public function settingsPageBreadcrumbs(): array
+    {
+        return [
+            new Breadcrumb(text: __('shopper-loyalty::messages.settings.menu')),
+        ];
+    }
+
+    public function mount(): void
+    {
+        $this->authorize('system.settings');
+    }
+
+    public function render(): View
+    {
+        return view('shopper-loyalty::livewire.pages.loyalty-settings')
+            ->title(__('shopper-loyalty::messages.settings.menu'));
+    }
+}
+```
+
+Shopper's settings pages require the `system.settings` permission, and so does this one. The `HandlesAuthorizationExceptions` trait turns a failed check in a later action into an "Unauthorized" notification instead of an error page.
+
+### Product Sections
+
+`addonProductSections()` adds tabs to the product edit page, next to Shopper's own (Pricing, Inventory, SEO and the others). Each tab is a class that extends `Shopper\Navigation\Product\AbstractProductSection`, and its `url()` method receives the product:
+
+```php title="src/Navigation/PointsSection.php"
+namespace Acme\Loyalty\Navigation;
+
+use BackedEnum;
+use Mckenziearts\Icons\Untitledui\Enums\Untitledui;
+use Shopper\Core\Models\Contracts\Product;
+use Shopper\Enum\ProductSectionGroup;
+use Shopper\Navigation\Product\AbstractProductSection;
+
+final class PointsSection extends AbstractProductSection
+{
+    public function name(): string
+    {
+        return __('shopper-loyalty::messages.points');
+    }
+
+    public function icon(): BackedEnum
+    {
+        return Untitledui::Gift;
+    }
+
+    public function group(): string
+    {
+        return ProductSectionGroup::Marketing->value;
+    }
+
+    public function order(): int
+    {
+        return 30;
+    }
+
+    public function url(Product $product): string
+    {
+        return route('shopper.products.edit.points', ['product' => $product]);
+    }
+}
+```
+
+`group()` returns one of the `ProductSectionGroup` values (`product`, `inventory`, `sales` and `marketing`), and `order()` sorts the tabs of a group: Shopper's SEO and Related Products tabs are in `marketing` with orders 10 and 20, so this one comes after them. Override `visible()` to hide the tab for some products, the way Shopper only shows the Files tab for virtual products. `permission()` hides it from users without that permission, like a settings entry.
+
+Register the class and the page's route. The route lives under `products/{product}/edit/` and keeps the `{product}` parameter: the product layout reads that parameter to show the product's header and tabs, and highlights the tab whose URL has the same segment after `edit/` as the current page. Shopper's product pages require the `products.edit` permission through the `can:` middleware:
+
+```php title="src/LoyaltyAddon.php"
+use Acme\Loyalty\Livewire\ProductPoints;
+use Acme\Loyalty\Navigation\PointsSection;
+use Illuminate\Support\Facades\Route;
+
+$panel
+    ->addonProductSections([
+        PointsSection::class => true,
+    ])
+    ->addonRoutes(function (): void {
+        Route::middleware('can:products.edit')->group(function (): void {
+            Route::get('products/{product}/edit/points', ProductPoints::class)
+                ->name('products.edit.points');
+        });
+    });
+```
+
+The page answers at `/cpanel/products/{product}/edit/points`. Its component uses the product layout and receives the product in a `Product` property, which Livewire resolves from the route to the product model configured in Shopper. `#[Locked]` stops the browser from changing it:
+
+```php title="src/Livewire/ProductPoints.php"
+namespace Acme\Loyalty\Livewire;
+
+use Illuminate\Contracts\View\View;
+use Livewire\Attributes\Layout;
+use Livewire\Attributes\Locked;
+use Livewire\Component;
+use Shopper\Core\Models\Contracts\Product;
+use Shopper\Traits\HandlesAuthorizationExceptions;
+
+#[Layout('shopper::components.layouts.product')]
+class ProductPoints extends Component
+{
+    use HandlesAuthorizationExceptions;
+
+    #[Locked]
+    public Product $product;
+
+    public function render(): View
+    {
+        return view('shopper-loyalty::livewire.pages.product-points')
+            ->title($this->product->name);
+    }
+}
+```
+
+Livewire applies the route's `can:` middleware again to each action of the page, so the actions are covered too. A check in `mount()` only runs when the page opens, so components that check there check again in each action that changes data.
+
+### Permissions
+
+In 3.x, an add-on creates its permissions in the database. The skeleton's install command does it with `Permission::generate()`, which creates the five permissions of a resource (`browse`, `read`, `create`, `edit` and `delete`), described in [Generating Permissions](/3.x/acl#generating-permissions). The second argument is the group the role page lists them under, such as `customers`:
+
+```php title="src/Console/InstallCommand.php"
+use Shopper\Models\Permission;
+use Shopper\Models\Role;
+
+Permission::generate('loyalty', 'customers');
+
+Role::findByName(config('shopper.admin.roles.admin'))->givePermissionTo([
+    'loyalty.browse',
+    'loyalty.read',
+    'loyalty.create',
+    'loyalty.edit',
+    'loyalty.delete',
+]);
+```
+
+Shopper does not bypass permission checks for administrators, so give the new permissions to the administrator role, or administrators cannot open your pages either. Other roles get them from the role page of the admin panel. Without a group, `generate()` uses the resource name, and the role page lists the permissions under `loyalty`.
+
+<Warning>
+`Permission::generate()` looks for each permission by its name, its group and its display name and description, translated in the current locale, and creates it when it finds no match. Called again under another application locale, or after an administrator generated the same permissions from a role page in another language, it finds no match and fails on the unique permission name. Run your install command under the same locale each time.
+</Warning>
+
+Check the permissions wherever a user reaches your feature, as described in [Checking Permissions](/3.x/acl#checking-permissions):
+
+| Where | Check |
+|-------|-------|
+| A page component | `$this->authorize('loyalty.browse')` in `mount()`, and before each action that changes data |
+| A group of routes | `Route::middleware('can:loyalty.edit')` |
+| A sidebar entry | `$item->setAuthorized($this->user->can('loyalty.browse'))` |
+| A settings entry or a product tab | A `permission()` method that returns the permission name |
+| A Filament action | `Action::make('adjust')->authorize('loyalty.edit')` |
+| A Blade view | `@can('loyalty.edit')` |
+
+### Render Hooks
+
+`renderHook()` adds HTML at a named place of the admin panel. The closure takes no arguments and returns a string or a view. Several hooks on the same place render in the order they were registered:
+
+```php title="src/LoyaltyAddon.php"
+use Illuminate\Contracts\View\View;
+use Shopper\View\LayoutRenderHook;
+
+$panel->renderHook(
+    LayoutRenderHook::HEADER_END,
+    fn (): View => view('shopper-loyalty::components.points-badge'),
+);
+```
+
+`Shopper\View\LayoutRenderHook` names the places of the layout:
+
+| Constant | Renders |
+|----------|---------|
+| `HEAD_START`, `HEAD_END` | At the start and end of `<head>`, on every page, sign-in pages included |
+| `BODY_START`, `BODY_END` | At the start and end of `<body>`, on every page, sign-in pages included |
+| `BEFORE_HEADER`, `AFTER_HEADER` | Above and below the top bar |
+| `HEADER_START`, `HEADER_END` | In the top bar, before its buttons |
+| `SIDEBAR_START`, `SIDEBAR_END` | At the top and bottom of the sidebar |
+| `CONTENT_START`, `CONTENT_END` | Above and below the content of each page |
+| `CONTENT_ASIDE` | Next to the content, for a side panel |
+| `DASHBOARD_START`, `DASHBOARD_END` | At the top and bottom of the dashboard, as described in [Adding Content with Render Hooks](/3.x/dashboard#adding-content-with-render-hooks) |
+| `ACCOUNT_START`, `ACCOUNT_END` | At the top and bottom of the account page |
+
+Pages have hooks of their own, in `CatalogRenderHook`, `CollectionRenderHook`, `CustomerRenderHook`, `OrderRenderHook`, `ProductRenderHook` and `SalesRenderHook` of the same namespace: before and after the table of most list pages, around some create and edit forms, and in the header, the tabs, the content and the sidebar of the customer, product and order pages. `CustomerRenderHook::SHOW_SIDEBAR_AFTER` renders below the sidebar of a customer's page, for example.
+
+The closure receives no context: a hook on a customer's page does not know which customer it renders for. The `HEAD` and `BODY` hooks also render on the sign-in pages, so check `shopper()->auth()->check()` before rendering content meant for signed-in users. Hooks inside a Livewire page, such as the dashboard hooks, run again each time the page re-renders: keep their queries short.
+
+### Styles and Scripts
+
+`addonStyles()` adds stylesheets to the `<head>` of every admin page, after Shopper's and the theme's, and `addonScripts()` adds scripts at the end of the `<body>`, after Shopper's and Filament's. A value that starts with `http://` or `https://` is used as is. Any other value goes through `asset()`, so it is a path under the application's `public` directory:
+
+```php title="src/LoyaltyAddon.php"
+$panel
+    ->addonStyles(['vendor/shopper-loyalty/loyalty.css'])
+    ->addonScripts(['vendor/shopper-loyalty/loyalty.js']);
+```
+
+A package cannot write to the application's `public` directory by itself. Put your compiled files in `resources/dist` and call `hasAssets()` on the package in your service provider: the store then copies them to `public/vendor/shopper-loyalty` with Laravel's publish command, and again after each update of your add-on:
+
+```bash
+php artisan vendor:publish --tag=shopper-loyalty-assets --force
+```
+
+The files load on every admin page, sign-in pages included, so scope your CSS to your own markup. To load Filament-style assets instead, register them with `FilamentAsset::register()` in your add-on's `boot()` method: the admin panel outputs Filament's registered styles and scripts on every page, and the store copies them to `public` with `php artisan filament:assets`.
+
+### Translations and Config [#translations-and-config]
+
+Translations, views, configuration and migrations come from the add-on's service provider, so they stay available when the store disables the add-on. The skeleton's provider registers them as follows:
+
+| File | Registered by | Used as | Store copy |
+|------|---------------|---------|------------|
+| `resources/lang/en/messages.php` | `hasTranslations()` | `__('shopper-loyalty::messages.menu')` | `vendor:publish --tag=shopper-loyalty-translations` |
+| `resources/views/livewire/pages/loyalty-index.blade.php` | `hasViews()` | `view('shopper-loyalty::livewire.pages.loyalty-index')` | `vendor:publish --tag=shopper-loyalty-views` |
+| `config/loyalty.php` | `$configFiles` and `registerConfigFiles()` | `config('shopper.loyalty.points_per_order')` | `vendor:publish --provider="Acme\Loyalty\LoyaltyServiceProvider" --tag=shopper-config` |
+| `database/migrations/*` | `registerDatabase()` | `php artisan migrate` | None, they run from the package |
+
+Add a language with a folder next to `en`, such as `resources/lang/fr/messages.php`. Each key of `config/loyalty.php` is read under `shopper.loyalty`, and the store's copy lands in `config/shopper/loyalty.php`, next to Shopper's own configuration files:
+
+```php title="config/loyalty.php"
+return [
+    'points_per_order' => 10,
+];
+```
+
+The configuration is merged with Laravel's `mergeConfigFrom()`, which only fills top-level keys: when the store publishes the file, a key you add to a nested array in a later release does not reach it. Prefer top-level keys, or read nested ones with a default value.
+
+## Full Example: A Loyalty Points Add-on [#full-example-a-loyalty-points-addon]
+
+This add-on class brings the pieces of this page together: a loyalty page with its sidebar entry, a settings page, a tab on each product, and a block on the dashboard. It keeps the skeleton's `usingLivewireComponents()` method, so a store can replace each of its pages:
+
+```php title="src/LoyaltyAddon.php"
+namespace Acme\Loyalty;
+
+use Acme\Loyalty\Livewire\LoyaltyIndex;
+use Acme\Loyalty\Livewire\LoyaltySettings;
+use Acme\Loyalty\Livewire\ProductPoints;
+use Acme\Loyalty\Navigation\LoyaltySetting;
+use Acme\Loyalty\Navigation\PointsSection;
+use Acme\Loyalty\Sidebar\LoyaltySidebar;
+use Illuminate\Support\Facades\Route;
+use Shopper\Addon\BaseAddon;
+use Shopper\ShopperPanel;
+use Shopper\View\LayoutRenderHook;
+
+final class LoyaltyAddon extends BaseAddon
+{
+    /** @var array<string, class-string> */
+    private array $componentOverrides = [];
+
+    public function getId(): string
+    {
+        return 'loyalty';
+    }
+
+    /**
+     * @param  array<string, class-string>  $components
+     */
+    public function usingLivewireComponents(array $components): static
+    {
+        $this->componentOverrides = array_merge($this->componentOverrides, $components);
+
+        return $this;
+    }
+
+    public function register(ShopperPanel $panel): void
+    {
+        $components = $this->livewireComponents();
+
+        $panel
+            ->addonLivewireComponents($components)
+            ->addonSidebar(LoyaltySidebar::class)
+            ->addonSettingItems([
+                LoyaltySetting::class => true,
+            ])
+            ->addonProductSections([
+                PointsSection::class => true,
+            ])
+            ->addonRoutes(function () use ($components): void {
+                Route::prefix('loyalty')
+                    ->as('loyalty.')
+                    ->group(function () use ($components): void {
+                        Route::get('/', $components['loyalty.index'])->name('index');
+                    });
+
+                Route::prefix('setting')
+                    ->as('settings.')
+                    ->group(function () use ($components): void {
+                        Route::get('/loyalty', $components['loyalty.settings'])->name('loyalty');
+                    });
+
+                Route::middleware('can:products.edit')->group(function () use ($components): void {
+                    Route::get('products/{product}/edit/points', $components['loyalty.product-points'])
+                        ->name('products.edit.points');
+                });
+            })
+            ->renderHook(
+                LayoutRenderHook::DASHBOARD_START,
+                fn (): string => shopper()->auth()->user()?->can('loyalty.browse')
+                    ? view('shopper-loyalty::dashboard.top-members')->render()
+                    : '',
+            );
+    }
+
+    /**
+     * @return array<string, class-string>
+     */
+    private function livewireComponents(): array
+    {
+        $components = [
+            'loyalty.index' => LoyaltyIndex::class,
+            'loyalty.settings' => LoyaltySettings::class,
+            'loyalty.product-points' => ProductPoints::class,
+        ];
+
+        return array_merge($components, array_intersect_key($this->componentOverrides, $components));
+    }
+}
+```
+
+Once the store registers the add-on, the admin panel gains these pages:
+
+| URL | Route name | Component | Required permission |
+|-----|------------|-----------|---------------------|
+| `/cpanel/loyalty` | `shopper.loyalty.index` | `shopper-loyalty.index` | `loyalty.browse` |
+| `/cpanel/setting/loyalty` | `shopper.settings.loyalty` | `shopper-loyalty.settings` | `system.settings` |
+| `/cpanel/products/{product}/edit/points` | `shopper.products.edit.points` | `shopper-loyalty.product-points` | `products.edit` |
+
+The other classes are on this page: `LoyaltySidebar` in [Sidebar Navigation](#sidebar-navigation), `LoyaltySetting` and `LoyaltySettings` in [Settings Items](#settings-items), `PointsSection` and `ProductPoints` in [Product Sections](#product-sections). The install command creates the `loyalty.*` permissions as shown in [Permissions](#permissions), and the dashboard block only shows to users who hold `loyalty.browse`.
+
+Before you publish the add-on, [Publishing an Add-on](/3.x/addons/publishing) covers versions, releases and the listing on the Shopper website.

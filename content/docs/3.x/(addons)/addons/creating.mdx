@@ -1,0 +1,534 @@
+---
+title: Creating an Add-on
+description: Start a Shopper add-on from the official skeleton, configure it, develop it against a local application and test it.
+---
+
+A Shopper add-on is a Laravel package. The [add-on skeleton](https://github.com/shopperlabs/addon-skeleton) gives you a working one to start from: an add-on class, a service provider, an admin page with its sidebar entry, a permission set, an install command, tests and GitHub workflows. This page builds `acme/loyalty`, a loyalty points add-on, from that skeleton. [Extending the Admin Panel](/3.x/addons/admin-panel) then covers what the add-on can register, and [Publishing an Add-on](/3.x/addons/publishing) how to release it.
+
+## Creating the Repository
+
+The skeleton is a GitHub repository with placeholders in place of your names. You clone it into a new repository of your own, then run a script that fills the placeholders in.
+
+<Steps>
+<Step title="Create your repository">
+On GitHub, create an empty repository named after your package, `loyalty` in this example, without a README or a license.
+</Step>
+<Step title="Clone the skeleton">
+Clone the skeleton into a folder with the same name, start a new Git history and point `origin` to your repository. The configuration script reads the folder name and the `origin` remote to suggest the package name and your GitHub username.
+
+```bash
+git clone https://github.com/shopperlabs/addon-skeleton.git loyalty
+
+cd loyalty
+
+rm -rf .git
+
+git init -b main
+
+git remote add origin git@github.com:acme/loyalty.git
+```
+
+Clone it rather than downloading the ZIP archive from GitHub: the archive leaves out `configure.php`, the tests and the workflows.
+</Step>
+<Step title="Run the configuration script">
+```bash
+php ./configure.php
+```
+
+The script needs PHP 8.4 or later. Once it is done, commit the files and push them to `origin`.
+</Step>
+</Steps>
+
+## Configuring the Skeleton
+
+`configure.php` asks eight questions. Each one suggests a default between parentheses: press Enter to keep it.
+
+| Prompt | Default | Used for |
+|--------|---------|----------|
+| Author name | `git config user.name` | `composer.json` authors, `LICENSE.md`, README credits |
+| Author email | `git config user.email` | `composer.json` authors, `LICENSE.md` |
+| Author username | The owner of the `origin` remote | The GitHub link in the README credits |
+| Vendor name | The author username | The Composer vendor (`acme` in `acme/loyalty`) and the GitHub URLs in `composer.json` and the README badges |
+| Vendor namespace | The vendor name, capitalized | The root namespace, `Acme` in `Acme\Loyalty` |
+| Package name | The folder name | The Composer package name, the add-on ID, the route prefix, the install command, the view and translation namespace, the table, the permissions and the configuration file |
+| Class name | The package name in StudlyCase | The second namespace segment (`Loyalty` in `Acme\Loyalty`), the class and file names (`LoyaltyAddon`, `LoyaltyServiceProvider`, `LoyaltyIndex`, `LoyaltySidebar`), and the menu label and page title in the translations |
+| Package description | `The {package name} addon for Shopper` | The `composer.json` description and the README title |
+
+The script prints a summary and asks to modify the files. It then replaces the placeholders in every file of the project except `vendor` and itself, and renames the files that carry them: `src/SkeletonAddon.php` becomes `src/LoyaltyAddon.php`, `config/skeleton_snake.php` becomes `config/loyalty.php`, and so on. It removes the skeleton instructions from the README, offers to run `composer install`, and deletes itself.
+
+The package name gives two forms. Its slug, `loyalty` (or `loyalty-points` for "Loyalty Points"), is used for the Composer package name, the add-on ID, the route prefix, the `shopper:loyalty:install` command and the `shopper-loyalty` view and translation namespace. Its snake form, `loyalty` (or `loyalty_points`), is used for the configuration file, the table and the `loyalty.*` permissions. Check both in the summary before you confirm: the script runs once, and it deletes itself unless you answer no to the last question.
+
+## Package Structure
+
+After configuration, the package contains:
+
+```text
+loyalty/
+  .github/
+    dependabot.yml
+    workflows/
+      quality.yml
+      tests.yml
+      update-changelog.yml
+  config/
+    loyalty.php
+  database/
+    factories/
+      ModelFactory.php
+    migrations/
+      2026_07_15_000001_create_loyalty_table.php
+  resources/
+    lang/
+      en/messages.php
+      fr/messages.php
+    views/
+      livewire/pages/loyalty-index.blade.php
+  src/
+    Console/
+      InstallCommand.php
+    Livewire/
+      LoyaltyIndex.php
+    Models/
+    Sidebar/
+      LoyaltySidebar.php
+    LoyaltyAddon.php
+    LoyaltyServiceProvider.php
+  tests/
+    Feature/
+      InstallCommandTest.php
+    Pest.php
+    TestCase.php
+  CHANGELOG.md
+  composer.json
+  LICENSE.md
+  README.md
+  phpstan.neon
+  phpunit.xml
+  pint.json
+```
+
+`LoyaltyAddon` is what the store registers on the admin panel, and `LoyaltyServiceProvider` is what Laravel loads. The migration creates the `sh_loyalty` table, with the table prefix set in `config('shopper.core.table_prefix')`. `ModelFactory.php` is a commented-out factory to adapt once you add a model in `src/Models`.
+
+## The composer.json File
+
+The skeleton's `composer.json` requires PHP 8.3 or later, `shopper/framework` and `spatie/laravel-package-tools`:
+
+```json title="composer.json"
+{
+    "name": "acme/loyalty",
+    "require": {
+        "php": "^8.3",
+        "shopper/framework": "^3.0.0-rc.4",
+        "spatie/laravel-package-tools": "^1.15"
+    },
+    "extra": {
+        "laravel": {
+            "providers": [
+                "Acme\\Loyalty\\LoyaltyServiceProvider"
+            ]
+        }
+    }
+}
+```
+
+The `shopper/framework` constraint decides which Shopper versions can install your add-on. [Publishing an Add-on](/3.x/addons/publishing#versioning) explains how to set it for a release. The `extra.laravel.providers` entry lets Laravel discover the service provider, so the store never registers it by hand. The development dependencies include Testbench, Pest with its Laravel and Livewire plugins, Larastan and Pint, and four scripts run them:
+
+| Script | Runs |
+|--------|------|
+| `composer test` | The Pest suite, in parallel |
+| `composer test:types` | PHPStan with Larastan, at level 5 on `src` |
+| `composer test:lint` | Pint in check mode, without changing files |
+| `composer lint` | Pint, which fixes the code style |
+
+## The Service Provider
+
+The service provider loads the package into Laravel. It extends `PackageServiceProvider` from `spatie/laravel-package-tools`, and uses a Shopper trait for the configuration and the migrations:
+
+```php title="src/LoyaltyServiceProvider.php"
+namespace Acme\Loyalty;
+
+use Acme\Loyalty\Console\InstallCommand;
+use Shopper\Core\Traits\HasRegisterConfigAndMigrationFiles;
+use Spatie\LaravelPackageTools\Package;
+use Spatie\LaravelPackageTools\PackageServiceProvider;
+
+final class LoyaltyServiceProvider extends PackageServiceProvider
+{
+    use HasRegisterConfigAndMigrationFiles;
+
+    protected string $root = __DIR__.'/..';
+
+    /** @var list<string> */
+    protected array $configFiles = [
+        'loyalty',
+    ];
+
+    public function configurePackage(Package $package): void
+    {
+        $package
+            ->name('shopper-loyalty')
+            ->hasTranslations()
+            ->hasViews()
+            ->hasCommand(InstallCommand::class);
+    }
+
+    public function packageRegistered(): void
+    {
+        $this->registerConfigFiles();
+        $this->registerDatabase();
+    }
+}
+```
+
+The provider registers the translations and views under the `shopper-loyalty` namespace, the install command, the configuration file under `shopper.loyalty`, and the migrations of `database/migrations`. It runs whenever the package is installed, even when the store has not registered or has [disabled](/3.x/addons#disabling-an-addon) the add-on. [Translations and Config](/3.x/addons/admin-panel#translations-and-config) covers each of them.
+
+## The Add-on Class
+
+The add-on class is what the store registers with `Shopper::addons()`. It implements `Shopper\Contracts\ShopperAddon`, usually by extending `Shopper\Addon\BaseAddon`:
+
+| Method | Purpose | In `BaseAddon` |
+|--------|---------|----------------|
+| `getId(): string` | A unique ID, also the key that disables the add-on in `config/shopper/addons.php` | Not implemented |
+| `getName(): string` | A readable name | The ID in title case, hyphens replaced by spaces |
+| `register(ShopperPanel $panel): void` | Registers the add-on's routes, pages, navigation and assets on the panel | Not implemented |
+| `boot(ShopperPanel $panel): void` | Runs once Shopper boots, after every add-on is registered | Does nothing |
+| `isEnabled(): bool` | `false` skips the add-on entirely | `false` when `config('shopper.addons.{id}')` is `false` |
+
+The skeleton's add-on registers a Livewire page, a sidebar entry and a route, and lets the store [replace its Livewire components](/3.x/addons#customizing-an-addons-screens):
+
+```php title="src/LoyaltyAddon.php"
+namespace Acme\Loyalty;
+
+use Acme\Loyalty\Livewire\LoyaltyIndex;
+use Acme\Loyalty\Sidebar\LoyaltySidebar;
+use Illuminate\Support\Facades\Route;
+use Shopper\Addon\BaseAddon;
+use Shopper\ShopperPanel;
+
+final class LoyaltyAddon extends BaseAddon
+{
+    /** @var array<string, class-string> */
+    private array $componentOverrides = [];
+
+    public function getId(): string
+    {
+        return 'loyalty';
+    }
+
+    /**
+     * @param  array<string, class-string>  $components
+     */
+    public function usingLivewireComponents(array $components): static
+    {
+        $this->componentOverrides = array_merge($this->componentOverrides, $components);
+
+        return $this;
+    }
+
+    public function register(ShopperPanel $panel): void
+    {
+        $components = $this->livewireComponents();
+
+        $panel
+            ->addonLivewireComponents($components)
+            ->addonSidebar(LoyaltySidebar::class)
+            ->addonRoutes(function () use ($components): void {
+                Route::prefix('loyalty')
+                    ->as('loyalty.')
+                    ->group(function () use ($components): void {
+                        Route::get('/', $components['loyalty.index'])->name('index');
+                    });
+            });
+    }
+
+    /**
+     * @return array<string, class-string>
+     */
+    private function livewireComponents(): array
+    {
+        $components = [
+            'loyalty.index' => LoyaltyIndex::class,
+        ];
+
+        return array_merge($components, array_intersect_key($this->componentOverrides, $components));
+    }
+}
+```
+
+`register()` runs as soon as the store calls `Shopper::addons()`, inside the `register()` method of its service provider. Other service providers have not booted yet at that point, so keep `register()` to the `addon*` calls of the panel. `boot()` runs when Shopper's own service provider boots, after every add-on is registered: use it for work that needs booted services, such as registering Filament assets. Shopper has already loaded its routes by then, so `addonRoutes()` called from `boot()` is ignored. The other `addon*` methods still apply.
+
+## The Install Command
+
+The skeleton ships `shopper:loyalty:install`, which a store runs once after `composer require`:
+
+```bash
+php artisan shopper:loyalty:install
+```
+
+The command runs three tasks in order:
+
+1. It runs `php artisan migrate --force`, which applies every pending migration of the application, yours included.
+2. It creates the `loyalty.browse`, `loyalty.read`, `loyalty.create`, `loyalty.edit` and `loyalty.delete` permissions with `Permission::generate('loyalty')`, then gives them to the administrator role named in `config('shopper.admin.roles.admin')`.
+3. It adds `use Acme\Loyalty\LoyaltyAddon;` and `new LoyaltyAddon` to `app/Providers/AppServiceProvider.php`. When the file already calls `Shopper::addons([`, the add-on joins that call. Otherwise a new call goes at the top of the `register()` method. When neither works, the command prints the line for the developer to add.
+
+The command can run again: the registration is skipped when `AppServiceProvider` already contains `LoyaltyAddon`, and the role keeps the permissions it has. `Permission::generate()` looks each permission up by its name, its group and its display name and description, translated in the current locale, and only creates the ones without a match. Run the command under the same application locale each time: under another one the lookup finds nothing, and the insert fails on the unique permission name. The skeleton's `InstallCommandTest` checks that a second run leaves `AppServiceProvider` unchanged. Extend the command as your add-on grows, for example to seed default data, and keep each task safe to repeat.
+
+## Developing Against a Local Application
+
+Develop the add-on inside a real Shopper application with a Composer path repository. Composer then links the package folder into the application's `vendor` directory, and every change you save shows up in the admin panel. From the application, with the add-on cloned next to it in `../loyalty`:
+
+```bash
+composer config repositories.loyalty path ../loyalty
+
+composer require acme/loyalty:@dev
+
+php artisan shopper:loyalty:install
+```
+
+The `@dev` flag lets Composer install the untagged package into an application that only accepts stable versions. The application must run a Shopper version that matches your `shopper/framework` constraint. Remove the repository with `composer config --unset repositories.loyalty` before you require the published package.
+
+## Testing
+
+The skeleton tests with Pest on top of Orchestra Testbench, which boots a Laravel application for the package. `tests/Pest.php` applies the `TestCase` class to every test in `tests`, and `tests/TestCase.php` loads the providers the install command needs:
+
+```php title="tests/TestCase.php"
+namespace Acme\Loyalty\Tests;
+
+use Acme\Loyalty\LoyaltyServiceProvider;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Orchestra\Testbench\TestCase as BaseTestCase;
+use Shopper\Core\CoreServiceProvider;
+use Shopper\Core\Database\Seeders\CurrenciesTableSeeder;
+use Spatie\Permission\PermissionServiceProvider;
+
+abstract class TestCase extends BaseTestCase
+{
+    use RefreshDatabase;
+
+    protected bool $seed = true;
+
+    protected string $seeder = CurrenciesTableSeeder::class;
+
+    protected function getPackageProviders($app): array
+    {
+        return [
+            PermissionServiceProvider::class,
+            CoreServiceProvider::class,
+            LoyaltyServiceProvider::class,
+        ];
+    }
+
+    protected function defineEnvironment($app): void
+    {
+        $app['config']->set('database.default', 'testing');
+
+        $app->afterResolving('migrator', function ($migrator): void {
+            $migrator->path(\Orchestra\Testbench\default_migration_path());
+        });
+    }
+}
+```
+
+Run the suite with `composer test`, and the type and style checks with `composer test:types` and `composer test:lint`.
+
+### Testing Admin Pages
+
+A test that renders an admin page needs the admin panel itself: its service providers, the Livewire and Filament providers it depends on, a user model that implements `Shopper\Models\Contracts\ShopperUser`, and your add-on registered on the panel. Register the add-on in a `booting` callback, so it is in place before Shopper's service provider boots:
+
+```php title="tests/TestCase.php"
+namespace Acme\Loyalty\Tests;
+
+use Acme\Loyalty\LoyaltyAddon;
+use Acme\Loyalty\LoyaltyServiceProvider;
+use Acme\Loyalty\Tests\Stubs\User;
+use BladeUI\Heroicons\BladeHeroiconsServiceProvider;
+use BladeUI\Icons\BladeIconsServiceProvider;
+use Filament\Actions\ActionsServiceProvider;
+use Filament\FilamentServiceProvider;
+use Filament\Forms\FormsServiceProvider;
+use Filament\Infolists\InfolistsServiceProvider;
+use Filament\Notifications\NotificationsServiceProvider;
+use Filament\Schemas\SchemasServiceProvider;
+use Filament\Support\SupportServiceProvider;
+use Filament\Tables\TablesServiceProvider;
+use Filament\Widgets\WidgetsServiceProvider;
+use Illuminate\Contracts\Foundation\Application;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Laravelcm\LivewireSlideOvers\LivewireSlideOverServiceProvider;
+use Livewire\LivewireServiceProvider;
+use Mckenziearts\BladeUntitledUIIcons\BladeUntitledUIIconsServiceProvider;
+use Orchestra\Testbench\TestCase as BaseTestCase;
+use Shopper\Cart\CartServiceProvider;
+use Shopper\Core\CoreServiceProvider;
+use Shopper\Core\Database\Seeders\CurrenciesTableSeeder;
+use Shopper\Payment\PaymentServiceProvider;
+use Shopper\ShopperServiceProvider;
+use Shopper\Sidebar\SidebarServiceProvider;
+use Spatie\MediaLibrary\MediaLibraryServiceProvider;
+use Spatie\Permission\PermissionServiceProvider;
+use TailwindMerge\Laravel\TailwindMergeServiceProvider;
+
+use function Orchestra\Testbench\default_migration_path;
+
+abstract class TestCase extends BaseTestCase
+{
+    use RefreshDatabase;
+
+    protected bool $seed = true;
+
+    protected string $seeder = CurrenciesTableSeeder::class;
+
+    protected function getPackageProviders($app): array
+    {
+        return [
+            BladeIconsServiceProvider::class,
+            BladeHeroiconsServiceProvider::class,
+            BladeUntitledUIIconsServiceProvider::class,
+            LivewireServiceProvider::class,
+            LivewireSlideOverServiceProvider::class,
+            SupportServiceProvider::class,
+            ActionsServiceProvider::class,
+            FormsServiceProvider::class,
+            InfolistsServiceProvider::class,
+            NotificationsServiceProvider::class,
+            SchemasServiceProvider::class,
+            TablesServiceProvider::class,
+            WidgetsServiceProvider::class,
+            FilamentServiceProvider::class,
+            PermissionServiceProvider::class,
+            TailwindMergeServiceProvider::class,
+            MediaLibraryServiceProvider::class,
+            CoreServiceProvider::class,
+            ShopperServiceProvider::class,
+            SidebarServiceProvider::class,
+            CartServiceProvider::class,
+            PaymentServiceProvider::class,
+            LoyaltyServiceProvider::class,
+        ];
+    }
+
+    protected function defineEnvironment($app): void
+    {
+        $app['config']->set('auth.providers.users.model', User::class);
+        $app['config']->set('database.default', 'testing');
+
+        $app->afterResolving('migrator', function ($migrator): void {
+            $migrator->path(default_migration_path());
+        });
+
+        $app->booting(function (Application $app): void {
+            $app->make('shopper')->addons([new LoyaltyAddon]);
+        });
+    }
+}
+```
+
+The user model only needs Shopper's contract and trait:
+
+```php title="tests/Stubs/User.php"
+namespace Acme\Loyalty\Tests\Stubs;
+
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Shopper\Models\Contracts\ShopperUser;
+use Shopper\Traits\InteractsWithShopper;
+
+class User extends Authenticatable implements ShopperUser
+{
+    use InteractsWithShopper;
+
+    protected $guarded = [];
+}
+```
+
+A test then signs a user in and renders the page with Livewire. `Gate::before()` grants every permission, so the test does not depend on the permission set. Its callback takes no user, which Laravel only calls for a signed-in user, so `actingAs()` is required:
+
+```php title="tests/Feature/LoyaltyIndexTest.php"
+use Acme\Loyalty\Livewire\LoyaltyIndex;
+use Acme\Loyalty\Tests\Stubs\User;
+use Illuminate\Support\Facades\Gate;
+use Livewire\Livewire;
+
+beforeEach(function (): void {
+    Gate::before(fn (): bool => true);
+
+    $this->actingAs(User::query()->create([
+        'first_name' => 'Jane',
+        'last_name' => 'Doe',
+        'email' => 'jane@example.com',
+        'gender' => 'female',
+    ]));
+});
+
+it('renders the loyalty page', function (): void {
+    Livewire::test(LoyaltyIndex::class)->assertOk();
+});
+```
+
+### Continuous Integration
+
+The skeleton ships three GitHub Actions workflows in `.github/workflows`. They do not run on the skeleton repository itself, only on the repositories created from it.
+
+| Workflow | Runs on | Does |
+|----------|---------|------|
+| `tests.yml` | Every push and pull request | `composer test` on PHP 8.3, 8.4 and 8.5, against Laravel 12 and 13 |
+| `quality.yml` | Every push and pull request | `composer test:types` and `composer test:lint` on PHP 8.4 |
+| `update-changelog.yml` | Each published release | Adds the release notes to `CHANGELOG.md`, as described in [Publishing an Add-on](/3.x/addons/publishing#changelog) |
+
+## From the Skeleton to an Admin Page
+
+With the steps above, the add-on already has a page in the admin panel. This walk-through takes it from the configured skeleton to that page, then makes the page your own.
+
+<Steps>
+<Step title="Install the add-on in your application">
+From your Shopper application, add the path repository, require the package and run its install command:
+
+```bash
+composer config repositories.loyalty path ../loyalty
+
+composer require acme/loyalty:@dev
+
+php artisan shopper:loyalty:install
+```
+
+The command creates the `sh_loyalty` table and the `loyalty.*` permissions, gives them to the administrator role and registers `LoyaltyAddon` in `AppServiceProvider`.
+</Step>
+<Step title="Open the page">
+Sign in to the admin panel as an administrator. The sidebar shows a **Loyalty** group, between the core groups and **Settings**, and its **Loyalty** entry opens `/cpanel/loyalty`, the route named `shopper.loyalty.index`. The page renders `resources/views/livewire/pages/loyalty-index.blade.php`, with the title and the description of `resources/lang/en/messages.php`. A user without the `loyalty.browse` permission sees neither the entry nor the page.
+</Step>
+<Step title="Check the permission with can()">
+The skeleton's sidebar checks the permission with `hasPermissionTo()`, which throws an exception when the permission does not exist yet. A store that deploys the add-on registration before running the install command would get an error on every admin page. Check it with `can()` instead, which returns `false`:
+
+```php title="src/Sidebar/LoyaltySidebar.php"
+namespace Acme\Loyalty\Sidebar;
+
+use Shopper\Sidebar\AbstractAdminSidebar;
+use Shopper\Sidebar\Contracts\Builder\Group;
+use Shopper\Sidebar\Contracts\Builder\Item;
+use Shopper\Sidebar\Contracts\Builder\Menu;
+
+final class LoyaltySidebar extends AbstractAdminSidebar
+{
+    public function extendWith(Menu $menu): Menu
+    {
+        $menu->group(__('shopper-loyalty::messages.menu'), function (Group $group): void {
+            $group->weight(6);
+            $group->setAuthorized($this->user->can('loyalty.browse'));
+
+            $group->item(__('shopper-loyalty::messages.menu'), function (Item $item): void {
+                $item->weight(1);
+                $item->setAuthorized($this->user->can('loyalty.browse'));
+                $item->route('shopper.loyalty.index');
+                $item->setIcon('phosphor-gift');
+                $item->useSpa();
+            });
+        });
+
+        return $menu;
+    }
+}
+```
+</Step>
+<Step title="Add your columns and your content">
+Add your columns to the migration, roll it back and run it again in your application, then build the page in `LoyaltyIndex` and its view. Edit `resources/lang/en/messages.php` and `resources/lang/fr/messages.php` for the menu label, the page title and the description. The next page, [Extending the Admin Panel](/3.x/addons/admin-panel), covers the settings pages, product sections, render hooks and assets an add-on can add.
+</Step>
+</Steps>

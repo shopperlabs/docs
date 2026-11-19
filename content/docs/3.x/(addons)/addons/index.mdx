@@ -1,0 +1,168 @@
+---
+title: Add-ons
+sidebarTitle: Overview
+description: Install, register, disable and customize Shopper add-ons, the Composer packages that add pages and features to the admin panel.
+---
+
+An add-on is a Composer package that extends the Shopper admin panel. Its entry point is a class that implements `Shopper\Contracts\ShopperAddon`, which you register on the admin panel from your application. Once registered, the add-on adds its own pages, sidebar entries, settings pages, product sections, styles and scripts, and you can turn it off with one line of configuration.
+
+This page is for store developers who install add-ons. To build one, start with [Creating an Add-on](/3.x/addons/creating), then [Extending the Admin Panel](/3.x/addons/admin-panel) and [Publishing an Add-on](/3.x/addons/publishing).
+
+## Finding Add-ons
+
+The Shopper website lists the add-ons you can install: the official ones, published under the `shopper/*` vendor on Packagist, and the ones the community publishes. A free add-on shows its README as the overview, its changelog as release notes, and the `composer require` line for the Shopper major you select. A paid add-on shows its highlights and a link to buy a license.
+
+## Installing an Add-on
+
+An add-on installs with Composer, like any Laravel package. Laravel discovers its service provider, so you do not register the provider yourself. Most add-ons that add admin pages also ship an install command that prepares the database and registers the add-on for you. Its name and what it does are in the add-on's README.
+
+### Free Add-ons
+
+Require the package, then run its install command. The examples on this page use `acme/loyalty`, an add-on built on the [add-on skeleton](/3.x/addons/creating):
+
+```bash
+composer require acme/loyalty
+
+php artisan shopper:loyalty:install
+```
+
+The install command of an add-on built on the skeleton does three things:
+
+- It runs `php artisan migrate --force`, which applies every pending migration of the application, the add-on's included.
+- It creates the add-on's permissions (`loyalty.browse`, `loyalty.read`, `loyalty.create`, `loyalty.edit` and `loyalty.delete`) and gives them to the administrator role named in `config('shopper.admin.roles.admin')`. Other roles get them from the role page of the admin panel, as described in [Roles and Permissions](/3.x/acl).
+- It adds the add-on to `Shopper::addons()` in the `register()` method of `app/Providers/AppServiceProvider.php`, as shown in [Registering an Add-on](#registering-an-addon). When it cannot edit the file, it prints the line to add yourself.
+
+Running the command again skips the registration when `AppServiceProvider` already names the add-on class, and only creates the permissions it does not find. It looks them up by their translated labels, so run it under the same application locale each time: under another locale, it tries to create them again and fails. Commit the change to `AppServiceProvider`, then run the command on each environment where you would run `php artisan migrate`, since the tables and permissions live in that environment's database.
+
+### Paid Add-ons
+
+A paid add-on is not on Packagist. Its vendor serves it from a private Composer repository, and the license you buy gives the repository address and the credentials to read it. Add the repository and the credentials to your project, then require the package:
+
+```bash
+composer config repositories.acme composer https://composer.example.com
+
+composer config http-basic.composer.example.com LICENSE-USERNAME LICENSE-KEY
+
+composer require acme/loyalty-pro
+```
+
+Replace the address, the username and the key with the values of your license. The second command stores the credentials in an `auth.json` file at the root of your project. Keep that file out of version control: add it to `.gitignore`, and give the credentials to servers and CI through the `COMPOSER_AUTH` environment variable instead:
+
+```bash
+COMPOSER_AUTH='{"http-basic": {"composer.example.com": {"username": "LICENSE-USERNAME", "password": "LICENSE-KEY"}}}'
+```
+
+Once the package is installed, run its install command as you would for a free add-on.
+
+## Registering an Add-on [#registering-an-addon]
+
+An add-on only runs once you register it on the admin panel. Pass an instance of its add-on class to `Shopper::addons()` in the `register()` method of a service provider of your application:
+
+```php title="app/Providers/AppServiceProvider.php"
+namespace App\Providers;
+
+use Acme\Loyalty\LoyaltyAddon;
+use Illuminate\Support\ServiceProvider;
+use Shopper\Facades\Shopper;
+
+class AppServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        Shopper::addons([
+            new LoyaltyAddon,
+        ]);
+    }
+}
+```
+
+`Shopper::addon(new LoyaltyAddon)` registers a single add-on. Registering calls the add-on's own `register()` method right away, unless the add-on is [disabled](#disabling-an-addon). Each add-on has an ID, and registering two enabled add-ons with the same ID throws a `LogicException`.
+
+The install command of a skeleton-based add-on writes this registration for you. When `AppServiceProvider` already calls `Shopper::addons([`, it adds the new add-on to that call.
+
+<Warning>
+Shopper reads the registered add-ons once, when its own service provider boots: it loads their routes, calls each add-on's `boot()` method, then registers their sidebar entries, Livewire components, views, settings pages and product sections. Laravel boots package service providers before your application's providers, so an add-on registered in `AppServiceProvider::boot()` comes too late: all of these are skipped, without any error. Register add-ons in `register()`.
+</Warning>
+
+## Disabling an Add-on [#disabling-an-addon]
+
+Set the add-on's ID to `false` in `config/shopper/addons.php`. `php artisan shopper:install` publishes this file, and the add-on's README gives its ID:
+
+```php title="config/shopper/addons.php"
+return [
+    'loyalty' => false,
+];
+```
+
+A disabled add-on stays in your `Shopper::addons()` call, but Shopper neither keeps it nor calls its `register()` and `boot()` methods. Everything the add-on registers on the admin panel is gone: its routes, Livewire components, sidebar entries, view namespaces, settings pages, product sections, styles, scripts and render hooks. `Shopper::hasAddon('loyalty')` returns `false`. When your configuration and routes are cached, run `php artisan optimize` again for the change to apply.
+
+Disabling does not uninstall the package. Laravel still loads its service provider, so its configuration, migrations, translations, views and Artisan commands stay registered. To remove an add-on, delete it from the `Shopper::addons()` call, then run `composer remove` with its package name. Its tables and permissions stay in the database until you drop them.
+
+## Checking if an Add-on is Active [#checking-if-an-addon-is-active]
+
+Your code can depend on an add-on that may be missing or disabled. Check it by ID before you use it:
+
+```php
+use Shopper\Facades\Shopper;
+
+if (Shopper::hasAddon('loyalty')) {
+    $addon = Shopper::getAddon('loyalty');
+
+    $addon->getName();
+}
+```
+
+`hasAddon()` returns `false` for an add-on that is disabled or was never registered, and `getAddon()` throws a `LogicException` for it. `Shopper::addonManager()->all()` returns the active add-ons as a collection keyed by ID.
+
+## Customizing an Add-on's Screens [#customizing-an-addons-screens]
+
+Each add-on decides what you can change in it. Most publish their views, translations and configuration with Laravel's `vendor:publish` command, under the tags listed in their README. For `acme/loyalty`, built on the skeleton:
+
+```bash
+php artisan vendor:publish --tag=shopper-loyalty-views
+
+php artisan vendor:publish --tag=shopper-loyalty-translations
+
+php artisan vendor:publish --provider="Acme\Loyalty\LoyaltyServiceProvider" --tag=shopper-config
+```
+
+The views land in `resources/views/vendor/shopper-loyalty`, the translations in `lang/vendor/shopper-loyalty` and the configuration in `config/shopper/loyalty.php`. Your copies win over the package files, and no longer follow the changes the add-on makes to them in later releases.
+
+Add-ons built on the skeleton also accept your own Livewire components in place of theirs. Pass them to `usingLivewireComponents()` when you register the add-on, keyed by the name the add-on gives each component:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Acme\Loyalty\LoyaltyAddon;
+use App\Livewire\LoyaltyIndex;
+use Shopper\Facades\Shopper;
+
+public function register(): void
+{
+    Shopper::addons([
+        (new LoyaltyAddon)->usingLivewireComponents([
+            'loyalty.index' => LoyaltyIndex::class,
+        ]),
+    ]);
+}
+```
+
+Your component replaces the add-on's everywhere, including on the route that serves the page, so `/cpanel/loyalty` now renders `App\Livewire\LoyaltyIndex`. Extend the add-on's class to keep its behavior and change only what you need. A key the add-on does not know is ignored. `usingLivewireComponents()` comes from the skeleton and is absent from the add-on contract: an add-on that is not built on it may offer another way, or none.
+
+## Payment and Shipping Drivers
+
+The Stripe, FedEx, UPS and USPS packages are drivers, not add-ons. Each one registers a driver on the payment or the shipping manager from its service provider and adds no page to the admin panel: you require it with Composer and set its credentials, with no `Shopper::addons()` call. `shopper/framework` requires none of them. Their documentation sits with the feature they extend: [Payments](/3.x/payments) for `shopper/stripe`, [Carriers](/3.x/carriers) for `shopper/fedex`, `shopper/ups` and `shopper/usps`.
+
+## Building an Add-on
+
+The next three pages walk through an add-on from the first commit to its listing on the Shopper website.
+
+<Cards className="@lg:grid-cols-3">
+  <Card title="Creating an Add-on" icon="code" href="/3.x/addons/creating">
+    Start from the skeleton, configure it, develop against a local application and test it.
+  </Card>
+  <Card title="Extending the Admin Panel" icon="panels-top-left" href="/3.x/addons/admin-panel">
+    Routes, Livewire pages, sidebar entries, settings pages, product sections, permissions and assets.
+  </Card>
+  <Card title="Publishing an Add-on" icon="rocket" href="/3.x/addons/publishing">
+    Version, release and list a free or paid add-on.
+  </Card>
+</Cards>

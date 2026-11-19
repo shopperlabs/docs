@@ -1,0 +1,166 @@
+---
+title: USPS
+description: Quote live USPS retail rates in US dollars at checkout with the shopper/usps driver, its credentials, sandbox mode and services.
+---
+
+The `shopper/usps` package connects a Shopper store to the USPS APIs. A carrier that uses it quotes live USPS rates at checkout, computed from the postal codes of the shipment origin and the customer address and from the packages. The driver does not track packages.
+
+The package registers the `usps` driver on the shipping manager of `shopper/shipping`. The manager, the carrier model and the rate service are described on the [Carriers](/3.x/carriers) page. This page covers what is specific to USPS. Shopper also ships drivers for FedEx (`shopper/fedex`) and UPS (`shopper/ups`); each section below says where they work differently.
+
+## Installation
+
+Install the package with Composer:
+
+```bash
+composer require shopper/usps
+```
+
+Laravel discovers `Shopper\Usps\UspsServiceProvider`. The provider merges the package configuration under `shopper.usps` and registers the `usps` driver with `Shipping::extend()`, built from that configuration. The driver reads its values from environment variables, so you only publish the file to change how a value is read:
+
+```bash
+php artisan vendor:publish --tag=shopper-usps-config
+```
+
+This creates `config/shopper/usps.php`.
+
+## Configuration
+
+Every key of the file comes from an environment variable:
+
+| Key | Environment variable | Default | Description |
+|-----|----------------------|---------|-------------|
+| `enabled` | `SHIPPING_USPS_ENABLED` | `false` | Lists the driver in `Shipping::configuredDrivers()` |
+| `sandbox` | `SHIPPING_SANDBOX` | `false` | Sends the requests to the USPS test environment, `https://apis-tem.usps.com`, instead of `https://apis.usps.com` |
+| `client_id` | `USPS_CLIENT_ID` | `null` | Consumer key of your USPS app |
+| `client_secret` | `USPS_CLIENT_SECRET` | `null` | Consumer secret of your USPS app |
+
+Add the values to your `.env` file:
+
+```dotenv
+SHIPPING_SANDBOX=true
+USPS_CLIENT_ID=your-consumer-key
+USPS_CLIENT_SECRET=your-consumer-secret
+```
+
+The driver is ready once `client_id` and `client_secret` are both filled in: its `isConfigured()` method then returns `true`, carriers that use it quote USPS rates and the admin panel stops showing it as "Not configured". The `enabled` key takes no part in that check. Only `Shipping::configuredDrivers()` reads it, as described in [Driver Configuration](/3.x/carriers#driver-configuration), so set it to `true` for code that lists the configured drivers. To stop USPS from quoting, disable the carrier or remove a credential.
+
+`SHIPPING_SANDBOX` is shared by the FedEx, UPS and USPS drivers: one variable switches all three. To run USPS against the test environment while another driver stays in production, publish the file and set its `sandbox` key to `true`.
+
+### Credentials
+
+USPS issues a consumer key and a consumer secret for an app you add in the Customer Onboarding Portal of your USPS business account, under My Apps, in the credentials of the app. The consumer key is your `client_id` and the consumer secret your `client_secret`. The driver needs no account number: it quotes retail prices.
+
+The driver exchanges the key and the secret for an OAuth access token with the client credentials grant, posting both in the form body to `/oauth2/v3/token`. It keeps the token in the default cache store until a minute before it expires, under a key that holds the client ID and the environment, and a cache lock stops two requests from asking for a token at the same time. The FedEx driver also needs an account number, and the UPS driver needs an account number and a user ID and sends its key and secret with HTTP Basic authentication.
+
+## Enabling the Carrier
+
+Installing the package adds no carrier to the store. A merchant creates one under Settings, Carriers: name it `USPS` and pick USPS as its driver. The name sets the slug, `usps`, which must equal the driver code because the Store API finds the carrier of a live rate by that code, as [API-Connected Carrier](/3.x/carriers#api-connected-carrier) explains. Then add the carrier to each zone it serves, from the zone form, and keep it enabled. The [User Guide](/3.x/user-guide) walks through these screens.
+
+The driver select lists every installed driver, whatever its `enabled` key says: USPS shows there once the package is installed, with a "Not configured" badge until the two credentials are filled in. Until then the carrier offers its shipping options in the zone, as a manual carrier does. Once the driver is configured, the carrier quotes USPS rates and no longer reads those options, so a USPS carrier needs no shipping option.
+
+## Shipping Rates
+
+The driver quotes each package with one call to the USPS shipping options API, `POST /shipments/v3/options/search`. Shopper calls it through `CarrierRateService` when the Store API lists the shipping options of a cart, as described in [Calculating Shipping Rates](/3.x/carriers#calculating-shipping-rates). The Store API takes the origin from the [default inventory location](/3.x/locations#default-location), or the location with the lowest priority when none is the default, and needs its country and street address. It sends one package per cart, with the summed weight of the items and their largest dimensions, in the unit system of `shopper.shipping.units`.
+
+The driver sends only the postal codes of the two addresses, and the destination country when the shipment is not domestic. A shipment is domestic when both addresses are in the United States (`country` is `US`):
+
+| USPS field | Domestic shipment | Other destinations |
+|------------|-------------------|--------------------|
+| `pricingOptions` | `RETAIL` price type | `RETAIL` price type |
+| `originZIPCode` | The postal code of the origin | The postal code of the origin |
+| `destinationZIPCode` | The postal code of the destination | Not sent |
+| `destinationCountryCode` | Not sent | The country of the destination |
+| `foreignPostalCode` | Not sent | The postal code of the destination |
+| `destinationEntryFacilityType` | `NONE` | `NONE` |
+| `packageDescription` | Weight in pounds, length, width and height in inches, rounded to two decimals, mail class `ALL_OUTBOUND` | The same, with the mail class `ALL` |
+
+The driver converts a package measured in centimeters and kilograms to inches and pounds before sending it. USPS answers with the prices of its mail classes, and each becomes a `ShippingRate`:
+
+| `ShippingRate` property | USPS value |
+|-------------------------|------------|
+| `serviceCode` | The mail class, followed by a hyphen and the rate indicator when USPS gives one |
+| `serviceName` | The product name, `productName` |
+| `amount` | The price, in cents |
+| `currency` | Always `USD` |
+| `estimatedDays` | Not set |
+
+A shipment with several packages is quoted one package at a time. The driver adds up the prices of each service and keeps only the services USPS priced for every package. A price without a mail class, a product name or a numeric amount, or with an amount of zero, is left out and logged as a `Discarded an unusable USPS rate.` warning with the mail class and the reason.
+
+Every USPS rate is in US dollars, and the Store API leaves out the options priced in another currency than the cart and says so in its warnings: a cart in another currency gets no USPS option.
+
+Quotes are cached for `shopper.shipping.rates_cache_ttl` seconds, per driver, addresses and packages, as described in [Rate Caching](/3.x/carriers#rate-caching). The FedEx and UPS drivers send centimeters and kilograms, quote the whole shipment in one call and return the currency of the carrier, and only the UPS driver returns transit days.
+
+## Labels
+
+The driver does not create shipments or buy labels at USPS: its `supportsLabels()` method returns `false`, as do those of the FedEx and UPS drivers. Buy the label from USPS, then record the package on the order: the Create Shipping Label slide-over of the order page takes the USPS carrier, the tracking number and the tracking URL, as described in [In the Admin](/3.x/fulfillment#in-the-admin).
+
+## Tracking
+
+The driver does not track packages: its `supportsTracking()` method returns `false`, so the `shopper:shipments:sync-tracking` command skips the packages of a USPS carrier, as described in [Tracking Sync](/3.x/fulfillment#tracking-sync). Record each step from the shipment timeline of the admin panel, or from your code with `RecordShipmentEventAction`, as described in [Carrier Tracking](/3.x/fulfillment#carrier-tracking).
+
+The FedEx and UPS drivers both track their packages.
+
+## Errors
+
+A failing USPS call never hides the other carriers. Each request times out after 15 seconds, and a request that cannot connect is tried up to three times, 200 milliseconds apart. The driver throws a `Shopper\Shipping\Exceptions\ShippingException` when the connection still fails, when USPS answers with an error, including a refused token request, or when the answer holds no usable rate. The message names the driver and the error USPS returned, such as `API error from [usps]: ...`, or the HTTP status when USPS gives no message. With several packages, an error on one package fails the whole quote.
+
+`CarrierRateService` catches the exception, logs a `Shipping rates unavailable for carrier.` warning and reports the carrier as failing. The Store API turns it into a warning on the shipping options and answers `503` when the customer picks a USPS option, as described in [Failing Carriers](/3.x/carriers#failing-carriers).
+
+## Testing
+
+Test the driver against the USPS test environment before the store quotes real shipments.
+
+### Sandbox Mode
+
+Set `SHIPPING_SANDBOX=true` to send every request to `https://apis-tem.usps.com`. The test environment takes the same consumer key and secret as production. The access token is cached per environment, so a test token is never sent to production.
+
+<Warning>
+The quote cache key holds the driver, the addresses and the packages, without the environment. After you switch from the sandbox to production, run `php artisan cache:clear` or wait `shopper.shipping.rates_cache_ttl` seconds, or the Store API can serve a sandbox quote.
+</Warning>
+
+### Quoting a Test Shipment
+
+Call the driver directly to check the credentials without a cart or a carrier. This Artisan command asks for the rates of one package from a Los Angeles warehouse to a New York customer:
+
+```php title="routes/console.php"
+use Illuminate\Support\Facades\Artisan;
+use Shopper\Shipping\DataTransferObjects\Address;
+use Shopper\Shipping\DataTransferObjects\Package;
+use Shopper\Shipping\Facades\Shipping;
+
+Artisan::command('shipping:quote-usps', function (): void {
+    $rates = Shipping::driver('usps')->calculateRates(
+        from: new Address(
+            firstName: '',
+            lastName: 'Los Angeles Warehouse',
+            street: '1200 S Alameda St',
+            city: 'Los Angeles',
+            postalCode: '90021',
+            state: 'CA',
+            country: 'US',
+        ),
+        to: new Address(
+            firstName: 'Jane',
+            lastName: 'Cooper',
+            street: '350 Fifth Avenue',
+            city: 'New York',
+            postalCode: '10118',
+            state: 'NY',
+            country: 'US',
+        ),
+        packages: [
+            new Package(length: 12, width: 8, height: 6, weight: 5.5, unit: 'imperial'),
+        ],
+    );
+
+    foreach ($rates as $rate) {
+        $this->line("{$rate->serviceCode}: {$rate->serviceName}, {$rate->formattedAmount()}");
+    }
+});
+```
+
+Run `php artisan shipping:quote-usps`. Each line is a USPS mail class with its price. A `ShippingException` carries the USPS error, for example a refused token when a credential is wrong. This call skips the quote cache, so it always reaches USPS.
+
+## Events
+
+The driver dispatches no event of its own, and since it does not track, no shipment event comes from USPS. The events you record on a USPS package dispatch the shipment events listed in [Shipment Events](/3.x/events#shipment-events).

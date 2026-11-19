@@ -8,7 +8,6 @@
     "extending/navigation",
     "extending/controllers",
     "render-hooks",
-    "addons",
     "---Sidebar---",
     "sidebar/overview",
     "sidebar/shopper-extension",

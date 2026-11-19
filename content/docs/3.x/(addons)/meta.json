@@ -1,8 +1,11 @@
 {
   "title": "Add-ons",
-  "description": "Official packages for payment and shipping providers.",
+  "description": "Build, register and publish add-ons that extend the Shopper admin panel.",
   "root": true,
   "pages": [
-    "addons"
+    "addons/index",
+    "addons/creating",
+    "addons/admin-panel",
+    "addons/publishing"
   ]
 }

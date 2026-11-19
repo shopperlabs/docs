@@ -59,7 +59,7 @@ The `capture_method` setting controls when funds are collected from the customer
 | `manual` | Authorize first, capture later from the admin panel | Physical goods, verify stock before charging |
 | `automatic` | Capture immediately when the customer confirms | Digital products, subscriptions, instant fulfillment |
 
-Manual capture is the default. When using manual capture, the payment status goes through `Pending → Authorized → Paid`. The merchant captures from the order detail page when ready.
+Manual capture is the default. When using manual capture, the payment status goes from `Pending` to `Authorized`, then to `Paid`. The merchant captures from the order detail page when ready.
 
 <Note>
 Authorization holds typically expire after **7 days** (varies by card network). You must capture within that window or the hold is released and the customer is not charged.

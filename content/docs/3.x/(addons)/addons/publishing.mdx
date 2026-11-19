@@ -1,0 +1,117 @@
+---
+title: Publishing an Add-on
+description: Version a Shopper add-on, tag releases, keep its changelog, publish it on Packagist and list a free or paid add-on on the Shopper website.
+---
+
+A free add-on reaches stores through Packagist, the registry Composer installs from, and through the Shopper website, which lists the add-ons stores can install. This page releases `acme/loyalty`, the add-on built in [Creating an Add-on](/3.x/addons/creating), and covers what changes for a paid add-on.
+
+## Versioning
+
+Composer reads your add-on's versions from the Git tags of its repository. Number them with [semantic versioning](https://semver.org): a patch version (`1.0.1`) fixes bugs, a minor version (`1.1.0`) adds features, and a major version (`2.0.0`) breaks something a store relies on. For an add-on, that covers a Livewire component name or a `usingLivewireComponents()` key, a route name, a configuration key, a permission name, a published view that changes its variables, and the end of support for a Shopper major.
+
+The `shopper/framework` constraint in `composer.json` decides which Shopper versions your add-on installs on. Composer refuses to install the add-on in a store whose Shopper version does not match it:
+
+```json title="composer.json"
+"require": {
+    "php": "^8.3",
+    "shopper/framework": "^3.0",
+    "spatie/laravel-package-tools": "^1.15"
+}
+```
+
+The skeleton ships `^3.0.0-rc.4`, a release candidate of Shopper 3. Replace it with `^3.0`, the constraint Shopper's own installation uses, and raise the minimum when the add-on starts to use a feature of a later minor version, such as `^3.2`. When a new Shopper major comes out, test the add-on against it before you widen the constraint to `^3.0|^4.0`. If supporting it means breaking changes, release a new major of the add-on that requires only the new Shopper major, and keep fixing the previous one on its own branch.
+
+## Tagging a Release
+
+Publish each version as a GitHub release, from the **Releases** page of the repository:
+
+<Steps>
+<Step title="Choose the tag">
+Create a tag named after the version, such as `v1.0.0` or `1.0.0`. Composer accepts both forms: pick one and keep it.
+</Step>
+<Step title="Name the release">
+Give the release the same name as the tag. The changelog workflow uses the release name as the version heading in `CHANGELOG.md`.
+</Step>
+<Step title="Write the notes">
+List what changed for the stores that install the add-on. GitHub's **Generate release notes** button drafts them from the merged pull requests.
+</Step>
+<Step title="Publish">
+Publish the release. Check **This is a pre-release** for a version such as `1.1.0-beta.1`. Composer reads the stability from the `-beta.1` suffix, not from that checkbox, and only installs it in a store that accepts unstable versions.
+</Step>
+</Steps>
+
+Packagist picks up the new tag within minutes when it is [connected to GitHub](#publishing-on-packagist).
+
+## Changelog
+
+The skeleton's `update-changelog.yml` workflow keeps `CHANGELOG.md` in step with your releases. It runs when a release is published, except a pre-release, and when a pre-release is turned into a full release. It adds the release notes to `CHANGELOG.md` under a heading made of the release name and the date, then commits the file to the `main` branch with the message "Update CHANGELOG". The Shopper website shows this file as the add-on's release notes, so write the release notes for the people who install the add-on.
+
+The file the skeleton ships has an intro line and a placeholder entry, `## 1.0.0 - 202X-XX-XX`. Delete the placeholder entry before your first release, so the first real entry is the one the workflow writes. When your default branch has another name, change the two `main` values in the workflow, the branch it checks out and the branch it commits to.
+
+## Publishing on Packagist
+
+Packagist makes the package installable with `composer require`. Push the configured skeleton to a public GitHub repository, sign in on [Packagist](https://packagist.org) with your GitHub account, and submit the repository URL. Packagist reads the package name from the `name` key of `composer.json`, so the name stores require is `acme/loyalty`.
+
+When your Packagist account is connected to GitHub, Packagist updates the package on each push and each new tag. Without that connection, Packagist checks the package once a week, or when you trigger an update from the package page. Packagist lists each branch as a development version (`dev-main`) and each tag as a release. The Shopper website does not show a free add-on until Packagist has a version for it, so tag a release first.
+
+## Writing the README
+
+The Shopper website shows the README of a free add-on as its overview, so the README is the add-on's page as much as its documentation. The configure script removes the skeleton's own instructions and keeps a draft with the badges, an installation section, a usage section with the `usingLivewireComponents()` example, testing, changelog, credits and license.
+
+Replace the description paragraph, then document what a store developer needs to install and adapt the add-on:
+
+- What the add-on adds to the admin panel, with screenshots.
+- The Shopper and PHP versions it requires.
+- The `composer require` line and the install command, with what the command does.
+- The add-on ID, which [disables](/3.x/addons#disabling-an-addon) the add-on in `config/shopper/addons.php`.
+- The permissions it creates, so administrators know what to give to other roles.
+- Its configuration keys, and the `vendor:publish` tags of its views, translations and configuration.
+- The keys `usingLivewireComponents()` accepts, if you keep that method.
+
+The usage example of the skeleton shows `Shopper::addons()` without its imports: add the `use` lines for `Shopper\Facades\Shopper` and your add-on class. The README is read outside GitHub too, so give images and links their full URL.
+
+## Listing on the Shopper Website
+
+The Shopper website lists official add-ons, published under the `shopper/*` vendor, and community add-ons. It does not read the keywords or the type of your `composer.json`: an add-on appears only once it is submitted with the website's form and approved.
+
+<Steps>
+<Step title="Sign in with GitHub">
+Sign in on the Shopper website with your GitHub account. For a free add-on, that account needs push access to the add-on's repository.
+</Step>
+<Step title="Fill the add-on form">
+Describe the add-on with the fields listed below.
+</Step>
+<Step title="Wait for approval">
+A moderator reviews each entry before it appears on the website.
+</Step>
+</Steps>
+
+The form asks for these fields for every add-on:
+
+| Field | Value |
+|-------|-------|
+| Package | The Composer name, `vendor/name` |
+| GitHub repository | For a free add-on, the repository Packagist publishes the package from |
+| Free or paid | Whether the add-on is sold with a license |
+| Name, description and type | The add-on's name, a short description and its type |
+| Tags | 1 to 4 among Admin, Catalog, Customers, Inventory, Orders, Payments, Pricing, Retail, Search, Shipping and Taxes |
+| Cover | A 16:9 image of at least 1280x720 |
+| Screenshots | Images of the add-on in the admin panel |
+
+Once approved, a free add-on's page shows the README as its overview, `CHANGELOG.md` as its release notes, and the `composer require` line for the Shopper major the visitor selects.
+
+## Paid Add-ons
+
+A paid add-on is not on Packagist. Its licenses are sold through a sales platform, and it installs from a private Composer repository: each license gives its customer the repository address and a key to read it, and the customer installs the add-on as described in [Paid Add-ons](/3.x/addons#paid-add-ons) of the overview. Version and tag it like a free add-on. How a new tag reaches the private repository depends on your sales platform.
+
+To list a paid add-on, fill the same form, choose paid, and add these fields:
+
+| Field | Value |
+|-------|-------|
+| Price and currency | The price of a license |
+| Sales platform | Anystack, Privato, Pukau or Other |
+| Product ID | The product's ID on that platform |
+| Checkout URL | The page where a customer buys a license |
+| Supported Shopper majors | 2.x, 3.x or both |
+
+A paid add-on's page on the Shopper website shows its highlights and a "Buy a license" link. A moderator approves it like a free one.

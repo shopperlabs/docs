@@ -15,7 +15,7 @@ Shopper publishes its configuration files to `config/shopper/` during installati
 | `admin.php` | admin | Admin panel prefix, domain, roles, branding, locales, notifications |
 | `auth.php` | admin | Authentication guard, two-factor authentication, passkeys, password reset |
 | `features.php` | admin | Feature flags for the optional sections of the admin panel |
-| `media.php` | admin | Media disk, accepted file types, maximum sizes, image conversions |
+| `media.php` | admin | Media disks, accepted file types, maximum sizes, image conversions |
 | `models.php` | admin | The class used for each swappable model |
 | `routes.php` | admin | Extra middleware and a custom route file for the admin panel |
 | `settings.php` | admin | The pages listed on the settings screen |
@@ -30,7 +30,7 @@ Shopper publishes its configuration files to `config/shopper/` during installati
 
 When `shopper/api` is installed, the same command also publishes `api.php` (pagination, token lifetime, filters and includes of each resource) and `http.php` (route prefix, rate limits, zone and channel resolution).
 
-Payment and carrier drivers publish their own file on demand, with the `shopper-stripe-config`, `shopper-fedex-config`, `shopper-ups-config` or `shopper-usps-config` tag, for example `php artisan vendor:publish --tag=shopper-stripe-config`. The [Add-ons](/3.x/addons) tab covers each driver.
+Payment and carrier drivers publish their own file on demand, with the `shopper-stripe-config`, `shopper-fedex-config`, `shopper-ups-config` or `shopper-usps-config` tag, for example `php artisan vendor:publish --tag=shopper-stripe-config`. The [Payments](/3.x/payments) and [Carriers](/3.x/carriers) pages cover each driver.
 
 To publish the configuration files again after an upgrade, together with the translations, run `php artisan shopper:publish`. Existing files are kept; add `--force` to overwrite them.
 
@@ -108,7 +108,7 @@ Shopper can store notifications for administrators, such as a new order or a fai
 
 ### Themes
 
-The admin panel ships with three themes: `default`, `midnight` and `evergreen`. `config/shopper/themes.php` sets the theme used until a user picks one in the **Appearance** settings, and registers the available themes. The [Themes](/3.x/themes) page explains how to add your own.
+The admin panel ships with three themes: `default`, `midnight` and `evergreen`. `config/shopper/themes.php` registers the available themes and sets the one used until a merchant saves another in the **Appearance** settings, for every user of the admin panel. The [Themes](/3.x/themes) page explains how to add your own.
 
 ## Database Table Prefix
 
@@ -237,7 +237,7 @@ Pass `--all` to publish every section at once. Without a name or `--all`, the co
 
 ## Settings
 
-The settings screen of the admin panel lists one page per class registered in `config/shopper/settings.php`. Set an entry to `false` to remove its page:
+The settings screen of the admin panel lists one page per class registered in `config/shopper/settings.php`. Set an entry to `false` to take it off the settings screen:
 
 ```php title="config/shopper/settings.php"
 use Shopper\Navigation\Setting\Items;
