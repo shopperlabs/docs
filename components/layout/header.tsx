@@ -144,7 +144,7 @@ export function Header({
         </div>
       </div>
       {sectioned ? <SubNav scope={scope} /> : null}
-      <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} />
+      <SearchDialog open={searchOpen} onOpenChange={setSearchOpen} version={scope.version} versions={versions(tree)} />
     </header>
   );
 }

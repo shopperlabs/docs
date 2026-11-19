@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { useRouter } from 'next/navigation';
-import { useDocsSearch, useHighlightQuery } from 'fumadocs-core/search/client';
+import { useFetchSearch, useHighlightQuery } from 'fumadocs-core/search/client';
+import { toJsx } from 'fumadocs-core/utils/hast-to-jsx';
 import clsx from 'clsx';
 import { Clock, FileText, Hash } from 'lucide-react';
 import { useShortcutLabel } from '@/components/ui/kbd';
@@ -15,6 +16,7 @@ import {
   CommandPaletteItem,
   CommandPaletteLabel,
 } from '@/components/ui/command-palette';
+import type { TreeFolder } from './tree';
 
 const RECENT_KEY = 'shopper-docs-recent-searches';
 const MAX_RECENT = 5;
@@ -42,6 +44,25 @@ function clearRecent() {
     localStorage.removeItem(RECENT_KEY);
   } catch {}
 }
+
+const marks =
+  '[&_::highlight(fd-search)]:bg-brand-100 [&_::highlight(fd-search)]:text-brand-800 group-data-focus:[&_::highlight(fd-search)]:bg-white/20 group-data-focus:[&_::highlight(fd-search)]:text-white [&_code]:font-mono';
+
+function Line({ children }: { children?: ReactNode }) {
+  return <span className="block truncate">{children}</span>;
+}
+
+function Children({ children }: { children?: ReactNode }) {
+  return children;
+}
+
+function Cell({ children }: { children?: ReactNode }) {
+  return <div className="min-w-0 not-last:truncate last:line-clamp-2">{children}</div>;
+}
+
+const text = { p: Line };
+const cells = { table: Children, thead: Children, tbody: Children, tr: Children, th: Cell, td: Cell };
+const rowCells = { ...cells, thead: () => null };
 
 export function SearchGlyph({ className }: { className?: string }) {
   return (
@@ -85,18 +106,38 @@ export function SearchIconButton({ onClick }: { onClick: () => void }) {
   );
 }
 
-export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChange: (open: boolean) => void }) {
+export function SearchDialog({
+  open,
+  onOpenChange,
+  version,
+  versions,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  version: TreeFolder;
+  versions: TreeFolder[];
+}) {
   const router = useRouter();
-  const { search, setSearch, query } = useDocsSearch({ type: 'fetch', api: '/api/search' });
+  const [picked, setPicked] = useState<TreeFolder>();
+  const scope = picked ?? version;
+  const { search, onSearchChange, isLoading, data } = useFetchSearch({
+    api: '/api/search',
+    tag: scope.$id,
+    delayMs: 250,
+  });
   const [recent, setRecent] = useState<string[]>([]);
-  const results = Array.isArray(query.data) ? query.data : [];
+  const items = data?.items ?? [];
+  const count = items.reduce((total, item) => total + (item.type === 'table' ? item.rows.length : 1), 0);
   const term = search.trim();
   const highlight = useHighlightQuery(term);
 
   useEffect(() => {
     if (open) setRecent(loadRecent());
-    else setSearch('');
-  }, [open, setSearch]);
+    else {
+      onSearchChange('');
+      setPicked(undefined);
+    }
+  }, [open, onSearchChange]);
 
   function go(url: string) {
     if (term) setRecent(saveRecent(term));
@@ -112,10 +153,10 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
       label="Search documentation"
       placeholder="Search..."
       query={search}
-      onQueryChange={setSearch}
+      onQueryChange={onSearchChange}
       onEscape={() => {
         if (!search) return false;
-        setSearch('');
+        onSearchChange('');
         return true;
       }}
       panel={
@@ -134,17 +175,29 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
           </div>
         ) : undefined
       }
+      footer={
+        <div className="flex items-center gap-1 text-xs/5 text-zinc-500 dark:text-zinc-400">
+          <span className="mr-1">Version</span>
+          {versions.map((candidate) => (
+            <button
+              key={candidate.$id}
+              type="button"
+              aria-pressed={candidate.$id === scope.$id}
+              // Keeps the focus in the input, so typing goes on after a switch.
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => setPicked(candidate)}
+              className="rounded-md px-1.5 font-medium hover:text-zinc-950 aria-pressed:bg-zinc-950/5 aria-pressed:text-zinc-950 dark:hover:text-white dark:aria-pressed:bg-white/10 dark:aria-pressed:text-white"
+            >
+              {candidate.name}
+            </button>
+          ))}
+        </div>
+      }
     >
       {!term && recent.length > 0 && (
         <CommandPaletteGroup heading="Recent">
           {recent.map((q) => (
-            <CommandPaletteItem
-              key={q}
-              value={`recent:${q}`}
-              filter={false}
-              // The Combobox clears the query on close right after onChange, so set it once that has run.
-              onSelect={() => queueMicrotask(() => setSearch(q))}
-            >
+            <CommandPaletteItem key={q} value={`recent:${q}`} filter={false} onSelect={() => onSearchChange(q)}>
               <Clock data-slot="icon" aria-hidden />
               <CommandPaletteLabel>{q}</CommandPaletteLabel>
             </CommandPaletteItem>
@@ -156,24 +209,58 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         <CommandPaletteEmpty>Search pages and guides. Use arrow keys to navigate results.</CommandPaletteEmpty>
       )}
 
-      {term && results.length > 0 && (
-        <CommandPaletteGroup heading={`${results.length} result${results.length > 1 ? 's' : ''}`}>
-          {results.map((item) => {
+      {term && count > 0 && (
+        <CommandPaletteGroup heading={`${count} result${count > 1 ? 's' : ''}`}>
+          {items.map((item) => {
+            if (item.type === 'table') {
+              const headerId = `search-table-${item.id}`;
+
+              return (
+                <div
+                  key={item.id}
+                  role={item.header ? 'group' : undefined}
+                  aria-labelledby={item.header ? headerId : undefined}
+                  className="ml-7 grid gap-x-3"
+                  style={{ gridTemplateColumns: `${'fit-content(30%) '.repeat(item.columns - 1)}minmax(30%, 1fr)` }}
+                >
+                  {item.header && (
+                    <div
+                      id={headerId}
+                      ref={highlight}
+                      aria-hidden
+                      className={clsx(
+                        marks,
+                        'col-span-full grid grid-cols-subgrid rounded-md bg-zinc-50 px-2 py-1 text-xs/5 text-zinc-500 dark:bg-white/5 dark:text-zinc-400',
+                      )}
+                    >
+                      {toJsx(item.header, { components: cells })}
+                    </div>
+                  )}
+                  {item.rows.map((row) => (
+                    <CommandPaletteItem
+                      key={row.id}
+                      value={row.id}
+                      filter={false}
+                      onSelect={() => go(row.url)}
+                      className="col-span-full grid! grid-cols-subgrid items-baseline!"
+                    >
+                      <div ref={highlight} className={clsx(marks, 'contents')}>
+                        {toJsx(row.hastContent, { components: item.header ? rowCells : cells })}
+                      </div>
+                    </CommandPaletteItem>
+                  ))}
+                </div>
+              );
+            }
+
             const Icon = item.type === 'page' ? FileText : Hash;
 
             return (
               <CommandPaletteItem key={item.id} value={item.id} filter={false} onSelect={() => go(item.url)}>
                 <Icon data-slot="icon" aria-hidden />
                 <span className="min-w-0 flex-1">
-                  {/* The index returns markdown source, so it renders as text: inline code like `<x-filament::button>` would parse as HTML. */}
-                  <span
-                    ref={highlight}
-                    className={clsx(
-                      item.type === 'page' && 'font-medium',
-                      'block truncate [&::highlight(fd-search)]:bg-brand-100 [&::highlight(fd-search)]:text-brand-800 group-data-focus:[&::highlight(fd-search)]:bg-white/20 group-data-focus:[&::highlight(fd-search)]:text-white',
-                    )}
-                  >
-                    {item.content}
+                  <span ref={highlight} className={clsx(marks, item.type === 'page' && 'font-medium', 'block')}>
+                    {toJsx(item.hastContent, { components: text })}
                   </span>
                   {item.breadcrumbs && item.breadcrumbs.length > 0 && (
                     <span className="block truncate text-xs text-zinc-500 group-data-focus:text-white/80 dark:text-zinc-400">
@@ -188,7 +275,7 @@ export function SearchDialog({ open, onOpenChange }: { open: boolean; onOpenChan
         </CommandPaletteGroup>
       )}
 
-      {term && !query.isLoading && results.length === 0 && (
+      {term && !isLoading && count === 0 && (
         <CommandPaletteEmpty>No results for &quot;{term}&quot;</CommandPaletteEmpty>
       )}
     </CommandPalette>

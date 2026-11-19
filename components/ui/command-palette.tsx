@@ -145,12 +145,13 @@ export function CommandPalette({
           <PaletteContext.Provider value={{ filterTerm: filterTerm ?? query, handlers }}>
             <Headless.Combobox
               immediate
+              value={null}
               onChange={(value: string | null) => {
                 if (value === null) return;
+                updateQuery('');
                 handlers.get(value)?.();
                 onChange?.(value);
               }}
-              onClose={() => updateQuery('')}
             >
               <div className="flex items-center gap-3 px-4">
                 <Search
@@ -167,6 +168,8 @@ export function CommandPalette({
                   autoComplete="off"
                   placeholder={placeholder}
                   value={query}
+                  // Headless UI writes the display value into the input when the combobox closes, which a click in the panel or footer does.
+                  displayValue={() => query}
                   onChange={(event) => updateQuery(event.target.value)}
                   className={clsx(
                     'min-w-0 flex-1 appearance-none bg-transparent py-4 sm:py-3.5',
@@ -180,6 +183,8 @@ export function CommandPalette({
               <Headless.ComboboxOptions
                 ref={list}
                 static
+                // The dialog already locks scroll and makes the page inert; a modal list would also make the panel and footer inert.
+                modal={false}
                 className="group/list max-h-[60dvh] scroll-py-2 overflow-y-auto overscroll-contain p-2 empty:hidden sm:max-h-96"
               >
                 {children}
