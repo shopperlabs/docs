@@ -406,4 +406,4 @@ A zone resource has the type `zones` and carries `name`, `slug`, `code`, `curren
 curl "https://example.com/store/zones?include=countries"
 ```
 
-When the customer picks another market during checkout, move the cart with `PATCH /store/carts/{cartId}` and `zone_code`, as described in [What the Zone Changes](#what-the-zone-changes). The [Storefront](/3.x/storefront) section documents the Store API.
+When the customer picks another market during checkout, move the cart with `PATCH /store/carts/{cartId}` and `zone_code`, as described in [What the Zone Changes](#what-the-zone-changes). The Store API [Store and Regions](/3.x/store-api/store#picking-a-zone-and-a-currency) guide shows how a storefront picks a zone.

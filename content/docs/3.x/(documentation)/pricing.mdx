@@ -343,4 +343,4 @@ The Store API returns the prices of a product on `GET /store/products` and `GET 
 
 Listings sort with `sort=price` or `sort=-price` and filter with `filter[price_min]` and `filter[price_max]`, in cents of the request currency. Both leave out products without a price in that currency. `include=price_range` adds `meta.price_range`, the lowest and highest price of the whole listing. When no currency resolves, a price sort or filter answers `422` with the `currency_required` code.
 
-The resolver receives the customer of the bearer token, so a response with calculated prices carries `Vary: Authorization`. [Amounts in the Store API](/3.x/money#amounts-in-the-store-api) covers the amounts of the other resources, and [Storefront](/3.x/storefront) the Store API itself.
+The resolver receives the customer of the bearer token, so a response with calculated prices carries `Vary: Authorization`. [Amounts in the Store API](/3.x/money#amounts-in-the-store-api) covers the amounts of the other resources, and the Store API [Catalog](/3.x/store-api/catalog#prices-currency-and-stock) guide the product prices.

@@ -1,0 +1,678 @@
+---
+title: Cart
+description: Create a cart, add products and variants, set addresses and promotion codes, and read the totals the Store API computes.
+---
+
+A storefront keeps the shopping basket of a visitor in a Shopper cart. The Store API creates the cart, prices every line from the catalog, checks stock, applies promotion codes, computes tax once a shipping address is known, and returns the totals with every response. The storefront never computes a price: it sends what the customer picked and renders the cart the API answers with.
+
+Every amount in a cart response is an integer in cents: a line priced at €90.00 carries `9000`. The [Money](/3.x/money) page covers cents and formatting. The [Checkout](/3.x/store-api/checkout) guide picks up where this page ends, with shipping, payment and the order.
+
+## Endpoints
+
+The cart endpoints sit in the public route group: they work without a customer token, and with one. The ones that create or add things share the checkout rate limit of 30 requests per minute (`shopper.http.rate_limiters`), on top of the general limit described in [Rate limits](/3.x/store-api#rate-limits). On these public routes both limits count requests per IP address, for guests and logged-in customers alike.
+
+| Method | Path | Purpose | Checkout limit |
+|--------|------|---------|----------------|
+| `POST` | `/store/carts` | Create a cart | Yes |
+| `GET` | `/store/carts/{cartId}` | Read a cart | No |
+| `PATCH` | `/store/carts/{cartId}` | Change the currency, zone, email or metadata | No |
+| `POST` | `/store/carts/{cartId}/lines` | Add a product or a variant | Yes |
+| `PATCH` | `/store/carts/{cartId}/lines/{lineId}` | Change the quantity or metadata of a line | No |
+| `DELETE` | `/store/carts/{cartId}/lines/{lineId}` | Remove a line | No |
+| `POST` | `/store/carts/{cartId}/addresses` | Set the shipping and billing addresses | No |
+| `POST` | `/store/carts/{cartId}/promotion` | Apply a promotion code | Yes |
+| `DELETE` | `/store/carts/{cartId}/promotion` | Remove one or every promotion code | Yes |
+
+Request bodies are flat JSON objects, such as `{"quantity": 2}`, sent with `Content-Type: application/json`. Responses are JSON:API documents, described in [JSON:API Conventions](/3.x/store-api/json-api). Every endpoint of this page answers with the whole cart, so the storefront re-renders from the response without a second call.
+
+## Creating a Cart
+
+A storefront creates the cart the first time the visitor adds something, and keeps its ID for every later call. The cart takes its zone from the `X-Shopper-Zone` header of this request, or the default zone when the header is missing, as described in [Request headers](/3.x/store-api#request-headers). The zone sets the prices, the shipping options and the payment methods the cart offers.
+
+<ApiTable name="POST /store/carts" label="Parameter">
+
+<ParamField path="currency_code" type="string">
+  ISO code of an enabled currency of the shop, such as `EUR`. Upper-cased before validation. Defaults to the currency of the zone, then to the default currency of the shop.
+</ParamField>
+
+<ParamField path="email" type="string">
+  Contact email of the checkout, lower-cased. Up to 255 characters.
+</ParamField>
+
+<ParamField path="metadata" type="object">
+  Your own data, such as a gift note or a tracking source. Up to 50 keys and 4,096 characters once encoded as JSON.
+</ParamField>
+
+</ApiTable>
+
+Every parameter is optional, so an empty body creates a cart in the currency of the zone:
+
+```bash title="Request"
+curl -X POST http://localhost:8000/store/carts \
+  -H "Accept: application/vnd.api+json" \
+  -H "Content-Type: application/json" \
+  -H "X-Shopper-Zone: EU" \
+  -d '{"email": "camille.martin@example.com"}'
+```
+
+The API answers `201 Created` with the new cart. Its `id` is the cart ID the storefront stores:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD8Z6Q4M3K2V7R9T5W1XNB0C",
+        "type": "carts",
+        "attributes": {
+            "currency_code": "EUR",
+            "email": "camille.martin@example.com",
+            "promotions": [],
+            "completed_at": null,
+            "metadata": null,
+            "lines_count": 0,
+            "lines_quantity": 0,
+            "subtotal": 0,
+            "discount_total": 0,
+            "tax_total": 0,
+            "shipping_total": 0,
+            "total": 0,
+            "tax_inclusive": false,
+            "shipping_option_id": null,
+            "created_at": "2026-11-19T10:15:00+00:00",
+            "updated_at": "2026-11-19T10:15:00+00:00"
+        }
+    }
+}
+```
+
+A `currency_code` that is unknown, disabled or not one of the shop currencies answers `422` with the code `exists` on `/data/attributes/currency_code`.
+
+## Guest and Customer Carts
+
+Who can use a cart depends on the request that created it. A request without a customer token creates a guest cart. A request with the bearer token of a logged-in customer, described in [Logging in](/3.x/store-api/authentication#logging-in), creates a cart that belongs to that customer. Send the same token on every later call for that cart.
+
+A guest cart has no owner: any request that carries its ID can read and change it. The ID is a ULID, 26 characters with 80 random bits, so it cannot be guessed, but it works like a session token. Keep it where the visitor's session lives, such as an `HttpOnly` cookie or the secure storage of a mobile app, and keep it out of URLs, logs and analytics events.
+
+A customer cart answers only to its owner. A request without the token, or with the token of another customer, gets `404 not_found`, the same answer as an ID that does not exist, so the API never confirms that a cart exists. An expired or revoked token counts as no token, so the customer cart also answers `404` once the token expires: log the customer in again before creating a new cart. A valid token that does not belong to a store customer answers `401 unauthenticated`, even on these public routes.
+
+When a guest logs in during checkout, transfer the guest cart to the customer with the cart transfer endpoint described in [Customers](/3.x/store-api/customers). The cart then answers only to that customer.
+
+A completed cart, one that became an order, stays readable with the same ID. Any change to it answers `409 cart_completed`. Open carts that see no activity for 30 days are deleted by the scheduled `shopper:prune-carts` command, as the [Cart](/3.x/cart) page describes, so a storefront that gets `404` on a stored ID creates a new cart.
+
+## Adding a Line
+
+A line is one product or one variant in the cart, with its quantity. The storefront sends the type and the public ID of what the customer picked; the API finds it in the catalog, prices it in the cart currency and checks stock. The client never sends a price.
+
+<ApiTable name="POST /store/carts/{cartId}/lines" label="Parameter">
+
+<ParamField path="purchasable_type" type="string" required>
+  `variant` for a product variant, `product` for a product without variants.
+</ParamField>
+
+<ParamField path="purchasable_id" type="string" required>
+  The public ID of the variant or the product, the `id` the [Catalog](/3.x/store-api/catalog) endpoints return.
+</ParamField>
+
+<ParamField path="quantity" type="integer" default="1">
+  Quantity to add, from 1 to 1,000,000.
+</ParamField>
+
+<ParamField path="metadata" type="object">
+  Data of this line, such as an engraving text. Same limits as the cart metadata.
+</ParamField>
+
+</ApiTable>
+
+This request adds two pairs of Classic Leather Sneakers in size 42, black, and asks for the lines in the same response with `include=lines`:
+
+```bash title="Request"
+curl -X POST "http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/lines?include=lines" \
+  -H "Accept: application/vnd.api+json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "purchasable_type": "variant",
+    "purchasable_id": "01JD8YQ3H5K7M9P2R4T6V8X0Z1",
+    "quantity": 2
+  }'
+```
+
+The API answers `200 OK` with the recalculated cart. The line carries the unit price frozen when it was added:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD8Z6Q4M3K2V7R9T5W1XNB0C",
+        "type": "carts",
+        "attributes": {
+            "currency_code": "EUR",
+            "email": "camille.martin@example.com",
+            "promotions": [],
+            "completed_at": null,
+            "metadata": null,
+            "lines_count": 1,
+            "lines_quantity": 2,
+            "subtotal": 18000,
+            "discount_total": 0,
+            "tax_total": 0,
+            "shipping_total": 0,
+            "total": 18000,
+            "tax_inclusive": false,
+            "shipping_option_id": null,
+            "created_at": "2026-11-19T10:15:00+00:00",
+            "updated_at": "2026-11-19T10:16:12+00:00"
+        },
+        "relationships": {
+            "lines": {
+                "data": [
+                    { "id": "01JD8Z7C1E3G5J7K9N1Q3S5V7W", "type": "cart-lines" }
+                ]
+            }
+        }
+    },
+    "included": [
+        {
+            "id": "01JD8Z7C1E3G5J7K9N1Q3S5V7W",
+            "type": "cart-lines",
+            "attributes": {
+                "purchasable_type": "variant",
+                "quantity": 2,
+                "unit_price_amount": 9000,
+                "is_custom_price": false,
+                "subtotal": 18000,
+                "discount_total": 0,
+                "tax_total": 0,
+                "adjustments": [],
+                "tax_lines": [],
+                "metadata": null,
+                "created_at": "2026-11-19T10:16:12+00:00",
+                "updated_at": "2026-11-19T10:16:12+00:00"
+            }
+        }
+    ]
+}
+```
+
+Adding the same variant again adds to the quantity of its existing line instead of creating a second line. When the new request carries metadata that differs from the metadata of that line, the API refuses with `422 cart_line_metadata_conflict`: update that line or remove it first.
+
+### Products and Variants
+
+A product that has variants is sold through them. Adding such a product with `purchasable_type: "product"` answers `422 variant_required` on `/data/attributes/purchasable_id`: the storefront asks the customer for a size or a color and adds the variant. The [Catalog](/3.x/store-api/catalog) guide shows how to read the variants of a product, and [Product Variants](/3.x/product-variants) explains how they are built.
+
+The API accepts a product when it is published and not an external product, and a variant when its product is published. Anything else answers `422 purchasable_unavailable` on `/data/attributes/purchasable_id`. A purchasable that has prices, but none in the cart currency, answers `422 price_missing` on `/data/attributes/purchasable_id`.
+
+### Stock and Quantity Rules
+
+The API checks stock when a line is added or its quantity changes. A variant or product that tracks its inventory and does not allow backorders answers `422 stock_insufficient` on `/data/attributes/quantity` when the stock cannot cover the quantity. The check runs again when the order is placed, as the [Checkout](/3.x/store-api/checkout) guide explains.
+
+A price can carry quantity rules (a minimum, a maximum, an increment), described in [Pricing](/3.x/pricing). A quantity that breaks one answers `422 quantity_rule_violated` with a `meta` object, so the storefront can correct the quantity selector:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "422",
+            "code": "quantity_rule_violated",
+            "title": "Unprocessable Content",
+            "detail": "This item must be ordered in multiples of 2.",
+            "source": { "pointer": "/data/attributes/quantity" },
+            "meta": {
+                "purchasable_id": "01JD8YQ3H5K7M9P2R4T6V8X0Z1",
+                "quantity": 3,
+                "minimum": 2,
+                "maximum": null,
+                "increment": 2
+            }
+        }
+    ]
+}
+```
+
+## Reading a Cart
+
+A storefront reads the cart to render the basket page or the mini cart. The totals come with the cart, so one request is enough: the API reuses the stored totals when they were calculated in the last 15 minutes (`shopper.cart.totals_ttl_minutes`) and recalculates them otherwise.
+
+The cart document carries only the cart attributes by default. The `include` query parameter adds related resources, as described in [Includes](/3.x/store-api/json-api#includes). The cart accepts these paths, set in `resources.cart.includes` of `config/shopper/api.php`:
+
+| Include | Adds |
+|---------|------|
+| `lines` | The cart lines |
+| `lines.purchasable` | The lines and the variant or product of each line |
+| `lines.purchasable.product` | The same, plus the parent product of each variant |
+| `addresses` | The shipping and billing addresses |
+| `paymentMethod` | The payment method chosen at checkout |
+
+Any other path answers `400 bad_request`. A basket page asks for `lines.purchasable` to show the variant of each line, or `lines.purchasable.product` to add the parent product and its images:
+
+```bash title="Request"
+curl "http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C?include=lines.purchasable" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK`. In this trimmed response, the cart keeps its totals and the variant keeps three of its attributes; the [Catalog](/3.x/store-api/catalog) guide lists them all:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD8Z6Q4M3K2V7R9T5W1XNB0C",
+        "type": "carts",
+        "attributes": {
+            "currency_code": "EUR",
+            "lines_count": 1,
+            "lines_quantity": 2,
+            "subtotal": 18000,
+            "discount_total": 0,
+            "tax_total": 0,
+            "shipping_total": 0,
+            "total": 18000,
+            "tax_inclusive": false
+        },
+        "relationships": {
+            "lines": {
+                "data": [
+                    { "id": "01JD8Z7C1E3G5J7K9N1Q3S5V7W", "type": "cart-lines" }
+                ]
+            }
+        }
+    },
+    "included": [
+        {
+            "id": "01JD8Z7C1E3G5J7K9N1Q3S5V7W",
+            "type": "cart-lines",
+            "attributes": {
+                "purchasable_type": "variant",
+                "quantity": 2,
+                "unit_price_amount": 9000,
+                "subtotal": 18000
+            },
+            "relationships": {
+                "purchasable": {
+                    "data": { "id": "01JD8YQ3H5K7M9P2R4T6V8X0Z1", "type": "variants" }
+                }
+            }
+        },
+        {
+            "id": "01JD8YQ3H5K7M9P2R4T6V8X0Z1",
+            "type": "variants",
+            "attributes": {
+                "name": "42 / Black",
+                "sku": "CLS-BLK-42",
+                "prices": [
+                    {
+                        "public_id": "01JD8YR6A8C0E2G4J6K8N0Q2S4",
+                        "amount": 9000,
+                        "compare_amount": null,
+                        "currency_code": "EUR"
+                    },
+                    {
+                        "public_id": "01JD8YR6A8C0E2G4J6K8N0Q2S5",
+                        "amount": 9900,
+                        "compare_amount": null,
+                        "currency_code": "USD"
+                    }
+                ]
+            }
+        }
+    ]
+}
+```
+
+Render the price of a line from `unit_price_amount` and `subtotal` of the line, not from the `prices` of the variant: the line keeps the price it was added at, which can differ from the current catalog price until checkout checks it again.
+
+## Updating and Removing Lines
+
+The quantity selector of the basket page changes a line through its ID, the `id` of the `cart-lines` resource. A quantity of zero is not accepted: removing a line has its own endpoint.
+
+<ApiTable name="PATCH /store/carts/{cartId}/lines/{lineId}" label="Parameter">
+
+<ParamField path="quantity" type="integer">
+  New quantity of the line, from 1 to 1,000,000. Checked against stock and quantity rules like an added line.
+</ParamField>
+
+<ParamField path="metadata" type="object">
+  New metadata of the line. `null` clears it.
+</ParamField>
+
+</ApiTable>
+
+```bash title="Request"
+curl -X PATCH http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/lines/01JD8Z7C1E3G5J7K9N1Q3S5V7W \
+  -H "Accept: application/vnd.api+json" \
+  -H "Content-Type: application/json" \
+  -d '{"quantity": 1}'
+```
+
+The API answers `200 OK` with the cart. Removing the line works the same way and also answers `200 OK` with the recalculated cart, not an empty `204`:
+
+```bash title="Request"
+curl -X DELETE http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/lines/01JD8Z7C1E3G5J7K9N1Q3S5V7W \
+  -H "Accept: application/vnd.api+json"
+```
+
+A line ID that does not belong to the cart answers `404 not_found`. A line with `is_custom_price: true` holds a price negotiated in the back office: its quantity cannot change and the API answers `409 cart_line_locked`. The storefront can still remove it.
+
+## Addresses
+
+The cart needs a shipping address before checkout: taxes, live carrier rates and the order addresses come from it. One request sets the shipping address, the billing address, or both, and can set the contact email at the same time. Sending an address type again replaces the previous one.
+
+<ApiTable name="POST /store/carts/{cartId}/addresses" label="Parameter">
+
+<ParamField path="shipping_address" type="object">
+  The delivery address. Required when `billing_address` is missing.
+</ParamField>
+
+<ParamField path="billing_address" type="object">
+  The billing address. Required when `shipping_address` is missing.
+</ParamField>
+
+<ParamField path="email" type="string">
+  Contact email of the checkout, lower-cased. Replaces the email of the cart.
+</ParamField>
+
+</ApiTable>
+
+Each address object takes these fields:
+
+<ApiTable name="shipping_address, billing_address" label="Field">
+
+<ParamField path="first_name" type="string">
+  First name, up to 255 characters.
+</ParamField>
+
+<ParamField path="last_name" type="string" required>
+  Last name, up to 255 characters.
+</ParamField>
+
+<ParamField path="company" type="string">
+  Company name, up to 255 characters.
+</ParamField>
+
+<ParamField path="address_1" type="string" required>
+  Street and number.
+</ParamField>
+
+<ParamField path="address_2" type="string">
+  Apartment, floor or building.
+</ParamField>
+
+<ParamField path="city" type="string" required>
+  City.
+</ParamField>
+
+<ParamField path="state" type="string">
+  State or province. Tax rules of a province match on this value.
+</ParamField>
+
+<ParamField path="postal_code" type="string" required>
+  Postal code.
+</ParamField>
+
+<ParamField path="phone" type="string">
+  Phone number.
+</ParamField>
+
+<ParamField path="country_code" type="string" required>
+  Two-letter ISO code of the country, such as `FR`. Upper-cased before validation.
+</ParamField>
+
+</ApiTable>
+
+```bash title="Request"
+curl -X POST "http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/addresses?include=addresses" \
+  -H "Accept: application/vnd.api+json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "shipping_address": {
+      "first_name": "Camille",
+      "last_name": "Martin",
+      "address_1": "12 Rue de Rivoli",
+      "city": "Paris",
+      "postal_code": "75004",
+      "phone": "+33612345678",
+      "country_code": "FR"
+    }
+  }'
+```
+
+The API answers `200 OK` with the cart. With a French address, the 20% VAT now shows in `tax_total`, and `tax_inclusive` is `true` because the tax zone of France is set up with prices that include tax. The response is trimmed to the totals and the address:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD8Z6Q4M3K2V7R9T5W1XNB0C",
+        "type": "carts",
+        "attributes": {
+            "currency_code": "EUR",
+            "subtotal": 18000,
+            "discount_total": 0,
+            "tax_total": 3000,
+            "shipping_total": 0,
+            "total": 18000,
+            "tax_inclusive": true
+        },
+        "relationships": {
+            "addresses": {
+                "data": [
+                    { "id": "01JD8ZA4B6D8F0H2K4M6P8R0T2", "type": "cart-addresses" }
+                ]
+            }
+        }
+    },
+    "included": [
+        {
+            "id": "01JD8ZA4B6D8F0H2K4M6P8R0T2",
+            "type": "cart-addresses",
+            "attributes": {
+                "type": "shipping",
+                "first_name": "Camille",
+                "last_name": "Martin",
+                "full_name": "Camille Martin",
+                "company": null,
+                "address_1": "12 Rue de Rivoli",
+                "address_2": null,
+                "city": "Paris",
+                "state": null,
+                "postal_code": "75004",
+                "country_code": "FR",
+                "phone": "+33612345678"
+            }
+        }
+    ]
+}
+```
+
+The address does not change the zone of the cart. When the country is outside the zone, the shipping options endpoint returns no option and a warning, as the [Checkout](/3.x/store-api/checkout) guide shows: switch the cart to the zone of that country with `zone_code`, described in [Updating the cart](#updating-the-cart). The [Taxes](/3.x/taxes) page explains how the tax zone is picked from the country and the state.
+
+## Promotion Codes
+
+A promotion code entered by the customer is checked against the whole cart before it is kept: its currency, zone, dates, eligible products, minimum amount or quantity, usage limits and campaign budget. A code that cannot apply is refused and leaves the cart as it was. Automatic promotions need no request: they appear in `promotions` as soon as the cart qualifies. The [Discounts](/3.x/discounts) page describes how promotions are set up.
+
+<ApiTable name="POST /store/carts/{cartId}/promotion" label="Parameter">
+
+<ParamField path="code" type="string" required>
+  The promotion code, up to 255 characters.
+</ParamField>
+
+</ApiTable>
+
+```bash title="Request"
+curl -X POST http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/promotion \
+  -H "Accept: application/vnd.api+json" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "WELCOME10"}'
+```
+
+The API answers `200 OK` with the cart. `WELCOME10` takes 10% off the subtotal, and the VAT is recalculated on the discounted amount. The response is trimmed to the totals:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD8Z6Q4M3K2V7R9T5W1XNB0C",
+        "type": "carts",
+        "attributes": {
+            "currency_code": "EUR",
+            "promotions": [
+                {
+                    "code": "WELCOME10",
+                    "source": "code",
+                    "amount": 1800,
+                    "status": "applied"
+                }
+            ],
+            "subtotal": 18000,
+            "discount_total": 1800,
+            "tax_total": 2700,
+            "shipping_total": 0,
+            "total": 16200,
+            "tax_inclusive": true
+        }
+    }
+}
+```
+
+Each entry of `promotions` has a `source` of `code` or `automatic`, the `amount` it takes off the cart in cents, and a `status`. A promotion is `applied` when its amount is above zero, and `suppressed` when it takes nothing off the cart right now, such as a code that an exclusive promotion of higher priority overrides. A suppressed code stays on the cart. A cart applies at most 5 promotions at once (`shopper.cart.max_promotions`). Each line shows its share of the discount in its own `adjustments`, with the code and the amount.
+
+A code the cart cannot use answers `422 promotion_not_applicable`, with the same message whatever the reason, so codes cannot be discovered by trying them:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "422",
+            "code": "promotion_not_applicable",
+            "title": "Unprocessable Content",
+            "detail": "This promotion code does not apply to your cart.",
+            "source": { "pointer": "/data/attributes/code" }
+        }
+    ]
+}
+```
+
+Removing a code takes the same `code` field. Without it, the request removes every code of the cart; automatic promotions stay:
+
+```bash title="Request"
+curl -X DELETE http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/promotion \
+  -H "Accept: application/vnd.api+json" \
+  -H "Content-Type: application/json" \
+  -d '{"code": "WELCOME10"}'
+```
+
+The API answers `200 OK` with the cart. When the cart later changes currency or zone, the codes that no longer apply are dropped from it.
+
+## Updating the Cart
+
+The cart itself has four fields a storefront changes after creating it: the currency of a currency switcher, the zone of a country picker, the email of the checkout form and the metadata. Send only the fields that change.
+
+<ApiTable name="PATCH /store/carts/{cartId}" label="Parameter">
+
+<ParamField path="currency_code" type="string">
+  ISO code of an enabled currency of the shop. The lines are priced again in that currency.
+</ParamField>
+
+<ParamField path="zone_code" type="string">
+  Code of an enabled zone, the code the `X-Shopper-Zone` header carries. The lines are priced again for that zone.
+</ParamField>
+
+<ParamField path="email" type="string">
+  Contact email of the checkout, lower-cased.
+</ParamField>
+
+<ParamField path="metadata" type="object">
+  Replaces the cart metadata. `null` clears it.
+</ParamField>
+
+</ApiTable>
+
+```bash title="Request"
+curl -X PATCH http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C \
+  -H "Accept: application/vnd.api+json" \
+  -H "Content-Type: application/json" \
+  -d '{"currency_code": "USD"}'
+```
+
+The API answers `200 OK` with the cart priced in the new currency. Switching currency or zone resets part of the checkout:
+
+| Change | Lines | Shipping method | Payment method | Promotion codes |
+|--------|-------|-----------------|----------------|-----------------|
+| `currency_code` | Priced again in the new currency | Removed | Kept | Dropped when they no longer apply |
+| `zone_code` | Priced again for the new zone | Removed | Removed | Dropped when they no longer apply |
+
+The currency of the cart stays the same on a zone switch: send both fields to change both. When a line has no price in the new currency, the API refuses with `422 price_missing` on `/data/attributes/currency_code` and changes nothing. A line with a custom price cannot change currency and answers `409 cart_line_locked`.
+
+## The Cart Resource
+
+The cart resource has the type `carts` and the public ID of the cart as its `id`. These attributes come with every cart response:
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `currency_code` | string | ISO code of the cart currency |
+| `email` | string, null | Contact email of the checkout |
+| `promotions` | array | The promotions on the cart, each with `code`, `source`, `amount` and `status` |
+| `completed_at` | string, null | When the cart became an order, ISO 8601 |
+| `metadata` | object, null | Your own data |
+| `lines_count` | integer | Number of lines |
+| `lines_quantity` | integer | Sum of the line quantities |
+| `subtotal` | integer | Sum of the line subtotals, in cents |
+| `discount_total` | integer | Total of the promotions, in cents |
+| `tax_total` | integer | Tax of the cart, in cents, 0 until the cart has a shipping address |
+| `shipping_total` | integer | Price of the chosen shipping option, in cents |
+| `total` | integer | Amount to pay, in cents |
+| `tax_inclusive` | boolean | Whether the prices already include `tax_total` |
+| `shipping_option_id` | string, null | The chosen shipping option, `{carrier_code}:{service_code}` |
+| `created_at` | string | ISO 8601 |
+| `updated_at` | string | ISO 8601 |
+
+The total follows the tax mode of the shipping address. When `tax_inclusive` is `true`, `total` is the subtotal minus the discounts, plus shipping, and `tax_total` is the share of VAT it already contains: show it as "VAT included". When it is `false`, `total` adds `tax_total` on top. The subtotal minus the discounts never goes below zero. The [Cart](/3.x/cart#calculation-pipeline) page describes the calculation pipeline behind these numbers.
+
+A `cart-lines` resource has these attributes:
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `purchasable_type` | string | `variant` or `product` |
+| `quantity` | integer | Quantity of the line |
+| `unit_price_amount` | integer | Unit price frozen when the line was added, in cents |
+| `is_custom_price` | boolean | Whether the price was set by hand in the back office, which locks the line |
+| `subtotal` | integer | `unit_price_amount` times `quantity`, in cents |
+| `discount_total` | integer | Discount on the line, in cents |
+| `tax_total` | integer | Tax on the line, in cents |
+| `adjustments` | array | The discounts of the line, each with `amount` and `code` |
+| `tax_lines` | array | The taxes of the line, each with `code`, `name`, `rate` (a percentage, `20` for 20%) and `amount` |
+| `metadata` | object, null | Data of the line |
+| `created_at` | string | ISO 8601 |
+| `updated_at` | string | ISO 8601 |
+
+Its `purchasable` relationship points to a `variants` or a `products` resource, the same resources the catalog returns. A `cart-addresses` resource carries `type` (`shipping` or `billing`), `first_name`, `last_name`, `full_name`, `company`, `address_1`, `address_2`, `city`, `state`, `postal_code`, `country_code` and `phone`.
+
+## Errors
+
+Errors use the JSON:API error object, with a `code` a client can branch on, described with every code in [Error codes](/3.x/store-api/errors#error-codes). On top of validation errors, `401 unauthenticated` for a rejected token and `429 rate_limited`, the cart endpoints answer with these codes:
+
+| Code | Status | Endpoints | When |
+|------|--------|-----------|------|
+| `not_found` | 404 | All but `POST /carts` | No cart with this ID for this request, or no line with this ID in the cart |
+| `bad_request` | 400 | All that answer with the cart | An `include` path outside the cart allowlist |
+| `purchasable_unavailable` | 422 | Add a line | The product or variant cannot be bought |
+| `variant_required` | 422 | Add a line | The product is sold through its variants |
+| `price_missing` | 422 | Add a line, update the cart | No price in the cart currency, or in the new currency |
+| `stock_insufficient` | 422 | Add a line, update a line | Not enough stock for the quantity |
+| `quantity_rule_violated` | 422 | Add a line, update a line | The quantity breaks a minimum, maximum or increment, details in `meta` |
+| `cart_line_metadata_conflict` | 422 | Add a line | The line already exists with other metadata |
+| `promotion_not_applicable` | 422 | Apply a code | The code does not exist or does not apply to the cart |
+| `cart_line_locked` | 409 | Update a line, update the cart | The line has a custom price |
+| `cart_completed` | 409 | All changes | The cart is already an order |
+| `payment_session_collected` | 409 | All changes | The customer already paid: the cart can no longer change, complete it |
+| `payment_session_in_progress` | 409 | All changes | Another request is changing the cart, retry after the `Retry-After` header (3 seconds) |
+| `payment_provider_unavailable` | 503 | All changes | The open payment could not be cancelled at the provider, retry after the `Retry-After` header (5 seconds) |
+
+The last three come from the payment session a checkout opens. A change to the cart that alters its total cancels that session, and the storefront opens a new one, as the [Checkout](/3.x/store-api/checkout) guide explains.
+
+## Next Steps
+
+The cart now holds lines, an email and a shipping address. The checkout guide lists the shipping options and payment methods for this cart, opens the payment and turns the cart into an order.
+
+<Cards>
+  <Card title="Checkout" href="/3.x/store-api/checkout">
+    Shipping, payment session and order placement.
+  </Card>
+  <Card title="Customers" href="/3.x/store-api/customers">
+    Customer accounts and the transfer of a guest cart.
+  </Card>
+</Cards>

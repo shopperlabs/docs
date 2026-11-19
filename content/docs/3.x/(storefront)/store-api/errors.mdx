@@ -1,0 +1,339 @@
+---
+title: Errors
+description: The error object of the Store API, validation and rate limit errors, and every error code with its HTTP status and what the storefront should do.
+---
+
+Every error of the Store API, from a missing product to a payment provider outage, answers with an `errors` array and no `data`. Each error carries a `code` that does not change with the language of the request: branch on `code` in your storefront, and show `detail` to the customer.
+
+## Error Object
+
+A request for a product that does not exist shows the shape that every error shares:
+
+```bash title="Request"
+curl "http://localhost:8000/store/products/classic-leather-boots" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `404 Not Found`:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "404",
+            "code": "not_found",
+            "title": "Not Found",
+            "detail": "Not Found"
+        }
+    ]
+}
+```
+
+Each error object has these members:
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `status` | string | The HTTP status code, as a string. Every error of one response has the status of the response. |
+| `code` | string | A code from [Error Codes](#error-codes), or for a validation error the name of the rule that failed. |
+| `title` | string | The HTTP status text, such as `Not Found`, the same for every error with that status. |
+| `detail` | string | A message for the customer, in the language of the request. |
+| `source.pointer` | string | Validation errors only: the field the error is about, as described in [Validation Errors](#validation-errors). |
+| `meta` | object | Only on the codes that carry extra values, such as `quantity_rule_violated`. |
+
+The API answers in this format for every path under the `/store` prefix, with `Content-Type: application/vnd.api+json`. A URL that matches no route answers `404 not_found` with a `detail` such as `The route store/wishlists could not be found.`, and a route called with the wrong HTTP method answers `405 method_not_allowed` with a `detail` that lists the methods the route accepts.
+
+An unexpected exception answers `500 Internal Server Error` with the `server_error` code and `Internal Server Error` as `detail`. The body never carries the exception message or a stack trace, even when `APP_DEBUG` is on: read the cause in the log of the Laravel application, `storage/logs/laravel.log` by default.
+
+The `detail` follows the `Accept-Language` header, as described in [Language](/3.x/store-api#language). Messages that come from Laravel itself, such as validation messages, the login error and the password reset error, follow the language files of your application.
+
+## Validation Errors
+
+A request whose body or query parameters fail validation answers `422 Unprocessable Content` with one error object per message. Two fields that fail give two objects, and a field that fails two rules gives two objects with the same pointer. A login without a body fails on both fields:
+
+```bash title="Request"
+curl -X POST "http://localhost:8000/store/auth/login" \
+  -H "Accept: application/vnd.api+json" \
+  -H "Content-Type: application/json" \
+  -d '{}'
+```
+
+The API answers `422 Unprocessable Content`:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "422",
+            "code": "required",
+            "title": "Unprocessable Content",
+            "detail": "The email field is required.",
+            "source": {
+                "pointer": "/data/attributes/email"
+            }
+        },
+        {
+            "status": "422",
+            "code": "required",
+            "title": "Unprocessable Content",
+            "detail": "The password field is required.",
+            "source": {
+                "pointer": "/data/attributes/password"
+            }
+        }
+    ]
+}
+```
+
+The `code` of a validation error is one of these:
+
+- The name of the Laravel rule that failed, in snake case: `required`, `email`, `unique`, `max`. A rule object gives the snake case of its class name, such as `image_file` for `File::image()`.
+- A code from [Error Codes](#error-codes) when Shopper raises the error itself, such as `credentials_invalid` or `stock_insufficient`.
+- `invalid` when no rule stands behind the message, such as an error your own route raises with `ValidationException::withMessages()`.
+
+### Reading the Pointer
+
+Request bodies are flat JSON, while `source.pointer` follows the JSON:API form `/data/attributes/{field}`. Remove the `/data/attributes/` prefix to get the name of the field. A nested field keeps its path with `/` between the segments, so an error on `lines.0.quantity` points at `/data/attributes/lines/0/quantity`.
+
+Errors on query parameters use the same form: an unknown currency in `filter[currency]` points at `/data/attributes/filter/currency`, and a forbidden include at `/data/attributes/include`.
+
+A few codes point at a name that is not a field of the request. On `POST /carts/{cartId}/complete` and `POST /carts/{cartId}/payment-session`, which take no field, the pointer names the part of the cart that blocks the checkout: `cart`, `email`, `promotion`, `shipping_method`, `payment_method` or `payment_session`. Show these errors at the top of the checkout page instead of next to a field.
+
+This function groups the messages of a validation error by field, ready for a form:
+
+```ts title="lib/store-api-errors.ts"
+type StoreApiError = {
+    status: string;
+    code: string;
+    title: string;
+    detail: string;
+    source?: { pointer: string };
+    meta?: Record<string, unknown>;
+};
+
+export function fieldErrors(errors: StoreApiError[]): Record<string, string[]> {
+    const fields: Record<string, string[]> = {};
+
+    for (const error of errors) {
+        if (!error.source) {
+            continue;
+        }
+
+        const field = error.source.pointer.replace('/data/attributes/', '').replaceAll('/', '.');
+
+        (fields[field] ??= []).push(error.detail);
+    }
+
+    return fields;
+}
+```
+
+### Errors With Meta
+
+Some errors carry a `meta` object with the values a storefront needs to fix the request. A quantity that breaks a quantity rule of its price answers `quantity_rule_violated` with the rule and the quantity that was sent:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "422",
+            "code": "quantity_rule_violated",
+            "title": "Unprocessable Content",
+            "detail": "This item must be ordered in multiples of 2.",
+            "source": {
+                "pointer": "/data/attributes/quantity"
+            },
+            "meta": {
+                "purchasable_id": "01JD8YQ3H5K7M9P2R4T6V8X0Z1",
+                "quantity": 3,
+                "minimum": 2,
+                "maximum": null,
+                "increment": 2
+            }
+        }
+    ]
+}
+```
+
+`minimum`, `maximum` and `increment` are `null` when the rule does not set them. Use them to correct the quantity selector, as described in [Cart](/3.x/store-api/cart).
+
+## Rate Limit Errors
+
+A client that goes past a rate limiter, described in [Rate Limits](/3.x/store-api#rate-limits), gets `429 Too Many Requests` with the `rate_limited` code until the limiter resets:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "429",
+            "code": "rate_limited",
+            "title": "Too Many Requests",
+            "detail": "Too Many Attempts."
+        }
+    ]
+}
+```
+
+The response carries these headers:
+
+| Header | Value |
+|--------|-------|
+| `X-RateLimit-Limit` | The number of requests the limiter allows per minute, such as `30` for `shopper-api-checkout` |
+| `X-RateLimit-Remaining` | `0` |
+| `Retry-After` | The seconds to wait before the next request, such as `42` |
+| `X-RateLimit-Reset` | The Unix timestamp at which the limiter accepts requests again, such as `1795083912` |
+
+Wait for `Retry-After` before sending the request again.
+
+A login refused after too many failures, described in [Failed Logins](/3.x/store-api/authentication#failed-logins), also answers `429` with the `rate_limited` code, and a `detail` that gives the wait, such as `Too many login attempts. Please try again in 59 seconds.`. Its `Retry-After` header counts down the lockout of that email. The `X-RateLimit-Limit` and `X-RateLimit-Remaining` headers of that response describe the `shopper-api-auth` limiter of the route, not the lockout, so rely on `Retry-After` alone.
+
+## Error Codes
+
+The codes below are every code the API sets itself, grouped by area. The Pointer column gives the end of `source.pointer`, after `/data/attributes/`, for the codes that answer as validation errors.
+
+Four codes carry a `Retry-After` header and can succeed when the same request is sent again later: `rate_limited`, `payment_session_in_progress`, `shipping_provider_unavailable` and `payment_provider_unavailable`. Any other error answers the same until the request or the cart changes.
+
+### General Codes
+
+These codes come from the HTTP status of the response, so any route can answer them:
+
+| Code | Status | Pointer | When it happens | What to do |
+|------|--------|---------|-----------------|------------|
+| `bad_request` | 400 | | An `include`, `filter` or `sort` name outside the allowlist of the endpoint. The `detail` lists the accepted names | Fix the query, see [Allowlists](/3.x/store-api/json-api#allowlists) |
+| `unauthenticated` | 401 | | A route of the authenticated group called without a token, with an expired or revoked token, or with a token that lacks the `store` ability | Drop the stored token and send the customer to the login page, see [Using the Token](/3.x/store-api/authentication#using-the-token) |
+| `forbidden` | 403 | | A download link asked for a file of an order that is not paid yet, or a cart transfer on a cart that belongs to another customer | Offer the download once the order is paid. For a transfer, create a new cart |
+| `not_found` | 404 | | No record with this ID or slug for the request, or no route for the URL. A disabled or unpublished record, and a cart or an order of another customer, count as missing | Check the ID. For a cart the customer owned, see [Using the Token](/3.x/store-api/authentication#using-the-token) |
+| `method_not_allowed` | 405 | | The route does not accept this HTTP method. The `detail` lists the methods it accepts | Fix the method |
+| `conflict` | 409 | | `POST /carts/{cartId}/payment-session` on a cart that is already an order | Read the order instead of opening a session |
+| `invalid` | 422 | Any field | A validation error with no rule behind it | Show the `detail` |
+| `rate_limited` | 429 | | Too many requests or too many failed logins, see [Rate Limit Errors](#rate-limit-errors) | Wait for `Retry-After` |
+| `server_error` | 500 or higher | | An unexpected exception on the server | Retry later. The cause is in the application log |
+| `http_error` | Any other | | Any other status, such as the `422` of `GET /carts/{cartId}/shipping-options` on a cart without a zone, which has no `source` | For a cart without a zone, set its `zone_code`, see [Cart](/3.x/store-api/cart) |
+
+### Authentication
+
+These codes come from the login and password reset endpoints described in [Authentication](/3.x/store-api/authentication):
+
+| Code | Status | Pointer | When it happens | What to do |
+|------|--------|---------|-----------------|------------|
+| `credentials_invalid` | 422 | `email` | No customer has this email, or the password is wrong | Show one message for both cases. After 5 failures, the login locks for a minute |
+| `reset_token_invalid` | 422 | `email` | The reset token expired, was already used, or belongs to another email | Offer to send a new reset link |
+
+### Query Parameters
+
+These codes come from the query parameters described in [JSON:API Conventions](/3.x/store-api/json-api):
+
+| Code | Status | Pointer | When it happens | What to do |
+|------|--------|---------|-----------------|------------|
+| `include_not_allowed` | 422 | `include` | An include other than `items` on `GET /orders/{orderId}`, the order confirmation lookup | Ask for `items` only, or read the order from the customer's account, see [Orders](/3.x/store-api/orders) |
+| `filter_too_wide` | 422 | `filter/{name}` | A filter with more than 50 comma-separated values | Split the request |
+| `currency_required` | 422 | `sort` or `filter/price_min` | `GET /products` sorted by price or filtered by `price_min` or `price_max` when no currency applies: no `filter[currency]`, no zone, and no default currency on the shop | Send `filter[currency]` or the `X-Shopper-Zone` header |
+| `currency_unknown` | 422 | `filter/currency` | `filter[currency]` names a currency that does not exist or is disabled | Send a code listed by `GET /currencies` |
+
+### Cart Lines and Prices
+
+These codes come from adding and updating lines, changing the currency of a cart, and checking the cart out:
+
+| Code | Status | Pointer | When it happens | What to do |
+|------|--------|---------|-----------------|------------|
+| `purchasable_unavailable` | 422 | `purchasable_id` | No product or variant with this ID can be bought: it does not exist, its product is not published, or the product is external | Refresh the product page |
+| `variant_required` | 422 | `purchasable_id` | The ID is the one of a product sold through its variants | Send the ID of a variant, with `purchasable_type` set to `variant` |
+| `price_missing` | 422 | `purchasable_id`, `currency_code` or `cart` | The product has no price in the cart currency: when the line is added, when the cart moves to another currency, or at checkout | Remove the line, or keep the cart in its currency |
+| `price_changed` | 422 | `cart` | At checkout or when a payment session opens, the price of a line went up since it was added. The cart already holds the new prices; a lower price is applied without an error | Show the new total and ask the customer to confirm |
+| `stock_insufficient` | 422 | `quantity` or `cart` | Not enough stock for the quantity, when the line changes or at checkout | Lower the quantity or remove the line |
+| `quantity_rule_violated` | 422 | `quantity` or `cart` | The quantity breaks the minimum, maximum or increment of its price. The rule is in `meta`, see [Errors With Meta](#errors-with-meta) | Correct the quantity |
+
+### Cart State
+
+These codes come from the state of the cart as a whole:
+
+| Code | Status | Pointer | When it happens | What to do |
+|------|--------|---------|-----------------|------------|
+| `cart_empty` | 422 | `cart` | Checkout of a cart without lines | Add a line |
+| `cart_completed` | 409 | | A change to a cart that is already an order | Read the order, and start a new cart |
+| `cart_line_locked` | 409 | | A change to a line whose price the merchant set by hand: a new quantity, the same product added again, or a new currency for the cart | Leave the line as it is, or remove it |
+| `cart_line_metadata_conflict` | 422 | `metadata` | The product is already in the cart with other `metadata` | Update that line, or remove it first |
+| `cart_nothing_to_collect` | 422 | `cart` | A payment session on a cart whose total is zero | Set a manual payment method, which needs no session, and complete the cart |
+| `email_required` | 422 | `email` | Checkout of a guest cart without an email. A customer's cart uses the email of the account | Set the email on the cart |
+
+### Promotions
+
+These codes come from applying a promotion code and from checking out a cart that has promotions:
+
+| Code | Status | Pointer | When it happens | What to do |
+|------|--------|---------|-----------------|------------|
+| `promotion_not_applicable` | 422 | `code` or `promotion` | The code does not exist, is not active or does not apply to the cart. At checkout, a promotion of the cart that no longer applies. The `detail` never says why, so that codes cannot be guessed | Show the `detail`. At checkout, show the new total |
+| `promotion_limit_reached` | 422 | `promotion` | At checkout, a promotion of the cart reached its usage limit | Show the new total |
+| `promotion_budget_reached` | 422 | `promotion` | At checkout, the campaign of a promotion spent its budget | Show the new total |
+
+When checkout fails on a promotion, the API cancels the payment session of the cart and computes its totals again before it answers: show the new total, then open a new payment session.
+
+### Shipping
+
+These codes come from choosing a shipping option and from checking out a cart that has products to ship:
+
+| Code | Status | Pointer | When it happens | What to do |
+|------|--------|---------|-----------------|------------|
+| `shipping_method_required` | 422 | `shipping_method` | Checkout or a payment session on a cart with products to ship and no shipping option | Set a shipping method |
+| `shipping_option_unavailable` | 422 | `option_id` or `shipping_method` | The option is not among the options quoted for the cart, or no longer is at checkout | List the shipping options again and choose another one |
+| `shipping_price_changed` | 422 | `shipping_method` | At checkout, the carrier quotes the chosen option higher than when it was set | Set the shipping method again to accept the new price |
+| `shipping_provider_unavailable` | 503 | | The carrier of the chosen option did not answer | Retry after `Retry-After` (5 seconds) |
+
+### Payment
+
+These codes come from choosing a payment method, opening a payment session and completing the cart, described in [Checkout](/3.x/store-api/checkout):
+
+| Code | Status | Pointer | When it happens | What to do |
+|------|--------|---------|-----------------|------------|
+| `payment_method_required` | 422 | `payment_method` | Checkout or a payment session on a cart without a payment method | Set a payment method |
+| `payment_method_unavailable` | 422 | `payment_method_id` | The payment method is not offered for the cart | Choose a method listed by `GET /carts/{cartId}/payment-methods` |
+| `payment_method_not_configured` | 503 | | The driver of the payment method has no configuration on the server | Offer another payment method |
+| `payment_provider_unavailable` | 503 | | The payment provider did not answer when the session opened, or when a change to the cart had to cancel the open payment | Retry after `Retry-After` (5 seconds) |
+| `payment_session_in_progress` | 409 | | Another request holds the payment session of the cart, such as a second click on the pay button | Retry after `Retry-After` (3 seconds) |
+| `payment_session_collected` | 409 | | A change to the cart, or a new payment session, after the payment of the cart was collected | Complete the cart |
+| `payment_session_required` | 422 | `payment_session` | Checkout with a payment method that needs a session, before one was opened | Open a payment session |
+| `payment_session_mismatch` | 422 | `payment_session` | Checkout of a cart whose total changed since the payment session opened | Open a new payment session and pay again |
+| `payment_released` | 422 | `cart` | At checkout, a product ran out of stock after the payment was collected. The payment is refunded and the session cleared | Update the cart and pay again |
+
+### Account
+
+This code comes from the customer account endpoints described in [Customers](/3.x/store-api/customers):
+
+| Code | Status | Pointer | When it happens | What to do |
+|------|--------|---------|-----------------|------------|
+| `avatar_invalid` | 422 | `avatar` | The avatar upload passed validation but holds no file | Send the image as a `multipart/form-data` part named `avatar` |
+
+## Errors From Your Own Routes
+
+A route you add under the prefix, as described in [Adding Your Own Routes](/3.x/store-api#adding-your-own-routes), answers its errors in the same format. A failed `$request->validate()` gives one object per message with the rule as `code`, and `abort(403, 'This wishlist is private.')` gives `forbidden` with your message as `detail`.
+
+To answer with a code of the table, throw the exceptions the API uses:
+
+```php title="app/Http/Controllers/Store/WishlistController.php"
+use Shopper\Http\Enum\ErrorCode;
+use Shopper\Http\Exceptions\ApiException;
+use Shopper\Http\Exceptions\ApiValidationException;
+
+throw new ApiException(409, ErrorCode::Conflict, 'This product is already in the wishlist.');
+
+throw ApiValidationException::withCode(ErrorCode::PurchasableUnavailable, [
+    'product_id' => 'This product cannot be added to a wishlist.',
+]);
+```
+
+`ApiValidationException::withCode()` answers `422` with the field as pointer, and takes a `meta` array as its third argument. The codes come from the `ErrorCode` enum, so a storefront only ever meets the codes of this page.
+
+## Next Steps
+
+The cart and checkout guides show where each of these codes comes up in the storefront flow.
+
+<Cards>
+  <Card title="Cart" href="/3.x/store-api/cart">
+    Add lines, apply promotions and handle the errors of each change.
+  </Card>
+  <Card title="Checkout" href="/3.x/store-api/checkout">
+    Choose shipping and payment, then complete the cart into an order.
+  </Card>
+  <Card title="JSON:API Conventions" href="/3.x/store-api/json-api">
+    The includes, filters, sorts and pagination that every endpoint reads.
+  </Card>
+</Cards>

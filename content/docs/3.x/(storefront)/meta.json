@@ -3,6 +3,17 @@
   "description": "Starter kits, the Store API and the JavaScript SDK for the customer side.",
   "root": true,
   "pages": [
-    "storefront"
+    "storefront",
+    "---Store API---",
+    "store-api/index",
+    "store-api/authentication",
+    "store-api/json-api",
+    "store-api/errors",
+    "store-api/catalog",
+    "store-api/store",
+    "store-api/cart",
+    "store-api/checkout",
+    "store-api/customers",
+    "store-api/orders"
   ]
 }

@@ -1,0 +1,340 @@
+---
+title: Store API
+sidebarTitle: Overview
+description: The HTTP API a headless storefront calls to browse the catalog, run the cart and checkout, and manage customer accounts and orders.
+---
+
+The Store API is the HTTP interface of Shopper for storefronts that run outside your Laravel application: a Next.js or Nuxt site, a mobile app, a kiosk. It serves the catalog, the cart and checkout, customer accounts and orders as [JSON:API](https://jsonapi.org) documents. It runs inside the same Laravel application as the admin panel and reads the same database, so a product published in the admin panel is on the API at once.
+
+A storefront rendered by your Laravel application itself, with Blade, Livewire or Inertia, reads the Shopper models directly and does not need the API. The [Storefront](/3.x/storefront) page compares both approaches.
+
+## Installation
+
+The API ships in its own Composer package, `shopper/api`, which needs an installed Shopper application. Follow the [Installation](/3.x/installation) guide first, then add the package and run its installer:
+
+```bash
+composer require shopper/api:"^3.0"
+php artisan shopper:api:install
+```
+
+The installer runs these steps:
+
+1. Publishes the Laravel Sanctum migration, which creates the `personal_access_tokens` table that stores the customer tokens.
+2. Publishes the Shopper configuration files, among them `config/shopper/api.php` and `config/shopper/http.php`. A file that already exists is kept as it is.
+3. Offers to add Sanctum's `HasApiTokens` trait to the user model set in `auth.providers.users.model`. When you answer no, or when the file is not writable, it prints the line to add instead.
+4. Warns when the model does not use the `InteractsWithShopper` trait, which the customer endpoints need.
+5. Asks whether to run the migrations.
+
+Once installed, the user model carries both traits:
+
+```php title="app/Models/User.php"
+use Illuminate\Foundation\Auth\User as Authenticatable;
+use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
+use Shopper\Models\Contracts\ShopperUser;
+use Shopper\Traits\InteractsWithShopper;
+
+class User extends Authenticatable implements ShopperUser
+{
+    use HasApiTokens;
+    use InteractsWithShopper;
+    use Notifiable;
+}
+```
+
+The routes register themselves when the package boots, so there is nothing to add to your route files. The package also schedules `sanctum:prune-expired --hours=24` once a day to delete expired customer tokens, which only runs when the [scheduler runs](/3.x/installation#run-the-scheduler-and-a-queue-worker).
+
+The installer ends with a few next steps, among them the install command of the JavaScript SDK, `@shopperlabs/shopper-sdk`. The guides of this section use plain HTTP requests, so they apply to any client.
+
+## Base URL
+
+Every Store API route sits under one path prefix, `store` by default. With `php artisan serve`, the base URL is:
+
+```
+http://localhost:8000/store
+```
+
+Set `SHOPPER_API_PREFIX` in your `.env` file to serve the API under another prefix, such as `api/store`. The `admin` prefix is reserved for a future admin API. The package appends `<prefix>/*` to the `paths` of `config/cors.php`, so a browser can call the API from the storefront domain; the allowed origins come from that same file.
+
+Every route under the prefix answers with `Content-Type: application/vnd.api+json`, errors included, as described on the [JSON:API Conventions](/3.x/store-api/json-api) and [Errors](/3.x/store-api/errors) pages.
+
+## Route Groups
+
+The routes fall into three groups. Each group is a Laravel middleware group, which decides who can call the route and which rate limit counts it.
+
+| Group | Middleware group | Who calls it | Routes |
+|-------|------------------|--------------|--------|
+| Public | `shopper:store` | Any visitor. A customer token is optional | `/settings`, `/legals`, the catalog, `/countries`, `/zones`, `/currencies`, `/auth/*`, `/carts/*`, `/orders/{orderId}`, `/shipments/{shipmentId}`, `/files/{fileId}` |
+| Authenticated | `shopper:store-auth` | A logged-in customer with a bearer token | `/auth/logout`, `/carts/{cartId}/transfer`, `/customers/me` and everything under it |
+| Webhooks | `shopper:store-webhook` | Payment and carrier providers | `/webhooks/{driver}`, `/webhooks/shipping/{driver}` |
+
+A route of the authenticated group answers `401 Unauthorized` without a valid token. The [Authentication](/3.x/store-api/authentication) guide covers the token.
+
+### Adding Your Own Routes
+
+The `ShopperApi` facade registers routes in one of these groups, so they get the prefix, the rate limit, the zone, the channel and the error format of the built-in routes. Register them in the `then` callback of `withRouting`, which keeps them out of the `web` middleware group and its CSRF check:
+
+```php title="bootstrap/app.php"
+use App\Http\Controllers\Store\StoreLocatorController;
+use App\Http\Controllers\Store\WishlistController;
+use Illuminate\Support\Facades\Route;
+use Shopper\Http\Facades\ShopperApi;
+
+return Application::configure(basePath: dirname(__DIR__))
+    ->withRouting(
+        web: __DIR__.'/../routes/web.php',
+        commands: __DIR__.'/../routes/console.php',
+        health: '/up',
+        then: function (): void {
+            ShopperApi::store(function (): void {
+                Route::get('/store-locations', StoreLocatorController::class);
+            });
+
+            ShopperApi::authenticated(function (): void {
+                Route::get('/customers/me/wishlist', WishlistController::class);
+            });
+        },
+    )
+    // ...
+```
+
+The groups do not include `SubstituteBindings`, so route parameters reach your controller as strings: look the record up yourself, by its public ID or its slug as the Shopper controllers do. The current customer, zone and channel are request attributes: `$request->attributes->get('shopper_customer')`, `shopper_zone` and `shopper_channel`, each `null` when nothing resolved.
+
+## Request Headers
+
+The API reads a few request headers to know the response format, the pricing zone, the sales channel and the language. None of them is required: without them, the API falls back to the defaults of the shop.
+
+| Header | Value | Purpose |
+|--------|-------|---------|
+| `Accept` | `application/vnd.api+json` | The API answers JSON:API whatever you send, so this header is informative |
+| `Content-Type` | `application/json` | Required on requests with a body. Bodies are flat JSON objects, such as `{"quantity": 2}`. `application/vnd.api+json` works too |
+| `Authorization` | `Bearer <token>` | The customer token returned at login or registration |
+| `X-Shopper-Zone` | A zone code, such as `EU` | The pricing zone: currency, shipping options and payment methods |
+| `X-Shopper-Channel` | A channel slug, such as `web-store` | The sales channel: which products the catalog shows |
+| `Accept-Language` | A language, such as `fr-FR` | The language of translated content and of error messages |
+
+Responses carry `Vary: X-Shopper-Channel, X-Shopper-Zone`, so a CDN or HTTP cache in front of the API stores one copy per zone and channel. Product responses that include customer prices also vary on `Authorization`.
+
+### Zone
+
+A zone groups countries that share a currency, shipping options and payment methods, as the [Zones](/3.x/zones) page explains. The storefront picks one per request with `X-Shopper-Zone`, set to the `code` of an enabled zone. The zone sets the currency of product prices and of new carts, and the options offered at checkout.
+
+When the header is missing, or names no enabled zone, the API uses the zone whose code is in `SHOPPER_API_DEFAULT_ZONE`. When that is empty too, the request runs without a zone: prices fall back to the default currency of the shop, and the shipping options of a cart created without a zone answer `422`. An unknown code is not an error, so check the zone codes your storefront sends against [`GET /store/zones`](/3.x/store-api/store).
+
+Zones found by code are cached for 60 seconds (`zone.cache_ttl`), and the cache is cleared when a zone is saved or deleted in the admin panel. To pick the zone another way, such as from the visitor's country, bind your own resolver in `zone.resolver`. It implements `Shopper\Http\Contracts\ZoneResolver`:
+
+```php title="app/Http/CountryZoneResolver.php"
+namespace App\Http;
+
+use Illuminate\Http\Request;
+use Shopper\Core\Models\Contracts\Zone as ZoneContract;
+use Shopper\Core\Models\Zone;
+use Shopper\Http\Contracts\ZoneResolver;
+
+final class CountryZoneResolver implements ZoneResolver
+{
+    public function resolve(Request $request): ?ZoneContract
+    {
+        $country = $request->header('CF-IPCountry');
+
+        if (blank($country)) {
+            return null;
+        }
+
+        return Zone::query()
+            ->with('currency')
+            ->where('is_enabled', true)
+            ->whereRelation('countries', 'cca2', $country)
+            ->first();
+    }
+}
+```
+
+### Sales Channel
+
+A sales channel decides where a product is sold, as described on the [Channels](/3.x/channels) page. Send the `slug` of an enabled channel in `X-Shopper-Channel` and the catalog endpoints only return the products published in that channel; new carts record the channel too.
+
+When the header is missing or unknown, the API uses the channel whose slug is in `SHOPPER_API_DEFAULT_CHANNEL`. When nothing resolves, the catalog is not filtered by channel. The resolver is cached and swappable the same way as the zone resolver, through `channel.resolver` and `Shopper\Http\Contracts\ChannelResolver`.
+
+### Language
+
+The API negotiates `Accept-Language` against the locales of the shop, the keys of `locales` in `config/shopper/admin.php` (`en` and `fr` by default). A regional value matches its base language, so `fr-FR` selects `fr`. A header that matches no locale selects the first one of the list, and a request without the header keeps the application locale.
+
+Products, categories and the other catalog records store their content in one language, so their names and descriptions do not change with the header. The negotiated locale changes the `translated_name` of countries (`Allemagne` for Germany in French, while `name` stays `Germany`), the content of add-ons that translate their own records, and the `detail` of error messages. The API's own messages ship in English, French, Spanish and Swedish. Laravel ships its validation messages in English only: publish them with `php artisan lang:publish` and add a translated copy, such as `lang/fr/validation.php`, to answer validation errors in the visitor's language.
+
+## Rate Limits
+
+Every route counts against one or two named Laravel rate limiters, so that a single client cannot exhaust the shop. The limits are requests per minute, set in `rate_limiters` of `config/shopper/http.php`:
+
+| Limiter | Per minute | Applies to | Counted per |
+|---------|-----------|------------|-------------|
+| `shopper-api` | 120 | Every public and authenticated route | IP address on public routes, customer on authenticated routes |
+| `shopper-api-auth` | 20 | `/auth/register`, `/auth/login`, `/auth/forgot-password`, `/auth/reset-password` | IP address |
+| `shopper-api-checkout` | 30 | `POST /carts`, `POST /carts/{cartId}/lines`, `POST` and `DELETE /carts/{cartId}/promotion`, `POST /carts/{cartId}/payment-method`, `/payment-session`, `/complete` and `/transfer` | IP address on public routes, customer on `/transfer` |
+| `shopper-api-webhook` | 120 | The webhook routes | IP address |
+
+A route with two limiters counts the request against both. On public routes the count is per IP address even when the request carries a customer token.
+
+Each response carries `X-RateLimit-Limit` and `X-RateLimit-Remaining`. When two limiters apply, these headers report the one with the fewest requests left. Past the limit, the API answers `429 Too Many Requests` with `Retry-After` (seconds) and `X-RateLimit-Reset` (a Unix timestamp), as shown in [Rate Limit Errors](/3.x/store-api/errors#rate-limit-errors). Failed logins have their own, stricter count, described in [Failed Logins](/3.x/store-api/authentication#failed-logins).
+
+### Behind a Server-Side Storefront
+
+The limits count per IP address, which is the visitor's address when the browser calls the API. When your storefront calls the API from its own server, such as a Next.js server component or a Nuxt server route, every request comes from the server's address and all visitors share one quota.
+
+Forward the visitor's IP address in the `X-Forwarded-For` header from the storefront server, and trust that server in the Laravel application, so Laravel reads the forwarded address:
+
+```php title="bootstrap/app.php"
+->withMiddleware(function (Middleware $middleware): void {
+    $middleware->trustProxies(at: ['10.0.0.12']);
+})
+```
+
+Replace `10.0.0.12` with the address of your storefront server. Never trust every proxy (`at: '*'`) on an API open to the internet: any client could then send a fake `X-Forwarded-For` and pick its own quota.
+
+## Configuration
+
+Two configuration files hold the Store API settings. `config/shopper/http.php` covers the HTTP layer: prefix, rate limits, zone, channel and middleware.
+
+| Key | Default | Purpose |
+|-----|---------|---------|
+| `prefix` | `env('SHOPPER_API_PREFIX', 'store')` | The path prefix of every route |
+| `rate_limiters` | 120, 20, 30, 120 | Requests per minute of each limiter, see [Rate Limits](#rate-limits) |
+| `login_failures` | `5` | Failed logins allowed per email and IP address within a minute |
+| `zone.header` | `X-Shopper-Zone` | The header the zone resolver reads |
+| `zone.default_code` | `env('SHOPPER_API_DEFAULT_ZONE')` | The zone used when the header names none |
+| `zone.resolver` | `DefaultZoneResolver` | The class that resolves the zone |
+| `zone.cache_ttl` | `60` | Seconds a zone stays cached. `0` turns the cache off |
+| `channel.header` | `X-Shopper-Channel` | The header the channel resolver reads |
+| `channel.default_slug` | `env('SHOPPER_API_DEFAULT_CHANNEL')` | The channel used when the header names none |
+| `channel.resolver` | `DefaultChannelResolver` | The class that resolves the channel |
+| `channel.cache_ttl` | `60` | Seconds a channel stays cached |
+| `middleware.store` | `[]` | Extra middleware appended to the public group |
+| `middleware.authenticated` | `[]` | Extra middleware appended to the authenticated group |
+| `middleware.webhook` | `[]` | Extra middleware appended to the webhook group |
+
+The `store` and `authenticated` middleware lists are separate: a middleware listed under `store` does not run on the authenticated routes, so list it in both when it must run everywhere.
+
+`config/shopper/api.php` covers what the endpoints return:
+
+| Key | Default | Purpose |
+|-----|---------|---------|
+| `pagination.per_page` | `env('SHOPPER_API_PER_PAGE', 15)` | Items per page when the request sends no `page[size]` |
+| `pagination.max_per_page` | `100` | The largest `page[size]` accepted |
+| `pagination.max_page` | `100` | The deepest `page[number]` accepted |
+| `token_expiration` | `env('SHOPPER_API_TOKEN_EXPIRATION', 43200)` | Lifetime of a customer token in minutes (30 days). `null` or `0` means no expiry |
+| `settings.expose` | Store name, contact, address, logo, currencies | The shop settings `GET /store/settings` returns |
+| `settings.max_age` | `300` | Seconds a client may cache the settings response |
+| `resources` | One entry per resource | The filters, sorts and includes each listing accepts |
+
+The [JSON:API Conventions](/3.x/store-api/json-api#extending-the-allowlists) page explains how to change the `resources` entries.
+
+## Your First Request
+
+The currencies endpoint needs no token and no body, which makes it a good first call to check that the API answers. This request lists the euro and the US dollar:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/currencies?filter[code]=EUR,USD" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The `-g` flag stops curl from reading the square brackets as a URL pattern. The API answers `200 OK` with the enabled currencies that match, one page at a time:
+
+```json title="Response"
+{
+    "data": [
+        {
+            "id": "01JD3Z8M4K7Q2W9E5R6T1Y0H3B",
+            "type": "currencies",
+            "attributes": {
+                "name": "Euro",
+                "code": "EUR",
+                "symbol": "€",
+                "format": "1.0,00 €",
+                "exchange_rate": 0
+            }
+        },
+        {
+            "id": "01JD3Z8M4N2C6V8X1P5G7S9A4F",
+            "type": "currencies",
+            "attributes": {
+                "name": "US Dollar",
+                "code": "USD",
+                "symbol": "$",
+                "format": "$1,0.00",
+                "exchange_rate": 0
+            }
+        }
+    ],
+    "links": {
+        "first": "http://localhost:8000/store/currencies?filter%5Bcode%5D=EUR%2CUSD&page%5Bnumber%5D=1",
+        "last": "http://localhost:8000/store/currencies?filter%5Bcode%5D=EUR%2CUSD&page%5Bnumber%5D=1",
+        "prev": null,
+        "next": null
+    },
+    "meta": {
+        "current_page": 1,
+        "from": 1,
+        "last_page": 1,
+        "links": [
+            {
+                "url": null,
+                "label": "&laquo; Previous",
+                "page": null,
+                "active": false
+            },
+            {
+                "url": "http://localhost:8000/store/currencies?filter%5Bcode%5D=EUR%2CUSD&page%5Bnumber%5D=1",
+                "label": "1",
+                "page": 1,
+                "active": true
+            },
+            {
+                "url": null,
+                "label": "Next &raquo;",
+                "page": null,
+                "active": false
+            }
+        ],
+        "path": "http://localhost:8000/store/currencies",
+        "per_page": 15,
+        "to": 2,
+        "total": 2
+    }
+}
+```
+
+An empty `data` array means that no enabled currency has these codes. The [JSON:API Conventions](/3.x/store-api/json-api) page explains every member of this document.
+
+## Next Steps
+
+Each guide follows one part of the storefront flow, from the shared conventions to the order confirmation.
+
+<Cards>
+  <Card title="Authentication" href="/3.x/store-api/authentication">
+    Register and log in customers, send their token, and reset passwords.
+  </Card>
+  <Card title="JSON:API Conventions" href="/3.x/store-api/json-api">
+    Read the document shape and use includes, sparse fieldsets, filters, sorting and pagination.
+  </Card>
+  <Card title="Errors" href="/3.x/store-api/errors">
+    Read the error object and react to every error code the API returns.
+  </Card>
+  <Card title="Catalog" href="/3.x/store-api/catalog">
+    List and filter products, categories, collections, brands, tags, attributes and reviews.
+  </Card>
+  <Card title="Store and Regions" href="/3.x/store-api/store">
+    Read the shop settings, the legal pages, and the countries, zones and currencies a storefront picks from.
+  </Card>
+  <Card title="Cart" href="/3.x/store-api/cart">
+    Create a cart, add products and variants, set addresses and apply promotion codes.
+  </Card>
+  <Card title="Checkout" href="/3.x/store-api/checkout">
+    Choose shipping and payment, open a payment session and turn the cart into an order.
+  </Card>
+  <Card title="Customers" href="/3.x/store-api/customers">
+    Manage the logged-in customer's profile, avatar and addresses.
+  </Card>
+  <Card title="Orders" href="/3.x/store-api/orders">
+    Show the order confirmation, the order history, shipments and digital downloads.
+  </Card>
+</Cards>

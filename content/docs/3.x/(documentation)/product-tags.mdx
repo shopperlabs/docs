@@ -253,4 +253,4 @@ The Tags page sits under Products in the sidebar. It lists tags with their name,
 }
 ```
 
-To list the products of a tag, call `GET /store/products?filter[tag]=summer-2026`. The filter uses the `tag` scope, so it takes a slug or a public ID, and a comma-separated list keeps the products that carry any of them. `include=tags` on `GET /store/products` and `GET /store/products/{slug}` returns the tags of each product. The [Storefront](/3.x/storefront) section covers the Store API, its pagination and its includes.
+To list the products of a tag, call `GET /store/products?filter[tag]=summer-2026`. The filter uses the `tag` scope, so it takes a slug or a public ID, and a comma-separated list keeps the products that carry any of them. `include=tags` on `GET /store/products` and `GET /store/products/{slug}` returns the tags of each product. The Store API [Catalog](/3.x/store-api/catalog#tags) guide covers the tag endpoints, and the [JSON:API](/3.x/store-api/json-api) page the pagination and the includes.

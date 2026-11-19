@@ -703,4 +703,4 @@ The Store API exposes the cart under the `store` prefix, set by `SHOPPER_API_PRE
 
 A cart resource has the type `carts` and carries `currency_code`, `email`, `promotions` (each with `code`, `source`, `amount` and a `status` of `applied` or `suppressed`), `completed_at`, `metadata`, `lines_count`, `lines_quantity`, `subtotal`, `discount_total`, `tax_total`, `shipping_total`, `total`, `tax_inclusive`, `shipping_option_id`, `created_at` and `updated_at`, with the `lines`, `addresses` and `paymentMethod` relationships. Amounts are in cents.
 
-The promotion endpoint applies a code only when it discounts the cart and answers with the same error for every code it refuses. The [Storefront](/3.x/storefront) section documents the Store API.
+The promotion endpoint applies a code only when it discounts the cart and answers with the same error for every code it refuses. The Store API [Cart](/3.x/store-api/cart) guide covers these endpoints.

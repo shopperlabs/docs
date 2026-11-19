@@ -932,4 +932,4 @@ The amounts of the list are for display. Choosing an option quotes the cart agai
 | `shipping_price_changed` | 422 | The quote rose since the option was chosen. Choose the option again to accept the new price |
 | `shipping_provider_unavailable` | 503 | The carrier of the option is failing. The response carries `Retry-After: 5` |
 
-A lower quote replaces the stored price without an error. Once the payment provider may have collected the payment, the cart keeps the price it was charged. The [Cart](/3.x/cart) page describes the rest of the checkout, and the [Storefront](/3.x/storefront) section documents the Store API.
+A lower quote replaces the stored price without an error. Once the payment provider may have collected the payment, the cart keeps the price it was charged. The [Cart](/3.x/cart) page describes the rest of the checkout, and the Store API [Checkout](/3.x/store-api/checkout#shipping-options) guide the shipping endpoints.

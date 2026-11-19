@@ -1,0 +1,1138 @@
+---
+title: Catalog
+description: List and filter products, read a product with its variants and prices, and browse categories, collections, brands, tags, attributes and reviews.
+---
+
+The catalog endpoints feed the pages a visitor browses before the cart: the product grid, the product page, the category menu, the brand and collection pages, the filter sidebar and the reviews. They are read-only and public, so a storefront calls them without a customer token, from the server or from the browser.
+
+Every amount is an integer in cents: a product priced at €90.00 carries `9000`. The [Money](/3.x/money#amounts-in-the-store-api) page covers cents and formatting. Responses are JSON:API documents, and this page lists what each endpoint accepts; the mechanics of `include`, `fields`, `filter`, `sort` and `page` are described once in [JSON:API Conventions](/3.x/store-api/json-api).
+
+## Endpoints
+
+All the catalog routes answer `GET` requests in the public route group. A bearer token is optional: when present, it only changes the prices a custom price resolver returns, as explained in [Prices, currency and stock](#prices-currency-and-stock).
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/store/products` | List products, with filters, sorting and price bounds |
+| `GET` | `/store/products/{slug}` | Read one product, with its variants and options |
+| `GET` | `/store/products/{slug}/reviews` | List the approved reviews of a product, with the rating summary |
+| `GET` | `/store/reviews` | Read the latest approved reviews of the shop |
+| `GET` | `/store/categories` | List categories |
+| `GET` | `/store/categories/tree` | Read the whole category tree in one call |
+| `GET` | `/store/categories/{slug}` | Read one category |
+| `GET` | `/store/collections` | List collections |
+| `GET` | `/store/collections/{slug}` | Read one collection |
+| `GET` | `/store/brands` | List brands |
+| `GET` | `/store/brands/{slug}` | Read one brand |
+| `GET` | `/store/tags` | List product tags |
+| `GET` | `/store/attributes` | List the attributes a filter sidebar can offer |
+
+The `{slug}` of a show endpoint is the slug of the record, such as `classic-leather-sneakers`. Its `id` does not work there. The `/store/categories/tree` route is matched before `/store/categories/{slug}`, so a category whose slug is `tree` cannot be read on its own.
+
+## What a Visitor Sees
+
+The API never returns a record the merchant has not made public. Each endpoint applies the same rule as the admin panel, so a storefront does not filter anything itself:
+
+| Resource | Returned when |
+|----------|---------------|
+| Products | `published_at` is in the past and the product is visible. With a sales channel, the product must also be in that channel. |
+| Categories | The category and all its parents are enabled. Disabling a category hides its whole branch. |
+| Collections | `published_at` is set and in the past. |
+| Brands | The brand is enabled. |
+| Tags | Always. |
+| Attributes | The attribute is enabled, marked filterable, and of type `checkbox`, `colorpicker` or `select`. |
+| Reviews | The review is approved. |
+
+The sales channel comes from the `X-Shopper-Channel` header, or the default channel of the API, as described in [Request headers](/3.x/store-api#request-headers). It filters products only: the product listing, the product page, and the products embedded with `include=products` or counted with `products_count`. Categories, collections, brands, tags and reviews stay the same for every channel. The [Channels](/3.x/channels#what-the-channel-changes) page lists what the channel changes.
+
+A show endpoint answers `404 Not Found` for a record the visitor cannot see, exactly as for a slug that does not exist:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "404",
+            "code": "not_found",
+            "title": "Not Found",
+            "detail": "Not Found"
+        }
+    ]
+}
+```
+
+## Listing Products
+
+The product listing powers the shop page, the category pages, the search results and the brand pages: the same endpoint with different filters. The simplest call returns the first 15 published products, in the order they were created:
+
+```bash title="Request"
+curl http://localhost:8000/store/products \
+  -H "Accept: application/vnd.api+json" \
+  -H "X-Shopper-Zone: EU"
+```
+
+A category page filters by the category slug and picks a page size. The `-g` option stops curl from reading the brackets of the query string:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/products?filter[category]=men-shoes&page[size]=2" \
+  -H "Accept: application/vnd.api+json" \
+  -H "X-Shopper-Zone: EU"
+```
+
+The API answers `200 OK` with a page of products, the pagination links and the page details. `meta.currency` is the currency every price of the response is expressed in:
+
+```json title="Response"
+{
+    "data": [
+        {
+            "id": "01JD8YQ1A2B3C4D5E6F7G8H9JK",
+            "type": "products",
+            "attributes": {
+                "name": "Classic Leather Sneakers",
+                "slug": "classic-leather-sneakers",
+                "sku": null,
+                "barcode": null,
+                "summary": "Full-grain leather sneakers with a cushioned insole.",
+                "description": "<p>Full-grain leather upper, rubber cupsole and a removable cushioned insole.</p>",
+                "featured": true,
+                "type": "variant",
+                "published_at": "2026-10-01T08:00:00+00:00",
+                "seo_title": null,
+                "seo_description": null,
+                "metadata": null,
+                "in_stock": true,
+                "price_range": {
+                    "currency_code": "EUR",
+                    "min": 9000,
+                    "max": 9500
+                },
+                "prices": [],
+                "images": [
+                    {
+                        "id": "9d2f1c4e-3b7a-4f8e-a1d2-6c5b4e3f2a10",
+                        "url": "http://localhost:8000/storage/12/classic-leather-sneakers.jpg",
+                        "conversions": {
+                            "large": "http://localhost:8000/storage/12/conversions/classic-leather-sneakers-large.jpg",
+                            "medium": "http://localhost:8000/storage/12/conversions/classic-leather-sneakers-medium.jpg"
+                        },
+                        "name": "classic-leather-sneakers",
+                        "extension": "jpg",
+                        "created_at": "2026-09-28T14:22:10+00:00",
+                        "updated_at": "2026-09-28T14:22:12+00:00"
+                    }
+                ],
+                "thumbnail": {
+                    "id": "9d2f1c4e-3b7a-4f8e-a1d2-6c5b4e3f2a10",
+                    "url": "http://localhost:8000/storage/12/classic-leather-sneakers.jpg",
+                    "conversions": {
+                        "large": "http://localhost:8000/storage/12/conversions/classic-leather-sneakers-large.jpg",
+                        "medium": "http://localhost:8000/storage/12/conversions/classic-leather-sneakers-medium.jpg"
+                    },
+                    "name": "classic-leather-sneakers",
+                    "extension": "jpg",
+                    "created_at": "2026-09-28T14:22:10+00:00",
+                    "updated_at": "2026-09-28T14:22:12+00:00"
+                },
+                "created_at": "2026-09-28T14:20:00+00:00",
+                "updated_at": "2026-11-12T09:05:00+00:00"
+            }
+        },
+        {
+            "id": "01JD8YQ2B3C4D5E6F7G8H9JKM0",
+            "type": "products",
+            "attributes": {
+                "name": "Leather Care Kit",
+                "slug": "leather-care-kit",
+                "sku": "LCK-001",
+                "barcode": null,
+                "summary": "Cleaner, conditioner and brush for leather shoes.",
+                "description": "<p>Everything to clean, feed and protect smooth leather.</p>",
+                "featured": false,
+                "type": "standard",
+                "published_at": "2026-10-01T08:00:00+00:00",
+                "seo_title": null,
+                "seo_description": null,
+                "metadata": null,
+                "stock": 42,
+                "in_stock": true,
+                "price_range": {
+                    "currency_code": "EUR",
+                    "min": 1990,
+                    "max": 1990
+                },
+                "prices": [
+                    {
+                        "public_id": "01JD8YQ7P9R1T3V5X7Z9B1D3F5",
+                        "amount": 1990,
+                        "compare_amount": 2490,
+                        "currency_code": "EUR"
+                    },
+                    {
+                        "public_id": "01JD8YQ7P9R1T3V5X7Z9B1D3F6",
+                        "amount": 2190,
+                        "compare_amount": null,
+                        "currency_code": "USD"
+                    }
+                ],
+                "calculated_price": {
+                    "amount": 1990,
+                    "compare_amount": 2490,
+                    "original_amount": null,
+                    "currency_code": "EUR",
+                    "meta": null
+                },
+                "quantity_rule": null,
+                "images": [],
+                "thumbnail": null,
+                "created_at": "2026-09-30T10:12:00+00:00",
+                "updated_at": "2026-11-02T16:40:00+00:00"
+            }
+        }
+    ],
+    "links": {
+        "first": "http://localhost:8000/store/products?filter%5Bcategory%5D=men-shoes&page%5Bsize%5D=2&page%5Bnumber%5D=1",
+        "last": "http://localhost:8000/store/products?filter%5Bcategory%5D=men-shoes&page%5Bsize%5D=2&page%5Bnumber%5D=2",
+        "prev": null,
+        "next": "http://localhost:8000/store/products?filter%5Bcategory%5D=men-shoes&page%5Bsize%5D=2&page%5Bnumber%5D=2"
+    },
+    "meta": {
+        "current_page": 1,
+        "from": 1,
+        "last_page": 2,
+        "links": [
+            { "url": null, "label": "&laquo; Previous", "page": null, "active": false },
+            { "url": "http://localhost:8000/store/products?filter%5Bcategory%5D=men-shoes&page%5Bsize%5D=2&page%5Bnumber%5D=1", "label": "1", "page": 1, "active": true },
+            { "url": "http://localhost:8000/store/products?filter%5Bcategory%5D=men-shoes&page%5Bsize%5D=2&page%5Bnumber%5D=2", "label": "2", "page": 2, "active": false },
+            { "url": "http://localhost:8000/store/products?filter%5Bcategory%5D=men-shoes&page%5Bsize%5D=2&page%5Bnumber%5D=2", "label": "Next &raquo;", "page": 2, "active": false }
+        ],
+        "path": "http://localhost:8000/store/products",
+        "per_page": 2,
+        "to": 2,
+        "total": 3,
+        "currency": "EUR"
+    }
+}
+```
+
+The two products show the two shapes a grid meets. Classic Leather Sneakers is a variant product: its prices live on its variants, so `prices` is empty, and the card shows "From €90.00" with `price_range.min`. Leather Care Kit is a standard product with a single price, so the card shows `calculated_price.amount` and strikes through `compare_amount`.
+
+### The Product Resource
+
+Some attributes depend on the product type or on an include. An attribute that does not apply is left out of the response, not sent as `null`:
+
+| Attribute | Description |
+|-----------|-------------|
+| `name`, `slug` | Name, and the slug the product page reads with `/store/products/{slug}`. |
+| `sku`, `barcode` | Codes of the product. A variant product keeps its codes on each variant. |
+| `summary`, `description` | Short and long description, as entered in the admin panel. |
+| `featured` | `true` for a product the merchant highlights. |
+| `type` | `standard`, `variant`, `virtual` or `external`. See [Products](/3.x/products). |
+| `published_at` | Publication date, in ISO 8601. |
+| `seo_title`, `seo_description` | Values for the page `<title>` and meta description. |
+| `metadata` | Your own data, or `null`. |
+| `external_id` | External products only: the ID on the platform that sells the product. |
+| `stock`, `in_stock` | Availability. See [Stock](#stock). |
+| `price_range` | Lowest and highest price in the currency of the request. See [Prices, currency and stock](#prices-currency-and-stock). |
+| `prices` | Every price of the product in an enabled currency. Empty for a variant product. |
+| `calculated_price`, `quantity_rule` | The price to charge in the currency of the request, and the quantity limits. Not on variant products. |
+| `images` | Every image of the gallery, as media objects. |
+| `thumbnail` | The thumbnail image, or the first gallery image when the product has no thumbnail, or `null`. |
+| `files` | Virtual products only: the downloadable files, each with `id`, `name`, `extension` and `size` in bytes. The files themselves are downloaded from the order, see [Orders](/3.x/store-api/orders). |
+| `rating`, `reviews_count` | With `include=rating` only: the average rating of the approved reviews, rounded to one decimal or `null` without reviews, and their number. |
+| `options` | With `include=options` only. See [Options](#options). |
+| `created_at`, `updated_at` | Dates in ISO 8601. |
+
+A media object carries the `id` of the file, its `url`, the `conversions` already generated (by default `large` at 800 x 800 and `medium` at 500 x 500, keyed by name), the file `name` and `extension`, and its dates. A conversion that is not generated yet is missing from `conversions`, so fall back to `url`.
+
+The product relationships are `brand`, `categories`, `collections`, `tags`, `relatedProducts`, and `variants` on variant products. A relationship appears in `relationships` only when it is requested with `include`.
+
+### Filters, Sorting and Includes
+
+The listing accepts the filters, sorts and includes of `resources.product` in `config/shopper/api.php`. A comma inside one filter means OR, such as `filter[brand]=maison-cuir,nordic-steps`, and different filters combine with AND. A filter accepts up to 50 values; more returns `422` with the code `filter_too_wide`. An unknown filter, sort or include returns `400` with the code `bad_request`. The [Errors](/3.x/store-api/errors#error-codes) page lists every code.
+
+<ApiTable name="GET /store/products" label="Parameter">
+
+<ParamField path="filter[q]" type="string">
+  Search term, matched case-insensitively anywhere in the name, the description or the SKU of the product. Only the first comma-separated term is searched, and `%` and `_` act as wildcards.
+</ParamField>
+
+<ParamField path="filter[name]" type="string">
+  Keeps the products whose name contains the value, case-insensitively.
+</ParamField>
+
+<ParamField path="filter[sku]" type="string">
+  Exact SKU of the product. The SKUs of variants are not searched.
+</ParamField>
+
+<ParamField path="filter[featured]" type="boolean">
+  `true` keeps the featured products, `false` the others.
+</ParamField>
+
+<ParamField path="filter[in_stock]" type="boolean">
+  `true` keeps what a visitor can buy now: external products, products with stock left or that allow backorders, and variant products with at least one such variant. `false` keeps the rest.
+</ParamField>
+
+<ParamField path="filter[category]" type="string">
+  Slug or ID of a category. Keeps the products assigned to that category itself, without its subcategories. A hidden category matches nothing.
+</ParamField>
+
+<ParamField path="filter[category_tree]" type="string">
+  Slug or ID of a category. Keeps the products of that category and of every enabled category below it. Use it for a parent category page such as "Men".
+</ParamField>
+
+<ParamField path="filter[collection]" type="string">
+  Slug or ID of a published collection.
+</ParamField>
+
+<ParamField path="filter[brand]" type="string">
+  Slug or ID of an enabled brand.
+</ParamField>
+
+<ParamField path="filter[tag]" type="string">
+  Slug or ID of a tag.
+</ParamField>
+
+<ParamField path="filter[option]" type="string">
+  Key or label of an attribute value, such as `42` or `Black`. Keeps the products with a variant that carries the value, or with the value set on the product, whatever the attribute. See [Attributes](#attributes).
+</ParamField>
+
+<ParamField path="filter[currency]" type="string">
+  ISO code of an enabled currency, such as `USD`, in any case. Sets the currency of every price, price sort and price bound of the response. Defaults to the currency of the zone, then to the default currency of the shop.
+</ParamField>
+
+<ParamField path="filter[price_min]" type="integer">
+  Lowest price to keep, in cents, in the currency of the request. Products without a price in that currency are left out.
+</ParamField>
+
+<ParamField path="filter[price_max]" type="integer">
+  Highest price to keep, in cents, in the currency of the request. Products without a price in that currency are left out.
+</ParamField>
+
+<ParamField path="sort" type="string">
+  `name`, `created_at`, `published_at` or `price`, prefixed with `-` for descending order, such as `-published_at` for the newest first. Without `sort`, products come in creation order. See [Sorting](/3.x/store-api/json-api#sorting).
+</ParamField>
+
+<ParamField path="include" type="string">
+  Comma-separated list from the includes table below. See [Includes](/3.x/store-api/json-api#includes).
+</ParamField>
+
+<ParamField path="fields[products]" type="string">
+  Comma-separated attributes to return, such as `name,slug,price_range,thumbnail`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</ParamField>
+
+<ParamField path="page[size]" type="integer" default="15">
+  Products per page, from 1 to 100.
+</ParamField>
+
+<ParamField path="page[number]" type="integer" default="1">
+  Page to return, from 1 to 100. Past page 100, switch to `page[cursor]`. See [Pagination](/3.x/store-api/json-api#pagination).
+</ParamField>
+
+<ParamField path="page[cursor]" type="string">
+  Cursor from the `links` of a previous page. Switches the listing to cursor pagination.
+</ParamField>
+
+</ApiTable>
+
+The includes add related records, or extra attributes computed on demand:
+
+| Include | Adds |
+|---------|------|
+| `brand` | The brand, when it is enabled. |
+| `categories` | The categories of the product that sit in a visible branch, with their parent loaded. |
+| `collections` | The published collections of the product. |
+| `tags` | The tags of the product. |
+| `variants` | The variants of a variant product, with their prices, stock and option values. |
+| `options` | The `options` attribute: the attributes and values the product uses. |
+| `relatedProducts` | The related products that are published and in the sales channel, with their stock and `price_range`. |
+| `rating` | The `rating` and `reviews_count` attributes, from the approved reviews. |
+| `price_range` | Listing only: `meta.price_range`, the lowest and highest price of the products that match the filters. See [Price filters and sorting](#price-filters-and-sorting). |
+
+Several filters together build a search results page with facets. This request searches "leather" in the products of the "Men" branch that are in stock, from the brand Maison Cuir, newest first:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/products?filter[q]=leather&filter[category_tree]=men&filter[in_stock]=true&filter[brand]=maison-cuir&sort=-published_at&include=brand,rating" \
+  -H "Accept: application/vnd.api+json" \
+  -H "X-Shopper-Zone: EU"
+```
+
+## Prices, Currency and Stock
+
+A storefront shows prices in one currency per page, and the API resolves that currency once per request so every amount of the response agrees. Prices are never converted: an amount always comes from a price the merchant set in that currency, and a product without a price in the currency shows no amount at all.
+
+The currency of a request is, in this order:
+
+1. The `filter[currency]` query parameter, on the listing and on the product page.
+2. The currency of the zone sent in `X-Shopper-Zone`, or of the default zone. See [Picking a zone and a currency](/3.x/store-api/store).
+3. The default currency of the shop.
+
+A code in `filter[currency]` that matches no enabled currency is an error, never a silent fallback. The API answers `422 Unprocessable Content`:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "422",
+            "code": "currency_unknown",
+            "title": "Unprocessable Content",
+            "detail": "The \"EURO\" currency is unknown or not enabled on this shop.",
+            "source": {
+                "pointer": "/data/attributes/filter/currency"
+            }
+        }
+    ]
+}
+```
+
+The check runs against every enabled currency, not only the currencies the shop sells in, and Shopper enables all 158 currencies at install. A code such as `GBP` on a shop that sells in EUR and USD passes with `200 OK`, and every `calculated_price` and `price_range` of the response is `null`. Send a code from the `currencies` of the [store settings](/3.x/store-api/store#reading-the-store-settings), the list a cart accepts.
+
+A product carries up to four price attributes. Read the one that matches what the page shows:
+
+| Attribute | Shape | Use it for |
+|-----------|-------|------------|
+| `calculated_price` | `amount`, `compare_amount`, `original_amount`, `currency_code`, `meta` | The price to display and charge for a standard, virtual or external product, and for each variant on the product page. `null` when there is no price in the currency. |
+| `quantity_rule` | `minimum`, `maximum`, `increment` | The quantity limits of the quantity picker. `null` when no rule applies. |
+| `price_range` | `currency_code`, `min`, `max` | "From" prices on cards, mostly for variant products: the lowest and highest price of the product or of its variants. `null` when there is no price in the currency. |
+| `prices` | A list of `public_id`, `amount`, `compare_amount`, `currency_code` | Every price of the product in every enabled currency, as the merchant set them. Empty for a variant product. |
+
+`compare_amount` is the "compare at" price to strike through, or `null`. With the default price resolver, `calculated_price.amount` is the price set for the currency, `original_amount` and `meta` are `null`, and `quantity_rule` is `null`. A custom resolver can return a customer price instead: the API passes it the currency, the zone, the channel and the customer of the bearer token, if any. Product responses carry `Vary: Authorization` for that reason, so a shared cache must not serve one customer's prices to another. The [Pricing](/3.x/pricing#custom-price-resolver) page covers resolvers and [quantity rules](/3.x/pricing#quantity-rules).
+
+To show the prices of a product in US dollars whatever the zone, pass the currency:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/products/leather-care-kit?filter[currency]=USD&fields[products]=name,price_range,prices,calculated_price" \
+  -H "Accept: application/vnd.api+json" \
+  -H "X-Shopper-Zone: EU"
+```
+
+The API answers `200 OK`. `price_range`, `calculated_price` and `meta.currency` follow the requested currency, while `prices` still lists every currency:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD8YQ2B3C4D5E6F7G8H9JKM0",
+        "type": "products",
+        "attributes": {
+            "name": "Leather Care Kit",
+            "price_range": {
+                "currency_code": "USD",
+                "min": 2190,
+                "max": 2190
+            },
+            "prices": [
+                {
+                    "public_id": "01JD8YQ7P9R1T3V5X7Z9B1D3F5",
+                    "amount": 1990,
+                    "compare_amount": 2490,
+                    "currency_code": "EUR"
+                },
+                {
+                    "public_id": "01JD8YQ7P9R1T3V5X7Z9B1D3F6",
+                    "amount": 2190,
+                    "compare_amount": null,
+                    "currency_code": "USD"
+                }
+            ],
+            "calculated_price": {
+                "amount": 2190,
+                "compare_amount": null,
+                "original_amount": null,
+                "currency_code": "USD",
+                "meta": null
+            }
+        }
+    },
+    "meta": {
+        "currency": "USD"
+    }
+}
+```
+
+The currency of the page does not set the currency of the cart. The cart takes its own `currency_code`, as described in [Cart](/3.x/store-api/cart).
+
+### Price Filters and Sorting
+
+A price slider needs two things: the products within the chosen bounds, and the bounds of the slider itself. `filter[price_min]`, `filter[price_max]` and `sort=price` work on the lowest price of each product in the currency of the request: the price of a standard product, or the cheapest variant of a variant product. Products without a price in that currency are left out of the results. Bounds are integers in cents.
+
+`include=price_range` adds `meta.price_range`, the lowest and highest of these prices over every product that matches the other filters. It ignores `price_min` and `price_max`, so the slider keeps its full range while the visitor moves it. This request keeps the products of the "Men" branch between €50.00 and €100.00, cheapest first, and asks for the slider range:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/products?filter[category_tree]=men&filter[price_min]=5000&filter[price_max]=10000&sort=price&include=price_range&fields[products]=name,price_range" \
+  -H "Accept: application/vnd.api+json" \
+  -H "X-Shopper-Zone: EU"
+```
+
+The API answers `200 OK`. One product falls within the bounds, and `meta.price_range` covers the whole branch, from the €19.90 care kit to a €189.00 jacket:
+
+```json title="Response"
+{
+    "data": [
+        {
+            "id": "01JD8YQ1A2B3C4D5E6F7G8H9JK",
+            "type": "products",
+            "attributes": {
+                "name": "Classic Leather Sneakers",
+                "price_range": {
+                    "currency_code": "EUR",
+                    "min": 9000,
+                    "max": 9500
+                }
+            }
+        }
+    ],
+    "links": {
+        "first": "http://localhost:8000/store/products?filter%5Bcategory_tree%5D=men&filter%5Bprice_min%5D=5000&filter%5Bprice_max%5D=10000&sort=price&include=price_range&fields%5Bproducts%5D=name%2Cprice_range&page%5Bnumber%5D=1",
+        "last": "http://localhost:8000/store/products?filter%5Bcategory_tree%5D=men&filter%5Bprice_min%5D=5000&filter%5Bprice_max%5D=10000&sort=price&include=price_range&fields%5Bproducts%5D=name%2Cprice_range&page%5Bnumber%5D=1",
+        "prev": null,
+        "next": null
+    },
+    "meta": {
+        "current_page": 1,
+        "from": 1,
+        "last_page": 1,
+        "links": [
+            { "url": null, "label": "&laquo; Previous", "page": null, "active": false },
+            { "url": "http://localhost:8000/store/products?filter%5Bcategory_tree%5D=men&filter%5Bprice_min%5D=5000&filter%5Bprice_max%5D=10000&sort=price&include=price_range&fields%5Bproducts%5D=name%2Cprice_range&page%5Bnumber%5D=1", "label": "1", "page": 1, "active": true },
+            { "url": null, "label": "Next &raquo;", "page": null, "active": false }
+        ],
+        "path": "http://localhost:8000/store/products",
+        "per_page": 15,
+        "to": 1,
+        "total": 1,
+        "currency": "EUR",
+        "price_range": {
+            "min": 1990,
+            "max": 18900,
+            "currency_code": "EUR"
+        }
+    }
+}
+```
+
+`meta.price_range` is `null` when no matching product has a price in the currency. The prices come from the price index, which reads the prices set on products and variants; the [Pricing](/3.x/pricing#price-index) page explains how to replace it. When the shop has no enabled currency at all, a price sort or bound answers `422` with the code `currency_required`.
+
+### Stock
+
+A product card needs to know whether to show "Add to cart" or "Sold out", and the API computes that per product type, so the storefront reads one boolean:
+
+| Product type | Attributes |
+|--------------|------------|
+| `standard`, `virtual` | `stock`, the quantity on hand, and `in_stock`: `true` when `stock` is above 0 or the product allows backorders. |
+| `variant` | `in_stock` only: `true` when at least one variant has stock or allows backorders. Each variant carries its own `stock` and `in_stock` with `include=variants`. |
+| `external` | `in_stock`, always `true`. The product is sold elsewhere. |
+
+The listing, the product page, related products, and the products embedded in brands and categories carry these attributes. The products embedded with `include=products` in collections and tags do not, so read the stock from the product listing with `filter[collection]` or `filter[tag]` instead. The [Product variants](/3.x/product-variants#stock-management) page covers how stock is counted.
+
+## Showing a Product
+
+The product page reads one product by slug and asks for what it shows: the variants to pick from, and often the options, the brand and the rating. This request asks for the variants, and limits the product attributes to keep the example short:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/products/classic-leather-sneakers?include=variants&fields[products]=name,slug,type,in_stock,price_range" \
+  -H "Accept: application/vnd.api+json" \
+  -H "X-Shopper-Zone: EU"
+```
+
+The API answers `200 OK` with the product, its variants in `included`, and the currency in `meta`:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD8YQ1A2B3C4D5E6F7G8H9JK",
+        "type": "products",
+        "attributes": {
+            "name": "Classic Leather Sneakers",
+            "slug": "classic-leather-sneakers",
+            "type": "variant",
+            "in_stock": true,
+            "price_range": {
+                "currency_code": "EUR",
+                "min": 9000,
+                "max": 9500
+            }
+        },
+        "relationships": {
+            "variants": {
+                "data": [
+                    { "id": "01JD8YQ3H5K7M9P2R4T6V8X0Z1", "type": "variants" },
+                    { "id": "01JD8YQ4J6M8P0R2T4V6X8Z0B2", "type": "variants" }
+                ]
+            }
+        }
+    },
+    "included": [
+        {
+            "id": "01JD8YQ3H5K7M9P2R4T6V8X0Z1",
+            "type": "variants",
+            "attributes": {
+                "name": "42 / Black",
+                "sku": "CLS-42-BLK",
+                "barcode": null,
+                "ean": null,
+                "upc": null,
+                "position": 1,
+                "allow_backorder": false,
+                "stock": 12,
+                "in_stock": true,
+                "metadata": null,
+                "prices": [
+                    {
+                        "public_id": "01JD8YQ5M7P9R1T3V5X7Z9B1D3",
+                        "amount": 9000,
+                        "compare_amount": null,
+                        "currency_code": "EUR"
+                    },
+                    {
+                        "public_id": "01JD8YQ5M7P9R1T3V5X7Z9B1D4",
+                        "amount": 9900,
+                        "compare_amount": null,
+                        "currency_code": "USD"
+                    }
+                ],
+                "calculated_price": {
+                    "amount": 9000,
+                    "compare_amount": null,
+                    "original_amount": null,
+                    "currency_code": "EUR",
+                    "meta": null
+                },
+                "quantity_rule": null,
+                "values": [
+                    { "value": "42", "key": "42", "attribute": "Size", "attribute_slug": "size" },
+                    { "value": "Black", "key": "#000000", "attribute": "Color", "attribute_slug": "color" }
+                ],
+                "images": [],
+                "thumbnail": null,
+                "created_at": "2026-09-28T14:25:00+00:00",
+                "updated_at": "2026-11-12T09:05:00+00:00"
+            }
+        },
+        {
+            "id": "01JD8YQ4J6M8P0R2T4V6X8Z0B2",
+            "type": "variants",
+            "attributes": {
+                "name": "43 / Brown",
+                "sku": "CLS-43-BRN",
+                "barcode": null,
+                "ean": null,
+                "upc": null,
+                "position": 2,
+                "allow_backorder": false,
+                "stock": 0,
+                "in_stock": false,
+                "metadata": null,
+                "prices": [
+                    {
+                        "public_id": "01JD8YQ6N8Q0S2T4W6Y8A0C2E4",
+                        "amount": 9500,
+                        "compare_amount": null,
+                        "currency_code": "EUR"
+                    },
+                    {
+                        "public_id": "01JD8YQ6N8Q0S2T4W6Y8A0C2E5",
+                        "amount": 10500,
+                        "compare_amount": null,
+                        "currency_code": "USD"
+                    }
+                ],
+                "calculated_price": {
+                    "amount": 9500,
+                    "compare_amount": null,
+                    "original_amount": null,
+                    "currency_code": "EUR",
+                    "meta": null
+                },
+                "quantity_rule": null,
+                "values": [
+                    { "value": "43", "key": "43", "attribute": "Size", "attribute_slug": "size" },
+                    { "value": "Brown", "key": "#8b4513", "attribute": "Color", "attribute_slug": "color" }
+                ],
+                "images": [],
+                "thumbnail": null,
+                "created_at": "2026-09-28T14:25:00+00:00",
+                "updated_at": "2026-11-12T09:05:00+00:00"
+            }
+        }
+    ],
+    "meta": {
+        "currency": "EUR"
+    }
+}
+```
+
+The variant picker matches the visitor's choices against `values`, where `key` is the stored value (a hex code for a color) and `value` the label to show. When the visitor picks "43 / Brown", the page shows €95.00 from `calculated_price` and disables "Add to cart" because `in_stock` is `false`. The cart takes the variant `id`, as described in [Cart](/3.x/store-api/cart). A variant shows its own `images` and `thumbnail`; when it has none, show the images of the product.
+
+The product listing accepts `include=variants` too, but there the variants carry no `calculated_price` and no `quantity_rule`. Read the price of a variant on a listing from its `prices` entry in the currency of `meta.currency`, or read the variants from the product page.
+
+The product page accepts the includes of the listing, `filter[currency]` and `fields`. Other filters, sorts and pagination parameters do not apply. Add `relatedProducts` for a "You may also like" row and `rating` for the stars next to the title. A product outside the sales channel of the request answers `404`, like an unpublished one.
+
+### Options
+
+The options are the attributes the merchant set on the product, such as its sizes, its colors or its material, with only the values the product uses. A product page shows them as specifications, or builds the variant picker from them before matching a variant. Ask for them with `include=options`:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/products/classic-leather-sneakers?include=options&fields[products]=name,options" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` with an `options` attribute. Attributes come in the order the merchant added them to the product, and values by position:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD8YQ1A2B3C4D5E6F7G8H9JK",
+        "type": "products",
+        "attributes": {
+            "name": "Classic Leather Sneakers",
+            "options": [
+                {
+                    "name": "Size",
+                    "slug": "size",
+                    "description": null,
+                    "type": "select",
+                    "icon": null,
+                    "custom_value": null,
+                    "values": [
+                        { "key": "42", "value": "42", "position": 1, "swatch_url": null },
+                        { "key": "43", "value": "43", "position": 2, "swatch_url": null }
+                    ]
+                },
+                {
+                    "name": "Color",
+                    "slug": "color",
+                    "description": null,
+                    "type": "colorpicker",
+                    "icon": null,
+                    "custom_value": null,
+                    "values": [
+                        { "key": "#000000", "value": "Black", "position": 1, "swatch_url": null },
+                        { "key": "#8b4513", "value": "Brown", "position": 2, "swatch_url": null }
+                    ]
+                },
+                {
+                    "name": "Material",
+                    "slug": "material",
+                    "description": null,
+                    "type": "text",
+                    "icon": null,
+                    "custom_value": "Full-grain leather",
+                    "values": []
+                }
+            ]
+        }
+    },
+    "meta": {
+        "currency": "EUR"
+    }
+}
+```
+
+`custom_value` holds the free text of a `text`, `number`, `richtext` or `datepicker` attribute, which has no predefined values. `swatch_url` is the URL of a swatch image the merchant uploaded for that value on this product, or `null`. Disabled attributes are left out. External products have no options. The [Attributes](/3.x/attributes#product-attributes-and-variant-options) page explains how options and variant values relate.
+
+## Categories
+
+Categories give the storefront its menu, its category pages and its breadcrumbs. The API offers three reads: the tree for the menu, the listing for flat lists such as a sitemap, and the category itself for a category page.
+
+### The Category Tree
+
+A navigation menu needs every visible category, nested, in one request. `/store/categories/tree` returns the enabled branches with their children, ordered by position. It is not paginated and is not a JSON:API document: each node carries `id`, `name`, `slug`, `position` and `children` directly.
+
+```bash title="Request"
+curl http://localhost:8000/store/categories/tree \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` with the root categories in `data`:
+
+```json title="Response"
+{
+    "data": [
+        {
+            "id": "01JD8XR1M2N3P4Q5R6S7T8V9W0",
+            "name": "Men",
+            "slug": "men",
+            "position": 1,
+            "children": [
+                {
+                    "id": "01JD8XR2N3P4Q5R6S7T8V9W0X1",
+                    "name": "Shoes",
+                    "slug": "men-shoes",
+                    "position": 1,
+                    "children": []
+                },
+                {
+                    "id": "01JD8XR3P4Q5R6S7T8V9W0X1Y2",
+                    "name": "Jackets",
+                    "slug": "men-jackets",
+                    "position": 2,
+                    "children": []
+                }
+            ]
+        },
+        {
+            "id": "01JD8XR4Q5R6S7T8V9W0X1Y2Z3",
+            "name": "Women",
+            "slug": "women",
+            "position": 2,
+            "children": []
+        }
+    ]
+}
+```
+
+The tree is the same for every sales channel, and it does not count products. A category with no products in the current channel still appears.
+
+### Reading a Category
+
+A category page shows the category name, its description, a breadcrumb and the products. Read the category with `include=ancestors` for the breadcrumb, and `include=products_count` for the number of products:
+
+```bash title="Request"
+curl "http://localhost:8000/store/categories/men-shoes?include=ancestors,products_count" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` with the category and its ancestors in `included`, root first:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD8XR2N3P4Q5R6S7T8V9W0X1",
+        "type": "categories",
+        "attributes": {
+            "name": "Shoes",
+            "slug": "men-shoes",
+            "description": "<p>Sneakers, boots and loafers for men.</p>",
+            "position": 1,
+            "parent_id": "01JD8XR1M2N3P4Q5R6S7T8V9W0",
+            "is_enabled": true,
+            "depth": 1,
+            "products_count": 3,
+            "seo_title": null,
+            "seo_description": null,
+            "metadata": null,
+            "thumbnail": null,
+            "created_at": "2026-09-20T09:00:00+00:00",
+            "updated_at": "2026-10-04T11:30:00+00:00"
+        },
+        "relationships": {
+            "ancestors": {
+                "data": [
+                    { "id": "01JD8XR1M2N3P4Q5R6S7T8V9W0", "type": "categories" }
+                ]
+            }
+        }
+    },
+    "included": [
+        {
+            "id": "01JD8XR1M2N3P4Q5R6S7T8V9W0",
+            "type": "categories",
+            "attributes": {
+                "name": "Men",
+                "slug": "men",
+                "description": null,
+                "position": 1,
+                "parent_id": null,
+                "is_enabled": true,
+                "depth": 0,
+                "seo_title": null,
+                "seo_description": null,
+                "metadata": null,
+                "thumbnail": null,
+                "created_at": "2026-09-20T08:55:00+00:00",
+                "updated_at": "2026-09-20T08:55:00+00:00"
+            }
+        }
+    ]
+}
+```
+
+`parent_id` is the `id` of the parent category, and `depth` is 0 for a root category. `products_count` counts the published products of the category and of all its enabled subcategories, in the sales channel of the request. Then list the products with `filter[category_tree]` or `filter[category]` on the [product listing](#listing-products), which paginates, sorts and carries prices.
+
+The category endpoints accept these parameters:
+
+| Parameter | Values | Description |
+|-----------|--------|-------------|
+| `filter[name]` | Text | Categories whose name contains the value. Listing only. |
+| `sort` | `name`, `position` | Prefix with `-` for descending order. Listing only. |
+| `include` | `parent`, `children`, `ancestors`, `products`, `products_count` | `parent` and `children` return enabled categories only. `products` embeds the published products assigned to the category itself, without pagination. |
+| `page[size]`, `page[number]`, `page[cursor]` | See [Pagination](/3.x/store-api/json-api#pagination) | Listing only. 15 categories per page by default. |
+
+The listing returns every visible category of every level in one flat list. Use `sort=position` to keep the order of the admin panel. The [Categories](/3.x/categories#visibility-and-depth) page explains how visibility and depth are computed.
+
+## Collections
+
+Collections group products for a campaign or a theme, such as "Gift Ideas" or "Winter Essentials". The API returns the published ones only: a collection whose `published_at` is empty or in the future stays hidden.
+
+```bash title="Request"
+curl "http://localhost:8000/store/collections/gift-ideas?include=products&fields[products]=name,slug,prices" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` with the collection and its products in `included`:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD8XT4Q6S8V0X2Z4B6D8F0H2",
+        "type": "collections",
+        "attributes": {
+            "name": "Gift Ideas",
+            "slug": "gift-ideas",
+            "description": "<p>Small leather goods and care kits under €50.</p>",
+            "type": "manual",
+            "published_at": "2026-11-01T00:00:00+00:00",
+            "seo_title": null,
+            "seo_description": null,
+            "metadata": null,
+            "thumbnail": null,
+            "created_at": "2026-10-25T15:00:00+00:00",
+            "updated_at": "2026-11-01T00:00:00+00:00"
+        },
+        "relationships": {
+            "products": {
+                "data": [
+                    { "id": "01JD8YQ2B3C4D5E6F7G8H9JKM0", "type": "products" }
+                ]
+            }
+        }
+    },
+    "included": [
+        {
+            "id": "01JD8YQ2B3C4D5E6F7G8H9JKM0",
+            "type": "products",
+            "attributes": {
+                "name": "Leather Care Kit",
+                "slug": "leather-care-kit",
+                "prices": [
+                    {
+                        "public_id": "01JD8YQ7P9R1T3V5X7Z9B1D3F5",
+                        "amount": 1990,
+                        "compare_amount": 2490,
+                        "currency_code": "EUR"
+                    },
+                    {
+                        "public_id": "01JD8YQ7P9R1T3V5X7Z9B1D3F6",
+                        "amount": 2190,
+                        "compare_amount": null,
+                        "currency_code": "USD"
+                    }
+                ]
+            }
+        }
+    ]
+}
+```
+
+`type` is `manual` when the merchant picks the products, or `auto` when rules select them. See [Collection types](/3.x/collections#collection-types). The products embedded with `include=products` are published and in the sales channel, but they come without pagination, stock, `price_range` or `calculated_price`. For the product grid of a collection page, call the product listing with `filter[collection]=gift-ideas`.
+
+The collection listing accepts `filter[name]` (partial match), `sort=name`, `include=products` and the pagination parameters.
+
+## Brands
+
+A brand page shows the brand name, its logo, its website and its products. The API returns enabled brands only, by slug:
+
+```bash title="Request"
+curl http://localhost:8000/store/brands/maison-cuir \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` with the brand:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD8XV1C3E5G7J9K1M3P5R7T9",
+        "type": "brands",
+        "attributes": {
+            "name": "Maison Cuir",
+            "slug": "maison-cuir",
+            "website": "https://maisoncuir.example",
+            "description": "<p>Leather shoes made in Portugal since 1962.</p>",
+            "seo_title": null,
+            "seo_description": null,
+            "metadata": null,
+            "thumbnail": null,
+            "created_at": "2026-09-15T10:00:00+00:00",
+            "updated_at": "2026-09-15T10:00:00+00:00"
+        }
+    }
+}
+```
+
+`thumbnail` is the brand logo as a media object, or `null`. The brand endpoints accept `filter[name]` (partial match), `sort=name` or `sort=position`, and `include=products`, which embeds the published products of the brand in the sales channel, with their stock but without pagination. For a paginated grid, call the product listing with `filter[brand]=maison-cuir`.
+
+## Tags
+
+Tags label products across categories, such as "vegan" or "new-season". The API lists every tag, with no show endpoint, so a storefront uses them to build filter chips or tag pages:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/tags?sort=name&page[size]=50" \
+  -H "Accept: application/vnd.api+json"
+```
+
+Each tag carries `name`, `slug`, `created_at` and `updated_at`. The listing accepts `filter[name]` (partial match), `sort=name`, `include=products` and the pagination parameters. As with collections, the products embedded in a tag carry no stock, so a tag page calls the product listing with `filter[tag]=vegan`.
+
+## Attributes
+
+A filter sidebar offers the attributes a visitor can narrow the catalog by, such as size or color, with their values. The attribute listing returns the attributes the merchant marked as filterable, of the types that have predefined values: `checkbox`, `colorpicker` and `select`.
+
+```bash title="Request"
+curl http://localhost:8000/store/attributes \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` with a page of attributes and their values:
+
+```json title="Response"
+{
+    "data": [
+        {
+            "id": "01JD8XS1A3C5E7G9J1M3P5R7T9",
+            "type": "attributes",
+            "attributes": {
+                "name": "Size",
+                "slug": "size",
+                "description": null,
+                "type": "select",
+                "icon": null,
+                "values": [
+                    { "key": "42", "value": "42", "position": 1 },
+                    { "key": "43", "value": "43", "position": 2 }
+                ]
+            }
+        },
+        {
+            "id": "01JD8XS2B4D6F8H0K2N4Q6S8V0",
+            "type": "attributes",
+            "attributes": {
+                "name": "Color",
+                "slug": "color",
+                "description": null,
+                "type": "colorpicker",
+                "icon": null,
+                "values": [
+                    { "key": "#000000", "value": "Black", "position": 1 },
+                    { "key": "#8b4513", "value": "Brown", "position": 2 }
+                ]
+            }
+        }
+    ],
+    "links": {
+        "first": "http://localhost:8000/store/attributes?page%5Bnumber%5D=1",
+        "last": "http://localhost:8000/store/attributes?page%5Bnumber%5D=1",
+        "prev": null,
+        "next": null
+    },
+    "meta": {
+        "current_page": 1,
+        "from": 1,
+        "last_page": 1,
+        "links": [
+            { "url": null, "label": "&laquo; Previous", "page": null, "active": false },
+            { "url": "http://localhost:8000/store/attributes?page%5Bnumber%5D=1", "label": "1", "page": 1, "active": true },
+            { "url": null, "label": "Next &raquo;", "page": null, "active": false }
+        ],
+        "path": "http://localhost:8000/store/attributes",
+        "per_page": 15,
+        "to": 2,
+        "total": 2
+    }
+}
+```
+
+When the visitor ticks a value, pass its `key` or its `value` to `filter[option]` on the product listing. Several values in one filter mean OR, so `filter[option]=42,43` keeps the products available in size 42 or 43. The filter does not know which attribute a value belongs to, and it cannot require two values at once: `filter[option]=42,Black` returns the products in size 42 or in black, not the black ones in size 42. A product matches when one of its variants carries the value, whatever the stock of that variant. Encode a hex key in the URL, `%23000000` for `#000000`, or send the label instead.
+
+`values` lists every value of the attribute, including values no visible product uses, so a facet can lead to an empty result. The values come in no set order: sort them by `position` before showing them. The listing accepts `filter[name]` (partial match), `sort=name` and the pagination parameters, without includes. The [Attributes](/3.x/attributes#searchable-and-filterable-attributes) page explains how a merchant makes an attribute filterable.
+
+## Reviews
+
+Reviews give a product page its stars, its rating summary and the comments of buyers. The API returns approved reviews only, with the author name shortened to a first name and an initial.
+
+### Reviews of a Product
+
+The reviews of a product are paginated, newest first, and the response adds the rating summary of the product in `meta`. The product must be published, or the API answers `404`. This request keeps the 3-star reviews, as a "3 stars" filter of the rating summary would:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/products/classic-leather-sneakers/reviews?filter[rating]=3" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK`. The summary in `meta` counts every approved review of the product, whatever the filter:
+
+```json title="Response"
+{
+    "data": [
+        {
+            "id": "01JD9A2K4M6P8R0T2V4X6Z8B0D",
+            "type": "reviews",
+            "attributes": {
+                "title": "Runs half a size small",
+                "content": "Nice leather and a clean look. Order half a size up.",
+                "rating": 3,
+                "is_recommended": true,
+                "author": {
+                    "name": "Camille M.",
+                    "avatar": "http://localhost:8000/storage/avatars/kD3f9QmZ7xWb2LpR8sTn4VhY6cJe1AuG0oNi5MrK.jpg"
+                },
+                "created_at": "2026-11-10T16:42:00+00:00"
+            }
+        }
+    ],
+    "links": {
+        "first": "http://localhost:8000/store/products/classic-leather-sneakers/reviews?filter%5Brating%5D=3&page%5Bnumber%5D=1",
+        "last": "http://localhost:8000/store/products/classic-leather-sneakers/reviews?filter%5Brating%5D=3&page%5Bnumber%5D=1",
+        "prev": null,
+        "next": null
+    },
+    "meta": {
+        "current_page": 1,
+        "from": 1,
+        "last_page": 1,
+        "links": [
+            { "url": null, "label": "&laquo; Previous", "page": null, "active": false },
+            { "url": "http://localhost:8000/store/products/classic-leather-sneakers/reviews?filter%5Brating%5D=3&page%5Bnumber%5D=1", "label": "1", "page": 1, "active": true },
+            { "url": null, "label": "Next &raquo;", "page": null, "active": false }
+        ],
+        "path": "http://localhost:8000/store/products/classic-leather-sneakers/reviews",
+        "per_page": 15,
+        "to": 1,
+        "total": 1,
+        "reviews_count": 12,
+        "average_rating": 4.6,
+        "rating_distribution": {
+            "1": 0,
+            "2": 0,
+            "3": 1,
+            "4": 3,
+            "5": 8
+        }
+    }
+}
+```
+
+`average_rating` is rounded to one decimal, and `null` when the product has no approved review. `rating_distribution` always has the five keys, so a storefront draws the bars without checking for missing ratings. `author` is `null` when the author account no longer exists. The endpoint accepts `filter[rating]` (exact), `sort=created_at` or `sort=rating` with `-` for descending (the default is `-created_at`), and the pagination parameters.
+
+For the stars on a product card, `include=rating` on the product listing is cheaper: it adds `rating` and `reviews_count` to each product without reading the reviews.
+
+### Latest Reviews
+
+A home page testimonials block shows the most recent reviews of the whole shop. `/store/reviews` returns the latest approved reviews, newest first, capped at 20 by `resources.review.latest_limit` in `config/shopper/api.php`:
+
+```bash title="Request"
+curl http://localhost:8000/store/reviews \
+  -H "Accept: application/vnd.api+json"
+```
+
+The response holds a `data` list of reviews in the shape above, with no `links` or `meta`: the endpoint has no pagination, filters or sorting. A review does not say which product it belongs to, so this block cannot link a review to its product page.
+
+## Next Steps
+
+With the products on screen, the next step is the cart. The store settings and the zones decide the currency and the prices this page shows.
+
+<Cards>
+  <Card title="Cart" href="/3.x/store-api/cart">
+    Create a cart and add a product or a variant to it.
+  </Card>
+  <Card title="Store and regions" href="/3.x/store-api/store">
+    Read the store settings, the zones and the currencies, and pick a zone for the visitor.
+  </Card>
+</Cards>

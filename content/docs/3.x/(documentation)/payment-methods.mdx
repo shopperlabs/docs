@@ -431,4 +431,4 @@ curl -X POST "https://example.com/store/carts/01JD8Z3K4M5N6P7Q8R9S0T1V2W/payment
   -d '{"payment_method_id": "01JD9A2B3C4D5E6F7G8H9J0K1M"}'
 ```
 
-The response is the cart. An enabled method the cart does not offer returns a 422 response with the `payment_method_unavailable` code. Switching methods releases the payment session opened for the previous one, and is refused once that session is paid. Carts and orders accept `include=paymentMethod`. The next step of the checkout opens a payment session for the selected method, as described in [Payments](/3.x/payments). The [Storefront](/3.x/storefront) section documents the Store API.
+The response is the cart. An enabled method the cart does not offer returns a 422 response with the `payment_method_unavailable` code. Switching methods releases the payment session opened for the previous one, and is refused once that session is paid. Carts and orders accept `include=paymentMethod`. The next step of the checkout opens a payment session for the selected method, as described in [Payments](/3.x/payments). The Store API [Checkout](/3.x/store-api/checkout#payment-methods) guide covers the payment method endpoints.

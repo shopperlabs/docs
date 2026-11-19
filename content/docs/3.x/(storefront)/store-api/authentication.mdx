@@ -1,0 +1,388 @@
+---
+title: Authentication
+description: Register and log in customers, send their bearer token, reset passwords, and know what a guest can do without a token.
+---
+
+Most of the Store API answers without any credentials, so a visitor can browse the catalog, fill a cart and check out as a guest. A customer account adds a profile, saved addresses, an order history and carts that follow the customer from one device to another. The API identifies a customer with a bearer token issued by [Laravel Sanctum](https://laravel.com/docs/sanctum) at registration and login.
+
+This page follows the life of that token: register or log in to get one, send it on each request, then log out or reset the password.
+
+## Endpoints
+
+The authentication endpoints sit under `/store/auth`. All of them except logout are public and share the `shopper-api-auth` rate limit of 20 requests per minute per IP address, described in [Rate Limits](/3.x/store-api#rate-limits).
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `POST` | `/store/auth/register` | Create a customer account and return a token |
+| `POST` | `/store/auth/login` | Check the email and password and return a token |
+| `POST` | `/store/auth/logout` | Revoke the token sent with the request |
+| `POST` | `/store/auth/forgot-password` | Email a password reset link |
+| `POST` | `/store/auth/reset-password` | Set a new password from the reset link |
+
+The request bodies are flat JSON objects sent with `Content-Type: application/json`, as on every Store API route.
+
+## Guest and Customer Requests
+
+A request without an `Authorization` header is a guest request. A guest can call every public route: the catalog, the store settings, the regions, the cart and its checkout, and the order confirmation lookup. A guest checkout only needs an email on the cart, as the [Checkout](/3.x/store-api/checkout) guide shows.
+
+A request with a valid customer token runs as that customer. The token gives access to:
+
+- the routes under `/store/customers/me`: profile, avatar, addresses, order history and digital downloads, covered in the [Customers](/3.x/store-api/customers) and [Orders](/3.x/store-api/orders) guides;
+- `POST /store/carts/{cartId}/transfer`, which attaches a guest cart to the customer;
+- the carts that belong to the customer. A cart attached to a customer answers `404 Not Found` to any request that does not carry that customer's token, so a cart ID alone never exposes a customer's cart;
+- prices calculated for the customer. The API passes the customer to the price resolver, which ignores it by default; a custom resolver can return customer group prices, as described on the [Pricing](/3.x/pricing) page.
+
+The same public route can answer differently for a guest and for a customer, which is why product responses that include calculated prices carry `Vary: Authorization`.
+
+## Registering a Customer
+
+Registration creates the account and logs the customer in at once: the response carries the token, so the storefront does not need a second call to log in. Send the guest cart ID in `cart_id` to keep the products the visitor added before signing up.
+
+<ApiTable name="POST /store/auth/register" label="Parameter">
+
+<ParamField path="last_name" type="string" required>
+  The last name of the customer, up to 255 characters.
+</ParamField>
+
+<ParamField path="first_name" type="string">
+  The first name of the customer, up to 255 characters.
+</ParamField>
+
+<ParamField path="email" type="string" required>
+  A valid email address, up to 255 characters, not used by another account.
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  The password. It follows the application's `Password::defaults()` rule: at least 8 characters unless your application sets other defaults.
+</ParamField>
+
+<ParamField path="opt_in" type="boolean" default="false">
+  Whether the customer accepts marketing emails.
+</ParamField>
+
+<ParamField path="cart_id" type="string">
+  The ID of a guest cart to attach to the new account.
+</ParamField>
+
+</ApiTable>
+
+This request creates the account of Camille Martin and attaches her guest cart:
+
+```bash title="Request"
+curl -X POST "http://localhost:8000/store/auth/register" \
+  -H "Accept: application/vnd.api+json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "first_name": "Camille",
+    "last_name": "Martin",
+    "email": "camille.martin@example.com",
+    "password": "sneakers-in-paris",
+    "opt_in": true,
+    "cart_id": "01JD8Z6Q4M3K2V7R9T5W1XNB0C"
+  }'
+```
+
+The API answers `201 Created` with the customer and, in `meta`, the token and the ID of the customer's cart:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD9B2K7X4N8R3T6V1Y5Z0QWE",
+        "type": "customers",
+        "attributes": {
+            "first_name": "Camille",
+            "last_name": "Martin",
+            "email": "camille.martin@example.com",
+            "avatar": "https://ui-avatars.com/api/?name=Camille+Martin&color=1d4ed8&background=dbeafe",
+            "avatar_type": null,
+            "phone_number": null,
+            "gender": null,
+            "birth_date": null,
+            "opt_in": true,
+            "email_verified": false,
+            "created_at": "2026-11-19T10:24:31+00:00"
+        }
+    },
+    "meta": {
+        "token": "3|Xk9mWqT2xLp8RzN6vHc1YbJ7sDe5GaU0iOk3nQw49e8b7c6d",
+        "cart_id": "01JD8Z6Q4M3K2V7R9T5W1XNB0C"
+    }
+}
+```
+
+Store `meta.token` where your storefront keeps credentials, such as an `httpOnly` cookie set by your storefront server, and replace the cart ID you kept with `meta.cart_id`. The `avatar_type` attribute is `null` in this response and `avatar_ui` once the customer is read again, for instance at the next login.
+
+The account gets the customer role set in `roles.user` of `config/shopper/admin.php`, and Shopper fires the `Shopper\Core\Events\Customers\CustomerRegistered` event once the account is saved. Listen to it to send a welcome email or sync the customer to a mailing tool.
+
+An email already in use answers `422 Unprocessable Content` with the `unique` code on the `email` field. The [Errors](/3.x/store-api/errors#validation-errors) page shows the full shape:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "422",
+            "code": "unique",
+            "title": "Unprocessable Content",
+            "detail": "The email has already been taken.",
+            "source": {
+                "pointer": "/data/attributes/email"
+            }
+        }
+    ]
+}
+```
+
+### What Happens to the Guest Cart
+
+The `cart_id` sent at registration or login never makes the call fail. The API attaches the cart when it is an open cart that belongs to no customer, or to this customer, and ignores it otherwise: an unknown ID, a completed cart or a cart of another customer.
+
+When the customer already has an open cart, the guest cart is merged into it and `meta.cart_id` is the ID of that existing cart, not the one you sent. When the guest cart cannot be attached, for example because its payment session is already collected, `meta.cart_id` is the guest cart ID. Without `cart_id`, `meta.cart_id` is the latest open cart of the customer, or `null` when there is none. In every case, `meta.cart_id` is the cart your storefront uses from then on.
+
+## Logging In
+
+Login checks an email and a password and issues a new token. Like registration, it takes an optional `cart_id` to bring the guest cart into the customer's account.
+
+<ApiTable name="POST /store/auth/login" label="Parameter">
+
+<ParamField path="email" type="string" required>
+  The email address of the account.
+</ParamField>
+
+<ParamField path="password" type="string" required>
+  The password of the account.
+</ParamField>
+
+<ParamField path="cart_id" type="string">
+  The ID of a guest cart to attach to the customer, as described in [What Happens to the Guest Cart](#what-happens-to-the-guest-cart).
+</ParamField>
+
+</ApiTable>
+
+```bash title="Request"
+curl -X POST "http://localhost:8000/store/auth/login" \
+  -H "Accept: application/vnd.api+json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "email": "camille.martin@example.com",
+    "password": "sneakers-in-paris",
+    "cart_id": "01JD8Z6Q4M3K2V7R9T5W1XNB0C"
+  }'
+```
+
+The API answers `200 OK` with the same document as registration:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD9B2K7X4N8R3T6V1Y5Z0QWE",
+        "type": "customers",
+        "attributes": {
+            "first_name": "Camille",
+            "last_name": "Martin",
+            "email": "camille.martin@example.com",
+            "avatar": "https://ui-avatars.com/api/?name=Camille+Martin&color=1d4ed8&background=dbeafe",
+            "avatar_type": "avatar_ui",
+            "phone_number": null,
+            "gender": null,
+            "birth_date": null,
+            "opt_in": true,
+            "email_verified": false,
+            "created_at": "2026-11-19T10:24:31+00:00"
+        }
+    },
+    "meta": {
+        "token": "4|Pq7Hn2Lw9Xc4Vb8Mz1Rt6Ky3Jd5Sf0Ga2Ue8Wo1N9c1d2e3f",
+        "cart_id": "01JD8Z6Q4M3K2V7R9T5W1XNB0C"
+    }
+}
+```
+
+Each login creates a new token and leaves the others valid, so a customer can stay logged in on a phone and a laptop at the same time.
+
+A wrong email or password answers `422 Unprocessable Content` with the `credentials_invalid` code on the `email` field. The message does not say which of the two is wrong:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "422",
+            "code": "credentials_invalid",
+            "title": "Unprocessable Content",
+            "detail": "These credentials do not match our records.",
+            "source": {
+                "pointer": "/data/attributes/email"
+            }
+        }
+    ]
+}
+```
+
+### Failed Logins
+
+Failed logins are counted per email address and IP address, the key Laravel's own login throttling uses, so an attacker on another network cannot lock a customer out. After 5 failures within a minute (`login_failures` in `config/shopper/http.php`), the API refuses the next attempts for that email from that address, even with the right password, until the minute has passed. A successful login clears the count.
+
+A refused attempt answers `429 Too Many Requests` with the `rate_limited` code and a `Retry-After` header that gives the seconds to wait:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "429",
+            "code": "rate_limited",
+            "title": "Too Many Requests",
+            "detail": "Too many login attempts. Please try again in 42 seconds."
+        }
+    ]
+}
+```
+
+Show the `detail` to the customer, or a countdown built from `Retry-After`. Shopper fires Laravel's `Illuminate\Auth\Events\Lockout` event on each refused attempt.
+
+## Using the Token
+
+Send the token in the `Authorization` header with the `Bearer` scheme, on every request of the customer, public routes included, so that the API knows who owns the cart:
+
+```bash title="Request"
+curl "http://localhost:8000/store/customers/me" \
+  -H "Accept: application/vnd.api+json" \
+  -H "Authorization: Bearer 4|Pq7Hn2Lw9Xc4Vb8Mz1Rt6Ky3Jd5Sf0Ga2Ue8Wo1N9c1d2e3f"
+```
+
+The token carries the `store` ability. The API accepts only tokens that carry it, so a Sanctum token your application issues for another purpose answers `401 Unauthorized` on every Store API route.
+
+An expired or revoked token is handled differently by the two route groups:
+
+| Route group | Missing token | Expired or revoked token |
+|-------------|---------------|--------------------------|
+| Public | Runs as a guest | Runs as a guest: a cart that belongs to the customer answers `404 Not Found` |
+| Authenticated | `401 Unauthorized` | `401 Unauthorized` |
+
+The `401` answer carries the `unauthenticated` code:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "401",
+            "code": "unauthenticated",
+            "title": "Unauthorized",
+            "detail": "Unauthenticated."
+        }
+    ]
+}
+```
+
+On a `401`, or on a `404` for the customer's own cart, drop the stored token and send the customer to the login page. Keep the cart ID: logging in again with `cart_id` attaches the cart back.
+
+## Token Expiration
+
+A token stays valid for 30 days after login or registration. Change the lifetime in minutes with `SHOPPER_API_TOKEN_EXPIRATION`, or set it to `0` to keep tokens until the customer logs out or resets the password. There is no refresh endpoint: when a token expires, the customer logs in again.
+
+```bash title=".env"
+SHOPPER_API_TOKEN_EXPIRATION=10080
+```
+
+The `expiration` key of `config/sanctum.php` also applies to these tokens when your application sets it, and the shorter of the two lifetimes wins. Expired tokens stay in the `personal_access_tokens` table until the daily `sanctum:prune-expired --hours=24` task deletes them, once the [scheduler runs](/3.x/installation#run-the-scheduler-and-a-queue-worker).
+
+## Logging Out
+
+Logout revokes the token sent with the request and leaves the customer's other tokens valid, so logging out on a phone keeps the laptop session. The route belongs to the authenticated group, so it needs a valid token:
+
+```bash title="Request"
+curl -X POST "http://localhost:8000/store/auth/logout" \
+  -H "Accept: application/vnd.api+json" \
+  -H "Authorization: Bearer 4|Pq7Hn2Lw9Xc4Vb8Mz1Rt6Ky3Jd5Sf0Ga2Ue8Wo1N9c1d2e3f"
+```
+
+The API answers `204 No Content`. The customer's cart stays attached to the account and comes back in `meta.cart_id` at the next login.
+
+## Resetting a Password
+
+A password reset takes two calls: the first sends an email with a link to your storefront, the second sends the new password with the token from that link. It uses Laravel's password broker, so the `passwords.users` settings of `config/auth.php` apply: a reset token expires after 60 minutes, and a second email to the same address is not sent within 60 seconds of the first.
+
+<Steps>
+<Step title="Point the reset link at your storefront">
+
+The reset email must link to the reset page of your storefront. Set that link before the storefront shows its "Forgot password" form, in the `boot` method of a service provider:
+
+```php title="app/Providers/AppServiceProvider.php"
+use Illuminate\Auth\Notifications\ResetPassword;
+
+public function boot(): void
+{
+    ResetPassword::createUrlUsing(function (object $notifiable, string $token): string {
+        return 'https://shop.example.com/reset-password?token='.$token.'&email='.urlencode($notifiable->getEmailForPasswordReset());
+    });
+}
+```
+
+The email is sent by the user model's `Notifiable` trait, through the mail settings of your application.
+
+</Step>
+<Step title="Request the email">
+
+Your storefront's "Forgot password" form sends the email address:
+
+```bash title="Request"
+curl -X POST "http://localhost:8000/store/auth/forgot-password" \
+  -H "Accept: application/vnd.api+json" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "camille.martin@example.com"}'
+```
+
+The API answers `202 Accepted` with an empty body whether or not an account uses that email, so the form cannot reveal who has an account. Show the same message in both cases, such as "If an account exists for this email, a reset link is on its way."
+
+</Step>
+<Step title="Set the new password">
+
+Your reset page reads `token` and `email` from the link and sends them with the new password. The password follows the same rule as at registration; the API does not ask for a confirmation field, so compare the two inputs in your form.
+
+```bash title="Request"
+curl -X POST "http://localhost:8000/store/auth/reset-password" \
+  -H "Accept: application/vnd.api+json" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "token": "8f14e45fceea167a5a36dedd4bea2543b1c2d3e4f5a6b7c8d9e0f1a2b3c4d5e6",
+    "email": "camille.martin@example.com",
+    "password": "new-sneakers-2026"
+  }'
+```
+
+The API answers `204 No Content`. The reset revokes every token of the customer, so all devices are logged out, and fires Laravel's `Illuminate\Auth\Events\PasswordReset` event. The customer then logs in with the new password.
+
+</Step>
+</Steps>
+
+An expired, used or wrong token answers `422 Unprocessable Content` with the `reset_token_invalid` code on the `email` field. Offer to send a new link:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "422",
+            "code": "reset_token_invalid",
+            "title": "Unprocessable Content",
+            "detail": "This password reset token is invalid.",
+            "source": {
+                "pointer": "/data/attributes/email"
+            }
+        }
+    ]
+}
+```
+
+## Next Steps
+
+With a token in hand, the storefront can read the customer's account and attach carts to it.
+
+<Cards>
+  <Card title="Customers" href="/3.x/store-api/customers">
+    Read and update the profile, the avatar and the saved addresses.
+  </Card>
+  <Card title="Cart" href="/3.x/store-api/cart">
+    Create a cart as a guest or as a customer and add products to it.
+  </Card>
+  <Card title="Errors" href="/3.x/store-api/errors">
+    Handle the error codes the authentication endpoints return.
+  </Card>
+</Cards>

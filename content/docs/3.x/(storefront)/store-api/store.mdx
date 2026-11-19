@@ -1,0 +1,469 @@
+---
+title: Store and Regions
+description: Read the store settings, legal pages, countries, zones and currencies, and pick the zone and the currency a storefront prices in.
+---
+
+A storefront needs the identity of the shop on every page (its name, logo and contact details), the legal pages for the footer and the checkout, and the regions it sells to. The region matters most: the zone of a request decides the currency of every price the catalog and the cart return.
+
+These endpoints are public and read-only. They answer `GET` requests without a customer token, and the responses follow the [JSON:API conventions](/3.x/store-api/json-api), except where this page says otherwise.
+
+## Endpoints
+
+All these routes sit in the public route group. A show endpoint answers `404` with the code `not_found` for a record that does not exist or that the merchant disabled.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/store/settings` | Read the public store settings |
+| `GET` | `/store/legals` | List the enabled legal pages |
+| `GET` | `/store/legals/{slug}` | Read one legal page |
+| `GET` | `/store/countries` | List countries |
+| `GET` | `/store/countries/{code}` | Read one country by its two-letter or three-letter ISO code |
+| `GET` | `/store/zones` | List the enabled zones |
+| `GET` | `/store/zones/{code}` | Read one zone by its code |
+| `GET` | `/store/currencies` | List the enabled currencies |
+| `GET` | `/store/currencies/{code}` | Read one currency by its ISO code |
+
+## Reading the Store Settings
+
+The header, the footer and the contact page show the shop name, the logo, the address and the social links. `/store/settings` returns them in one call, along with the default currency and the languages of the shop:
+
+```bash title="Request"
+curl http://localhost:8000/store/settings \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` with a single `settings` resource whose `id` is always `store`:
+
+```json title="Response"
+{
+    "data": {
+        "id": "store",
+        "type": "settings",
+        "attributes": {
+            "name": "Classic Apparel",
+            "legal_name": "Classic Apparel LLC",
+            "about": "<p>Organic cotton basics, made to last.</p>",
+            "email": "hello@classic-apparel.com",
+            "phone_number": "+33142685300",
+            "street_address": "12 Rue de la Paix",
+            "city": "Paris",
+            "postal_code": "75002",
+            "state": null,
+            "country": { "code": "FR", "name": "France" },
+            "logo": { "url": "https://classic-apparel.com/storage/01JD8XQ6S9W3T4N5V6B7C8D9EF.png" },
+            "cover": null,
+            "social_links": [
+                { "platform": "instagram", "url": "https://instagram.com/classicapparel", "label": "Instagram" }
+            ],
+            "default_currency": "EUR",
+            "currencies": ["EUR", "USD"],
+            "default_locale": "en",
+            "supported_locales": [
+                { "code": "en", "label": "English" },
+                { "code": "fr", "label": "Français" }
+            ]
+        }
+    }
+}
+```
+
+The endpoint returns only the keys listed under `settings.expose` in `config/shopper/api.php`, because the same table holds keys meant for the admin panel only. A key the merchant never filled in comes back as `null`. Some keys come back in a shape a storefront can use directly:
+
+| Attribute | Description |
+|-----------|-------------|
+| `name`, `legal_name`, `about`, `email`, `phone_number` | The shop identity and contact details, as entered in the admin panel. `about` is HTML. |
+| `street_address`, `city`, `postal_code`, `state` | The shop address. |
+| `country` | The `code` (ISO 3166-1 alpha-2) and the `name` of the shop country, in the language of the request. |
+| `logo`, `cover` | An object with the absolute `url` of the image, or `null`. |
+| `social_links` | Each link with its `platform`, its `url` and the `label` of the platform. Links with an unknown platform or an empty URL are left out. |
+| `default_currency` | The code of the default currency of the shop. |
+| `currencies` | The codes of the currencies the merchant sells in, sorted by currency name. Disabled currencies are left out. |
+| `default_locale` | The language the response is written in. |
+| `supported_locales` | The languages of the shop, each with its `code` and `label`. |
+
+The [Settings](/3.x/settings#store-api) page explains how to expose a setting of your own.
+
+### Caching the Settings
+
+A storefront reads the settings on nearly every page render, so the response is built to be cached by the browser, a CDN or your own server. It is public, with `max-age` and `s-maxage` set to `settings.max_age` in `config/shopper/api.php` (300 seconds by default), and it carries an `ETag` and `Vary: Accept-Language`.
+
+To revalidate a cached copy, send its ETag back in `If-None-Match`:
+
+```bash title="Request"
+curl -i http://localhost:8000/store/settings \
+  -H "Accept: application/vnd.api+json" \
+  -H 'If-None-Match: "5d41c7a2e9b04f1d8c3e6a7b2f9d0e14"'
+```
+
+While nothing changed, the API answers `304 Not Modified` with an empty body, and the storefront keeps its copy. A change the merchant makes in the admin panel reaches visitors at most `max_age` seconds later, once every cache has expired its copy.
+
+### Language
+
+The `Accept-Language` header picks the language of the response among the `supported_locales`, which come from `locales` in `config/shopper/admin.php`. A language the shop does not support falls back to the first locale of that list, and a request without the header gets the default locale of the Laravel app. `default_locale` tells the storefront which language it got.
+
+The language changes the country names: `country.name` in the settings, and `translated_name` on [countries](#countries). A storefront that shows a language switcher sends the visitor's choice in `Accept-Language` on every request.
+
+## Legal Pages
+
+The footer links to the refund, privacy, terms and shipping policies, and the checkout often asks the customer to accept the terms. Shopper creates four pages at install, with the slugs `refund`, `privacy`, `terms` and `shipping`, and the merchant writes their content in the admin panel. The API returns the enabled ones only.
+
+`/store/legals` lists them, for the footer links. It accepts `filter[title]` (partial match), `sort=title` or `sort=updated_at`, and the [pagination](/3.x/store-api/json-api#pagination) parameters. To render one page, read it by slug:
+
+```bash title="Request"
+curl http://localhost:8000/store/legals/privacy \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` with the page:
+
+```json title="Response"
+{
+    "data": {
+        "id": "2",
+        "type": "legals",
+        "attributes": {
+            "title": "Privacy policy",
+            "slug": "privacy",
+            "content": "<p>We collect your name, email address and shipping address to process and deliver your orders.</p>",
+            "updated_at": "2026-10-02T09:30:00+00:00"
+        }
+    }
+}
+```
+
+`content` is HTML, or `null` when the merchant has not written the page yet. `updated_at` is the date to show as "Last updated". A page the merchant disabled answers `404` with the code `not_found`, so a storefront hides the link instead of showing an empty page. The [Legal](/3.x/legal#from-a-storefront) page covers how the merchant edits these pages.
+
+## Countries
+
+Address forms need a country list, and a storefront that guesses the visitor's region needs to know which zone a country belongs to. `/store/countries` returns every country of the world, about 250, whether or not the shop sells there. For the countries the shop sells to, read the countries of its [zones](#zones) instead.
+
+The listing is paginated, 15 countries per page by default and 100 at most. It accepts these parameters:
+
+| Parameter | Values | Description |
+|-----------|--------|-------------|
+| `filter[name]` | Text | Countries whose English name contains the value. |
+| `filter[cca2]` | `FR`, `US` | Exact ISO 3166-1 alpha-2 code. |
+| `filter[cca3]` | `FRA`, `USA` | Exact ISO 3166-1 alpha-3 code. |
+| `filter[region]` | `Europe`, `Americas` | Exact region. |
+| `filter[zone]` | `EU` | Code of a zone the country belongs to. Disabled zones match too. |
+| `sort` | `name` | Prefix with `-` for descending order. |
+| `include` | `zones` | The enabled zones the country belongs to. |
+
+To read one country, pass its two-letter or three-letter ISO code in any case. This request reads the United States with its zones, in French:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/countries/usa?include=zones&fields[countries]=name,translated_name,cca2,flag" \
+  -H "Accept: application/vnd.api+json" \
+  -H "Accept-Language: fr"
+```
+
+The API answers `200 OK` with the country and its zones in `included`:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD8X9C3D4E5F6G7H8J9K0M1N",
+        "type": "countries",
+        "attributes": {
+            "name": "United States",
+            "translated_name": "États-Unis",
+            "cca2": "US",
+            "flag": "http://localhost:8000/vendor/shopper/images/flags/us.svg"
+        },
+        "relationships": {
+            "zones": {
+                "data": [
+                    { "id": "01JD8XZ2F4H6K8M0Q2S4V6X8Z0", "type": "zones" }
+                ]
+            }
+        }
+    },
+    "included": [
+        {
+            "id": "01JD8XZ2F4H6K8M0Q2S4V6X8Z0",
+            "type": "zones",
+            "attributes": {
+                "name": "United States",
+                "slug": "united-states",
+                "code": "US",
+                "currency_code": "USD",
+                "metadata": null,
+                "created_at": "2026-09-12T10:00:00+00:00",
+                "updated_at": "2026-09-12T10:00:00+00:00"
+            }
+        }
+    ]
+}
+```
+
+A country carries `name` (the common English name), `translated_name` (the name in the language of the request, or the English name when no translation exists), `name_official`, `region`, `subregion`, `cca2`, `flag` (the URL of an SVG flag served by your app), `latitude` and `longitude`. The three-letter code works in the path and in `filter[cca3]`, but the resource does not return it.
+
+## Zones
+
+A zone is a region of the shop, such as "Europe" or "United States", with its own currency, carriers and payment methods. A storefront sends the code of the visitor's zone in the `X-Shopper-Zone` header, and the API prices the catalog and the cart for that zone. The [Zones](/3.x/zones#what-the-zone-changes) page lists everything a zone changes.
+
+To match visitors to zones, list the enabled zones with their countries:
+
+```bash title="Request"
+curl "http://localhost:8000/store/zones?include=countries" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` with a page of zones, their countries in `included`, and the pagination details:
+
+```json title="Response"
+{
+    "data": [
+        {
+            "id": "01JD8XZ1E3G5J7K9M1P3R5T7V9",
+            "type": "zones",
+            "attributes": {
+                "name": "Europe",
+                "slug": "europe",
+                "code": "EU",
+                "currency_code": "EUR",
+                "metadata": null,
+                "created_at": "2026-09-12T09:55:00+00:00",
+                "updated_at": "2026-09-12T09:55:00+00:00"
+            },
+            "relationships": {
+                "countries": {
+                    "data": [
+                        { "id": "01JD8X9A1B2C3D4E5F6G7H8J9K", "type": "countries" },
+                        { "id": "01JD8X9B2C3D4E5F6G7H8J9K0M", "type": "countries" }
+                    ]
+                }
+            }
+        },
+        {
+            "id": "01JD8XZ2F4H6K8M0Q2S4V6X8Z0",
+            "type": "zones",
+            "attributes": {
+                "name": "United States",
+                "slug": "united-states",
+                "code": "US",
+                "currency_code": "USD",
+                "metadata": null,
+                "created_at": "2026-09-12T10:00:00+00:00",
+                "updated_at": "2026-09-12T10:00:00+00:00"
+            },
+            "relationships": {
+                "countries": {
+                    "data": [
+                        { "id": "01JD8X9C3D4E5F6G7H8J9K0M1N", "type": "countries" }
+                    ]
+                }
+            }
+        }
+    ],
+    "links": {
+        "first": "http://localhost:8000/store/zones?include=countries&page%5Bnumber%5D=1",
+        "last": "http://localhost:8000/store/zones?include=countries&page%5Bnumber%5D=1",
+        "prev": null,
+        "next": null
+    },
+    "meta": {
+        "current_page": 1,
+        "from": 1,
+        "last_page": 1,
+        "links": [
+            { "url": null, "label": "&laquo; Previous", "page": null, "active": false },
+            { "url": "http://localhost:8000/store/zones?include=countries&page%5Bnumber%5D=1", "label": "1", "page": 1, "active": true },
+            { "url": null, "label": "Next &raquo;", "page": null, "active": false }
+        ],
+        "path": "http://localhost:8000/store/zones",
+        "per_page": 15,
+        "to": 2,
+        "total": 2
+    },
+    "included": [
+        {
+            "id": "01JD8X9A1B2C3D4E5F6G7H8J9K",
+            "type": "countries",
+            "attributes": {
+                "name": "France",
+                "translated_name": "France",
+                "name_official": "French Republic",
+                "region": "Europe",
+                "subregion": "Western Europe",
+                "cca2": "FR",
+                "flag": "http://localhost:8000/vendor/shopper/images/flags/fr.svg",
+                "latitude": 46,
+                "longitude": 2
+            }
+        },
+        {
+            "id": "01JD8X9B2C3D4E5F6G7H8J9K0M",
+            "type": "countries",
+            "attributes": {
+                "name": "Germany",
+                "translated_name": "Germany",
+                "name_official": "Federal Republic of Germany",
+                "region": "Europe",
+                "subregion": "Western Europe",
+                "cca2": "DE",
+                "flag": "http://localhost:8000/vendor/shopper/images/flags/de.svg",
+                "latitude": 51,
+                "longitude": 9
+            }
+        },
+        {
+            "id": "01JD8X9C3D4E5F6G7H8J9K0M1N",
+            "type": "countries",
+            "attributes": {
+                "name": "United States",
+                "translated_name": "United States",
+                "name_official": "United States of America",
+                "region": "Americas",
+                "subregion": "North America",
+                "cca2": "US",
+                "flag": "http://localhost:8000/vendor/shopper/images/flags/us.svg",
+                "latitude": 38,
+                "longitude": -97
+            }
+        }
+    ]
+}
+```
+
+`code` is the value to send in `X-Shopper-Zone`. `currency_code` is the code of the zone currency, or `null` when the merchant disabled that currency; prices then fall back to the default currency of the shop. `metadata` holds your own data. The listing does not accept a fieldset for the included countries: `fields[countries]` answers `400 Bad Request`, so each country comes with all its attributes.
+
+The zone endpoints accept these parameters:
+
+| Parameter | Values | Description |
+|-----------|--------|-------------|
+| `filter[name]` | Text | Zones whose name contains the value. Listing only. |
+| `filter[code]` | `EU`, `US` | Exact zone code. Listing only. |
+| `sort` | `name` | Prefix with `-` for descending order. Listing only. |
+| `include` | `currency`, `countries` | The zone currency as a `currencies` resource, and every country of the zone. |
+
+To read one zone, pass its code in the path, such as `/store/zones/EU`. Unlike countries and currencies, the API does not uppercase a zone code, so send it exactly as the merchant wrote it. A disabled zone answers `404`.
+
+## Currencies
+
+A currency switcher needs the codes the shop sells in, and a price label needs the symbol of the currency. The codes come from `currencies` in the [settings](#reading-the-store-settings). `/store/currencies` returns every enabled currency, and Shopper enables all 158 currencies at install, so the listing holds far more codes than the shop sells in. A cart accepts only the codes of the settings and answers `422` for any other, so filter the listing by those codes:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/currencies?filter[code]=EUR,USD" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` with a page of currencies:
+
+```json title="Response"
+{
+    "data": [
+        {
+            "id": "01JD8X8E1R2T3V4W5X6Y7Z8A9B",
+            "type": "currencies",
+            "attributes": {
+                "name": "Euro",
+                "code": "EUR",
+                "symbol": "€",
+                "format": "1.0,00 €",
+                "exchange_rate": 0
+            }
+        },
+        {
+            "id": "01JD8X8D1S2T3V4W5X6Y7Z8A9C",
+            "type": "currencies",
+            "attributes": {
+                "name": "US Dollar",
+                "code": "USD",
+                "symbol": "$",
+                "format": "$1,0.00",
+                "exchange_rate": 0
+            }
+        }
+    ],
+    "links": {
+        "first": "http://localhost:8000/store/currencies?filter%5Bcode%5D=EUR%2CUSD&page%5Bnumber%5D=1",
+        "last": "http://localhost:8000/store/currencies?filter%5Bcode%5D=EUR%2CUSD&page%5Bnumber%5D=1",
+        "prev": null,
+        "next": null
+    },
+    "meta": {
+        "current_page": 1,
+        "from": 1,
+        "last_page": 1,
+        "links": [
+            { "url": null, "label": "&laquo; Previous", "page": null, "active": false },
+            { "url": "http://localhost:8000/store/currencies?filter%5Bcode%5D=EUR%2CUSD&page%5Bnumber%5D=1", "label": "1", "page": 1, "active": true },
+            { "url": null, "label": "Next &raquo;", "page": null, "active": false }
+        ],
+        "path": "http://localhost:8000/store/currencies",
+        "per_page": 15,
+        "to": 2,
+        "total": 2
+    }
+}
+```
+
+`format` is the display pattern stored with the currency. `exchange_rate` is the rate the merchant entered, and the API never uses it: every price comes from an amount the merchant set in that currency. To format amounts in the browser, the [Money](/3.x/money#formatting-in-javascript) page shows how to use `Intl.NumberFormat` with the currency code.
+
+The listing accepts `filter[name]` (partial match), `filter[code]` (exact, comma-separated for several), `sort=name` or `sort=code`, and the pagination parameters. `/store/currencies/{code}` reads one currency, with the code in any case, and answers `404` for a disabled one. The [Currencies](/3.x/currencies#from-a-storefront) page covers how the merchant enables currencies.
+
+## Picking a Zone and a Currency
+
+The API never guesses where a visitor is. The storefront decides the zone, sends it with every request, and the API prices everything for it. A typical flow on the first visit:
+
+<Steps>
+
+<Step title="Read the store settings">
+
+Call `/store/settings` once and cache it. `default_currency` is the currency of a visitor outside every zone, and `currencies` lists the codes for a currency switcher.
+
+</Step>
+
+<Step title="Load the zones and their countries">
+
+Call `/store/zones?include=countries` and keep a map from each country code (`cca2`) to its zone `code`. Add `page[size]=100` when the shop has more than 15 zones. Zones change rarely, so cache the map with the settings.
+
+</Step>
+
+<Step title="Find the visitor's country">
+
+Take the country from your CDN or hosting provider's geolocation header, from a country selector, or from the shipping address of a returning customer. Look it up in the map. A country outside every zone gets no zone, and a cart without a zone answers `422` when it asks for shipping options, so send the default zone or tell the visitor the shop does not deliver to their country.
+
+</Step>
+
+<Step title="Send the zone with every request">
+
+Send the zone code in `X-Shopper-Zone` on every catalog and cart request, and store it in a cookie so the next visit skips the lookup:
+
+```bash title="Request"
+curl http://localhost:8000/store/products \
+  -H "Accept: application/vnd.api+json" \
+  -H "X-Shopper-Zone: US"
+```
+
+Prices then come in the zone currency, and `meta.currency` confirms it: `USD` for this request. Every response lists `X-Shopper-Zone` in `Vary`, so a shared cache keeps one copy per zone.
+
+</Step>
+
+<Step title="Let the visitor switch currency">
+
+To show prices in another currency of the shop without changing the zone, add `filter[currency]` to the catalog requests, as described in [Prices, currency and stock](/3.x/store-api/catalog). The cart takes its own currency, set when it is created or updated: see [Cart](/3.x/store-api/cart).
+
+</Step>
+
+</Steps>
+
+The API does not reject a zone code it cannot find. An unknown or disabled code falls back to the default zone, whose code is set in `SHOPPER_API_DEFAULT_ZONE`, or to no zone at all when that variable is empty, and prices then come in the default currency of the shop. A typo in the header therefore shows the wrong currency instead of an error: compare `meta.currency` with the currency you expect while you build the storefront.
+
+The API caches each zone it resolves, with its currency, for 60 seconds (`zone.cache_ttl` in `config/shopper/http.php`), and clears that cache when the zone is saved or deleted. A change to the currency itself, such as disabling it, can take up to a minute to reach the API. A cart created with `X-Shopper-Zone` keeps that zone and takes its currency, unless the request sets another `currency_code`.
+
+The sales channel works the same way through the `X-Shopper-Channel` header, and decides which products the catalog returns. See [Request headers](/3.x/store-api#request-headers) and the [Channels](/3.x/channels#the-store-api) page. The [Zones](/3.x/zones#resolving-a-zone) page covers the resolution order and the `zone` settings of `config/shopper/http.php`, including the `resolver` class you can replace with your own.
+
+## Next Steps
+
+With the zone and the currency in place, the storefront can list products and fill a cart with the right prices.
+
+<Cards>
+  <Card title="Catalog" href="/3.x/store-api/catalog">
+    List and filter products, and read categories, brands and reviews.
+  </Card>
+  <Card title="Cart" href="/3.x/store-api/cart">
+    Create a cart in the visitor's zone and currency.
+  </Card>
+</Cards>

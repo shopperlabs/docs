@@ -210,7 +210,7 @@ A cart takes the `currency_code` sent when it is created, then the currency of t
 
 On an order, `price_amount` is the amount charged, with tax and shipping. `total` is the sum of the item totals: it leaves out shipping, and leaves out tax when prices exclude tax. Show `price_amount` as the order total.
 
-The `prices` of a product or a variant list its prices in every enabled currency. `calculated_price` and `price_range` use one currency: the `filter[currency]` parameter of the request, then the currency of the request zone, then the store default currency. The [Pricing](/3.x/pricing) page describes these fields, and [Storefront](/3.x/storefront) the Store API itself. Webhook payloads carry the same integers.
+The `prices` of a product or a variant list its prices in every enabled currency. `calculated_price` and `price_range` use one currency: the `filter[currency]` parameter of the request, then the currency of the request zone, then the store default currency. The [Pricing](/3.x/pricing) page describes these fields, and the Store API [Catalog](/3.x/store-api/catalog#prices-currency-and-stock) guide how a storefront reads them. Webhook payloads carry the same integers.
 
 ### Formatting in JavaScript
 

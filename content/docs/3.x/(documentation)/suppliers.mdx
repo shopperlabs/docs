@@ -412,4 +412,4 @@ Merchants manage suppliers under Catalog, Products, Suppliers, once the feature 
 
 The Store API does not expose suppliers: no endpoint lists them, and the product resource carries neither `supplier_id` nor a supplier relationship. An External product carries its `external_id`, and its `in_stock` is always `true`, because the supplier holds the stock.
 
-The cart endpoints refuse External products with the `purchasable_unavailable` error, so they cannot be bought through the Store API. The [Storefront](/3.x/storefront) section documents the Store API.
+The cart endpoints refuse External products with the `purchasable_unavailable` error, so they cannot be bought through the Store API. The Store API [Cart](/3.x/store-api/cart#errors) guide lists the cart errors.

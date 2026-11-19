@@ -253,7 +253,7 @@ The **Media** page of a product holds the thumbnail and the gallery, and **Choos
 
 ## From a Storefront
 
-The [Store API](/3.x/storefront) returns each image as an object with its `id` (the UUID of the media), `url`, `conversions` (the URL of each conversion already generated, keyed by name), `name`, `extension`, `created_at` and `updated_at`. Products and variants carry `images`, the gallery, and `thumbnail`, which falls back to the first gallery image. Brands, categories and collections carry `thumbnail` only, without that fallback. A model without an image returns `null`: the Store API never sends the placeholder. The `files` of a virtual product are not images and carry no URL, as described in [Downloadable Files](/3.x/products#downloadable-files).
+The [Store API](/3.x/store-api) returns each image as an object with its `id` (the UUID of the media), `url`, `conversions` (the URL of each conversion already generated, keyed by name), `name`, `extension`, `created_at` and `updated_at`. Products and variants carry `images`, the gallery, and `thumbnail`, which falls back to the first gallery image. Brands, categories and collections carry `thumbnail` only, without that fallback. A model without an image returns `null`: the Store API never sends the placeholder. The `files` of a virtual product are not images and carry no URL, as described in [Downloadable Files](/3.x/products#downloadable-files).
 
 ```json
 {

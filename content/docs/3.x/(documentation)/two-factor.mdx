@@ -254,4 +254,4 @@ Each team member manages both methods from the My profile page, opened from the 
 
 ## From a Storefront
 
-The Store API does not expose two-factor authentication or passkeys: no endpoint enables them, lists recovery codes or registers a passkey. Its `/store/auth/login` endpoint signs customers in with an email address and a password. A storefront that wants a second factor for customers builds it in the application, for example with Laravel Fortify, whose columns no longer collide with Shopper's. The [Storefront](/3.x/storefront) section documents the Store API.
+The Store API does not expose two-factor authentication or passkeys: no endpoint enables them, lists recovery codes or registers a passkey. A storefront that wants a second factor for customers builds it in the application, for example with Laravel Fortify, whose columns no longer collide with Shopper's. The Store API [Authentication](/3.x/store-api/authentication#logging-in) guide covers the login.

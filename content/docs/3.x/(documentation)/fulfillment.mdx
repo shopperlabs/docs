@@ -247,7 +247,7 @@ resolve(RecordShipmentEventAction::class)->execute(
 
 ### Carrier Webhooks
 
-The `shopper/api` package registers `POST /store/webhooks/shipping/{driver}` for carriers that push their updates, where `{driver}` is the name of the driver, such as `ups`, and `store` is the API prefix set by `config('shopper.http.prefix')`. The route passes the request to the `handleWebhook()` method of the driver, which verifies that the request comes from the carrier and returns a `TrackingInfo`, or `null` for a notification that has nothing to record.
+The `shopper/api` package registers `POST /store/webhooks/shipping/{driver}` for carriers that push their updates, where `{driver}` is the name of a driver whose `supportsWebhooks()` returns `true`, and `store` is the API prefix set by `config('shopper.http.prefix')`. The bundled UPS, FedEx and USPS drivers return `false`: their packages are refreshed by the [tracking sync](#tracking-sync). The route passes the request to the `handleWebhook()` method of the driver, which verifies that the request comes from the carrier and returns a `TrackingInfo`, or `null` for a notification that has nothing to record.
 
 Shopper matches the package by its tracking number among the shipments whose carrier uses that driver. When several open packages share the tracking number, nothing is recorded and a warning is logged. The route answers `{"received": true}`, `404` for a driver that is unknown, not configured or without webhook support, and `400` when `handleWebhook()` throws.
 
@@ -507,7 +507,7 @@ The order page shows the fulfillment steps (New, Processing, Shipped, Completed)
 
 The Store API exposes shipments read-only. A signed-in customer reads the packages of an order with `GET /store/customers/me/orders/{orderId}?include=shippings,shippings.events`, where each package comes with the name of its carrier, and the order itself carries its `shipping_status`. The order lookup at `GET /store/orders/{orderId}` does not include shipments.
 
-`GET /store/shipments/{shipmentId}?include=events` returns one package by its public ID. `events` is the only include it accepts, and the events come oldest first. A package is an `order-shippings` resource with the attributes `status`, `carrier_name`, `tracking_number`, `tracking_url`, `shipped_at`, `received_at` and `returned_at`. An event is an `order-shipping-events` resource with `status`, `description`, `location`, `latitude`, `longitude`, `occurred_at` and `created_at`. The [Storefront](/3.x/storefront) section documents the Store API.
+`GET /store/shipments/{shipmentId}?include=events` returns one package by its public ID. `events` is the only include it accepts, and the events come oldest first. A package is an `order-shippings` resource with the attributes `status`, `carrier_name`, `tracking_number`, `tracking_url`, `shipped_at`, `received_at` and `returned_at`. An event is an `order-shipping-events` resource with `status`, `description`, `location`, `latitude`, `longitude`, `occurred_at` and `created_at`. The Store API [Orders](/3.x/store-api/orders#tracking-a-shipment) guide shows how a storefront tracks a shipment.
 
 ### Order Tracking Page
 

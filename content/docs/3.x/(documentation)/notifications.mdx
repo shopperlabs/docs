@@ -246,7 +246,7 @@ When database notifications are on, the bell in the top bar shows the number of 
 
 ## From a Storefront
 
-The Store API does not expose database notifications: they belong to the admin panel. It sends one email of its own. `POST /store/auth/forgot-password` sends Laravel's `Illuminate\Auth\Notifications\ResetPassword` notification to the customer and answers `202`, whether the email exists or not. The link in that email points to the route named `password.reset` of your application. When your application has no such route, for example because the storefront runs on another domain, point the link at the reset page of your storefront in the `boot` method of a service provider:
+The Store API does not expose database notifications: they belong to the admin panel. It sends one email of its own. `POST /store/auth/forgot-password` sends Laravel's `Illuminate\Auth\Notifications\ResetPassword` notification to the customer and answers `202`, whether the email exists or not. The link in that email must open the reset page of your storefront. Set it before the storefront shows its "Forgot password" form, in the `boot` method of a service provider:
 
 ```php title="app/Providers/AppServiceProvider.php"
 use Illuminate\Auth\Notifications\ResetPassword;
@@ -262,4 +262,4 @@ public function boot(): void
 }
 ```
 
-The page then sends the token, the email and the new password to `POST /store/auth/reset-password`. Customer accounts on the Store API are covered on the [Storefront](/3.x/storefront) page.
+The page then sends the token, the email and the new password to `POST /store/auth/reset-password`. The Store API [Authentication](/3.x/store-api/authentication#resetting-a-password) guide covers the whole reset flow.

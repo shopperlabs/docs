@@ -1,0 +1,443 @@
+---
+title: "JSON:API Conventions"
+description: "The shape of Store API documents, and the include, fields, filter, sort and page parameters that every endpoint reads the same way."
+---
+
+The Store API answers with [JSON:API](https://jsonapi.org) documents, built on Laravel's JSON:API resources. This page covers what every endpoint shares: the shape of a document, the query parameters that change a response, how amounts and languages come back, and the allowlists in `config/shopper/api.php` that decide which filters, sorts and includes a client may request. Each guide lists the values its own endpoints accept.
+
+JSON:API applies to responses only. Request bodies are flat JSON objects, such as `{"quantity": 2}`, sent with `Content-Type: application/json`: the API never reads a `data.attributes` envelope.
+
+## Document Structure
+
+A successful response is a JSON object served as `application/vnd.api+json`. Its top-level members are:
+
+| Member | Content |
+|--------|---------|
+| `data` | One resource object, or an array of them on a listing |
+| `included` | The related resources requested with `include`, each one listed once |
+| `links` | The pagination links of a listing |
+| `meta` | The pagination details of a listing, and values specific to an endpoint, such as `meta.currency` on the product listing |
+
+Each resource object carries an `id`, a `type` and its `attributes`, plus `relationships` when the request includes related resources. The `id` is always a string. For most resources, such as products, carts, orders, customers and zones, it is the public ID of the record, a ULID such as `01JD3ZA2B4C6D8E0F2G4H6J8K0`. A few resources differ: a legal page carries its database key, such as `"1"`, and is read by its slug; the store settings carry `"store"`; a shipping option or a payment session carries the ID its shipping or payment driver gives it, such as `manual:01JD9C4E6G8J0K2M4N6P8R0S2T`. The `type` is a plural, lowercase name with hyphens, such as `products`, `cart-lines` or `order-items`. A member with nothing to show is left out: a resource read without `include` has no `relationships`, and a document without related resources has no `included`. The API does not add a `jsonapi` member.
+
+Dates are ISO 8601 strings with their offset, such as `2026-11-02T09:15:00+00:00`, in the timezone of the application.
+
+This request reads the zone `EU` and includes its currency:
+
+```bash title="Request"
+curl "http://localhost:8000/store/zones/EU?include=currency" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK`. The zone points to its currency in `relationships`, and the currency itself comes in `included`:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD3ZA2B4C6D8E0F2G4H6J8K0",
+        "type": "zones",
+        "attributes": {
+            "name": "Europe",
+            "slug": "europe",
+            "code": "EU",
+            "currency_code": "EUR",
+            "metadata": null,
+            "created_at": "2026-11-02T09:15:00+00:00",
+            "updated_at": "2026-11-02T09:15:00+00:00"
+        },
+        "relationships": {
+            "currency": {
+                "data": {
+                    "id": "01JD3Z8M4K7Q2W9E5R6T1Y0H3B",
+                    "type": "currencies"
+                }
+            }
+        }
+    },
+    "included": [
+        {
+            "id": "01JD3Z8M4K7Q2W9E5R6T1Y0H3B",
+            "type": "currencies",
+            "attributes": {
+                "name": "Euro",
+                "code": "EUR",
+                "symbol": "€",
+                "format": "1.0,00 €",
+                "exchange_rate": 0
+            }
+        }
+    ]
+}
+```
+
+To read a relationship, find the object in `included` whose `type` and `id` match the identifier in `relationships`. A to-one relationship holds one identifier, a to-many relationship an array of them.
+
+## Includes
+
+Related resources are left out by default, so that a listing stays small. The `include` parameter names the relationships to add, separated by commas. Each one adds a `relationships` entry to the resources of `data`, and the related resources to `included`, once each even when several resources share them:
+
+```bash title="Request"
+curl "http://localhost:8000/store/products?include=brand,categories" \
+  -H "Accept: application/vnd.api+json"
+```
+
+A dot path includes a relationship of an included resource, such as `lines.purchasable.product` on a cart: the lines, the variant or product of each line, and the parent product of each variant. A path works only when it is listed for the resource, as the cart lists it. The names are case-sensitive and keep the case of the allowlist, such as `relatedProducts` or `paymentMethod`.
+
+Included catalog resources only hold what a visitor may see: a disabled brand, a hidden category or an unpublished collection stays out of `included`, and so do unpublished products.
+
+A few includes add values instead of related resources:
+
+| Resource | Include | Adds |
+|----------|---------|------|
+| Products | `rating` | The `rating` attribute, the average of the approved reviews rounded to one decimal (`null` without reviews), and `reviews_count` |
+| Products | `options` | The `options` attribute: the enabled attributes of the product, such as a color or a size, each with the values the product uses |
+| Products | `price_range` | On the listing, `meta.price_range`: the lowest and highest price of all the products that match the filters other than `price_min` and `price_max`, so that a price slider keeps its bounds |
+| Categories | `products_count` | The `products_count` attribute: the products of the category and of its subcategories |
+
+An include that is not in the allowlist of the resource answers `400 Bad Request` with the `bad_request` code. The `detail` names the includes the endpoint accepts:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "400",
+            "code": "bad_request",
+            "title": "Bad Request",
+            "detail": "Requested include(s) `shippingOptions` are not allowed. Allowed include(s) are `currency, countries`."
+        }
+    ]
+}
+```
+
+## Sparse Fieldsets
+
+A product carries its description, images, SEO fields and prices. A product grid needs a few of them. The `fields[<type>]` parameter keeps only the listed attributes for the resources of that type, in `data` and in `included` alike. The key is the resource `type`, such as `products` or `brands`:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/products?include=brand&fields[products]=name,slug,price_range&fields[brands]=name&page[size]=1" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK`. This response leaves out `links` and `meta`:
+
+```json title="Response"
+{
+    "data": [
+        {
+            "id": "01JD8YQ1A2B3C4D5E6F7G8H9JK",
+            "type": "products",
+            "attributes": {
+                "name": "Classic Leather Sneakers",
+                "slug": "classic-leather-sneakers",
+                "price_range": {
+                    "currency_code": "EUR",
+                    "min": 9000,
+                    "max": 9500
+                }
+            },
+            "relationships": {
+                "brand": {
+                    "data": {
+                        "id": "01JD8XV1C3E5G7J9K1M3P5R7T9",
+                        "type": "brands"
+                    }
+                }
+            }
+        }
+    ],
+    "included": [
+        {
+            "id": "01JD8XV1C3E5G7J9K1M3P5R7T9",
+            "type": "brands",
+            "attributes": {
+                "name": "Maison Cuir"
+            }
+        }
+    ]
+}
+```
+
+`id`, `type` and `relationships` stay. An attribute name that the resource does not have is ignored, without an error. A fieldset trims the response but does not add anything: an attribute that comes with an include, such as `rating`, still needs that include.
+
+On two listings, four includes do not accept a fieldset for their own type: `variants` and `tags` on `/products`, `currency` and `countries` on `/zones`. A listing request that pairs one of them with `fields[variants]`, `fields[tags]`, `fields[currencies]` or `fields[countries]` answers `400 Bad Request` with the `bad_request` code. Every other include of a listing accepts a fieldset, and so does every include of a single resource, such as `/products/{slug}?include=variants&fields[variants]=name` or `/zones/{code}?include=countries&fields[countries]=name,cca2`.
+
+## Filters
+
+A listing narrows its results with `filter[<name>]=<value>`. The names a listing accepts come from its allowlist, and each one matches in one of three ways:
+
+| Kind | Matches | Example |
+|------|---------|---------|
+| Partial | Records whose column contains the value, ignoring case | `filter[name]=sneak` |
+| Exact | Records whose column equals the value | `filter[code]=EUR` |
+| Scope | Records selected by logic of its own, described in the guide of the endpoint | `filter[in_stock]=true` |
+
+A comma inside one filter means OR, and separate filters combine with AND. This request lists the countries of the zone `EU` whose name contains "fra" or "bel":
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/countries?filter[zone]=EU&filter[name]=fra,bel" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The values `true` and `false` are read as booleans, as in `filter[featured]=true`. Some endpoints accept filters of their own on top of their allowlist, such as the price and currency filters of the product listing, described in the [Catalog](/3.x/store-api/catalog) guide.
+
+A filter accepts at most 50 values. Past that, the API answers `422` with the `filter_too_wide` code, and `source.pointer` names the filter, such as `/data/attributes/filter/category`. A filter name outside the allowlist answers `400 Bad Request` with the `bad_request` code, and a `detail` such as "Requested filter(s) \`color\` are not allowed. Allowed filter(s) are \`name, code\`.". Both are described in [Errors](/3.x/store-api/errors#error-codes).
+
+## Sorting
+
+The `sort` parameter orders a listing by one of the sort names of its allowlist, in ascending order. A `-` prefix reverses it, and a comma separates several keys, applied in order:
+
+```bash title="Request"
+curl "http://localhost:8000/store/products?sort=-published_at,name" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API always adds the record's creation order as the last sort key, so records with the same value come in a stable order and never move between two pages. Without `sort`, product reviews and the customer's orders come newest first, and the other listings come in the order the records were created. A sort name outside the allowlist answers `400 Bad Request` with the `bad_request` code.
+
+## Pagination
+
+Every listing is paginated, except the few that return all their records at once: the category tree, the latest reviews, the shipping options and payment methods of a cart, and the customer's addresses. A listing returns 15 records per page by default, set by `SHOPPER_API_PER_PAGE`. It offers two kinds of pagination: by page number, the default, and by cursor.
+
+| Parameter | Default | Effect |
+|-----------|---------|--------|
+| `page[size]` | `15` | The number of records per page, from 1 to 100 (`pagination.max_per_page`). A larger value returns 100 records, without an error |
+| `page[number]` | `1` | The page to return, from 1 to 100 (`pagination.max_page`). A larger value returns page 100, without an error |
+| `page[cursor]` | None | Switches to cursor pagination. An empty value returns the first page |
+
+### Page Numbers
+
+Page numbers suit a classic paged catalog, with the total count and a link per page. This request reads the first page of brands, two per page:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/brands?sort=name&page[size]=2&page[number]=1" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK`. After `data`, the document carries these `links` and `meta`:
+
+```json title="Response"
+{
+    "links": {
+        "first": "http://localhost:8000/store/brands?sort=name&page%5Bsize%5D=2&page%5Bnumber%5D=1&page%5Bnumber%5D=1",
+        "last": "http://localhost:8000/store/brands?sort=name&page%5Bsize%5D=2&page%5Bnumber%5D=1&page%5Bnumber%5D=3",
+        "prev": null,
+        "next": "http://localhost:8000/store/brands?sort=name&page%5Bsize%5D=2&page%5Bnumber%5D=1&page%5Bnumber%5D=2"
+    },
+    "meta": {
+        "current_page": 1,
+        "from": 1,
+        "last_page": 3,
+        "links": [
+            {
+                "url": null,
+                "label": "&laquo; Previous",
+                "page": null,
+                "active": false
+            },
+            {
+                "url": "http://localhost:8000/store/brands?sort=name&page%5Bsize%5D=2&page%5Bnumber%5D=1&page%5Bnumber%5D=1",
+                "label": "1",
+                "page": 1,
+                "active": true
+            },
+            {
+                "url": "http://localhost:8000/store/brands?sort=name&page%5Bsize%5D=2&page%5Bnumber%5D=1&page%5Bnumber%5D=2",
+                "label": "2",
+                "page": 2,
+                "active": false
+            },
+            {
+                "url": "http://localhost:8000/store/brands?sort=name&page%5Bsize%5D=2&page%5Bnumber%5D=1&page%5Bnumber%5D=3",
+                "label": "3",
+                "page": 3,
+                "active": false
+            },
+            {
+                "url": "http://localhost:8000/store/brands?sort=name&page%5Bsize%5D=2&page%5Bnumber%5D=1&page%5Bnumber%5D=2",
+                "label": "Next &raquo;",
+                "page": 2,
+                "active": false
+            }
+        ],
+        "path": "http://localhost:8000/store/brands",
+        "per_page": 2,
+        "to": 2,
+        "total": 5
+    }
+}
+```
+
+`meta.links` lists one entry per page, ready for a pager. On a long listing, it replaces the pages in the middle with one entry labeled `...`, whose `url` is `null` and that has no `page`. The link URLs keep the filters, sorts and includes of the request. When the request carries `page[number]`, they also repeat it before the new one, as in `page%5Bnumber%5D=1&page%5Bnumber%5D=2`. The API reads the last value, so requesting a link URL as it is returns the right page. Do not read the page number from a link URL with `URLSearchParams.get()`, which returns the first value: use the `page` of each `meta.links` entry and `meta.current_page` instead.
+
+The page number stops at 100 so that a request can never scan the whole table. To walk further, such as to export a large catalog, use a cursor.
+
+### Cursors
+
+A cursor marks a position in the sorted results, so reading the next page costs the same at any depth. Send `page[cursor]` with an empty value to start, then follow `links.next` until it is `null`:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/brands?sort=name&page[size]=2&page[cursor]=" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK`. A cursor page has no total and no page numbers:
+
+```json title="Response"
+{
+    "links": {
+        "first": null,
+        "last": null,
+        "prev": null,
+        "next": "http://localhost:8000/store/brands?sort=name&page%5Bsize%5D=2&page%5Bcursor%5D=eyJuYW1lIjoiTWFpc29uIEN1aXIiLCJzaF9icmFuZHMuaWQiOjMsIl9wb2ludHNUb05leHRJdGVtcyI6dHJ1ZX0"
+    },
+    "meta": {
+        "path": "http://localhost:8000/store/brands",
+        "per_page": 2,
+        "next_cursor": "eyJuYW1lIjoiTWFpc29uIEN1aXIiLCJzaF9icmFuZHMuaWQiOjMsIl9wb2ludHNUb05leHRJdGVtcyI6dHJ1ZX0",
+        "prev_cursor": null
+    }
+}
+```
+
+Treat the cursor as an opaque string. From the second page on, `links.next` and `links.prev` repeat the cursor of the request before the new one, like the page links, and the API reads the last value. When you build the next URL yourself, send `meta.next_cursor` as `page[cursor]` with the same filters and sort as the first request: a cursor only applies to the sort that produced it.
+
+## Prices and Money
+
+Every amount is an integer in cents, or in whole units for a [zero-decimal currency](/3.x/money#zero-decimal-currencies), next to the code of its currency. A product priced at €19.90 carries `1990`. Divide by 100, or use the currency's own number of decimals, before you display an amount. The [Money](/3.x/money#amounts-in-the-store-api) page lists the amount attributes of each resource and shows how to format them in JavaScript.
+
+The `prices` of a product or a variant list one entry per enabled currency, with the `amount`, the `compare_amount` (the crossed-out price, or `null`) and the `currency_code`. `calculated_price` and `price_range` use one currency, picked in this order: the `filter[currency]` parameter, then the currency of the zone sent in `X-Shopper-Zone`, then the default currency of the shop. `meta.currency` on the product endpoints gives the code that was picked. A `filter[currency]` that names an unknown or disabled currency answers `422` with the `currency_unknown` code. An enabled currency that the products have no price in still resolves: `calculated_price` and `price_range` are then `null`. The [Pricing](/3.x/pricing#from-a-storefront) page explains how `calculated_price` is resolved.
+
+A calculated price can depend on the customer, so product responses that carry one add `Authorization` to their `Vary` header. A cache in front of the API then keeps one copy per token.
+
+## Locale
+
+The `Accept-Language` header selects the language of the response among the locales of the shop, as described in [Request headers](/3.x/store-api#request-headers). It changes the `translated_name` of countries and the `detail` of error messages. Product names, descriptions and other catalog content are stored in one language and come back the same whatever the header.
+
+## Allowlists
+
+A client may only filter, sort and include what the shop allows. The allowlists sit in `resources` of `config/shopper/api.php`, one entry per resource. Filters and sorts apply to the listing of a resource, includes to its listing and to its show endpoint:
+
+| Key | Endpoints | Filters | Sorts | Includes |
+|-----|-----------|---------|-------|----------|
+| `product` | `/products`, `/products/{slug}` | `name`, `sku`, `q`, `featured`, `in_stock`, `category`, `category_tree`, `collection`, `brand`, `tag`, `option` | `name`, `created_at`, `published_at`, `price` | `brand`, `variants`, `categories`, `collections`, `options`, `tags`, `relatedProducts`, `rating`, `price_range` |
+| `category` | `/categories`, `/categories/{slug}` | `name` | `name`, `position` | `parent`, `children`, `ancestors`, `products`, `products_count` |
+| `collection` | `/collections`, `/collections/{slug}` | `name` | `name` | `products` |
+| `brand` | `/brands`, `/brands/{slug}` | `name` | `name`, `position` | `products` |
+| `attribute` | `/attributes` | `name` | `name` | None |
+| `tag` | `/tags` | `name` | `name` | `products` |
+| `country` | `/countries`, `/countries/{code}` | `name`, `cca2`, `cca3`, `region`, `zone` | `name` | `zones` |
+| `zone` | `/zones`, `/zones/{code}` | `name`, `code` | `name` | `currency`, `countries` |
+| `currency` | `/currencies`, `/currencies/{code}` | `name`, `code` | `name`, `code` | None |
+| `cart` | The cart endpoints that answer with the cart | None | None | `lines`, `lines.purchasable`, `lines.purchasable.product`, `addresses`, `paymentMethod` |
+| `order` | `/customers/me/orders`, `/customers/me/orders/{orderId}` | `status` | `created_at` | `items`, `shippingAddress`, `billingAddress`, `paymentMethod`, `shippings`, `shippings.events`, `refund` |
+| `review` | `/products/{slug}/reviews` | `rating` | `created_at`, `rating` | None |
+| `legal` | `/legals`, `/legals/{slug}` | `title` | `title`, `updated_at` | None |
+
+The `review` entry also holds `latest_limit`, the number of reviews `GET /store/reviews` returns (20). The guides describe what each filter and include does.
+
+## Extending the Allowlists
+
+`php artisan shopper:api:install` publishes `config/shopper/api.php`, and you change the allowlists there. Each resource of your file is merged with the package defaults one level down: a key your file declares, such as `filters`, replaces the default list of that key, and the keys and resources your file leaves out keep the package defaults, including those a later Shopper release adds. When you change a list, keep the default entries you still want in it.
+
+Each list takes entries of these forms:
+
+| Entry | Effect |
+|-------|--------|
+| `'name' => 'partial'`, or `'name'` without a key | Filter: the column contains the value, ignoring case |
+| `'sku' => 'exact'` | Filter: the column equals the value |
+| `'zone' => ['exact', 'zones.code']` | Filter: a column of a relation equals the value |
+| `'category' => 'scope'` | Filter: calls the `category` query scope of the model |
+| `'in_stock' => ['scope', 'availability']` | Filter: calls a scope with another name, here `availability` |
+| `'name'` in `sorts` | Sort: by the column of that name |
+| `'price' => ['field', 'min_price']` in `sorts` | Sort: by another column or select alias, here the lowest price |
+| `'tags'` in `includes` | Include: loads the relation with all its rows |
+| `'brand' => EnabledRelation::class` in `includes` | Include: runs an include class, which keeps only the public rows |
+| `'categories' => ['categories.parent']` in `include_loads` | Loads these relations too when the include is requested, so that the response does not query each record |
+
+A plain include loads every related row, enabled or not. For a relation that holds drafts or disabled records, use one of the include classes of `Shopper\Api\Http\Includes`: `EnabledRelation` and `PublishedRelation` apply the `enabled` and `published` scopes of the related model. An include class implements `Spatie\QueryBuilder\Includes\IncludeInterface`, so you can write your own.
+
+To let a storefront look a product up by its barcode, add an exact filter to the `filters` list of `product` in the published file:
+
+```php title="config/shopper/api.php"
+'resources' => [
+    'product' => [
+        'filters' => [
+            'name' => 'partial',
+            'sku' => 'exact',
+            'barcode' => 'exact',
+            'q' => ['scope', 'matching'],
+            'featured' => 'exact',
+            'in_stock' => ['scope', 'availability'],
+            'category' => 'scope',
+            'category_tree' => ['scope', 'categoryTree'],
+            'collection' => ['scope', 'collection'],
+            'brand' => ['scope', 'byBrand'],
+            'tag' => ['scope', 'tag'],
+            'option' => ['scope', 'option'],
+        ],
+    ],
+],
+```
+
+The listing now accepts the new filter:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/products?filter[barcode]=3700123456789" \
+  -H "Accept: application/vnd.api+json"
+```
+
+When the configuration is cached, run `php artisan config:cache` again after the change.
+
+### Replacing a Resource
+
+The allowlists decide what a client may request, not what a document contains. To add an attribute or a relationship to a resource, extend its resource class and register the replacement with the `ApiResource` facade. This class adds a `care_instructions` column that your application added to the products table:
+
+```php title="app/Http/Resources/StoreProductResource.php"
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Shopper\Api\Http\Resources\ProductResource;
+
+class StoreProductResource extends ProductResource
+{
+    public function toAttributes(Request $request): array
+    {
+        return [
+            ...parent::toAttributes($request),
+            'care_instructions' => $this->care_instructions,
+        ];
+    }
+}
+```
+
+Register it in the `boot` method of a service provider:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Http\Resources\StoreProductResource;
+use Shopper\Api\Facades\ApiResource;
+use Shopper\Api\Http\Resources\ProductResource;
+
+public function boot(): void
+{
+    ApiResource::replace(ProductResource::class, StoreProductResource::class);
+}
+```
+
+Every endpoint then serializes products with your class, in `data`, in listings and in `included`. `replace()` also takes an array that maps several stock classes to their replacements. A replacement must extend the class it replaces, or `replace()` throws an `InvalidArgumentException`. The `type` of a resource cannot change.
+
+A new include also needs its relationship declared in `toRelationships()` of the resource: the document only shows the relationships the resource declares, even when the include is in the allowlist. Override `toRelationships()` in the replacement and add your relation to the array the parent method returns.
+
+## Next Steps
+
+These conventions apply to every guide that follows, starting with the errors the parameters can cause.
+
+<Cards>
+  <Card title="Errors" href="/3.x/store-api/errors">
+    Read the error object and react to each error code.
+  </Card>
+  <Card title="Catalog" href="/3.x/store-api/catalog">
+    The filters, sorts and includes of the product, category, collection and brand listings.
+  </Card>
+  <Card title="Cart" href="/3.x/store-api/cart">
+    Create a cart and include its lines and their products.
+  </Card>
+</Cards>

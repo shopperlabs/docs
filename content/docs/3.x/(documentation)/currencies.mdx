@@ -202,4 +202,4 @@ The currency of a request is chosen per endpoint:
 - The product endpoints return prices in the currency of `filter[currency]`, then in the currency of the zone of the request, then in the store default currency. An unknown or disabled code in `filter[currency]` answers `422` with the `currency_unknown` code. The [Pricing](/3.x/pricing#from-a-storefront) page shows the response.
 - `POST /store/carts` takes an optional `currency_code`, which must be an enabled store currency. Without it, the cart takes the zone currency, then the store default currency. `PATCH` on the cart changes the currency with the same rule.
 
-The [Storefront](/3.x/storefront) section documents the Store API.
+The Store API [Store and Regions](/3.x/store-api/store#picking-a-zone-and-a-currency) guide shows how a storefront picks a currency.

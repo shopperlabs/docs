@@ -998,4 +998,4 @@ The Store API exposes the checkout payment flow and the provider webhooks under 
 | `POST /store/webhooks/{driver}` | Receive the provider's webhooks |
 | `GET /store/customers/me/orders/{orderId}?include=refund` | An order of the signed-in customer with its refund (`status`, `amount`, `currency`, `reason`, `created_at`) |
 
-The Store API does not expose payment transactions or refunding. The [Storefront](/3.x/storefront) section documents the Store API.
+The Store API does not expose payment transactions or refunding. The Store API [Checkout](/3.x/store-api/checkout) guide covers the payment session and the completion of a cart.

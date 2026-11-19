@@ -263,7 +263,7 @@ Products are soft deleted, so a queued listener of `ProductDeleted` still loads 
 
 ## Customer Events
 
-`Shopper\Core\Events\Customers\CustomerRegistered` carries `public Authenticatable $customer`, an instance of your user model. It fires when a customer is created in the admin panel, or signs up through `POST /store/auth/register` in the [Store API](/3.x/storefront). A sign-up handled by your own code dispatches no Shopper event.
+`Shopper\Core\Events\Customers\CustomerRegistered` carries `public Authenticatable $customer`, an instance of your user model. It fires when a customer is created in the admin panel, or signs up through `POST /store/auth/register`, the [registration endpoint](/3.x/store-api/authentication#registering-a-customer) of the Store API. A sign-up handled by your own code dispatches no Shopper event.
 
 The Store API also dispatches two Laravel events: `Illuminate\Auth\Events\Lockout` when a login is refused after too many failed attempts, and `Illuminate\Auth\Events\PasswordReset` when a customer resets their password.
 

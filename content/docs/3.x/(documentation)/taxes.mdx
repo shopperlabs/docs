@@ -604,4 +604,4 @@ For a line of 5000 cents in the French zone above, at 20% VAT included, the attr
 
 Taxes depend on the shipping address: send it with the cart addresses endpoint, with the country in `country_code` and the province in `state`, in the format of the `province_code` of your zones. Until the cart has a shipping address, `tax_total` is 0. When `tax_inclusive` is `true`, the total already contains `tax_total`: show it as "VAT included". When it is `false`, show it as a line added to the subtotal.
 
-The order items of the Store API carry no tax fields, and the Store API exposes no endpoint for tax zones or rates. The [Storefront](/3.x/storefront) page covers the Store API.
+The order items of the Store API carry no tax fields, and the Store API exposes no endpoint for tax zones or rates. The Store API [Orders](/3.x/store-api/orders#amounts) guide shows which order amount includes tax.

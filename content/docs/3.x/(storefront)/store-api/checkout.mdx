@@ -1,0 +1,533 @@
+---
+title: Checkout
+description: Choose shipping and payment for a cart, open a payment session, and turn the cart into an order with the Store API.
+---
+
+Checkout turns a cart into an order. The storefront offers the shipping options and payment methods the API returns for the cart, opens a payment at the provider for the amount the API computes, lets the customer pay in the browser, then completes the cart. The API owns every amount: it quotes shipping, sets the amount of the payment, checks prices and stock again before it places the order, and answers with the order.
+
+This guide starts where [Cart](/3.x/store-api/cart) ends, with a cart that holds lines, an email and a shipping address. Amounts are integers in cents, as on the cart. A checkout goes through four steps:
+
+<Steps>
+<Step title="Set the shipping method">
+List the shipping options of the cart and send back the one the customer picks.
+</Step>
+<Step title="Set the payment method">
+List the payment methods of the cart and send back the one the customer picks.
+</Step>
+<Step title="Open a payment session">
+Ask the API to open the payment at the provider, then let the customer confirm it in the browser with the provider's SDK, such as Stripe.js.
+</Step>
+<Step title="Complete the cart">
+Place the order once the provider has confirmed the payment. The provider's webhooks then move the payment status of the order.
+</Step>
+</Steps>
+
+A cart that needs no delivery skips the first step, and a payment method that collects offline, such as a bank transfer, skips the third.
+
+## Endpoints
+
+The checkout endpoints take the cart ID and follow the access rules of the cart endpoints: a guest cart answers to any request that carries its ID, a customer cart only to the bearer token of its owner, as described in [Cart](/3.x/store-api/cart). The calls that set the payment method, open the payment session and complete the cart share the checkout rate limit of 30 requests per minute (`shopper.http.rate_limiters`), counted per IP address, on top of the general limit described in [Rate limits](/3.x/store-api#rate-limits).
+
+| Method | Path | Purpose | Checkout limit |
+|--------|------|---------|----------------|
+| `GET` | `/store/carts/{cartId}/shipping-options` | List the shipping options | No |
+| `POST` | `/store/carts/{cartId}/shipping-method` | Set the shipping method | No |
+| `GET` | `/store/carts/{cartId}/payment-methods` | List the payment methods | No |
+| `POST` | `/store/carts/{cartId}/payment-method` | Set the payment method | Yes |
+| `POST` | `/store/carts/{cartId}/payment-session` | Open or resume the payment session | Yes |
+| `POST` | `/store/carts/{cartId}/complete` | Place the order | Yes |
+| `POST` | `/store/webhooks/{driver}` | Receive the events of a payment provider | No |
+| `POST` | `/store/webhooks/shipping/{driver}` | Receive the tracking events of a carrier | No |
+
+The two listing endpoints return every option in one response: they take no filters, sorts, includes or pagination. Request bodies are flat JSON objects sent with `Content-Type: application/json`, and responses are JSON:API documents, described in [JSON:API Conventions](/3.x/store-api/json-api).
+
+## Shipping Options
+
+The shipping options depend on the cart: its zone, the carriers of that zone, the shippable lines and the shipping address. Carriers that quote live rates, such as UPS, FedEx or USPS once their credentials are set, need the shipping address and an inventory location to ship from: until the address is set, they are left out without a warning. The other carriers of the zone offer the options set up for them in the admin panel, at a fixed price. [Carriers](/3.x/carriers) describes both kinds. List the options after the shipping address is set, so that every carrier can answer.
+
+```bash title="Request"
+curl http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/shipping-options \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` with the options and a `meta.warnings` list:
+
+```json title="Response"
+{
+    "data": [
+        {
+            "id": "colissimo:01JD8XM5N7Q9S1T3W5Y7A9C1E3",
+            "type": "shipping-options",
+            "attributes": {
+                "name": "Colissimo Home",
+                "carrier_name": "Colissimo",
+                "carrier_code": "colissimo",
+                "service_code": "01JD8XM5N7Q9S1T3W5Y7A9C1E3",
+                "amount": 690,
+                "currency": "EUR",
+                "price_type": "flat",
+                "estimated_days": null,
+                "estimated_delivery": null
+            }
+        },
+        {
+            "id": "chronopost:01JD8XN8P0R2T4V6X8Z0B2D4F6",
+            "type": "shipping-options",
+            "attributes": {
+                "name": "Chronopost 24h",
+                "carrier_name": "Chronopost",
+                "carrier_code": "chronopost",
+                "service_code": "01JD8XN8P0R2T4V6X8Z0B2D4F6",
+                "amount": 1490,
+                "currency": "EUR",
+                "price_type": "flat",
+                "estimated_days": null,
+                "estimated_delivery": null
+            }
+        }
+    ],
+    "meta": {
+        "warnings": []
+    }
+}
+```
+
+The `id` of an option is `{carrier_code}:{service_code}`, the value the storefront sends back to choose it. The options are computed for each request and never stored, so their IDs and prices can change between two calls.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `name` | string | Name of the service, to show to the customer |
+| `carrier_name` | string | Name of the carrier |
+| `carrier_code` | string | Slug of the carrier |
+| `service_code` | string | Code of the service at the carrier, or the ID of the option for a fixed-price option |
+| `amount` | integer | Price of the option, in cents |
+| `currency` | string | ISO code of the price, always the cart currency |
+| `price_type` | string | `flat` for a fixed-price option, `calculated` for a live rate |
+| `estimated_days` | string, null | Delivery time quoted by the carrier, `null` for a fixed-price option |
+| `estimated_delivery` | string, null | Delivery date quoted by the carrier, `null` for a fixed-price option |
+
+### Empty Lists and Warnings
+
+An empty list does not always mean the same thing, and `meta.warnings` explains most cases. Warnings are sentences meant for a log or a notice, not codes: branch on the options themselves.
+
+| Situation | Options | Warning |
+|-----------|---------|---------|
+| No line of the cart ships | None | None: the cart needs no shipping method |
+| The country of the shipping address is outside the zone of the cart | None | "The shipping address is outside the cart zone. Choose the zone of its country." |
+| No inventory location can be the origin of a shipment | Fixed-price options only | "Live carrier rates are unavailable: no inventory location can act as the shipment origin." |
+| A carrier did not answer | The options of the other carriers | "Rates from "UPS" are temporarily unavailable." |
+| A carrier quoted in another currency | The options in the cart currency | "Options priced in USD were removed: the cart is priced in EUR." |
+
+A line ships unless it holds a virtual product added as a product, such as an e-book. A variant always counts as shippable, even when its product is virtual. When the shipping address is outside the zone, switch the cart to the zone of that country with `zone_code`, as described in [Cart](/3.x/store-api/cart), and list the options again.
+
+A cart created without a known `X-Shopper-Zone` header, in an application that sets no `shopper.http.zone.default_code`, has no zone. Listing its options answers `422` with the generic code `http_error` and the detail "The cart has no shipping zone, so no shipping option applies to it.": set a zone on the cart first.
+
+## Setting the Shipping Method
+
+The storefront sends back the ID of the option the customer picked. The API quotes the options of the cart again and keeps the price of that new quote, so the shipping price always comes from the server.
+
+<ApiTable name="POST /store/carts/{cartId}/shipping-method" label="Parameter">
+
+<ParamField path="option_id" type="string" required>
+  The `id` of a shipping option, such as `colissimo:01JD8XM5N7Q9S1T3W5Y7A9C1E3`.
+</ParamField>
+
+</ApiTable>
+
+```bash title="Request"
+curl -X POST http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/shipping-method \
+  -H "Accept: application/vnd.api+json" \
+  -H "Content-Type: application/json" \
+  -d '{"option_id": "colissimo:01JD8XM5N7Q9S1T3W5Y7A9C1E3"}'
+```
+
+The API answers `200 OK` with the cart. Shipping now shows in `shipping_total` and in `total`. The response is trimmed to the totals:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD8Z6Q4M3K2V7R9T5W1XNB0C",
+        "type": "carts",
+        "attributes": {
+            "currency_code": "EUR",
+            "subtotal": 18000,
+            "discount_total": 1800,
+            "tax_total": 2700,
+            "shipping_total": 690,
+            "total": 16890,
+            "tax_inclusive": true,
+            "shipping_option_id": "colissimo:01JD8XM5N7Q9S1T3W5Y7A9C1E3"
+        }
+    }
+}
+```
+
+An ID that the carriers no longer quote for this cart answers `422 shipping_option_unavailable` on `/data/attributes/option_id`: list the options again. When the carrier of that option failed to answer, the API answers `503 shipping_provider_unavailable` with a `Retry-After: 5` header instead, since the option may come back. Changing the currency or the zone of the cart removes its shipping method: list the options and set it again after such a change.
+
+## Payment Methods
+
+A payment method is the way the customer pays: a card through Stripe, a bank transfer, cash on delivery. The API offers the enabled payment methods of the zone of the cart whose driver is configured, so a Stripe method shows only once its secret key and webhook secret are set. A cart without a zone gets every enabled method with a configured driver. [Payment Methods](/3.x/payment-methods) describes how methods are set up and attached to zones.
+
+```bash title="Request"
+curl http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/payment-methods \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` with the methods:
+
+```json title="Response"
+{
+    "data": [
+        {
+            "id": "01JD8XR3T5V7X9Z1B3D5F7H9K1",
+            "type": "payment-methods",
+            "attributes": {
+                "title": "Credit card",
+                "slug": "credit-card",
+                "description": "Visa, Mastercard and American Express.",
+                "instructions": null,
+                "driver": "stripe",
+                "logo": "http://localhost:8000/vendor/shopper/images/payments/stripe.svg"
+            }
+        },
+        {
+            "id": "01JD8XR3T5V7X9Z1B3D5F7H9K2",
+            "type": "payment-methods",
+            "attributes": {
+                "title": "Bank transfer",
+                "slug": "bank-transfer",
+                "description": "Pay by bank transfer within 7 days.",
+                "instructions": "Transfer the total to IBAN FR76 3000 6000 0112 3456 7890 189 with your order number as the reference.",
+                "driver": "manual",
+                "logo": "http://localhost:8000/vendor/shopper/images/payments/cod.svg"
+            }
+        }
+    ]
+}
+```
+
+The `driver` tells the storefront which flow to run. A `manual` method collects offline: it needs no payment session, and its `instructions` hold what the customer must do, to show on the confirmation page. Any other driver, such as `stripe`, collects online through a payment session. The `logo` is the URL of the logo of the driver, the same for every method of that driver, and `null` for a driver without a logo.
+
+## Setting the Payment Method
+
+The storefront sends the ID of the method the customer picked. Ask for the `paymentMethod` include to get the method back with the cart.
+
+<ApiTable name="POST /store/carts/{cartId}/payment-method" label="Parameter">
+
+<ParamField path="payment_method_id" type="string" required>
+  The `id` of a payment method listed for the cart.
+</ParamField>
+
+</ApiTable>
+
+```bash title="Request"
+curl -X POST "http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/payment-method?include=paymentMethod" \
+  -H "Accept: application/vnd.api+json" \
+  -H "Content-Type: application/json" \
+  -d '{"payment_method_id": "01JD8XR3T5V7X9Z1B3D5F7H9K1"}'
+```
+
+The API answers `200 OK` with the cart, trimmed here to the total and the method:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD8Z6Q4M3K2V7R9T5W1XNB0C",
+        "type": "carts",
+        "attributes": {
+            "currency_code": "EUR",
+            "total": 16890
+        },
+        "relationships": {
+            "paymentMethod": {
+                "data": { "id": "01JD8XR3T5V7X9Z1B3D5F7H9K1", "type": "payment-methods" }
+            }
+        }
+    },
+    "included": [
+        {
+            "id": "01JD8XR3T5V7X9Z1B3D5F7H9K1",
+            "type": "payment-methods",
+            "attributes": {
+                "title": "Credit card",
+                "slug": "credit-card",
+                "description": "Visa, Mastercard and American Express.",
+                "instructions": null,
+                "driver": "stripe",
+                "logo": "http://localhost:8000/vendor/shopper/images/payments/stripe.svg"
+            }
+        }
+    ]
+}
+```
+
+An ID that matches no enabled payment method answers `422 exists` on `/data/attributes/payment_method_id`. An enabled method that the cart does not offer, because of its zone or an unconfigured driver, answers `422 payment_method_unavailable` on the same pointer.
+
+Changing the method cancels the payment session opened for the previous one at the provider, so the order never holds a payment of another method. Once the customer has paid, the method can no longer change and the API answers `409 payment_session_collected`. A zone switch removes the payment method of the cart; a currency switch keeps it.
+
+## Opening a Payment Session
+
+The payment provider must collect an amount that the server computed, not the browser. The payment session does that: the API prices the lines again, quotes the shipping method again, computes the total, and opens a payment for that total at the provider of the payment method, such as a Stripe PaymentIntent. The response carries what the provider's browser SDK needs to collect the payment. The request has no body.
+
+```bash title="Request"
+curl -X POST http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/payment-session \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `201 Created` with the session. With Stripe, its `id` is the PaymentIntent ID:
+
+```json title="Response"
+{
+    "data": {
+        "id": "pi_3QL2mNLkdIwHu7ix0Ab3Cd4E",
+        "type": "payment-sessions",
+        "attributes": {
+            "driver": "stripe",
+            "status": "pending",
+            "amount": 16890,
+            "currency_code": "EUR",
+            "client_secret": "pi_3QL2mNLkdIwHu7ix0Ab3Cd4E_secret_Z8kQw2nV5rT1yH6pL3mX",
+            "redirect_url": null,
+            "data": {
+                "stripe_status": "requires_payment_method",
+                "publishable_key": "pk_test_51QJ7xYLkdIwHu7ixT9bWm2Qe",
+                "idempotency_key": "cart_01JD8Z6Q4M3K2V7R9T5W1XNB0C_01JD8ZH6K8M0P2R4T6V8X0Z2B4"
+            }
+        }
+    }
+}
+```
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `driver` | string | Driver of the payment method, such as `stripe` |
+| `status` | string | Status of the payment at the provider: `pending`, `requires_action`, `processing`, `authorized`, `captured` or `canceled` |
+| `amount` | integer | Amount to collect, in cents, the `total` of the cart |
+| `currency_code` | string | Currency of the cart |
+| `client_secret` | string, null | Secret the provider's browser SDK confirms the payment with |
+| `redirect_url` | string, null | Page of the provider to send the customer to, for a driver that collects on its own page |
+| `data` | object, array | Extra values for the browser: `stripe_status`, `publishable_key` and `idempotency_key` when the driver sets them, an empty array `[]` when it sets none |
+
+With Stripe, load Stripe.js with `data.publishable_key`, mount the Payment Element with `client_secret` and confirm the payment with `stripe.confirmPayment()`. The [Stripe](/3.x/payments/stripe) page walks through the browser side, and [Payments](/3.x/payments#payment-sessions) describes sessions for every driver.
+
+### Calling It Again
+
+The storefront can call the endpoint again, for example when the payment page reloads. When the amount, the currency and the promotions of the cart have not changed, the API resumes the open session and answers with the same `id` and `client_secret`. A resumed Stripe session carries only `stripe_status` in `data`, so keep the publishable key in the storefront configuration as well. Drivers that cannot read a payment back from the provider open a new session on every call.
+
+When the cart changed, the API cancels the open payment at the provider and opens a new one with a new `client_secret`: mount the payment form again with it. Changing the lines, a promotion code, the currency, the zone or the shipping method also cancels the open session right away. A form that still holds the previous client secret cannot confirm the payment, so open a new session after every change to the cart.
+
+Once the provider has collected the payment (`authorized`, `captured` or `processing`), the API returns that session as it is and the cart is frozen: every change answers `409 payment_session_collected`. Complete the cart.
+
+### Manual Payment Methods
+
+A method with the `manual` driver needs no session: complete the cart directly. Opening one anyway answers `201` with a session whose status is `authorized` and whose `id` starts with `manual_`, which collects nothing: its `client_secret` and `redirect_url` are `null` and its `data` is an empty array.
+
+### When the Session Cannot Open
+
+The API checks the cart before it calls the provider. Each failure answers with a code the storefront can act on:
+
+| Code | Status | Pointer | What to do |
+|------|--------|---------|------------|
+| `conflict` | 409 | | The cart is already an order: read the order |
+| `cart_completed` | 409 | | Same, when the cart was completed during the call |
+| `payment_method_required` | 422 | `/data/attributes/payment_method` | Set a payment method |
+| `payment_method_not_configured` | 503 | | The driver lost its configuration: offer another method |
+| `price_changed` | 422 | `/data/attributes/cart` | A price went up: show the new total, then open the session again |
+| `price_missing` | 422 | `/data/attributes/cart` | A line has no price in the cart currency anymore: remove it |
+| `quantity_rule_violated` | 422 | `/data/attributes/cart` | A quantity breaks a rule of its price, details in `meta` |
+| `shipping_method_required` | 422 | `/data/attributes/shipping_method` | Set a shipping method |
+| `shipping_option_unavailable` | 422 | `/data/attributes/shipping_method` | The option is no longer quoted: choose another one |
+| `shipping_price_changed` | 422 | `/data/attributes/shipping_method` | The option costs more: set the shipping method again to accept the new price |
+| `shipping_provider_unavailable` | 503 | | The carrier did not answer: retry after `Retry-After` (5 seconds) |
+| `cart_nothing_to_collect` | 422 | `/data/attributes/cart` | The total is zero |
+| `payment_provider_unavailable` | 503 | | The provider did not answer: retry after `Retry-After` (5 seconds) |
+| `payment_session_in_progress` | 409 | | Another request holds the cart: retry after `Retry-After` (3 seconds) |
+| `payment_session_collected` | 409 | | The payment was collected meanwhile: complete the cart |
+
+A completed cart answers the generic `conflict` code on this endpoint, where every other endpoint answers `cart_completed`: treat both the same way. A cart with a total of zero, after a 100% promotion for example, cannot open a session, and completing it with an online method answers `payment_session_required`: such a cart can only be completed with a `manual` method.
+
+## Completing the Cart
+
+Completing the cart places the order. The API checks the cart one last time, reserves the stock, records the payment session on the order and marks the cart as completed. Call it once the provider has confirmed the payment: with Stripe, on the page Stripe sends the customer back to (`return_url`). For a `manual` method, call it when the customer confirms the order.
+
+```bash title="Request"
+curl -X POST "http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/complete?include=items" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `201 Created` with the order, and its items when the request asks for `include=items`:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD8ZM4P6R8T0V2X4Z6B8D0F2",
+        "type": "orders",
+        "attributes": {
+            "number": "ORD-20261119-000042",
+            "status": "new",
+            "payment_status": "pending",
+            "shipping_status": "unfulfilled",
+            "total": 16200,
+            "tax_amount": 2700,
+            "shipping_amount": 690,
+            "price_amount": 16890,
+            "currency_code": "EUR",
+            "created_at": "2026-11-19T10:24:31+00:00"
+        },
+        "relationships": {
+            "items": {
+                "data": [
+                    { "id": "01JD8ZM4P6R8T0V2X4Z6B8D0F3", "type": "order-items" }
+                ]
+            }
+        }
+    },
+    "included": [
+        {
+            "id": "01JD8ZM4P6R8T0V2X4Z6B8D0F3",
+            "type": "order-items",
+            "attributes": {
+                "name": "Classic Leather Sneakers / 42 / Black",
+                "sku": "CLS-BLK-42",
+                "quantity": 2,
+                "unit_price_amount": 9000,
+                "total": 16200,
+                "metadata": null
+            }
+        }
+    ]
+}
+```
+
+Completing a cart that is already completed answers `200 OK` with the same order. A storefront that loses the response to a timeout calls the endpoint again and gets the order it placed, never a second one. Keep the order `id`: the [Orders](/3.x/store-api/orders) guide reads the order back with it. Only `items` is loaded on this response; other include paths are ignored here.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `number` | string | Order number to show to the customer, from the `shopper.orders.generator` setting |
+| `status` | string | `new` when the order is placed |
+| `payment_status` | string | `pending` until the provider confirms, then `authorized`, `paid`, `partially_refunded`, `refunded` or `voided` |
+| `shipping_status` | string | `unfulfilled` when the order is placed |
+| `total` | integer | Sum of the item totals (unit price times quantity, minus discounts), in cents, without shipping |
+| `tax_amount` | integer | Tax of the order, in cents |
+| `shipping_amount` | integer, null | Shipping price, in cents |
+| `price_amount` | integer | Amount charged, in cents: the `total` of the cart |
+| `currency_code` | string | Currency of the order |
+| `email` | string, null | Contact email of the order |
+| `created_at` | string | ISO 8601 |
+
+The `total` of an order is not the `total` of the cart: the amount the customer pays is `price_amount`. An `order-items` resource carries `name` (the product name, followed by the variant name for a variant), `sku`, `quantity`, `unit_price_amount`, `total` (unit price times quantity, minus the discount of the item) and `metadata`, copied from the cart line. [Orders](/3.x/orders) describes the statuses.
+
+The email of the order is the email of the cart, or the account email of the customer for a customer cart. A guest cart without an email answers `422 email_required` on `/data/attributes/email`: set it with the addresses or with a cart update.
+
+### Payment Status After Placement
+
+The order starts with `payment_status: "pending"`, and the provider's events, received on the payment webhook, move it. With Stripe, the browser confirms the payment before the storefront completes the cart, so the event often arrives first: the API applies the events that arrived before the order during the complete call, and the response can already show `authorized` or `paid`. When `shopper.payment.reconciliation.pull_on_completion` is on (the default), the API also queues a check of the payment at the provider. A confirmation page shows the order as awaiting payment until the status moves.
+
+An order still unpaid 24 hours after it was placed through an online method is cancelled by the hourly `shopper:orders:reclaim` command, which cancels the payment at the provider and puts the stock back on sale. The delay is `shopper.orders.reclaim_pending_after_hours`. Orders paid with a `manual` method are never cancelled this way.
+
+### When the Order Cannot Be Placed
+
+The complete call runs the checks of the payment session again, and adds its own:
+
+| Code | Status | Pointer | What to do |
+|------|--------|---------|------------|
+| `cart_empty` | 422 | `/data/attributes/cart` | Add a line |
+| `payment_method_required` | 422 | `/data/attributes/payment_method` | Set a payment method |
+| `email_required` | 422 | `/data/attributes/email` | Set an email on the cart |
+| `shipping_method_required` | 422 | `/data/attributes/shipping_method` | Set a shipping method |
+| `shipping_option_unavailable` | 422 | `/data/attributes/shipping_method` | Choose another shipping option |
+| `shipping_price_changed` | 422 | `/data/attributes/shipping_method` | Set the shipping method again to accept the new price |
+| `shipping_provider_unavailable` | 503 | | Retry after `Retry-After` (5 seconds) |
+| `payment_session_required` | 422 | `/data/attributes/payment_session` | Open a payment session first |
+| `payment_session_mismatch` | 422 | `/data/attributes/payment_session` | The cart changed since the session opened: open a new session and pay again |
+| `price_changed` | 422 | `/data/attributes/cart` | A price went up: show the new total |
+| `price_missing` | 422 | `/data/attributes/cart` | Remove the line that has no price |
+| `quantity_rule_violated` | 422 | `/data/attributes/cart` | Fix the quantity, details in `meta` |
+| `stock_insufficient` | 422 | `/data/attributes/cart` | Lower the quantity or remove the line |
+| `payment_released` | 422 | `/data/attributes/cart` | The stock ran out after the payment: the payment was given back, update the cart and pay again |
+| `promotion_not_applicable` | 422 | `/data/attributes/promotion` | A promotion of the cart no longer applies: show the new total |
+| `promotion_limit_reached` | 422 | `/data/attributes/promotion` | A promotion reached its usage limit |
+| `promotion_budget_reached` | 422 | `/data/attributes/promotion` | The campaign of a promotion spent its budget |
+| `payment_session_in_progress` | 409 | | Retry after `Retry-After` (3 seconds) |
+| `payment_provider_unavailable` | 503 | | Retry after `Retry-After` (5 seconds) |
+
+The three promotion errors cancel the open payment session, so the storefront opens a new one for the new total before it completes the cart again.
+
+## Price, Stock and Shipping Changes
+
+Time passes between the basket and the payment: a price changes in the admin panel, the last pair sells, a carrier raises a rate. The API checks the cart when the payment session opens and when the cart completes, and never charges more than the customer saw without telling the storefront first.
+
+| Change | Opening the payment session | Completing the cart |
+|--------|-----------------------------|---------------------|
+| A price went up | The cart takes the new price, then `422 price_changed` | The cart takes the new price, then `422 price_changed` |
+| A price went down | The cart takes the new price | The cart takes the new price |
+| The stock ran out | Not checked | `422 stock_insufficient`, or `422 payment_released` when the payment was collected |
+| The shipping price went up | `422 shipping_price_changed` | `422 shipping_price_changed` |
+| The shipping price went down | The cart takes the new price | The cart takes the new price |
+| The shipping option is gone | `422 shipping_option_unavailable` | `422 shipping_option_unavailable` |
+
+On `price_changed`, the cart already holds the new prices: read it again, show the new total to the customer, and open the payment session again once they accept it. On `shipping_price_changed`, the cart keeps the old shipping price until the storefront sets the shipping method again.
+
+Once the provider has collected the payment, the order keeps what the customer paid for: the API honors the paid prices and the paid shipping price, and a price change no longer blocks the order. Missing stock still does, and the API then gives the payment back before it answers `payment_released`.
+
+## Retries, Idempotency and Locking
+
+Checkout calls reach the payment provider and the carriers, can time out, and can race: a double click, two tabs, a retry. The API holds one lock per cart, so these calls run one at a time and a retry is always safe.
+
+Setting the shipping method, setting the payment method, opening the payment session, completing the cart and every change to the lines, addresses, promotions, currency or zone of the cart hold the lock of the cart while they run. A call that waits more than 3 seconds for it answers `409 payment_session_in_progress` with `Retry-After: 3`. A provider or a carrier that does not answer gives `503` with `Retry-After: 5`. Retry the same call after the delay.
+
+Each new payment session opens at the provider under its own idempotency key, `cart_{cartId}_{ulid}`, which Stripe sessions return in `data.idempotency_key`, and the payment carries the cart ID in its `cart_id` metadata. Completing the cart is idempotent, as [Completing the cart](#completing-the-cart) explains.
+
+A customer can pay and close the tab before the storefront completes the cart. The scheduled `shopper:payments:reconcile` command, which runs every 15 minutes, finds payments collected without an order after 30 minutes (`shopper.payment.reconciliation.orphan_after_minutes`) and completes their cart, as described in [Orphaned Payments](/3.x/payments#orphaned-payments). The storefront still completes the cart itself: the command is a safety net.
+
+## Payment Webhooks
+
+The provider reports the outcome of each payment to Shopper through webhooks: authorized, captured, failed, refunded. The payment status of the order follows those events, so the storefront never reports a payment result itself. Register the route of the driver in the provider's dashboard, such as `https://shop.example.com/store/webhooks/stripe` for Stripe, with the events listed in [Handled Events](/3.x/payments/stripe#handled-events).
+
+The webhook routes sit in their own route group, without authentication, limited to 120 requests per minute per IP address. The driver checks each request, such as the `Stripe-Signature` header against the webhook secret, then Shopper records the event once by its provider event ID, so a redelivered event is never applied twice. An event that arrives before the order exists waits until the cart is completed. The route answers `200 OK`, also for an event the driver ignores:
+
+```json title="Response"
+{
+    "received": true
+}
+```
+
+A payload the driver rejects, such as one with an invalid signature, answers `400 Bad Request` with a plain error body, not a JSON:API error object:
+
+```json title="Response"
+{
+    "error": "Invalid webhook payload."
+}
+```
+
+A driver that is not registered, or not configured, answers `404`. [Payments](/3.x/payments#webhooks) describes how Shopper applies the events.
+
+## Shipping Webhooks
+
+The `/store/webhooks/shipping/{driver}` route receives tracking updates pushed by a carrier and applies them to the shipment. It answers only for a carrier driver that supports webhooks. None of the bundled carriers (manual, UPS, FedEx, USPS) does, so for them the route answers `404`, and tracking comes from the scheduled `shopper:shipments:sync-tracking` command, every 30 minutes while `shopper.shipping.tracking.sync` is on. The route returns the same `200`, `400` and `404` answers as the payment webhooks. [Carrier Tracking](/3.x/fulfillment#carrier-tracking) describes how tracking reaches the order, and [Carriers](/3.x/carriers) how to add a carrier driver.
+
+## Errors
+
+Errors use the JSON:API error object, with a `code` a client can branch on, described with every code in [Error codes](/3.x/store-api/errors#error-codes). Validation errors put the field in `source.pointer`, such as `/data/attributes/option_id`, even though request bodies are flat JSON. On top of `401 unauthenticated` for a token that does not belong to a store customer, `404 not_found` for an unknown cart or a customer cart requested without its owner's token, and `429 rate_limited`, the checkout endpoints answer with these codes:
+
+| Endpoint | Codes |
+|----------|-------|
+| List the shipping options | `http_error` (422, no zone) |
+| Set the shipping method | `required`, `shipping_option_unavailable`, `shipping_provider_unavailable`, `http_error`, `cart_completed`, `payment_session_collected`, `payment_session_in_progress`, `payment_provider_unavailable` |
+| List the payment methods | None beyond the common ones |
+| Set the payment method | `required`, `exists`, `payment_method_unavailable`, `cart_completed`, `payment_session_collected`, `payment_session_in_progress`, `payment_provider_unavailable` |
+| Open the payment session | The codes of [When the session cannot open](#when-the-session-cannot-open) |
+| Complete the cart | The codes of [When the order cannot be placed](#when-the-order-cannot-be-placed) |
+
+## Next Steps
+
+The cart is now an order. The orders guide reads it back for the confirmation page and lists the orders of a customer, and the customers guide covers accounts and the transfer of a guest cart.
+
+<Cards>
+  <Card title="Orders" href="/3.x/store-api/orders">
+    Order lookup, order history, shipments and downloads.
+  </Card>
+  <Card title="Customers" href="/3.x/store-api/customers">
+    Customer accounts and the transfer of a guest cart.
+  </Card>
+</Cards>

@@ -173,7 +173,7 @@ php artisan shopper:api:install
 
 The command publishes the Laravel Sanctum migrations and the Shopper configuration, offers to add Sanctum's `HasApiTokens` trait to your `User` model, and asks whether to run the migrations. When it finishes, it prints the next steps, from the `X-Shopper-Zone` header your storefront sends to the installation of the JavaScript SDK. The API is served under `/store`.
 
-The package also adds a daily `sanctum:prune-expired --hours=24` task to the scheduler, which deletes the customer tokens expired for more than 24 hours. The [Storefront](/3.x/storefront) section covers the API in detail.
+The package also adds a daily `sanctum:prune-expired --hours=24` task to the scheduler, which deletes the customer tokens expired for more than 24 hours. The [Store API](/3.x/store-api) guides cover the API in detail.
 
 ## Next Steps
 

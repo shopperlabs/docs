@@ -1,0 +1,573 @@
+---
+title: Orders
+description: Show the order confirmation, list a customer's orders, track shipments and download the files of a paid order.
+---
+
+Once the checkout places an order, the storefront shows it at three moments: on the confirmation page right after payment, in the order history of the account, and on a tracking page while the parcel travels. A digital product adds a fourth: the download of the files the customer paid for. This guide follows those moments in order.
+
+Orders are read-only in the Store API. The storefront never changes an order: the merchant updates it in the admin panel, and payment and carrier webhooks move its statuses. The [Orders](/3.x/orders) page covers the order model and its life cycle.
+
+## Endpoints
+
+The confirmation lookup and the shipment tracking sit in the public route group and work without a token. The account endpoints need the bearer token of a signed-in customer, described in [Logging in](/3.x/store-api/authentication#logging-in).
+
+| Method | Path | Purpose | Customer token |
+|--------|------|---------|----------------|
+| `GET` | `/store/orders/{orderId}` | Order confirmation | No |
+| `GET` | `/store/customers/me/orders` | Order history | Yes |
+| `GET` | `/store/customers/me/orders/{orderId}` | Order details | Yes |
+| `GET` | `/store/shipments/{shipmentId}` | Shipment tracking | No |
+| `GET` | `/store/customers/me/orders/{orderId}/items/{itemId}/files/{fileId}` | Download link of a purchased file | Yes |
+| `GET` | `/store/files/{fileId}` | The file itself, through a signed link | No, the signature grants access |
+
+## Order Confirmation
+
+The confirmation page thanks the customer and recaps what they bought, for guests and customers alike. The checkout returns the ID of the new order, as the [Checkout](/3.x/store-api/checkout) guide shows, and the storefront reads the order with it. This order belongs to a signed-in customer, so the request carries their token, as [Who Can Read an Order](#who-can-read-an-order) explains:
+
+```bash title="Request"
+curl "http://localhost:8000/store/orders/01JQ8Z6N4W2T5V3K9R7M1H0XAB?include=items" \
+  -H "Accept: application/vnd.api+json" \
+  -H "Authorization: Bearer 1|customer-token"
+```
+
+The API answers `200 OK` with the order and its lines in `included`:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JQ8Z6N4W2T5V3K9R7M1H0XAB",
+        "type": "orders",
+        "attributes": {
+            "number": "ORD-20261117-000042",
+            "status": "new",
+            "payment_status": "pending",
+            "shipping_status": "unfulfilled",
+            "total": 13800,
+            "tax_amount": 2398,
+            "shipping_amount": 590,
+            "price_amount": 14390,
+            "currency_code": "EUR",
+            "email": "camille.martin@example.com",
+            "created_at": "2026-11-17T09:42:12+00:00"
+        },
+        "relationships": {
+            "items": {
+                "data": [
+                    { "id": "01JQ8Z6N5D9F3E5G7H2K4M6N8Q", "type": "order-items" },
+                    { "id": "01JQ8Z6N5C8E2D4F6G1J3K5M7P", "type": "order-items" }
+                ]
+            }
+        }
+    },
+    "included": [
+        {
+            "id": "01JQ8Z6N5D9F3E5G7H2K4M6N8Q",
+            "type": "order-items",
+            "attributes": {
+                "name": "Classic Leather Sneakers",
+                "sku": "CLS-BLK-42",
+                "quantity": 1,
+                "unit_price_amount": 12900,
+                "total": 12900,
+                "metadata": null
+            }
+        },
+        {
+            "id": "01JQ8Z6N5C8E2D4F6G1J3K5M7P",
+            "type": "order-items",
+            "attributes": {
+                "name": "Sneaker Care Guide",
+                "sku": "SCG-PDF",
+                "quantity": 1,
+                "unit_price_amount": 900,
+                "total": 900,
+                "metadata": null
+            }
+        }
+    ]
+}
+```
+
+### Who Can Read an Order
+
+The confirmation lookup needs no token, so a guest can see the order they just placed. Access follows from who placed the order:
+
+| Order placed | Who can read it here |
+|--------------|----------------------|
+| As a guest, without a token | Anyone holding the order ID |
+| By a signed-in customer | Only requests with that customer's token |
+
+The order ID is a ULID, 26 characters with 80 random bits, so it cannot be guessed, but for a guest order it works like a password. Keep it in the confirmation URL or the session of the visitor, and out of logs and analytics events.
+
+A customer order read without the token, or with the token of another customer, answers `404 not_found`, the same answer as an ID that does not exist, so the API never confirms that an order exists.
+
+Because a guest order is readable by its ID alone, this endpoint returns less than the account endpoints:
+
+- `items` is the only relationship you can include. Addresses, the payment method, shipments and refunds are on the [Order details](#order-details) endpoint, for signed-in customers.
+- The items carry no `files`, even for a paid order: downloads go through the account, as [Downloading purchased files](#downloading-purchased-files) describes.
+
+Any other include answers `422` with the `include_not_allowed` code:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "422",
+            "code": "include_not_allowed",
+            "title": "Unprocessable Content",
+            "detail": "Only `items` can be included on the order confirmation lookup. Use the account order endpoint for the full order.",
+            "source": {
+                "pointer": "/data/attributes/include"
+            }
+        }
+    ]
+}
+```
+
+The account endpoints answer an include outside their list with `400 bad_request` instead, so handle both codes if your storefront builds include lists dynamically.
+
+## The Order Resource
+
+The confirmation, the history and the details all return the same `orders` resource. Its attributes summarize the order; the lines, addresses and shipments come through includes.
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `number` | string | The number the customer sees, such as `ORD-20261117-000042`. The format is set in the shop configuration, as [Orders](/3.x/orders#order-number-generation) describes. |
+| `status` | string | Where the order stands for the merchant. |
+| `payment_status` | string | Where the payment stands. |
+| `shipping_status` | string | Where the delivery stands, across every package. |
+| `total` | integer | Sum of the lines in cents, after line discounts, without shipping. |
+| `tax_amount` | integer | Tax of the order in cents. |
+| `shipping_amount` | integer | Shipping cost in cents. |
+| `price_amount` | integer | What the customer paid, in cents. |
+| `currency_code` | string | ISO code of the order currency, such as `EUR`. |
+| `email` | string or null | Email the order was placed with. |
+| `created_at` | string | When the order was placed, ISO 8601. |
+
+### Amounts
+
+Every amount is an integer in cents: `14390` is €143.90. The [Money](/3.x/money) page covers cents and formatting.
+
+Show `price_amount` as the amount paid. It is the sum of the lines, minus discounts, plus shipping, plus taxes when prices exclude tax. `total` covers the lines only, so it fits a "Subtotal" row, not the amount charged. In the example above, the lines sum to €138.00, shipping adds €5.90, and the customer paid €143.90, of which €23.98 is VAT included in the prices. The [Orders](/3.x/orders#order-total) page details how the totals are computed.
+
+### Statuses
+
+An order carries three statuses, each moved by a different part of the shop. The [Orders](/3.x/orders#order-status) page describes each value and when it changes.
+
+| Attribute | Values |
+|-----------|--------|
+| `status` | `new`, `processing`, `completed`, `cancelled`, `archived` |
+| `payment_status` | `pending`, `authorized`, `paid`, `partially_refunded`, `refunded`, `voided` |
+| `shipping_status` | `unfulfilled`, `partially_shipped`, `shipped`, `partially_delivered`, `delivered`, `partially_returned`, `returned` |
+
+### Relationships
+
+These relationships appear when you include them. On the confirmation lookup, only `items` is available.
+
+| Relationship | Type | Attributes |
+|--------------|------|------------|
+| `items` | `order-items` | `name`, `sku`, `quantity`, `unit_price_amount`, `total` (unit price times quantity, minus the line discount), `metadata`, and `files` for a downloadable product on the order details |
+| `shippingAddress`, `billingAddress` | `order-addresses` | `first_name`, `last_name`, `full_name`, `company`, `street_address`, `street_address_plus`, `city`, `state`, `postal_code`, `phone`, `country_name` |
+| `paymentMethod` | `payment-methods` | `title`, `slug`, `description`, `instructions`, `driver`, `logo` |
+| `shippings` | `order-shippings` | The packages of the order, as [Tracking a shipment](#tracking-a-shipment) describes |
+| `refund` | `order-refunds` | `status`, `amount` in cents, `currency`, `reason`, `created_at` |
+
+The order keeps a copy of the addresses and of each line as they were at checkout, so later changes to the customer's saved addresses or to the catalog do not alter a past order.
+
+## Order History
+
+The account area lists the orders of the customer, newest first, with their number, statuses and amount. The list returns only the orders of the token owner.
+
+```bash title="Request"
+curl http://localhost:8000/store/customers/me/orders \
+  -H "Accept: application/vnd.api+json" \
+  -H "Authorization: Bearer 1|customer-token"
+```
+
+The API answers `200 OK` with a page of orders, the pagination links and the page details:
+
+```json title="Response"
+{
+    "data": [
+        {
+            "id": "01JQ8Z6N4W2T5V3K9R7M1H0XAB",
+            "type": "orders",
+            "attributes": {
+                "number": "ORD-20261117-000042",
+                "status": "processing",
+                "payment_status": "paid",
+                "shipping_status": "shipped",
+                "total": 13800,
+                "tax_amount": 2398,
+                "shipping_amount": 590,
+                "price_amount": 14390,
+                "currency_code": "EUR",
+                "email": "camille.martin@example.com",
+                "created_at": "2026-11-17T09:42:12+00:00"
+            }
+        },
+        {
+            "id": "01JP3M7R2X5K8N1Q4T6W9Y0ZAB",
+            "type": "orders",
+            "attributes": {
+                "number": "ORD-20261002-000017",
+                "status": "completed",
+                "payment_status": "paid",
+                "shipping_status": "delivered",
+                "total": 4800,
+                "tax_amount": 900,
+                "shipping_amount": 590,
+                "price_amount": 5390,
+                "currency_code": "EUR",
+                "email": "camille.martin@example.com",
+                "created_at": "2026-10-02T17:11:40+00:00"
+            }
+        }
+    ],
+    "links": {
+        "first": "http://localhost:8000/store/customers/me/orders?page%5Bnumber%5D=1",
+        "last": "http://localhost:8000/store/customers/me/orders?page%5Bnumber%5D=1",
+        "prev": null,
+        "next": null
+    },
+    "meta": {
+        "current_page": 1,
+        "from": 1,
+        "last_page": 1,
+        "links": [
+            { "url": null, "label": "&laquo; Previous", "page": null, "active": false },
+            { "url": "http://localhost:8000/store/customers/me/orders?page%5Bnumber%5D=1", "label": "1", "page": 1, "active": true },
+            { "url": null, "label": "Next &raquo;", "page": null, "active": false }
+        ],
+        "path": "http://localhost:8000/store/customers/me/orders",
+        "per_page": 15,
+        "to": 2,
+        "total": 2
+    }
+}
+```
+
+The list carries the order summaries only. Open one order with [Order details](#order-details) to show its lines and shipments, or add includes to the list when the history page shows more than the summary.
+
+### Filters, Sorting and Includes
+
+The list accepts these query parameters, described in [JSON:API Conventions](/3.x/store-api/json-api):
+
+| Parameter | Values | Description |
+|-----------|--------|-------------|
+| `filter[status]` | One order status, such as `processing` | Keeps the orders in that status. See [Filters](/3.x/store-api/json-api#filters). |
+| `sort` | `created_at`, `-created_at` | Oldest or newest first. The default is `-created_at`. See [Sorting](/3.x/store-api/json-api#sorting). |
+| `include` | `items`, `shippingAddress`, `billingAddress`, `paymentMethod`, `shippings`, `shippings.events`, `refund` | Relationships to add, comma-separated. See [Includes](/3.x/store-api/json-api#includes). |
+| `page[size]` | 1 to 100 | Orders per page. The default is 15. |
+| `page[number]` | 1 to 100 | Page to return. |
+| `page[cursor]` | The cursor of a previous page | Switches to cursor pagination. See [Pagination](/3.x/store-api/json-api#pagination). |
+
+For a tab that shows the orders still on their way:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/customers/me/orders?filter[status]=processing&page[size]=10" \
+  -H "Accept: application/vnd.api+json" \
+  -H "Authorization: Bearer 1|customer-token"
+```
+
+## Order Details
+
+The order page of the account shows everything the customer may need after buying: the lines, where the parcel goes, how they paid, the packages and their tracking, and a refund when there is one. Ask for what the page shows with `include`:
+
+```bash title="Request"
+curl "http://localhost:8000/store/customers/me/orders/01JQ8Z6N4W2T5V3K9R7M1H0XAB?include=items,shippingAddress,shippings.events" \
+  -H "Accept: application/vnd.api+json" \
+  -H "Authorization: Bearer 1|customer-token"
+```
+
+The API answers `200 OK` with the order and the included resources. This order is paid, so the item of the Sneaker Care Guide, a downloadable product, lists its files:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JQ8Z6N4W2T5V3K9R7M1H0XAB",
+        "type": "orders",
+        "attributes": {
+            "number": "ORD-20261117-000042",
+            "status": "processing",
+            "payment_status": "paid",
+            "shipping_status": "shipped",
+            "total": 13800,
+            "tax_amount": 2398,
+            "shipping_amount": 590,
+            "price_amount": 14390,
+            "currency_code": "EUR",
+            "email": "camille.martin@example.com",
+            "created_at": "2026-11-17T09:42:12+00:00"
+        },
+        "relationships": {
+            "items": {
+                "data": [
+                    { "id": "01JQ8Z6N5D9F3E5G7H2K4M6N8Q", "type": "order-items" },
+                    { "id": "01JQ8Z6N5C8E2D4F6G1J3K5M7P", "type": "order-items" }
+                ]
+            },
+            "shippingAddress": {
+                "data": { "id": "01JQ8Z6N5E1G3H5J7K9M1N3P5Q", "type": "order-addresses" }
+            },
+            "shippings": {
+                "data": [
+                    { "id": "01JQ9B2C4D6E8F0G1H3J5K7M9N", "type": "order-shippings" }
+                ]
+            }
+        }
+    },
+    "included": [
+        {
+            "id": "01JQ8Z6N5D9F3E5G7H2K4M6N8Q",
+            "type": "order-items",
+            "attributes": {
+                "name": "Classic Leather Sneakers",
+                "sku": "CLS-BLK-42",
+                "quantity": 1,
+                "unit_price_amount": 12900,
+                "total": 12900,
+                "metadata": null
+            }
+        },
+        {
+            "id": "01JQ8Z6N5C8E2D4F6G1J3K5M7P",
+            "type": "order-items",
+            "attributes": {
+                "name": "Sneaker Care Guide",
+                "sku": "SCG-PDF",
+                "quantity": 1,
+                "unit_price_amount": 900,
+                "total": 900,
+                "metadata": null,
+                "files": [
+                    {
+                        "id": "4b1f0c2e-8d6a-4f3e-9a51-6c2d7e9b0a13",
+                        "name": "sneaker-care-guide",
+                        "extension": "pdf",
+                        "size": 2483012
+                    }
+                ]
+            }
+        },
+        {
+            "id": "01JQ8Z6N5E1G3H5J7K9M1N3P5Q",
+            "type": "order-addresses",
+            "attributes": {
+                "first_name": "Camille",
+                "last_name": "Martin",
+                "full_name": "Camille Martin",
+                "company": null,
+                "street_address": "18 Rue de la Roquette",
+                "street_address_plus": "Apartment 4B",
+                "city": "Paris",
+                "state": null,
+                "postal_code": "75011",
+                "phone": "+33 6 12 34 56 78",
+                "country_name": "France"
+            }
+        },
+        {
+            "id": "01JQ9B2C4D6E8F0G1H3J5K7M9N",
+            "type": "order-shippings",
+            "attributes": {
+                "status": "in_transit",
+                "carrier_name": "Colissimo",
+                "tracking_number": "6A12345678901",
+                "tracking_url": "https://www.laposte.fr/outils/suivre-vos-envois?code=6A12345678901",
+                "shipped_at": "2026-11-18T08:30:00+00:00",
+                "received_at": null,
+                "returned_at": null
+            },
+            "relationships": {
+                "events": {
+                    "data": [
+                        { "id": "01JQ9B3D5F7H9K1M3P5R7T9V1X", "type": "order-shipping-events" },
+                        { "id": "01JQ9C4E6G8J0K2M4N6P8R0S2T", "type": "order-shipping-events" }
+                    ]
+                }
+            }
+        },
+        {
+            "id": "01JQ9B3D5F7H9K1M3P5R7T9V1X",
+            "type": "order-shipping-events",
+            "attributes": {
+                "status": "picked_up",
+                "description": "Parcel picked up by the carrier",
+                "location": "Paris, FR",
+                "latitude": "48.8566000",
+                "longitude": "2.3522000",
+                "occurred_at": "2026-11-18T08:30:00+00:00",
+                "created_at": "2026-11-18T08:31:04+00:00"
+            }
+        },
+        {
+            "id": "01JQ9C4E6G8J0K2M4N6P8R0S2T",
+            "type": "order-shipping-events",
+            "attributes": {
+                "status": "in_transit",
+                "description": "Parcel in transit to the sorting center",
+                "location": "Wissous, FR",
+                "latitude": "48.7311000",
+                "longitude": "2.3263000",
+                "occurred_at": "2026-11-18T19:05:00+00:00",
+                "created_at": "2026-11-18T19:06:12+00:00"
+            }
+        }
+    ]
+}
+```
+
+The includes are the ones of the [order history](#filters-sorting-and-includes). Without `include`, the response carries the attributes only. Events included through `shippings.events` come in no set order: sort them by `occurred_at` before you draw a timeline. The [shipment endpoint](#tracking-a-shipment) returns them sorted.
+
+An order of another customer answers `404 not_found`, like an ID that does not exist. An include outside the list answers `400 bad_request`.
+
+## Tracking a Shipment
+
+A tracking page shows where a package is, without asking the customer to sign in, so it works from a link in a shipping email. An order can ship in several packages; each one is a shipment with its own ID, carrier and tracking number.
+
+The storefront gets the shipment ID from `include=shippings` on the [order details](#order-details), where each `order-shippings` resource is one package. A guest has no account to read, so pass the ID in the email you send when the package ships: the `shipment.*` webhooks carry it as the `id` of the package, as [Webhooks](/3.x/webhooks#shipment-data) describes.
+
+```bash title="Request"
+curl "http://localhost:8000/store/shipments/01JQ9B2C4D6E8F0G1H3J5K7M9N?include=events" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` with the shipment and its tracking events, oldest first:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JQ9B2C4D6E8F0G1H3J5K7M9N",
+        "type": "order-shippings",
+        "attributes": {
+            "status": "in_transit",
+            "carrier_name": "Colissimo",
+            "tracking_number": "6A12345678901",
+            "tracking_url": "https://www.laposte.fr/outils/suivre-vos-envois?code=6A12345678901",
+            "shipped_at": "2026-11-18T08:30:00+00:00",
+            "received_at": null,
+            "returned_at": null
+        },
+        "relationships": {
+            "events": {
+                "data": [
+                    { "id": "01JQ9B3D5F7H9K1M3P5R7T9V1X", "type": "order-shipping-events" },
+                    { "id": "01JQ9C4E6G8J0K2M4N6P8R0S2T", "type": "order-shipping-events" }
+                ]
+            }
+        }
+    },
+    "included": [
+        {
+            "id": "01JQ9B3D5F7H9K1M3P5R7T9V1X",
+            "type": "order-shipping-events",
+            "attributes": {
+                "status": "picked_up",
+                "description": "Parcel picked up by the carrier",
+                "location": "Paris, FR",
+                "latitude": "48.8566000",
+                "longitude": "2.3522000",
+                "occurred_at": "2026-11-18T08:30:00+00:00",
+                "created_at": "2026-11-18T08:31:04+00:00"
+            }
+        },
+        {
+            "id": "01JQ9C4E6G8J0K2M4N6P8R0S2T",
+            "type": "order-shipping-events",
+            "attributes": {
+                "status": "in_transit",
+                "description": "Parcel in transit to the sorting center",
+                "location": "Wissous, FR",
+                "latitude": "48.7311000",
+                "longitude": "2.3263000",
+                "occurred_at": "2026-11-18T19:05:00+00:00",
+                "created_at": "2026-11-18T19:06:12+00:00"
+            }
+        }
+    ]
+}
+```
+
+| Attribute | Description |
+|-----------|-------------|
+| `status` | Where the package stands: `pending`, `picked_up`, `in_transit`, `at_sorting_center`, `out_for_delivery`, `delivered`, `delivery_failed` or `returned`. |
+| `carrier_name` | Name of the carrier, or `null` when the package has none. |
+| `tracking_number`, `tracking_url` | The carrier references, to show or link to the carrier's own tracking page. |
+| `shipped_at`, `received_at`, `returned_at` | When the package left, was delivered and came back, ISO 8601, or `null`. |
+
+Each event has a `status` from the same list, a `description` and a `location` from the carrier, `latitude` and `longitude` as strings with seven decimals (or `null`), and `occurred_at`, the time the carrier reported. The [Fulfillment](/3.x/fulfillment#shipment-status-package-level) page describes the shipment statuses and how carriers report events.
+
+`events` is the only include of this endpoint; any other answers `400 bad_request`. An unknown shipment ID answers `404 not_found`.
+
+## Downloading Purchased Files
+
+A customer who buys a digital product, such as a PDF guide or a font pack, downloads its files from their account. The files sit on a private disk with no public URL, so the storefront asks the API for a short-lived link each time the customer clicks **Download**.
+
+<Steps>
+<Step title="Read the order with its items">
+
+Request the [order details](#order-details) with `include=items`. Once the payment status of the order is `paid` or `partially_refunded`, each item of a downloadable product carries `files`, with the `id`, `name`, `extension` and `size` in bytes of each file. Show one **Download** button per file.
+
+</Step>
+<Step title="Ask for a link when the customer clicks">
+
+Call the file endpoint with the order ID, the item ID and the file `id`:
+
+```bash title="Request"
+curl http://localhost:8000/store/customers/me/orders/01JQ8Z6N4W2T5V3K9R7M1H0XAB/items/01JQ8Z6N5C8E2D4F6G1J3K5M7P/files/4b1f0c2e-8d6a-4f3e-9a51-6c2d7e9b0a13 \
+  -H "Accept: application/vnd.api+json" \
+  -H "Authorization: Bearer 1|customer-token"
+```
+
+</Step>
+<Step title="Send the browser to the link">
+
+Redirect the browser, or open a new tab, to the `url` of the response right away. The file comes back as an attachment named after the file, such as `sneaker-care-guide.pdf`.
+
+</Step>
+</Steps>
+
+The API answers `200 OK` with the link and the moment it expires. This response is a plain `data` object, not a JSON:API resource:
+
+```json title="Response"
+{
+    "data": {
+        "url": "http://localhost:8000/store/files/4b1f0c2e-8d6a-4f3e-9a51-6c2d7e9b0a13?expires=1794995232&signature=b7e3c1f0a9d24e6b8c5f1a7d3e9b2c4f6a8d0e2b4c6f8a1d3e5b7c9f0a2d4e6b",
+        "expires_at": "2026-11-18T09:47:12+00:00"
+    }
+}
+```
+
+The link works for five minutes. Ask for a new one at every click rather than storing it, and never put it in an email: anyone holding the link downloads the file until it expires. The API keeps no count of links or downloads per customer: only the general [rate limit](/3.x/store-api#rate-limits) of the Store API applies.
+
+The shape of the link depends on the disk that holds the files, the `shopper.media.storage.files_disk` setting described in [Products](/3.x/products#downloadable-files):
+
+- On an S3 disk, the link is a temporary URL of the bucket, and the download goes straight to S3.
+- On any other disk, such as the default `local` disk, the link points to `GET /store/files/{fileId}`, a route signed by your app, which streams the file. A link that was altered or has expired answers `403`.
+
+| Status | Code | When |
+|--------|------|------|
+| `401` | `unauthenticated` | The request has no valid customer token. |
+| `403` | `forbidden` | The order is not paid yet: "The files of this order are available once it is paid." |
+| `404` | `not_found` | The order is not one of the customer's, the item is not in the order, or the file does not belong to the product of the item. |
+
+Downloads go through the account only. A guest order has no file endpoint, so a store that sells digital products asks buyers to create an account, or sends the files another way.
+
+When the files move to another disk with the `shopper:files:secure` command, each file gets a new `id`. Read the order again rather than reusing a file `id` stored earlier.
+
+## Next Steps
+
+The order pages build on the account of the customer and on the error codes shared by every endpoint.
+
+<Cards>
+  <Card title="Customers" href="/3.x/store-api/customers">
+    Manage the profile and the saved addresses of the account.
+  </Card>
+  <Card title="Errors" href="/3.x/store-api/errors">
+    Every error code the Store API returns, and what the client should do.
+  </Card>
+  <Card title="Webhooks" href="/3.x/webhooks">
+    Send shipping emails with the shipment ID when a package moves.
+  </Card>
+</Cards>

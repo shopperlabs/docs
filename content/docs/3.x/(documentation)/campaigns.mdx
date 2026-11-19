@@ -403,4 +403,4 @@ The Store API has no campaign endpoint, and its responses never name a campaign.
 | `GET /store/carts/{cartId}` | Each item of the `promotions` attribute has a `status`: `applied`, or `suppressed` with an `amount` of 0 when the discount applies nothing, for example because its campaign budget is used up |
 | `POST /store/carts/{cartId}/complete` | When another order took the last of the budget, a 422 error with code `promotion_budget_reached` on the `/data/attributes/promotion` pointer. The cart is priced again without the discount: show the new total and let the customer confirm |
 
-The `store` prefix is set by `SHOPPER_API_PREFIX`. The [Storefront](/3.x/storefront) page covers the Store API and its errors.
+The `store` prefix is set by `SHOPPER_API_PREFIX`. The Store API [Cart](/3.x/store-api/cart#promotion-codes) guide covers promotion codes, and the [Errors](/3.x/store-api/errors#error-codes) page lists every error code.

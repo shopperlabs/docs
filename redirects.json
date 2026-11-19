@@ -15,6 +15,11 @@
     "permanent": false
   },
   {
+    "source": "/store-api",
+    "destination": "/3.x/store-api",
+    "permanent": false
+  },
+  {
     "source": "/3.x/addons/stripe",
     "destination": "/3.x/payments/stripe",
     "permanent": true

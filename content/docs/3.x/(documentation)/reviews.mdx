@@ -478,7 +478,7 @@ The Store API exposes the approved reviews under the `store` prefix, set by `SHO
 | `GET /store/products/{slug}/reviews` | The approved reviews of a published product, paginated, newest first. Filter with `filter[rating]=5`, sort with `sort=rating` or `sort=-created_at` |
 | `GET /store/reviews` | The latest approved reviews across the store, for a testimonials block. Not paginated, capped at `latest_limit` |
 
-A review resource has the type `reviews` and carries `title`, `content`, `rating`, `is_recommended`, `created_at` and an `author` object. The author is reduced to a display name, the first name and the initial of the last name such as `Sarah K.`, and an `avatar` picture URL. The author's ID and full last name never leave the API.
+A review resource has the type `reviews` and carries `title`, `content`, `rating`, `is_recommended`, `created_at` and an `author` object. The author is reduced to a display name, the first name and the initial of the last name such as `Sarah K.`, and an `avatar` picture URL. The author's ID never leaves the API.
 
 The product reviews endpoint adds the aggregates of the approved reviews to `meta`, so a product page needs one request:
 
@@ -528,4 +528,4 @@ const { data, meta } = await sdk.store.product.reviews('classic-t-shirt', {
 const testimonials = await sdk.store.review.latest()
 ```
 
-The [Storefront](/3.x/storefront) section documents the Store API.
+The Store API [Catalog](/3.x/store-api/catalog#reviews) guide covers the review endpoints.

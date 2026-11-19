@@ -718,4 +718,4 @@ A signed-in customer manages their account under `/store/customers/me`:
 
 A customer resource has the type `customers` and carries `first_name`, `last_name`, `email`, `avatar` (the `picture` URL), `avatar_type`, `phone_number`, `gender`, `birth_date`, `opt_in`, `email_verified` (a boolean) and `created_at`. An address resource has the type `addresses`, carries the address columns except `metadata`, with `country_code` in place of `country_id`, and is identified by its public ID. An address or an order of another customer answers 404.
 
-The Store API changes neither the email nor the password of a signed-in customer outside the reset flow, and has no endpoint to delete or anonymize an account. The [Storefront](/3.x/storefront) section documents the Store API.
+The Store API changes neither the email nor the password of a signed-in customer outside the reset flow, and has no endpoint to delete or anonymize an account. The Store API [Customers](/3.x/store-api/customers) guide covers the profile and address endpoints.

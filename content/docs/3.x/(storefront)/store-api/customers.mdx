@@ -1,0 +1,484 @@
+---
+title: Customers
+description: Read and update the signed-in customer's profile, profile picture and addresses, and attach a guest cart to their account.
+---
+
+The account area of a storefront shows who is signed in, lets the customer edit their details, keeps the addresses they ship to, and carries the cart they built as a guest into their account. The endpoints of this page serve that area. The order history and the downloads of an account are on the [Orders](/3.x/store-api/orders) guide.
+
+Every endpoint of this page needs the bearer token of a signed-in customer, the one [Logging in](/3.x/store-api/authentication#logging-in) and [Registering a customer](/3.x/store-api/authentication#registering-a-customer) return. The token identifies the customer, so no URL carries a customer ID: `/customers/me` always means the owner of the token. The [Customers](/3.x/customers) page covers the customer model behind these endpoints.
+
+## Endpoints
+
+These routes sit in the authenticated route group. A request without a token, with an expired or revoked token, or with a token that was not issued for the store answers `401`.
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/store/customers/me` | Read the profile |
+| `PATCH` | `/store/customers/me` | Update the profile |
+| `POST` | `/store/customers/me/avatar` | Upload a profile picture |
+| `DELETE` | `/store/customers/me/avatar` | Remove the profile picture |
+| `GET` | `/store/customers/me/addresses` | List the saved addresses |
+| `POST` | `/store/customers/me/addresses` | Save an address |
+| `PATCH` | `/store/customers/me/addresses/{addressId}` | Update an address |
+| `DELETE` | `/store/customers/me/addresses/{addressId}` | Delete an address |
+| `POST` | `/store/carts/{cartId}/transfer` | Attach a guest cart to the customer |
+
+Request bodies are flat JSON objects, such as `{"opt_in": true}`. The profile picture is the only multipart upload.
+
+A missing or rejected token answers `401` with the `unauthenticated` code:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "401",
+            "code": "unauthenticated",
+            "title": "Unauthorized",
+            "detail": "Unauthenticated."
+        }
+    ]
+}
+```
+
+The storefront then drops the stored token and sends the customer to the sign-in form.
+
+## Reading the Profile
+
+The storefront reads the profile to greet the customer, fill the account form and show the profile picture. It is also the cheapest way to check that a stored token still works when the storefront starts.
+
+```bash title="Request"
+curl http://localhost:8000/store/customers/me \
+  -H "Accept: application/vnd.api+json" \
+  -H "Authorization: Bearer 1|customer-token"
+```
+
+The API answers `200 OK` with a `customers` resource:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD9B2K7X4N8R3T6V1Y5Z0QWE",
+        "type": "customers",
+        "attributes": {
+            "first_name": "Camille",
+            "last_name": "Martin",
+            "email": "camille.martin@example.com",
+            "avatar": "https://ui-avatars.com/api/?name=Camille+Martin&color=1d4ed8&background=dbeafe",
+            "avatar_type": "avatar_ui",
+            "phone_number": "+33 6 12 34 56 78",
+            "gender": "female",
+            "birth_date": "1992-04-18",
+            "opt_in": true,
+            "email_verified": true,
+            "created_at": "2026-09-03T14:20:11+00:00"
+        }
+    }
+}
+```
+
+| Attribute | Type | Description |
+|-----------|------|-------------|
+| `first_name` | string or null | First name. |
+| `last_name` | string | Last name. |
+| `email` | string | Email the customer signs in with. |
+| `avatar` | string | URL of the profile picture: the uploaded file, or a generated picture when there is none. |
+| `avatar_type` | string | `storage` when the customer uploaded a picture, `avatar_ui` for the generated one. |
+| `phone_number` | string or null | Phone number, as the customer typed it. |
+| `gender` | string or null | `female` or `male`. |
+| `birth_date` | string or null | Date of birth, `YYYY-MM-DD`. |
+| `opt_in` | boolean | Whether the customer accepts marketing emails. |
+| `email_verified` | boolean | Whether the customer confirmed their email address. |
+| `created_at` | string | When the account was created, ISO 8601. |
+
+The customer `id` is a ULID, like the IDs of carts, orders and addresses.
+
+## Updating the Profile
+
+The account form saves the fields the customer changed. Send only those fields: a field left out of the body keeps its value.
+
+<ApiTable name="PATCH /store/customers/me" label="Parameter">
+
+<ParamField path="first_name" type="string">
+  First name, up to 255 characters. `null` clears it.
+</ParamField>
+
+<ParamField path="last_name" type="string">
+  Last name, up to 255 characters. It cannot be cleared.
+</ParamField>
+
+<ParamField path="phone_number" type="string">
+  Phone number, up to 255 characters. `null` clears it.
+</ParamField>
+
+<ParamField path="birth_date" type="string">
+  A date before today, such as `1992-04-18`. `null` clears it.
+</ParamField>
+
+<ParamField path="gender" type="string">
+  `female` or `male`. `null` clears it.
+</ParamField>
+
+<ParamField path="opt_in" type="boolean">
+  Whether the customer accepts marketing emails.
+</ParamField>
+
+</ApiTable>
+
+The email address is not part of this endpoint. A body that carries `email` gets no error, and the email stays the same.
+
+```bash title="Request"
+curl -X PATCH http://localhost:8000/store/customers/me \
+  -H "Accept: application/vnd.api+json" \
+  -H "Authorization: Bearer 1|customer-token" \
+  -H "Content-Type: application/json" \
+  -d '{"phone_number": "+33 7 98 76 54 32", "opt_in": false}'
+```
+
+The API answers `200 OK` with the whole profile, in the shape of [Reading the profile](#reading-the-profile), so the storefront re-renders the form from the response.
+
+A value that fails validation answers `422`, with one error per field. The `code` is the name of the rule that failed, and the pointer names the field:
+
+```json title="Response"
+{
+    "errors": [
+        {
+            "status": "422",
+            "code": "before",
+            "title": "Unprocessable Content",
+            "detail": "The birth date field must be a date before today.",
+            "source": {
+                "pointer": "/data/attributes/birth_date"
+            }
+        }
+    ]
+}
+```
+
+The [Errors](/3.x/store-api/errors) guide lists every error code.
+
+## Profile Picture
+
+A customer who uploads a picture sees it in the account area. Without one, `avatar` points to a generated picture, so the storefront always has an image to show.
+
+The upload is a multipart request with the image in the `avatar` field. The file must be an image of 1,024 KB at most.
+
+```bash title="Request"
+curl -X POST http://localhost:8000/store/customers/me/avatar \
+  -H "Accept: application/vnd.api+json" \
+  -H "Authorization: Bearer 1|customer-token" \
+  -F "avatar=@camille.jpg"
+```
+
+The API answers `200 OK` with the profile. `avatar_type` is now `storage`, and `avatar` is the URL of the stored file:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JD9B2K7X4N8R3T6V1Y5Z0QWE",
+        "type": "customers",
+        "attributes": {
+            "first_name": "Camille",
+            "last_name": "Martin",
+            "email": "camille.martin@example.com",
+            "avatar": "http://localhost:8000/storage/avatars/kD3f9QmZ7xWb2LpR8sTn4VhY6cJe1AuG0oNi5MrK.jpg",
+            "avatar_type": "storage",
+            "phone_number": "+33 7 98 76 54 32",
+            "gender": "female",
+            "birth_date": "1992-04-18",
+            "opt_in": false,
+            "email_verified": true,
+            "created_at": "2026-09-03T14:20:11+00:00"
+        }
+    }
+}
+```
+
+The file goes to the `avatars` folder of the media disk, the `shopper.media.storage.disk_name` setting described in [Media](/3.x/media#storage-disk). A new upload replaces the previous picture and deletes its file. A file that is not an image or is larger than 1,024 KB answers `422` with a pointer on `/data/attributes/avatar`.
+
+To go back to the generated picture, delete the upload:
+
+```bash title="Request"
+curl -X DELETE http://localhost:8000/store/customers/me/avatar \
+  -H "Accept: application/vnd.api+json" \
+  -H "Authorization: Bearer 1|customer-token"
+```
+
+The API answers `200 OK` with the profile, where `avatar_type` is `avatar_ui` and `avatar` is the generated URL again.
+
+## Addresses
+
+Saved addresses spare a returning customer from typing their address at every checkout. The account area lists them, and the checkout offers them as choices. Each address is either a shipping or a billing address, and the customer can mark one address as the default for each.
+
+Every address request is scoped to the owner of the token. An address ID that belongs to another customer answers `404 not_found`, the same answer as an ID that does not exist.
+
+### Listing Addresses
+
+The list returns every address of the customer, newest first, in one response. It is not paginated.
+
+```bash title="Request"
+curl http://localhost:8000/store/customers/me/addresses \
+  -H "Accept: application/vnd.api+json" \
+  -H "Authorization: Bearer 1|customer-token"
+```
+
+The API answers `200 OK` with an array of `addresses` resources:
+
+```json title="Response"
+{
+    "data": [
+        {
+            "id": "01JZ8KA2B3C4D5E6F7G8H9JKMN",
+            "type": "addresses",
+            "attributes": {
+                "first_name": "Camille",
+                "last_name": "Martin",
+                "company_name": null,
+                "street_address": "18 Rue de la Roquette",
+                "street_address_plus": "Apartment 4B",
+                "postal_code": "75011",
+                "city": "Paris",
+                "state": null,
+                "country_code": "FR",
+                "type": "shipping",
+                "phone_number": "+33 6 12 34 56 78",
+                "shipping_default": true,
+                "billing_default": false,
+                "created_at": "2026-11-02T18:05:43+00:00",
+                "updated_at": "2026-11-02T18:05:43+00:00"
+            }
+        }
+    ]
+}
+```
+
+`country_code` is the two-letter ISO code of the country, and `type` is `shipping` or `billing`.
+
+### Saving an Address
+
+The storefront saves an address from the account area, or after a checkout when the customer ticks a "save this address" box.
+
+<ApiTable name="POST /store/customers/me/addresses" label="Parameter">
+
+<ParamField path="first_name" type="string" required>
+  First name, up to 255 characters.
+</ParamField>
+
+<ParamField path="last_name" type="string" required>
+  Last name, up to 255 characters.
+</ParamField>
+
+<ParamField path="company_name" type="string">
+  Company, up to 255 characters.
+</ParamField>
+
+<ParamField path="street_address" type="string" required>
+  Street and number, up to 255 characters.
+</ParamField>
+
+<ParamField path="street_address_plus" type="string">
+  Second address line, such as an apartment or a floor, up to 255 characters.
+</ParamField>
+
+<ParamField path="postal_code" type="string" required>
+  Postal code, up to 255 characters.
+</ParamField>
+
+<ParamField path="city" type="string" required>
+  City, up to 255 characters.
+</ParamField>
+
+<ParamField path="state" type="string">
+  State or region, such as `NY`, up to 255 characters.
+</ParamField>
+
+<ParamField path="country_code" type="string" required>
+  Two-letter ISO code of the country, such as `FR` or `US`. Upper-cased before validation.
+</ParamField>
+
+<ParamField path="type" type="string" required>
+  `shipping` or `billing`.
+</ParamField>
+
+<ParamField path="phone_number" type="string">
+  Phone number, up to 255 characters.
+</ParamField>
+
+<ParamField path="shipping_default" type="boolean">
+  `true` makes this address the default shipping address of the customer.
+</ParamField>
+
+<ParamField path="billing_default" type="boolean">
+  `true` makes this address the default billing address of the customer.
+</ParamField>
+
+</ApiTable>
+
+```bash title="Request"
+curl -X POST http://localhost:8000/store/customers/me/addresses \
+  -H "Accept: application/vnd.api+json" \
+  -H "Authorization: Bearer 1|customer-token" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "first_name": "Camille",
+    "last_name": "Martin",
+    "street_address": "18 Rue de la Roquette",
+    "street_address_plus": "Apartment 4B",
+    "postal_code": "75011",
+    "city": "Paris",
+    "country_code": "fr",
+    "type": "shipping",
+    "phone_number": "+33 6 12 34 56 78",
+    "shipping_default": true,
+    "billing_default": false
+  }'
+```
+
+The API answers `201 Created` with the new address, in the shape of the list above. A flag left out of the body is stored as `false`, but the `201` response shows it as `null`; the list and the update return `false`.
+
+An unknown country code answers `422` with the `exists` code on `/data/attributes/country_code`.
+
+### Default Addresses
+
+A customer has at most one default shipping address and one default billing address. Setting `shipping_default` or `billing_default` to `true` on an address, when saving or updating it, removes that flag from the other addresses of the customer, so the checkout can pick the default without asking.
+
+The values `1` and `"1"` count as `true` and move the default the same way.
+
+### Updating and Deleting an Address
+
+An update takes the same fields as [Saving an address](#saving-an-address), all optional. Send only what changed:
+
+```bash title="Request"
+curl -X PATCH http://localhost:8000/store/customers/me/addresses/01JZ8KB7C8D9E0F1G2H3J4K5M6 \
+  -H "Accept: application/vnd.api+json" \
+  -H "Authorization: Bearer 1|customer-token" \
+  -H "Content-Type: application/json" \
+  -d '{"billing_default": true}'
+```
+
+The API answers `200 OK` with the updated address.
+
+A delete removes the address for good:
+
+```bash title="Request"
+curl -X DELETE http://localhost:8000/store/customers/me/addresses/01JZ8KB7C8D9E0F1G2H3J4K5M6 \
+  -H "Accept: application/vnd.api+json" \
+  -H "Authorization: Bearer 1|customer-token"
+```
+
+The API answers `204 No Content`, with no body. Deleting a default address leaves the customer without a default of that kind until another address gets the flag.
+
+### Using a Saved Address at Checkout
+
+The cart does not take an address ID: the [Cart](/3.x/store-api/cart) guide sets addresses on a cart as objects. To ship to a saved address, copy its fields into the cart address. Most names are the same; these differ:
+
+| Saved address | Cart address |
+|---------------|--------------|
+| `company_name` | `company` |
+| `street_address` | `address_1` |
+| `street_address_plus` | `address_2` |
+| `phone_number` | `phone` |
+
+`first_name`, `last_name`, `city`, `state`, `postal_code` and `country_code` keep their names.
+
+## Transferring a Guest Cart
+
+Most visitors fill a cart before they sign in. When they sign in at checkout, the cart they built must follow them into their account, and join the cart they may have left open on another device. The transfer does that: it attaches a guest cart to the signed-in customer and returns the cart the storefront uses from then on.
+
+The login and registration requests accept the guest cart ID as `cart_id` and run this same transfer, returning the resulting cart ID in `meta.cart_id`, as [Logging in](/3.x/store-api/authentication#logging-in) shows. The transfer endpoint is for a customer who is already signed in when the guest cart appears, such as a second tab or a token restored from storage.
+
+```bash title="Request"
+curl -X POST http://localhost:8000/store/carts/01JZ9A1B2C3D4E5F6G7H8J9K0M/transfer \
+  -H "Accept: application/vnd.api+json" \
+  -H "Authorization: Bearer 1|customer-token"
+```
+
+### What the Transfer Does
+
+The result depends on the guest cart and on the open carts the customer already has:
+
+| Situation | Result | Cart ID to keep |
+|-----------|--------|-----------------|
+| The cart already belongs to this customer | Nothing changes, so a retry with the returned ID is safe. | The same ID |
+| The customer has no open cart | The guest cart becomes a cart of the customer. | The guest cart ID |
+| The customer has an open cart | The guest lines move into the customer's latest open cart, and the guest cart is deleted. | The customer cart ID |
+| The guest cart or the customer cart has a payment session open | No merge: the guest cart becomes a cart of the customer, next to the other one. | The guest cart ID |
+
+When the carts merge, a product present in both carts becomes one line whose quantity is the sum of both, and the other guest lines move as they are. Promotion codes of the guest cart are added to the customer cart. The shipping option of the customer cart is cleared, because the parcel changed, and the customer picks one again at checkout. The email and addresses of the guest cart are not carried over: the customer cart keeps its own.
+
+A merge that cannot be done falls back to the claim, and the guest cart becomes a cart of the customer, unchanged. That happens when a line carries a negotiated price that locks its quantity, when the same product carries different metadata in the two carts, or when a product has no price in the currency of the customer cart.
+
+Unless it has a payment session open, the cart that results is priced again from the catalog, and its promotion codes are checked again: a code the customer can no longer use, such as one limited to one use per customer that they already used, is removed. The [Cart](/3.x/cart) page covers how prices and promotions apply.
+
+### The Response
+
+The API answers `200 OK` with the resulting cart, in the shape the [Cart](/3.x/store-api/cart) guide describes. `meta.price_changes` lists the lines whose unit price changed in the transfer, with the price before and after, in cents:
+
+```json title="Response"
+{
+    "data": {
+        "id": "01JZ7Q4R5S6T7V8W9X0Y1Z2A3B",
+        "type": "carts",
+        "attributes": {
+            "currency_code": "EUR",
+            "email": null,
+            "promotions": [],
+            "completed_at": null,
+            "metadata": null,
+            "lines_count": 2,
+            "lines_quantity": 3,
+            "subtotal": 25700,
+            "discount_total": 0,
+            "tax_total": 0,
+            "shipping_total": 0,
+            "total": 25700,
+            "tax_inclusive": false,
+            "shipping_option_id": null,
+            "created_at": "2026-11-10T16:42:08+00:00",
+            "updated_at": "2026-11-19T10:21:37+00:00"
+        }
+    },
+    "meta": {
+        "price_changes": [
+            {
+                "line": "01JZ9A2C3D4E5F6G7H8J9K0M1N",
+                "from": 12900,
+                "to": 11900
+            }
+        ]
+    }
+}
+```
+
+Here the guest cart `01JZ9A1B2C3D4E5F6G7H8J9K0M` was merged into the customer cart `01JZ7Q4R5S6T7V8W9X0Y1Z2A3B`. The pair of Classic Leather Sneakers the customer had left in that cart now costs €119.00 instead of €129.00, and the storefront shows that change before the customer pays. `price_changes` is empty when no price moved, and it skips lines that changed currency in a merge.
+
+Store the `id` of the response as the cart ID and forget the guest cart ID: after a merge, the guest cart no longer exists and its ID answers `404`.
+
+### Errors
+
+The transfer shares the checkout rate limit with the cart endpoints that add things, described in [Rate limits](/3.x/store-api#rate-limits).
+
+| Status | Code | When | What to do |
+|--------|------|------|------------|
+| `401` | `unauthenticated` | The request has no valid customer token. | Sign the customer in, then transfer. |
+| `403` | `forbidden` | The cart belongs to another customer. | Drop the stored cart ID and use the customer's own cart. |
+| `404` | `not_found` | No cart has this ID. | Drop the stored cart ID. |
+| `409` | `cart_completed` | The cart is already an order. | Drop the stored cart ID. |
+| `409` | `payment_session_collected` | The guest cart is already paid at the payment provider, so its payment session cannot be released. | Complete the checkout of that cart to place the order. |
+| `409` | `payment_session_in_progress` | Another request is opening a payment session on the cart. The response carries `Retry-After: 3`. | Retry after 3 seconds. |
+| `503` | `payment_provider_unavailable` | The payment provider did not answer while the transfer released the payment session of the cart. | Retry later. |
+
+## Next Steps
+
+With the customer signed in and their cart attached, the storefront moves on to the checkout, then to the orders of the account.
+
+<Cards>
+  <Card title="Orders" href="/3.x/store-api/orders">
+    Show the order history of the customer, track shipments and download purchased files.
+  </Card>
+  <Card title="Checkout" href="/3.x/store-api/checkout">
+    Turn the cart into an order with a shipping option and a payment.
+  </Card>
+  <Card title="Cart" href="/3.x/store-api/cart">
+    Create carts, add lines and set addresses and promotion codes.
+  </Card>
+</Cards>
