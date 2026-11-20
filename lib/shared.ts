@@ -18,6 +18,7 @@ export const shopperRepo = {
 };
 
 export const siteUrl = 'https://shopperphp.com';
+export const docsUrl = 'https://docs.shopperphp.com';
 
 export const links = {
   github: 'https://github.com/shopperlabs/shopper',

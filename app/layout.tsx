@@ -1,6 +1,7 @@
 import { RootProvider } from 'fumadocs-ui/provider/next';
 import type { Metadata } from 'next';
 import { Geist_Mono, Instrument_Sans, Inter } from 'next/font/google';
+import { docsUrl } from '@/lib/shared';
 import './global.css';
 
 const sans = Instrument_Sans({
@@ -20,7 +21,7 @@ const mono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://docs.shopperphp.com'),
+  metadataBase: new URL(docsUrl),
   title: {
     template: '%s | Shopper',
     default: 'Shopper Documentation',

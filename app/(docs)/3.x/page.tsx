@@ -8,13 +8,19 @@ import { VersionMark } from '@/components/home/version-mark';
 import { domainHref, firstUrl, flattenPages, tabsFor, versions } from '@/components/layout/tree';
 import { DiscordIcon, GithubIcon, XIcon } from '@/components/ui/brand-icons';
 import { InstallCommand } from '@/components/ui/install-command';
-import { links } from '@/lib/shared';
+import { getPageImageUrl, links } from '@/lib/shared';
 import { getDocsTree } from '@/lib/source';
 
 export const metadata: Metadata = {
   title: { absolute: 'Shopper 3.x documentation' },
   description:
     'Install Shopper, run a store from its admin panel and build a storefront on the Store API. Documentation for Shopper 3, the headless e-commerce package for Laravel.',
+  alternates: {
+    canonical: '/3.x',
+  },
+  openGraph: {
+    images: getPageImageUrl({ slugs: ['3.x'] }).url,
+  },
 };
 
 const DOMAINS: { name: string; guideFolder?: string; glyph: string; description: string }[] = [

@@ -118,10 +118,18 @@ export async function generateMetadata(props: PageProps<'/[...slug]'>): Promise<
   const page = source.getPage(params.slug);
   if (!page) notFound();
 
+  // The same page exists in several versions under the same title: the version tells them apart in results.
+  const { version } = scopeFor(getDocsTree(), page.url);
+
   return {
-    title: page.data.title,
+    title: { absolute: `${page.data.title} | Shopper ${version.$id}` },
     description: page.data.description,
+    alternates: {
+      canonical: page.url,
+    },
     openGraph: {
+      url: page.url,
+      type: 'article',
       images: getPageImageUrl(page).url,
     },
   };
