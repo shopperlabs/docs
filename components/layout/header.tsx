@@ -71,7 +71,7 @@ export function Header({
             <Logo />
 
             <Menu>
-              <MenuButton className="group hidden h-8 items-center gap-2 rounded-xl px-2.5 py-1.5 font-mono text-xs font-medium tracking-wide whitespace-nowrap text-zinc-900 hover:bg-zinc-600/5 focus:outline-hidden data-focus:outline-2 data-focus:-outline-offset-2 data-focus:outline-primary data-open:bg-zinc-600/5 lg:flex dark:text-zinc-300 dark:hover:bg-zinc-200/5 dark:data-open:bg-zinc-200/5">
+              <MenuButton className="group hidden h-8 items-center gap-2 rounded-xl px-2.5 py-1.5 font-mono text-xs font-medium tracking-wide whitespace-nowrap text-zinc-900 hover:bg-zinc-600/5 focus:outline-hidden data-focus:ring-2 data-focus:ring-brand data-open:bg-zinc-600/5 lg:flex dark:text-zinc-300 dark:hover:bg-zinc-200/5 dark:data-focus:ring-brand-400 dark:data-open:bg-zinc-200/5">
                 <span className="sr-only">Version </span>
                 {scope.version.name}
                 {/* Mintlify's chevron: wider and bolder than lucide's at 12px. */}
