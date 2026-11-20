@@ -11,21 +11,33 @@ These endpoints are public and read-only. They answer `GET` requests without a c
 
 All these routes sit in the public route group. A show endpoint answers `404` with the code `not_found` for a record that does not exist or that the merchant disabled.
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| `GET` | `/store/settings` | Read the public store settings |
-| `GET` | `/store/legals` | List the enabled legal pages |
-| `GET` | `/store/legals/{slug}` | Read one legal page |
-| `GET` | `/store/countries` | List countries |
-| `GET` | `/store/countries/{code}` | Read one country by its two-letter or three-letter ISO code |
-| `GET` | `/store/zones` | List the enabled zones |
-| `GET` | `/store/zones/{code}` | Read one zone by its code |
-| `GET` | `/store/currencies` | List the enabled currencies |
-| `GET` | `/store/currencies/{code}` | Read one currency by its ISO code |
+<Routes>
+  <Route method="GET" path="/store/settings" href="#get-store-settings">Read the public store settings</Route>
+  <Route method="GET" path="/store/legals" href="#get-store-legals">List the enabled legal pages</Route>
+  <Route method="GET" path="/store/legals/{slug}" href="#get-store-legals-slug">Read one legal page</Route>
+  <Route method="GET" path="/store/countries" href="#get-store-countries">List countries</Route>
+  <Route method="GET" path="/store/countries/{code}" href="#get-store-countries-code">Read one country by its two-letter or three-letter ISO code</Route>
+  <Route method="GET" path="/store/zones" href="#get-store-zones">List the enabled zones</Route>
+  <Route method="GET" path="/store/zones/{code}" href="#get-store-zones-code">Read one zone by its code</Route>
+  <Route method="GET" path="/store/currencies" href="#get-store-currencies">List the enabled currencies</Route>
+  <Route method="GET" path="/store/currencies/{code}" href="#get-store-currencies-code">Read one currency by its ISO code</Route>
+</Routes>
 
 ## Reading the Store Settings
 
-The header, the footer and the contact page show the shop name, the logo, the address and the social links. `/store/settings` returns them in one call, along with the default currency and the languages of the shop:
+The header, the footer and the contact page show the shop name, the logo, the address and the social links.
+
+<Endpoint id="get-store-settings" method="GET" path="/store/settings" auth="public">
+
+<Params title="Query parameters">
+
+<Field name="fields[settings]" type="string">
+  Comma-separated attributes to keep, as described in [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+`/store/settings` returns them in one call, along with the default currency and the languages of the shop:
 
 ```bash title="Request"
 curl http://localhost:8000/store/settings \
@@ -34,7 +46,7 @@ curl http://localhost:8000/store/settings \
 
 The API answers `200 OK` with a single `settings` resource whose `id` is always `store`:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": {
         "id": "store",
@@ -69,17 +81,120 @@ The API answers `200 OK` with a single `settings` resource whose `id` is always 
 
 The endpoint returns only the keys listed under `settings.expose` in `config/shopper/api.php`, because the same table holds keys meant for the admin panel only. A key the merchant never filled in comes back as `null`. Some keys come back in a shape a storefront can use directly:
 
-| Attribute | Description |
-|-----------|-------------|
-| `name`, `legal_name`, `about`, `email`, `phone_number` | The shop identity and contact details, as entered in the admin panel. `about` is HTML. |
-| `street_address`, `city`, `postal_code`, `state` | The shop address. |
-| `country` | The `code` (ISO 3166-1 alpha-2) and the `name` of the shop country, in the language of the request. |
-| `logo`, `cover` | An object with the absolute `url` of the image, or `null`. |
-| `social_links` | Each link with its `platform`, its `url` and the `label` of the platform. Links with an unknown platform or an empty URL are left out. |
-| `default_currency` | The code of the default currency of the shop. |
-| `currencies` | The codes of the currencies the merchant sells in, sorted by currency name. Disabled currencies are left out. |
-| `default_locale` | The language the response is written in. |
-| `supported_locales` | The languages of the shop, each with its `code` and `label`. |
+<Attributes title="settings attributes">
+
+<Field name="name" type="string, null">
+  The shop name, as entered in the admin panel.
+</Field>
+
+<Field name="legal_name" type="string, null">
+  The legal name of the business, as entered in the admin panel.
+</Field>
+
+<Field name="about" type="string, null">
+  The shop description, as entered in the admin panel. HTML.
+</Field>
+
+<Field name="email" type="string, null">
+  The contact email, as entered in the admin panel.
+</Field>
+
+<Field name="phone_number" type="string, null">
+  The contact phone number, as entered in the admin panel.
+</Field>
+
+<Field name="street_address" type="string, null">
+  The street of the shop address.
+</Field>
+
+<Field name="city" type="string, null">
+  The city of the shop address.
+</Field>
+
+<Field name="postal_code" type="string, null">
+  The postal code of the shop address.
+</Field>
+
+<Field name="state" type="string, null">
+  The state or region of the shop address.
+</Field>
+
+<Field name="country" type="object, null">
+  The shop country.
+
+<Field name="code" type="string">
+  ISO 3166-1 alpha-2 code, such as `FR`.
+</Field>
+
+<Field name="name" type="string">
+  Name of the country, in the language of the request.
+</Field>
+
+</Field>
+
+<Field name="logo" type="object, null">
+  The shop logo, or `null`.
+
+<Field name="url" type="string">
+  Absolute URL of the image.
+</Field>
+
+</Field>
+
+<Field name="cover" type="object, null">
+  The cover image of the shop, or `null`.
+
+<Field name="url" type="string">
+  Absolute URL of the image.
+</Field>
+
+</Field>
+
+<Field name="social_links" type="array">
+  The social links of the shop. Links with an unknown platform or an empty URL are left out.
+
+<Field name="platform" type="string">
+  The platform, such as `instagram`.
+</Field>
+
+<Field name="url" type="string">
+  The link to the shop page on that platform.
+</Field>
+
+<Field name="label" type="string">
+  The label of the platform, such as `Instagram`.
+</Field>
+
+</Field>
+
+<Field name="default_currency" type="string">
+  The code of the default currency of the shop.
+</Field>
+
+<Field name="currencies" type="array">
+  The codes of the currencies the merchant sells in, sorted by currency name. Disabled currencies are left out.
+</Field>
+
+<Field name="default_locale" type="string">
+  The language the response is written in.
+</Field>
+
+<Field name="supported_locales" type="array">
+  The languages of the shop.
+
+<Field name="code" type="string">
+  The locale code, such as `fr`.
+</Field>
+
+<Field name="label" type="string">
+  The name of the language, such as `Français`.
+</Field>
+
+</Field>
+
+</Attributes>
+
+</Endpoint>
 
 The [Settings](/3.x/settings#store-api) page explains how to expose a setting of your own.
 
@@ -107,7 +222,134 @@ The language changes the country names: `country.name` in the settings, and `tra
 
 The footer links to the refund, privacy, terms and shipping policies, and the checkout often asks the customer to accept the terms. Shopper creates four pages at install, with the slugs `refund`, `privacy`, `terms` and `shipping`, and the merchant writes their content in the admin panel. The API returns the enabled ones only.
 
-`/store/legals` lists them, for the footer links. It accepts `filter[title]` (partial match), `sort=title` or `sort=updated_at`, and the [pagination](/3.x/store-api/json-api#pagination) parameters. To render one page, read it by slug:
+<Endpoint id="get-store-legals" method="GET" path="/store/legals" auth="public">
+
+<Params title="Query parameters">
+
+<Field name="filter[title]" type="string">
+  Pages whose title contains the value.
+</Field>
+
+<Field name="sort" type="string">
+  `title` or `updated_at`. Prefix with `-` for descending order.
+</Field>
+
+<Field name="page[size]" type="integer" default="15">
+  Legal pages per page, from 1 to 100.
+</Field>
+
+<Field name="page[number]" type="integer" default="1">
+  The page to return, from 1 to 100.
+</Field>
+
+<Field name="page[cursor]" type="string">
+  Switches to cursor pagination. An empty value returns the first page.
+</Field>
+
+<Field name="fields[legals]" type="string">
+  Comma-separated attributes to keep, as described in [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+`/store/legals` lists them, for the footer links. It accepts `filter[title]` (partial match), `sort=title` or `sort=updated_at`, and the [pagination](/3.x/store-api/json-api#pagination) parameters.
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/legals?fields[legals]=title,slug" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` with the enabled pages, here with their `title` and `slug` only, and the pagination details:
+
+```json title="Response 200"
+{
+    "data": [
+        {
+            "id": "1",
+            "type": "legals",
+            "attributes": {
+                "title": "Refund policy",
+                "slug": "refund"
+            }
+        },
+        {
+            "id": "2",
+            "type": "legals",
+            "attributes": {
+                "title": "Privacy policy",
+                "slug": "privacy"
+            }
+        },
+        {
+            "id": "3",
+            "type": "legals",
+            "attributes": {
+                "title": "Terms of use",
+                "slug": "terms"
+            }
+        },
+        {
+            "id": "4",
+            "type": "legals",
+            "attributes": {
+                "title": "Shipping policy",
+                "slug": "shipping"
+            }
+        }
+    ],
+    "links": {
+        "first": "http://localhost:8000/store/legals?fields%5Blegals%5D=title%2Cslug&page%5Bnumber%5D=1",
+        "last": "http://localhost:8000/store/legals?fields%5Blegals%5D=title%2Cslug&page%5Bnumber%5D=1",
+        "prev": null,
+        "next": null
+    },
+    "meta": {
+        "current_page": 1,
+        "from": 1,
+        "last_page": 1,
+        "links": [
+            { "url": null, "label": "&laquo; Previous", "page": null, "active": false },
+            { "url": "http://localhost:8000/store/legals?fields%5Blegals%5D=title%2Cslug&page%5Bnumber%5D=1", "label": "1", "page": 1, "active": true },
+            { "url": null, "label": "Next &raquo;", "page": null, "active": false }
+        ],
+        "path": "http://localhost:8000/store/legals",
+        "per_page": 15,
+        "to": 4,
+        "total": 4
+    }
+}
+```
+
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 400 | `bad_request` | A filter or sort outside the allowlist, or any `include` |
+| 422 | `filter_too_wide` | `filter[title]` with more than 50 values |
+
+</Errors>
+
+</Endpoint>
+
+<Endpoint id="get-store-legals-slug" method="GET" path="/store/legals/{slug}" auth="public">
+
+<Params title="Path parameters">
+
+<Field name="slug" type="string" required>
+  The slug of the page, such as `refund`, `privacy`, `terms` or `shipping`.
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="fields[legals]" type="string">
+  Comma-separated attributes to keep, as described in [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+To render one page, read it by slug:
 
 ```bash title="Request"
 curl http://localhost:8000/store/legals/privacy \
@@ -116,7 +358,7 @@ curl http://localhost:8000/store/legals/privacy \
 
 The API answers `200 OK` with the page:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": {
         "id": "2",
@@ -131,23 +373,124 @@ The API answers `200 OK` with the page:
 }
 ```
 
-`content` is HTML, or `null` when the merchant has not written the page yet. `updated_at` is the date to show as "Last updated". A page the merchant disabled answers `404` with the code `not_found`, so a storefront hides the link instead of showing an empty page. The [Legal](/3.x/legal#from-a-storefront) page covers how the merchant edits these pages.
+`content` is HTML, or `null` when the merchant has not written the page yet. `updated_at` is the date to show as "Last updated". A page the merchant disabled answers `404` with the code `not_found`, so a storefront hides the link instead of showing an empty page.
+
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 404 | `not_found` | No enabled legal page with this slug |
+| 400 | `bad_request` | Any `include`: a legal page has no related resources |
+
+</Errors>
+
+</Endpoint>
+
+The [Legal](/3.x/legal#from-a-storefront) page covers how the merchant edits these pages.
 
 ## Countries
 
 Address forms need a country list, and a storefront that guesses the visitor's region needs to know which zone a country belongs to. `/store/countries` returns every country of the world, about 250, whether or not the shop sells there. For the countries the shop sells to, read the countries of its [zones](#zones) instead.
 
+<Endpoint id="get-store-countries" method="GET" path="/store/countries" auth="public">
+
 The listing is paginated, 15 countries per page by default and 100 at most. It accepts these parameters:
 
-| Parameter | Values | Description |
-|-----------|--------|-------------|
-| `filter[name]` | Text | Countries whose English name contains the value. |
-| `filter[cca2]` | `FR`, `US` | Exact ISO 3166-1 alpha-2 code. |
-| `filter[cca3]` | `FRA`, `USA` | Exact ISO 3166-1 alpha-3 code. |
-| `filter[region]` | `Europe`, `Americas` | Exact region. |
-| `filter[zone]` | `EU` | Code of a zone the country belongs to. Disabled zones match too. |
-| `sort` | `name` | Prefix with `-` for descending order. |
-| `include` | `zones` | The enabled zones the country belongs to. |
+<Params title="Query parameters">
+
+<Field name="filter[name]" type="string">
+  Countries whose English name contains the value.
+</Field>
+
+<Field name="filter[cca2]" type="string">
+  Exact ISO 3166-1 alpha-2 code, such as `FR` or `US`.
+</Field>
+
+<Field name="filter[cca3]" type="string">
+  Exact ISO 3166-1 alpha-3 code, such as `FRA` or `USA`.
+</Field>
+
+<Field name="filter[region]" type="string">
+  Exact region, such as `Europe` or `Americas`.
+</Field>
+
+<Field name="filter[zone]" type="string">
+  Code of a zone the country belongs to, such as `EU`. Disabled zones match too.
+</Field>
+
+<Field name="sort" type="string">
+  `name`. Prefix with `-` for descending order.
+</Field>
+
+<Field name="include" type="string">
+  `zones`: the enabled zones the country belongs to.
+</Field>
+
+<Field name="page[size]" type="integer" default="15">
+  Countries per page, from 1 to 100.
+</Field>
+
+<Field name="page[number]" type="integer" default="1">
+  The page to return, from 1 to 100.
+</Field>
+
+<Field name="page[cursor]" type="string">
+  Switches to cursor pagination. An empty value returns the first page.
+</Field>
+
+<Field name="fields[countries]" type="string">
+  Comma-separated attributes to keep, as described in [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+<Field name="fields[zones]" type="string">
+  Attributes to keep on the included zones.
+</Field>
+
+</Params>
+
+This request lists the countries of Europe by name:
+
+```bash title="Request"
+curl -g "http://localhost:8000/store/countries?filter[region]=Europe&sort=name" \
+  -H "Accept: application/vnd.api+json"
+```
+
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 400 | `bad_request` | A filter, sort or include outside the allowlist |
+| 422 | `filter_too_wide` | A filter with more than 50 values |
+
+</Errors>
+
+</Endpoint>
+
+<Endpoint id="get-store-countries-code" method="GET" path="/store/countries/{code}" auth="public">
+
+<Params title="Path parameters">
+
+<Field name="code" type="string" required>
+  ISO 3166-1 alpha-2 or alpha-3 code of the country, in any case, such as `US` or `usa`.
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  `zones`: the enabled zones the country belongs to.
+</Field>
+
+<Field name="fields[countries]" type="string">
+  Comma-separated attributes to keep, as described in [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+<Field name="fields[zones]" type="string">
+  Attributes to keep on the included zones.
+</Field>
+
+</Params>
 
 To read one country, pass its two-letter or three-letter ISO code in any case. This request reads the United States with its zones, in French:
 
@@ -159,7 +502,7 @@ curl -g "http://localhost:8000/store/countries/usa?include=zones&fields[countrie
 
 The API answers `200 OK` with the country and its zones in `included`:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": {
         "id": "01JD8X9C3D4E5F6G7H8J9K0M1N",
@@ -196,11 +539,62 @@ The API answers `200 OK` with the country and its zones in `included`:
 }
 ```
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 404 | `not_found` | No country with this code |
+| 400 | `bad_request` | An `include` other than `zones` |
+
+</Errors>
+
+</Endpoint>
+
 A country carries `name` (the common English name), `translated_name` (the name in the language of the request, or the English name when no translation exists), `name_official`, `region`, `subregion`, `cca2`, `flag` (the URL of an SVG flag served by your app), `latitude` and `longitude`. The three-letter code works in the path and in `filter[cca3]`, but the resource does not return it.
 
 ## Zones
 
 A zone is a region of the shop, such as "Europe" or "United States", with its own currency, carriers and payment methods. A storefront sends the code of the visitor's zone in the `X-Shopper-Zone` header, and the API prices the catalog and the cart for that zone. The [Zones](/3.x/zones#what-the-zone-changes) page lists everything a zone changes.
+
+<Endpoint id="get-store-zones" method="GET" path="/store/zones" auth="public">
+
+The listing accepts these parameters:
+
+<Params title="Query parameters">
+
+<Field name="filter[name]" type="string">
+  Zones whose name contains the value.
+</Field>
+
+<Field name="filter[code]" type="string">
+  Exact zone code, such as `EU` or `US`.
+</Field>
+
+<Field name="sort" type="string">
+  `name`. Prefix with `-` for descending order.
+</Field>
+
+<Field name="include" type="string">
+  `currency` and `countries`: the zone currency as a `currencies` resource, and every country of the zone.
+</Field>
+
+<Field name="page[size]" type="integer" default="15">
+  Zones per page, from 1 to 100.
+</Field>
+
+<Field name="page[number]" type="integer" default="1">
+  The page to return, from 1 to 100.
+</Field>
+
+<Field name="page[cursor]" type="string">
+  Switches to cursor pagination. An empty value returns the first page.
+</Field>
+
+<Field name="fields[zones]" type="string">
+  Comma-separated attributes to keep, as described in [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
 
 To match visitors to zones, list the enabled zones with their countries:
 
@@ -211,7 +605,7 @@ curl "http://localhost:8000/store/zones?include=countries" \
 
 The API answers `200 OK` with a page of zones, their countries in `included`, and the pagination details:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": [
         {
@@ -328,20 +722,144 @@ The API answers `200 OK` with a page of zones, their countries in `included`, an
 
 `code` is the value to send in `X-Shopper-Zone`. `currency_code` is the code of the zone currency, or `null` when the merchant disabled that currency; prices then fall back to the default currency of the shop. `metadata` holds your own data. The listing does not accept a fieldset for the included countries: `fields[countries]` answers `400 Bad Request`, so each country comes with all its attributes.
 
-The zone endpoints accept these parameters:
+<Errors>
 
-| Parameter | Values | Description |
-|-----------|--------|-------------|
-| `filter[name]` | Text | Zones whose name contains the value. Listing only. |
-| `filter[code]` | `EU`, `US` | Exact zone code. Listing only. |
-| `sort` | `name` | Prefix with `-` for descending order. Listing only. |
-| `include` | `currency`, `countries` | The zone currency as a `currencies` resource, and every country of the zone. |
+| Status | Code | When |
+|--------|------|------|
+| 400 | `bad_request` | A filter, sort or include outside the allowlist |
+| 422 | `filter_too_wide` | A filter with more than 50 values |
 
-To read one zone, pass its code in the path, such as `/store/zones/EU`. Unlike countries and currencies, the API does not uppercase a zone code, so send it exactly as the merchant wrote it. A disabled zone answers `404`.
+</Errors>
+
+</Endpoint>
+
+<Endpoint id="get-store-zones-code" method="GET" path="/store/zones/{code}" auth="public">
+
+<Params title="Path parameters">
+
+<Field name="code" type="string" required>
+  The zone code, such as `EU`.
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  `currency` and `countries`: the zone currency as a `currencies` resource, and every country of the zone.
+</Field>
+
+<Field name="fields[zones]" type="string">
+  Comma-separated attributes to keep, as described in [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+<Field name="fields[currencies]" type="string">
+  Attributes to keep on the included currency.
+</Field>
+
+<Field name="fields[countries]" type="string">
+  Attributes to keep on the included countries.
+</Field>
+
+</Params>
+
+To read one zone, pass its code in the path, such as `/store/zones/EU`. Unlike countries and currencies, the API does not uppercase a zone code, so send it exactly as the merchant wrote it.
+
+```bash title="Request"
+curl "http://localhost:8000/store/zones/EU?include=currency" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` with the zone and its currency in `included`:
+
+```json title="Response 200"
+{
+    "data": {
+        "id": "01JD8XZ1E3G5J7K9M1P3R5T7V9",
+        "type": "zones",
+        "attributes": {
+            "name": "Europe",
+            "slug": "europe",
+            "code": "EU",
+            "currency_code": "EUR",
+            "metadata": null,
+            "created_at": "2026-09-12T09:55:00+00:00",
+            "updated_at": "2026-09-12T09:55:00+00:00"
+        },
+        "relationships": {
+            "currency": {
+                "data": { "id": "01JD8X8E1R2T3V4W5X6Y7Z8A9B", "type": "currencies" }
+            }
+        }
+    },
+    "included": [
+        {
+            "id": "01JD8X8E1R2T3V4W5X6Y7Z8A9B",
+            "type": "currencies",
+            "attributes": {
+                "name": "Euro",
+                "code": "EUR",
+                "symbol": "€",
+                "format": "1.0,00 €",
+                "exchange_rate": 0
+            }
+        }
+    ]
+}
+```
+
+A disabled zone answers `404`.
+
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 404 | `not_found` | No enabled zone with this code |
+| 400 | `bad_request` | An `include` other than `currency` and `countries` |
+
+</Errors>
+
+</Endpoint>
 
 ## Currencies
 
-A currency switcher needs the codes the shop sells in, and a price label needs the symbol of the currency. The codes come from `currencies` in the [settings](#reading-the-store-settings). `/store/currencies` returns every enabled currency, and Shopper enables all 158 currencies at install, so the listing holds far more codes than the shop sells in. A cart accepts only the codes of the settings and answers `422` for any other, so filter the listing by those codes:
+A currency switcher needs the codes the shop sells in, and a price label needs the symbol of the currency. The codes come from `currencies` in the [settings](#reading-the-store-settings). `/store/currencies` returns every enabled currency, and Shopper enables all 158 currencies at install, so the listing holds far more codes than the shop sells in.
+
+<Endpoint id="get-store-currencies" method="GET" path="/store/currencies" auth="public">
+
+<Params title="Query parameters">
+
+<Field name="filter[name]" type="string">
+  Currencies whose name contains the value.
+</Field>
+
+<Field name="filter[code]" type="string">
+  Exact ISO code, comma-separated for several, such as `EUR,USD`.
+</Field>
+
+<Field name="sort" type="string">
+  `name` or `code`. Prefix with `-` for descending order.
+</Field>
+
+<Field name="page[size]" type="integer" default="15">
+  Currencies per page, from 1 to 100.
+</Field>
+
+<Field name="page[number]" type="integer" default="1">
+  The page to return, from 1 to 100.
+</Field>
+
+<Field name="page[cursor]" type="string">
+  Switches to cursor pagination. An empty value returns the first page.
+</Field>
+
+<Field name="fields[currencies]" type="string">
+  Comma-separated attributes to keep, as described in [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+A cart accepts only the codes of the settings and answers `422` for any other, so filter the listing by those codes:
 
 ```bash title="Request"
 curl -g "http://localhost:8000/store/currencies?filter[code]=EUR,USD" \
@@ -350,7 +868,7 @@ curl -g "http://localhost:8000/store/currencies?filter[code]=EUR,USD" \
 
 The API answers `200 OK` with a page of currencies:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": [
         {
@@ -401,7 +919,74 @@ The API answers `200 OK` with a page of currencies:
 
 `format` is the display pattern stored with the currency. `exchange_rate` is the rate the merchant entered, and the API never uses it: every price comes from an amount the merchant set in that currency. To format amounts in the browser, the [Money](/3.x/money#formatting-in-javascript) page shows how to use `Intl.NumberFormat` with the currency code.
 
-The listing accepts `filter[name]` (partial match), `filter[code]` (exact, comma-separated for several), `sort=name` or `sort=code`, and the pagination parameters. `/store/currencies/{code}` reads one currency, with the code in any case, and answers `404` for a disabled one. The [Currencies](/3.x/currencies#from-a-storefront) page covers how the merchant enables currencies.
+The listing accepts `filter[name]` (partial match), `filter[code]` (exact, comma-separated for several), `sort=name` or `sort=code`, and the pagination parameters.
+
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 400 | `bad_request` | A filter or sort outside the allowlist, or any `include` |
+| 422 | `filter_too_wide` | A filter with more than 50 values |
+
+</Errors>
+
+</Endpoint>
+
+<Endpoint id="get-store-currencies-code" method="GET" path="/store/currencies/{code}" auth="public">
+
+<Params title="Path parameters">
+
+<Field name="code" type="string" required>
+  ISO 4217 code of the currency, in any case, such as `EUR` or `eur`.
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="fields[currencies]" type="string">
+  Comma-separated attributes to keep, as described in [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+`/store/currencies/{code}` reads one currency, with the code in any case, and answers `404` for a disabled one.
+
+```bash title="Request"
+curl http://localhost:8000/store/currencies/eur \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` with the currency:
+
+```json title="Response 200"
+{
+    "data": {
+        "id": "01JD8X8E1R2T3V4W5X6Y7Z8A9B",
+        "type": "currencies",
+        "attributes": {
+            "name": "Euro",
+            "code": "EUR",
+            "symbol": "€",
+            "format": "1.0,00 €",
+            "exchange_rate": 0
+        }
+    }
+}
+```
+
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 404 | `not_found` | No enabled currency with this code |
+| 400 | `bad_request` | Any `include`: a currency has no related resources |
+
+</Errors>
+
+</Endpoint>
+
+The [Currencies](/3.x/currencies#from-a-storefront) page covers how the merchant enables currencies.
 
 ## Picking a Zone and a Currency
 

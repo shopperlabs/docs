@@ -11,17 +11,17 @@ Every amount in a cart response is an integer in cents: a line priced at €90.0
 
 The cart endpoints sit in the public route group: they work without a customer token, and with one. The ones that create or add things share the checkout rate limit of 30 requests per minute (`shopper.http.rate_limiters`), on top of the general limit described in [Rate limits](/3.x/store-api#rate-limits). On these public routes both limits count requests per IP address, for guests and logged-in customers alike.
 
-| Method | Path | Purpose | Checkout limit |
-|--------|------|---------|----------------|
-| `POST` | `/store/carts` | Create a cart | Yes |
-| `GET` | `/store/carts/{cartId}` | Read a cart | No |
-| `PATCH` | `/store/carts/{cartId}` | Change the currency, zone, email or metadata | No |
-| `POST` | `/store/carts/{cartId}/lines` | Add a product or a variant | Yes |
-| `PATCH` | `/store/carts/{cartId}/lines/{lineId}` | Change the quantity or metadata of a line | No |
-| `DELETE` | `/store/carts/{cartId}/lines/{lineId}` | Remove a line | No |
-| `POST` | `/store/carts/{cartId}/addresses` | Set the shipping and billing addresses | No |
-| `POST` | `/store/carts/{cartId}/promotion` | Apply a promotion code | Yes |
-| `DELETE` | `/store/carts/{cartId}/promotion` | Remove one or every promotion code | Yes |
+<Routes>
+  <Route method="POST" path="/store/carts" href="#post-store-carts">Create a cart</Route>
+  <Route method="GET" path="/store/carts/{cartId}" href="#get-store-carts-cartid">Read a cart</Route>
+  <Route method="PATCH" path="/store/carts/{cartId}" href="#patch-store-carts-cartid">Change the currency, zone, email or metadata</Route>
+  <Route method="POST" path="/store/carts/{cartId}/lines" href="#post-store-carts-cartid-lines">Add a product or a variant</Route>
+  <Route method="PATCH" path="/store/carts/{cartId}/lines/{lineId}" href="#patch-store-carts-cartid-lines-lineid">Change the quantity or metadata of a line</Route>
+  <Route method="DELETE" path="/store/carts/{cartId}/lines/{lineId}" href="#delete-store-carts-cartid-lines-lineid">Remove a line</Route>
+  <Route method="POST" path="/store/carts/{cartId}/addresses" href="#post-store-carts-cartid-addresses">Set the shipping and billing addresses</Route>
+  <Route method="POST" path="/store/carts/{cartId}/promotion" href="#post-store-carts-cartid-promotion">Apply a promotion code</Route>
+  <Route method="DELETE" path="/store/carts/{cartId}/promotion" href="#delete-store-carts-cartid-promotion">Remove one or every promotion code</Route>
+</Routes>
 
 Request bodies are flat JSON objects, such as `{"quantity": 2}`, sent with `Content-Type: application/json`. Responses are JSON:API documents, described in [JSON:API Conventions](/3.x/store-api/json-api). Every endpoint of this page answers with the whole cart, so the storefront re-renders from the response without a second call.
 
@@ -29,21 +29,35 @@ Request bodies are flat JSON objects, such as `{"quantity": 2}`, sent with `Cont
 
 A storefront creates the cart the first time the visitor adds something, and keeps its ID for every later call. The cart takes its zone from the `X-Shopper-Zone` header of this request, or the default zone when the header is missing, as described in [Request headers](/3.x/store-api#request-headers). The zone sets the prices, the shipping options and the payment methods the cart offers.
 
-<ApiTable name="POST /store/carts" label="Parameter">
+<Endpoint id="post-store-carts" method="POST" path="/store/carts" auth="optional" limit="checkout">
 
-<ParamField path="currency_code" type="string">
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  Related resources to return with the cart, listed in [Reading a Cart](#reading-a-cart).
+</Field>
+
+<Field name="fields[carts]" type="string">
+  Comma-separated attributes to return, such as `lines_count,total`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+<Params title="Body">
+
+<Field name="currency_code" type="string">
   ISO code of an enabled currency of the shop, such as `EUR`. Upper-cased before validation. Defaults to the currency of the zone, then to the default currency of the shop.
-</ParamField>
+</Field>
 
-<ParamField path="email" type="string">
+<Field name="email" type="string">
   Contact email of the checkout, lower-cased. Up to 255 characters.
-</ParamField>
+</Field>
 
-<ParamField path="metadata" type="object">
+<Field name="metadata" type="object">
   Your own data, such as a gift note or a tracking source. Up to 50 keys and 4,096 characters once encoded as JSON.
-</ParamField>
+</Field>
 
-</ApiTable>
+</Params>
 
 Every parameter is optional, so an empty body creates a cart in the currency of the zone:
 
@@ -57,7 +71,7 @@ curl -X POST http://localhost:8000/store/carts \
 
 The API answers `201 Created` with the new cart. Its `id` is the cart ID the storefront stores:
 
-```json title="Response"
+```json title="Response 201"
 {
     "data": {
         "id": "01JD8Z6Q4M3K2V7R9T5W1XNB0C",
@@ -86,13 +100,25 @@ The API answers `201 Created` with the new cart. Its `id` is the cart ID the sto
 
 A `currency_code` that is unknown, disabled or not one of the shop currencies answers `422` with the code `exists` on `/data/attributes/currency_code`.
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 422 | `exists` | `currency_code` is unknown, disabled or not one of the shop currencies |
+| 422 | Rule name, such as `email` | Another field fails validation |
+| 400 | `bad_request` | An `include` path outside the cart list |
+
+</Errors>
+
+</Endpoint>
+
 ## Guest and Customer Carts
 
 Who can use a cart depends on the request that created it. A request without a customer token creates a guest cart. A request with the bearer token of a logged-in customer, described in [Logging in](/3.x/store-api/authentication#logging-in), creates a cart that belongs to that customer. Send the same token on every later call for that cart.
 
 A guest cart has no owner: any request that carries its ID can read and change it. The ID is a ULID, 26 characters with 80 random bits, so it cannot be guessed, but it works like a session token. Keep it where the visitor's session lives, such as an `HttpOnly` cookie or the secure storage of a mobile app, and keep it out of URLs, logs and analytics events.
 
-A customer cart answers only to its owner. A request without the token, or with the token of another customer, gets `404 not_found`, the same answer as an ID that does not exist, so the API never confirms that a cart exists. An expired or revoked token counts as no token, so the customer cart also answers `404` once the token expires: log the customer in again before creating a new cart. A valid token that does not belong to a store customer answers `401 unauthenticated`, even on these public routes.
+A customer cart answers only to its owner. A request without the token, or with the token of another customer, gets `404 not_found`, the same answer as an ID that does not exist, so the API never confirms that a cart exists. An expired or revoked token counts as no token, so the customer cart also answers `404` once the token expires: log the customer in again before creating a new cart. A valid token without the `store` ability answers `401 unauthenticated`, even on these public routes.
 
 When a guest logs in during checkout, transfer the guest cart to the customer with the cart transfer endpoint described in [Customers](/3.x/store-api/customers). The cart then answers only to that customer.
 
@@ -102,25 +128,47 @@ A completed cart, one that became an order, stays readable with the same ID. Any
 
 A line is one product or one variant in the cart, with its quantity. The storefront sends the type and the public ID of what the customer picked; the API finds it in the catalog, prices it in the cart currency and checks stock. The client never sends a price.
 
-<ApiTable name="POST /store/carts/{cartId}/lines" label="Parameter">
+<Endpoint id="post-store-carts-cartid-lines" method="POST" path="/store/carts/{cartId}/lines" auth="owner" limit="checkout">
 
-<ParamField path="purchasable_type" type="string" required>
+<Params title="Path parameters">
+
+<Field name="cartId" type="string" required>
+  The cart ID, the `id` returned by [Creating a Cart](#creating-a-cart).
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  Related resources to return with the cart, listed in [Reading a Cart](#reading-a-cart).
+</Field>
+
+<Field name="fields[carts]" type="string">
+  Comma-separated attributes to return, such as `lines_count,total`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+<Params title="Body">
+
+<Field name="purchasable_type" type="string" required>
   `variant` for a product variant, `product` for a product without variants.
-</ParamField>
+</Field>
 
-<ParamField path="purchasable_id" type="string" required>
+<Field name="purchasable_id" type="string" required>
   The public ID of the variant or the product, the `id` the [Catalog](/3.x/store-api/catalog) endpoints return.
-</ParamField>
+</Field>
 
-<ParamField path="quantity" type="integer" default="1">
+<Field name="quantity" type="integer" default="1">
   Quantity to add, from 1 to 1,000,000.
-</ParamField>
+</Field>
 
-<ParamField path="metadata" type="object">
+<Field name="metadata" type="object">
   Data of this line, such as an engraving text. Same limits as the cart metadata.
-</ParamField>
+</Field>
 
-</ApiTable>
+</Params>
 
 This request adds two pairs of Classic Leather Sneakers in size 42, black, and asks for the lines in the same response with `include=lines`:
 
@@ -137,7 +185,7 @@ curl -X POST "http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/lines
 
 The API answers `200 OK` with the recalculated cart. The line carries the unit price frozen when it was added:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": {
         "id": "01JD8Z6Q4M3K2V7R9T5W1XNB0C",
@@ -193,6 +241,28 @@ The API answers `200 OK` with the recalculated cart. The line carries the unit p
 
 Adding the same variant again adds to the quantity of its existing line instead of creating a second line. When the new request carries metadata that differs from the metadata of that line, the API refuses with `422 cart_line_metadata_conflict`: update that line or remove it first.
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 404 | `not_found` | No cart with this ID for this request |
+| 422 | `purchasable_unavailable` | The product or variant cannot be bought |
+| 422 | `variant_required` | The product is sold through its variants |
+| 422 | `price_missing` | No price in the cart currency |
+| 422 | `stock_insufficient` | Not enough stock for the quantity |
+| 422 | `quantity_rule_violated` | The quantity breaks a minimum, maximum or increment, details in `meta` |
+| 422 | `cart_line_metadata_conflict` | The line already exists with other metadata |
+| 422 | Rule name, such as `required` | A field fails validation |
+| 409 | `cart_completed` | The cart is already an order |
+| 409 | `payment_session_collected` | The customer already paid: complete the cart |
+| 409 | `payment_session_in_progress` | Another request is changing the cart, retry after `Retry-After` |
+| 503 | `payment_provider_unavailable` | The open payment could not be cancelled, retry after `Retry-After` |
+| 400 | `bad_request` | An `include` path outside the cart list |
+
+</Errors>
+
+</Endpoint>
+
 ### Products and Variants
 
 A product that has variants is sold through them. Adding such a product with `purchasable_type: "product"` answers `422 variant_required` on `/data/attributes/purchasable_id`: the storefront asks the customer for a size or a color and adds the variant. The [Catalog](/3.x/store-api/catalog) guide shows how to read the variants of a product, and [Product Variants](/3.x/product-variants) explains how they are built.
@@ -205,7 +275,7 @@ The API checks stock when a line is added or its quantity changes. A variant or 
 
 A price can carry quantity rules (a minimum, a maximum, an increment), described in [Pricing](/3.x/pricing). A quantity that breaks one answers `422 quantity_rule_violated` with a `meta` object, so the storefront can correct the quantity selector:
 
-```json title="Response"
+```json title="Response 422"
 {
     "errors": [
         {
@@ -230,6 +300,28 @@ A price can carry quantity rules (a minimum, a maximum, an increment), described
 
 A storefront reads the cart to render the basket page or the mini cart. The totals come with the cart, so one request is enough: the API reuses the stored totals when they were calculated in the last 15 minutes (`shopper.cart.totals_ttl_minutes`) and recalculates them otherwise.
 
+<Endpoint id="get-store-carts-cartid" method="GET" path="/store/carts/{cartId}" auth="owner">
+
+<Params title="Path parameters">
+
+<Field name="cartId" type="string" required>
+  The cart ID, the `id` returned by [Creating a Cart](#creating-a-cart).
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  Related resources to return with the cart, comma-separated, from the table below.
+</Field>
+
+<Field name="fields[carts]" type="string">
+  Comma-separated attributes to return, such as `lines_count,total`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
 The cart document carries only the cart attributes by default. The `include` query parameter adds related resources, as described in [Includes](/3.x/store-api/json-api#includes). The cart accepts these paths, set in `resources.cart.includes` of `config/shopper/api.php`:
 
 | Include | Adds |
@@ -249,7 +341,7 @@ curl "http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C?include=lines
 
 The API answers `200 OK`. In this trimmed response, the cart keeps its totals and the variant keeps three of its attributes; the [Catalog](/3.x/store-api/catalog) guide lists them all:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": {
         "id": "01JD8Z6Q4M3K2V7R9T5W1XNB0C",
@@ -315,23 +407,60 @@ The API answers `200 OK`. In this trimmed response, the cart keeps its totals an
 }
 ```
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 404 | `not_found` | No cart with this ID for this request |
+| 400 | `bad_request` | An `include` path outside the cart list |
+
+</Errors>
+
+</Endpoint>
+
 Render the price of a line from `unit_price_amount` and `subtotal` of the line, not from the `prices` of the variant: the line keeps the price it was added at, which can differ from the current catalog price until checkout checks it again.
 
 ## Updating and Removing Lines
 
 The quantity selector of the basket page changes a line through its ID, the `id` of the `cart-lines` resource. A quantity of zero is not accepted: removing a line has its own endpoint.
 
-<ApiTable name="PATCH /store/carts/{cartId}/lines/{lineId}" label="Parameter">
+<Endpoint id="patch-store-carts-cartid-lines-lineid" method="PATCH" path="/store/carts/{cartId}/lines/{lineId}" auth="owner">
 
-<ParamField path="quantity" type="integer">
+<Params title="Path parameters">
+
+<Field name="cartId" type="string" required>
+  The cart ID.
+</Field>
+
+<Field name="lineId" type="string" required>
+  The `id` of the `cart-lines` resource.
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  Related resources to return with the cart, listed in [Reading a Cart](#reading-a-cart).
+</Field>
+
+<Field name="fields[carts]" type="string">
+  Comma-separated attributes to return, such as `lines_count,total`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+<Params title="Body">
+
+<Field name="quantity" type="integer">
   New quantity of the line, from 1 to 1,000,000. Checked against stock and quantity rules like an added line.
-</ParamField>
+</Field>
 
-<ParamField path="metadata" type="object">
+<Field name="metadata" type="object">
   New metadata of the line. `null` clears it.
-</ParamField>
+</Field>
 
-</ApiTable>
+</Params>
 
 ```bash title="Request"
 curl -X PATCH http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/lines/01JD8Z7C1E3G5J7K9N1Q3S5V7W \
@@ -340,12 +469,74 @@ curl -X PATCH http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/lines
   -d '{"quantity": 1}'
 ```
 
-The API answers `200 OK` with the cart. Removing the line works the same way and also answers `200 OK` with the recalculated cart, not an empty `204`:
+The API answers `200 OK` with the cart.
+
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 404 | `not_found` | No cart with this ID for this request, or no line with this ID in the cart |
+| 422 | `stock_insufficient` | Not enough stock for the quantity |
+| 422 | `quantity_rule_violated` | The quantity breaks a minimum, maximum or increment, details in `meta` |
+| 422 | Rule name, such as `min` | A field fails validation |
+| 409 | `cart_line_locked` | The line has a custom price |
+| 409 | `cart_completed` | The cart is already an order |
+| 409 | `payment_session_collected` | The customer already paid: complete the cart |
+| 409 | `payment_session_in_progress` | Another request is changing the cart, retry after `Retry-After` |
+| 503 | `payment_provider_unavailable` | The open payment could not be cancelled, retry after `Retry-After` |
+| 400 | `bad_request` | An `include` path outside the cart list |
+
+</Errors>
+
+</Endpoint>
+
+<Endpoint id="delete-store-carts-cartid-lines-lineid" method="DELETE" path="/store/carts/{cartId}/lines/{lineId}" auth="owner">
+
+<Params title="Path parameters">
+
+<Field name="cartId" type="string" required>
+  The cart ID.
+</Field>
+
+<Field name="lineId" type="string" required>
+  The `id` of the `cart-lines` resource.
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  Related resources to return with the cart, listed in [Reading a Cart](#reading-a-cart).
+</Field>
+
+<Field name="fields[carts]" type="string">
+  Comma-separated attributes to return, such as `lines_count,total`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+Removing the line works the same way and also answers `200 OK` with the recalculated cart, not an empty `204`:
 
 ```bash title="Request"
 curl -X DELETE http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/lines/01JD8Z7C1E3G5J7K9N1Q3S5V7W \
   -H "Accept: application/vnd.api+json"
 ```
+
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 404 | `not_found` | No cart with this ID for this request, or no line with this ID in the cart |
+| 409 | `cart_completed` | The cart is already an order |
+| 409 | `payment_session_collected` | The customer already paid: complete the cart |
+| 409 | `payment_session_in_progress` | Another request is changing the cart, retry after `Retry-After` |
+| 503 | `payment_provider_unavailable` | The open payment could not be cancelled, retry after `Retry-After` |
+| 400 | `bad_request` | An `include` path outside the cart list |
+
+</Errors>
+
+</Endpoint>
 
 A line ID that does not belong to the cart answers `404 not_found`. A line with `is_custom_price: true` holds a price negotiated in the back office: its quantity cannot change and the API answers `409 cart_line_locked`. The storefront can still remove it.
 
@@ -353,67 +544,127 @@ A line ID that does not belong to the cart answers `404 not_found`. A line with 
 
 The cart needs a shipping address before checkout: taxes, live carrier rates and the order addresses come from it. One request sets the shipping address, the billing address, or both, and can set the contact email at the same time. Sending an address type again replaces the previous one.
 
-<ApiTable name="POST /store/carts/{cartId}/addresses" label="Parameter">
+<Endpoint id="post-store-carts-cartid-addresses" method="POST" path="/store/carts/{cartId}/addresses" auth="owner">
 
-<ParamField path="shipping_address" type="object">
+<Params title="Path parameters">
+
+<Field name="cartId" type="string" required>
+  The cart ID.
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  Related resources to return with the cart, listed in [Reading a Cart](#reading-a-cart).
+</Field>
+
+<Field name="fields[carts]" type="string">
+  Comma-separated attributes to return, such as `lines_count,total`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+Each address object takes the same fields, listed under each one:
+
+<Params title="Body">
+
+<Field name="shipping_address" type="object">
   The delivery address. Required when `billing_address` is missing.
-</ParamField>
 
-<ParamField path="billing_address" type="object">
-  The billing address. Required when `shipping_address` is missing.
-</ParamField>
-
-<ParamField path="email" type="string">
-  Contact email of the checkout, lower-cased. Replaces the email of the cart.
-</ParamField>
-
-</ApiTable>
-
-Each address object takes these fields:
-
-<ApiTable name="shipping_address, billing_address" label="Field">
-
-<ParamField path="first_name" type="string">
+<Field name="first_name" type="string">
   First name, up to 255 characters.
-</ParamField>
+</Field>
 
-<ParamField path="last_name" type="string" required>
+<Field name="last_name" type="string" required>
   Last name, up to 255 characters.
-</ParamField>
+</Field>
 
-<ParamField path="company" type="string">
+<Field name="company" type="string">
   Company name, up to 255 characters.
-</ParamField>
+</Field>
 
-<ParamField path="address_1" type="string" required>
+<Field name="address_1" type="string" required>
   Street and number.
-</ParamField>
+</Field>
 
-<ParamField path="address_2" type="string">
+<Field name="address_2" type="string">
   Apartment, floor or building.
-</ParamField>
+</Field>
 
-<ParamField path="city" type="string" required>
+<Field name="city" type="string" required>
   City.
-</ParamField>
+</Field>
 
-<ParamField path="state" type="string">
+<Field name="state" type="string">
   State or province. Tax rules of a province match on this value.
-</ParamField>
+</Field>
 
-<ParamField path="postal_code" type="string" required>
+<Field name="postal_code" type="string" required>
   Postal code.
-</ParamField>
+</Field>
 
-<ParamField path="phone" type="string">
+<Field name="phone" type="string">
   Phone number.
-</ParamField>
+</Field>
 
-<ParamField path="country_code" type="string" required>
+<Field name="country_code" type="string" required>
   Two-letter ISO code of the country, such as `FR`. Upper-cased before validation.
-</ParamField>
+</Field>
 
-</ApiTable>
+</Field>
+
+<Field name="billing_address" type="object">
+  The billing address. Required when `shipping_address` is missing.
+
+<Field name="first_name" type="string">
+  First name, up to 255 characters.
+</Field>
+
+<Field name="last_name" type="string" required>
+  Last name, up to 255 characters.
+</Field>
+
+<Field name="company" type="string">
+  Company name, up to 255 characters.
+</Field>
+
+<Field name="address_1" type="string" required>
+  Street and number.
+</Field>
+
+<Field name="address_2" type="string">
+  Apartment, floor or building.
+</Field>
+
+<Field name="city" type="string" required>
+  City.
+</Field>
+
+<Field name="state" type="string">
+  State or province. Tax rules of a province match on this value.
+</Field>
+
+<Field name="postal_code" type="string" required>
+  Postal code.
+</Field>
+
+<Field name="phone" type="string">
+  Phone number.
+</Field>
+
+<Field name="country_code" type="string" required>
+  Two-letter ISO code of the country, such as `FR`. Upper-cased before validation.
+</Field>
+
+</Field>
+
+<Field name="email" type="string">
+  Contact email of the checkout, lower-cased. Replaces the email of the cart.
+</Field>
+
+</Params>
 
 ```bash title="Request"
 curl -X POST "http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/addresses?include=addresses" \
@@ -434,7 +685,7 @@ curl -X POST "http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/addre
 
 The API answers `200 OK` with the cart. With a French address, the 20% VAT now shows in `tax_total`, and `tax_inclusive` is `true` because the tax zone of France is set up with prices that include tax. The response is trimmed to the totals and the address:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": {
         "id": "01JD8Z6Q4M3K2V7R9T5W1XNB0C",
@@ -479,19 +730,57 @@ The API answers `200 OK` with the cart. With a French address, the 20% VAT now s
 }
 ```
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 404 | `not_found` | No cart with this ID for this request |
+| 422 | Rule name, such as `required_with` | A field fails validation, the pointer names it, such as `/data/attributes/shipping_address/city` |
+| 409 | `cart_completed` | The cart is already an order |
+| 409 | `payment_session_collected` | The customer already paid: complete the cart |
+| 409 | `payment_session_in_progress` | Another request is changing the cart, retry after `Retry-After` |
+| 503 | `payment_provider_unavailable` | The open payment could not be cancelled, retry after `Retry-After` |
+| 400 | `bad_request` | An `include` path outside the cart list |
+
+</Errors>
+
+</Endpoint>
+
 The address does not change the zone of the cart. When the country is outside the zone, the shipping options endpoint returns no option and a warning, as the [Checkout](/3.x/store-api/checkout) guide shows: switch the cart to the zone of that country with `zone_code`, described in [Updating the cart](#updating-the-cart). The [Taxes](/3.x/taxes) page explains how the tax zone is picked from the country and the state.
 
 ## Promotion Codes
 
 A promotion code entered by the customer is checked against the whole cart before it is kept: its currency, zone, dates, eligible products, minimum amount or quantity, usage limits and campaign budget. A code that cannot apply is refused and leaves the cart as it was. Automatic promotions need no request: they appear in `promotions` as soon as the cart qualifies. The [Discounts](/3.x/discounts) page describes how promotions are set up.
 
-<ApiTable name="POST /store/carts/{cartId}/promotion" label="Parameter">
+<Endpoint id="post-store-carts-cartid-promotion" method="POST" path="/store/carts/{cartId}/promotion" auth="owner" limit="checkout">
 
-<ParamField path="code" type="string" required>
+<Params title="Path parameters">
+
+<Field name="cartId" type="string" required>
+  The cart ID.
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  Related resources to return with the cart, listed in [Reading a Cart](#reading-a-cart).
+</Field>
+
+<Field name="fields[carts]" type="string">
+  Comma-separated attributes to return, such as `lines_count,total`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+<Params title="Body">
+
+<Field name="code" type="string" required>
   The promotion code, up to 255 characters.
-</ParamField>
+</Field>
 
-</ApiTable>
+</Params>
 
 ```bash title="Request"
 curl -X POST http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/promotion \
@@ -502,7 +791,7 @@ curl -X POST http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/promot
 
 The API answers `200 OK` with the cart. `WELCOME10` takes 10% off the subtotal, and the VAT is recalculated on the discounted amount. The response is trimmed to the totals:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": {
         "id": "01JD8Z6Q4M3K2V7R9T5W1XNB0C",
@@ -532,7 +821,7 @@ Each entry of `promotions` has a `source` of `code` or `automatic`, the `amount`
 
 A code the cart cannot use answers `422 promotion_not_applicable`, with the same message whatever the reason, so codes cannot be discovered by trying them:
 
-```json title="Response"
+```json title="Response 422"
 {
     "errors": [
         {
@@ -546,6 +835,53 @@ A code the cart cannot use answers `422 promotion_not_applicable`, with the same
 }
 ```
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 404 | `not_found` | No cart with this ID for this request |
+| 422 | `promotion_not_applicable` | The code does not exist or does not apply to the cart |
+| 422 | Rule name, such as `required` | A field fails validation |
+| 409 | `cart_completed` | The cart is already an order |
+| 409 | `payment_session_collected` | The customer already paid: complete the cart |
+| 409 | `payment_session_in_progress` | Another request is changing the cart, retry after `Retry-After` |
+| 503 | `payment_provider_unavailable` | The open payment could not be cancelled, retry after `Retry-After` |
+| 400 | `bad_request` | An `include` path outside the cart list |
+
+</Errors>
+
+</Endpoint>
+
+<Endpoint id="delete-store-carts-cartid-promotion" method="DELETE" path="/store/carts/{cartId}/promotion" auth="owner" limit="checkout">
+
+<Params title="Path parameters">
+
+<Field name="cartId" type="string" required>
+  The cart ID.
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  Related resources to return with the cart, listed in [Reading a Cart](#reading-a-cart).
+</Field>
+
+<Field name="fields[carts]" type="string">
+  Comma-separated attributes to return, such as `lines_count,total`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+<Params title="Body">
+
+<Field name="code" type="string">
+  The promotion code to remove. Without it, every code of the cart is removed.
+</Field>
+
+</Params>
+
 Removing a code takes the same `code` field. Without it, the request removes every code of the cart; automatic promotions stay:
 
 ```bash title="Request"
@@ -557,29 +893,66 @@ curl -X DELETE http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/prom
 
 The API answers `200 OK` with the cart. When the cart later changes currency or zone, the codes that no longer apply are dropped from it.
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 404 | `not_found` | No cart with this ID for this request |
+| 409 | `cart_completed` | The cart is already an order |
+| 409 | `payment_session_collected` | The customer already paid: complete the cart |
+| 409 | `payment_session_in_progress` | Another request is changing the cart, retry after `Retry-After` |
+| 503 | `payment_provider_unavailable` | The open payment could not be cancelled, retry after `Retry-After` |
+| 400 | `bad_request` | An `include` path outside the cart list |
+
+</Errors>
+
+</Endpoint>
+
 ## Updating the Cart
 
 The cart itself has four fields a storefront changes after creating it: the currency of a currency switcher, the zone of a country picker, the email of the checkout form and the metadata. Send only the fields that change.
 
-<ApiTable name="PATCH /store/carts/{cartId}" label="Parameter">
+<Endpoint id="patch-store-carts-cartid" method="PATCH" path="/store/carts/{cartId}" auth="owner">
 
-<ParamField path="currency_code" type="string">
+<Params title="Path parameters">
+
+<Field name="cartId" type="string" required>
+  The cart ID.
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  Related resources to return with the cart, listed in [Reading a Cart](#reading-a-cart).
+</Field>
+
+<Field name="fields[carts]" type="string">
+  Comma-separated attributes to return, such as `lines_count,total`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+<Params title="Body">
+
+<Field name="currency_code" type="string">
   ISO code of an enabled currency of the shop. The lines are priced again in that currency.
-</ParamField>
+</Field>
 
-<ParamField path="zone_code" type="string">
+<Field name="zone_code" type="string">
   Code of an enabled zone, the code the `X-Shopper-Zone` header carries. The lines are priced again for that zone.
-</ParamField>
+</Field>
 
-<ParamField path="email" type="string">
+<Field name="email" type="string">
   Contact email of the checkout, lower-cased.
-</ParamField>
+</Field>
 
-<ParamField path="metadata" type="object">
+<Field name="metadata" type="object">
   Replaces the cart metadata. `null` clears it.
-</ParamField>
+</Field>
 
-</ApiTable>
+</Params>
 
 ```bash title="Request"
 curl -X PATCH http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C \
@@ -597,47 +970,194 @@ The API answers `200 OK` with the cart priced in the new currency. Switching cur
 
 The currency of the cart stays the same on a zone switch: send both fields to change both. When a line has no price in the new currency, the API refuses with `422 price_missing` on `/data/attributes/currency_code` and changes nothing. A line with a custom price cannot change currency and answers `409 cart_line_locked`.
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 404 | `not_found` | No cart with this ID for this request |
+| 422 | `price_missing` | A line has no price in the new currency |
+| 422 | Rule name, such as `exists` | A field fails validation, such as a disabled `zone_code` |
+| 409 | `cart_line_locked` | A line has a custom price |
+| 409 | `cart_completed` | The cart is already an order |
+| 409 | `payment_session_collected` | The customer already paid: complete the cart |
+| 409 | `payment_session_in_progress` | Another request is changing the cart, retry after `Retry-After` |
+| 503 | `payment_provider_unavailable` | The open payment could not be cancelled, retry after `Retry-After` |
+| 400 | `bad_request` | An `include` path outside the cart list |
+
+</Errors>
+
+</Endpoint>
+
 ## The Cart Resource
 
 The cart resource has the type `carts` and the public ID of the cart as its `id`. These attributes come with every cart response:
 
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `currency_code` | string | ISO code of the cart currency |
-| `email` | string, null | Contact email of the checkout |
-| `promotions` | array | The promotions on the cart, each with `code`, `source`, `amount` and `status` |
-| `completed_at` | string, null | When the cart became an order, ISO 8601 |
-| `metadata` | object, null | Your own data |
-| `lines_count` | integer | Number of lines |
-| `lines_quantity` | integer | Sum of the line quantities |
-| `subtotal` | integer | Sum of the line subtotals, in cents |
-| `discount_total` | integer | Total of the promotions, in cents |
-| `tax_total` | integer | Tax of the cart, in cents, 0 until the cart has a shipping address |
-| `shipping_total` | integer | Price of the chosen shipping option, in cents |
-| `total` | integer | Amount to pay, in cents |
-| `tax_inclusive` | boolean | Whether the prices already include `tax_total` |
-| `shipping_option_id` | string, null | The chosen shipping option, `{carrier_code}:{service_code}` |
-| `created_at` | string | ISO 8601 |
-| `updated_at` | string | ISO 8601 |
+<Attributes title="carts attributes">
+
+<Field name="currency_code" type="string">
+  ISO code of the cart currency.
+</Field>
+
+<Field name="email" type="string, null">
+  Contact email of the checkout.
+</Field>
+
+<Field name="promotions" type="array">
+  The promotions on the cart.
+
+<Field name="code" type="string">
+  The promotion code.
+</Field>
+
+<Field name="source" type="string">
+  `code` or `automatic`.
+</Field>
+
+<Field name="amount" type="integer">
+  What the promotion takes off the cart, in cents.
+</Field>
+
+<Field name="status" type="string">
+  `applied` or `suppressed`.
+</Field>
+
+</Field>
+
+<Field name="completed_at" type="string, null">
+  When the cart became an order, ISO 8601.
+</Field>
+
+<Field name="metadata" type="object, null">
+  Your own data.
+</Field>
+
+<Field name="lines_count" type="integer">
+  Number of lines.
+</Field>
+
+<Field name="lines_quantity" type="integer">
+  Sum of the line quantities.
+</Field>
+
+<Field name="subtotal" type="integer">
+  Sum of the line subtotals, in cents.
+</Field>
+
+<Field name="discount_total" type="integer">
+  Total of the promotions, in cents.
+</Field>
+
+<Field name="tax_total" type="integer">
+  Tax of the cart, in cents, 0 until the cart has a shipping address.
+</Field>
+
+<Field name="shipping_total" type="integer">
+  Price of the chosen shipping option, in cents.
+</Field>
+
+<Field name="total" type="integer">
+  Amount to pay, in cents.
+</Field>
+
+<Field name="tax_inclusive" type="boolean">
+  Whether the prices already include `tax_total`.
+</Field>
+
+<Field name="shipping_option_id" type="string, null">
+  The chosen shipping option, `{carrier_code}:{service_code}`.
+</Field>
+
+<Field name="created_at" type="string">
+  ISO 8601.
+</Field>
+
+<Field name="updated_at" type="string">
+  ISO 8601.
+</Field>
+
+</Attributes>
 
 The total follows the tax mode of the shipping address. When `tax_inclusive` is `true`, `total` is the subtotal minus the discounts, plus shipping, and `tax_total` is the share of VAT it already contains: show it as "VAT included". When it is `false`, `total` adds `tax_total` on top. The subtotal minus the discounts never goes below zero. The [Cart](/3.x/cart#calculation-pipeline) page describes the calculation pipeline behind these numbers.
 
 A `cart-lines` resource has these attributes:
 
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `purchasable_type` | string | `variant` or `product` |
-| `quantity` | integer | Quantity of the line |
-| `unit_price_amount` | integer | Unit price frozen when the line was added, in cents |
-| `is_custom_price` | boolean | Whether the price was set by hand in the back office, which locks the line |
-| `subtotal` | integer | `unit_price_amount` times `quantity`, in cents |
-| `discount_total` | integer | Discount on the line, in cents |
-| `tax_total` | integer | Tax on the line, in cents |
-| `adjustments` | array | The discounts of the line, each with `amount` and `code` |
-| `tax_lines` | array | The taxes of the line, each with `code`, `name`, `rate` (a percentage, `20` for 20%) and `amount` |
-| `metadata` | object, null | Data of the line |
-| `created_at` | string | ISO 8601 |
-| `updated_at` | string | ISO 8601 |
+<Attributes title="cart-lines attributes">
+
+<Field name="purchasable_type" type="string">
+  `variant` or `product`.
+</Field>
+
+<Field name="quantity" type="integer">
+  Quantity of the line.
+</Field>
+
+<Field name="unit_price_amount" type="integer">
+  Unit price frozen when the line was added, in cents.
+</Field>
+
+<Field name="is_custom_price" type="boolean">
+  Whether the price was set by hand in the back office, which locks the line.
+</Field>
+
+<Field name="subtotal" type="integer">
+  `unit_price_amount` times `quantity`, in cents.
+</Field>
+
+<Field name="discount_total" type="integer">
+  Discount on the line, in cents.
+</Field>
+
+<Field name="tax_total" type="integer">
+  Tax on the line, in cents.
+</Field>
+
+<Field name="adjustments" type="array">
+  The discounts of the line.
+
+<Field name="amount" type="integer">
+  Discount amount, in cents.
+</Field>
+
+<Field name="code" type="string">
+  The promotion code.
+</Field>
+
+</Field>
+
+<Field name="tax_lines" type="array">
+  The taxes of the line.
+
+<Field name="code" type="string">
+  Code of the tax rate.
+</Field>
+
+<Field name="name" type="string">
+  Name of the tax rate.
+</Field>
+
+<Field name="rate" type="number">
+  A percentage, `20` for 20%.
+</Field>
+
+<Field name="amount" type="integer">
+  Tax amount, in cents.
+</Field>
+
+</Field>
+
+<Field name="metadata" type="object, null">
+  Data of the line.
+</Field>
+
+<Field name="created_at" type="string">
+  ISO 8601.
+</Field>
+
+<Field name="updated_at" type="string">
+  ISO 8601.
+</Field>
+
+</Attributes>
 
 Its `purchasable` relationship points to a `variants` or a `products` resource, the same resources the catalog returns. A `cart-addresses` resource carries `type` (`shipping` or `billing`), `first_name`, `last_name`, `full_name`, `company`, `address_1`, `address_2`, `city`, `state`, `postal_code`, `country_code` and `phone`.
 

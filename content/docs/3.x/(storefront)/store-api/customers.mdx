@@ -11,23 +11,23 @@ Every endpoint of this page needs the bearer token of a signed-in customer, the 
 
 These routes sit in the authenticated route group. A request without a token, with an expired or revoked token, or with a token that was not issued for the store answers `401`.
 
-| Method | Path | Purpose |
-|--------|------|---------|
-| `GET` | `/store/customers/me` | Read the profile |
-| `PATCH` | `/store/customers/me` | Update the profile |
-| `POST` | `/store/customers/me/avatar` | Upload a profile picture |
-| `DELETE` | `/store/customers/me/avatar` | Remove the profile picture |
-| `GET` | `/store/customers/me/addresses` | List the saved addresses |
-| `POST` | `/store/customers/me/addresses` | Save an address |
-| `PATCH` | `/store/customers/me/addresses/{addressId}` | Update an address |
-| `DELETE` | `/store/customers/me/addresses/{addressId}` | Delete an address |
-| `POST` | `/store/carts/{cartId}/transfer` | Attach a guest cart to the customer |
+<Routes>
+  <Route method="GET" path="/store/customers/me" href="#get-store-customers-me">Read the profile</Route>
+  <Route method="PATCH" path="/store/customers/me" href="#patch-store-customers-me">Update the profile</Route>
+  <Route method="POST" path="/store/customers/me/avatar" href="#post-store-customers-me-avatar">Upload a profile picture</Route>
+  <Route method="DELETE" path="/store/customers/me/avatar" href="#delete-store-customers-me-avatar">Remove the profile picture</Route>
+  <Route method="GET" path="/store/customers/me/addresses" href="#get-store-customers-me-addresses">List the saved addresses</Route>
+  <Route method="POST" path="/store/customers/me/addresses" href="#post-store-customers-me-addresses">Save an address</Route>
+  <Route method="PATCH" path="/store/customers/me/addresses/{addressId}" href="#patch-store-customers-me-addresses-addressid">Update an address</Route>
+  <Route method="DELETE" path="/store/customers/me/addresses/{addressId}" href="#delete-store-customers-me-addresses-addressid">Delete an address</Route>
+  <Route method="POST" path="/store/carts/{cartId}/transfer" href="#post-store-carts-cartid-transfer">Attach a guest cart to the customer</Route>
+</Routes>
 
 Request bodies are flat JSON objects, such as `{"opt_in": true}`. The profile picture is the only multipart upload.
 
 A missing or rejected token answers `401` with the `unauthenticated` code:
 
-```json title="Response"
+```json title="Response 401"
 {
     "errors": [
         {
@@ -46,6 +46,16 @@ The storefront then drops the stored token and sends the customer to the sign-in
 
 The storefront reads the profile to greet the customer, fill the account form and show the profile picture. It is also the cheapest way to check that a stored token still works when the storefront starts.
 
+<Endpoint id="get-store-customers-me" method="GET" path="/store/customers/me" auth="customer">
+
+<Params title="Query parameters">
+
+<Field name="fields[customers]" type="string">
+  Comma-separated attributes to return, such as `first_name,last_name`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
 ```bash title="Request"
 curl http://localhost:8000/store/customers/me \
   -H "Accept: application/vnd.api+json" \
@@ -54,7 +64,7 @@ curl http://localhost:8000/store/customers/me \
 
 The API answers `200 OK` with a `customers` resource:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": {
         "id": "01JD9B2K7X4N8R3T6V1Y5Z0QWE",
@@ -63,8 +73,8 @@ The API answers `200 OK` with a `customers` resource:
             "first_name": "Camille",
             "last_name": "Martin",
             "email": "camille.martin@example.com",
-            "avatar": "https://ui-avatars.com/api/?name=Camille+Martin&color=1d4ed8&background=dbeafe",
-            "avatar_type": "avatar_ui",
+            "avatar": "http://localhost:8000/storage/avatars/u8jzPde0IgxLd6GncfBAepfJBd0Kh8oOOL8dKLzd.jpg",
+            "avatar_type": "storage",
             "phone_number": "+33 6 12 34 56 78",
             "gender": "female",
             "birth_date": "1992-04-18",
@@ -76,19 +86,63 @@ The API answers `200 OK` with a `customers` resource:
 }
 ```
 
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `first_name` | string or null | First name. |
-| `last_name` | string | Last name. |
-| `email` | string | Email the customer signs in with. |
-| `avatar` | string | URL of the profile picture: the uploaded file, or a generated picture when there is none. |
-| `avatar_type` | string | `storage` when the customer uploaded a picture, `avatar_ui` for the generated one. |
-| `phone_number` | string or null | Phone number, as the customer typed it. |
-| `gender` | string or null | `female` or `male`. |
-| `birth_date` | string or null | Date of birth, `YYYY-MM-DD`. |
-| `opt_in` | boolean | Whether the customer accepts marketing emails. |
-| `email_verified` | boolean | Whether the customer confirmed their email address. |
-| `created_at` | string | When the account was created, ISO 8601. |
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 401 | `unauthenticated` | The request has no valid customer token |
+
+</Errors>
+
+</Endpoint>
+
+<Attributes title="customers attributes">
+
+<Field name="first_name" type="string, null">
+  First name.
+</Field>
+
+<Field name="last_name" type="string">
+  Last name.
+</Field>
+
+<Field name="email" type="string">
+  Email the customer signs in with.
+</Field>
+
+<Field name="avatar" type="string">
+  URL of the profile picture: the uploaded file, or a generated picture when there is none.
+</Field>
+
+<Field name="avatar_type" type="string">
+  `storage` when the customer uploaded a picture, `avatar_ui` for the generated one.
+</Field>
+
+<Field name="phone_number" type="string, null">
+  Phone number, as the customer typed it.
+</Field>
+
+<Field name="gender" type="string, null">
+  `female` or `male`.
+</Field>
+
+<Field name="birth_date" type="string, null">
+  Date of birth, `YYYY-MM-DD`.
+</Field>
+
+<Field name="opt_in" type="boolean">
+  Whether the customer accepts marketing emails.
+</Field>
+
+<Field name="email_verified" type="boolean">
+  Whether the customer confirmed their email address.
+</Field>
+
+<Field name="created_at" type="string">
+  When the account was created, ISO 8601.
+</Field>
+
+</Attributes>
 
 The customer `id` is a ULID, like the IDs of carts, orders and addresses.
 
@@ -96,33 +150,43 @@ The customer `id` is a ULID, like the IDs of carts, orders and addresses.
 
 The account form saves the fields the customer changed. Send only those fields: a field left out of the body keeps its value.
 
-<ApiTable name="PATCH /store/customers/me" label="Parameter">
+<Endpoint id="patch-store-customers-me" method="PATCH" path="/store/customers/me" auth="customer">
 
-<ParamField path="first_name" type="string">
+<Params title="Query parameters">
+
+<Field name="fields[customers]" type="string">
+  Comma-separated attributes to return, such as `first_name,last_name`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+<Params title="Body">
+
+<Field name="first_name" type="string, null">
   First name, up to 255 characters. `null` clears it.
-</ParamField>
+</Field>
 
-<ParamField path="last_name" type="string">
+<Field name="last_name" type="string">
   Last name, up to 255 characters. It cannot be cleared.
-</ParamField>
+</Field>
 
-<ParamField path="phone_number" type="string">
+<Field name="phone_number" type="string, null">
   Phone number, up to 255 characters. `null` clears it.
-</ParamField>
+</Field>
 
-<ParamField path="birth_date" type="string">
+<Field name="birth_date" type="string, null">
   A date before today, such as `1992-04-18`. `null` clears it.
-</ParamField>
+</Field>
 
-<ParamField path="gender" type="string">
+<Field name="gender" type="string, null">
   `female` or `male`. `null` clears it.
-</ParamField>
+</Field>
 
-<ParamField path="opt_in" type="boolean">
+<Field name="opt_in" type="boolean">
   Whether the customer accepts marketing emails.
-</ParamField>
+</Field>
 
-</ApiTable>
+</Params>
 
 The email address is not part of this endpoint. A body that carries `email` gets no error, and the email stays the same.
 
@@ -138,7 +202,7 @@ The API answers `200 OK` with the whole profile, in the shape of [Reading the pr
 
 A value that fails validation answers `422`, with one error per field. The `code` is the name of the rule that failed, and the pointer names the field:
 
-```json title="Response"
+```json title="Response 422"
 {
     "errors": [
         {
@@ -156,9 +220,38 @@ A value that fails validation answers `422`, with one error per field. The `code
 
 The [Errors](/3.x/store-api/errors) guide lists every error code.
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 401 | `unauthenticated` | The request has no valid customer token |
+| 422 | Rule name, such as `before` | A field fails validation, the pointer names it |
+
+</Errors>
+
+</Endpoint>
+
 ## Profile Picture
 
 A customer who uploads a picture sees it in the account area. Without one, `avatar` points to a generated picture, so the storefront always has an image to show.
+
+<Endpoint id="post-store-customers-me-avatar" method="POST" path="/store/customers/me/avatar" auth="customer">
+
+<Params title="Query parameters">
+
+<Field name="fields[customers]" type="string">
+  Comma-separated attributes to return, such as `first_name,last_name`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+<Params title="Body">
+
+<Field name="avatar" type="file" required>
+  The image, sent as `multipart/form-data`, 1,024 KB at most.
+</Field>
+
+</Params>
 
 The upload is a multipart request with the image in the `avatar` field. The file must be an image of 1,024 KB at most.
 
@@ -171,7 +264,7 @@ curl -X POST http://localhost:8000/store/customers/me/avatar \
 
 The API answers `200 OK` with the profile. `avatar_type` is now `storage`, and `avatar` is the URL of the stored file:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": {
         "id": "01JD9B2K7X4N8R3T6V1Y5Z0QWE",
@@ -195,6 +288,28 @@ The API answers `200 OK` with the profile. `avatar_type` is now `storage`, and `
 
 The file goes to the `avatars` folder of the media disk, the `shopper.media.storage.disk_name` setting described in [Media](/3.x/media#storage-disk). A new upload replaces the previous picture and deletes its file. A file that is not an image or is larger than 1,024 KB answers `422` with a pointer on `/data/attributes/avatar`.
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 401 | `unauthenticated` | The request has no valid customer token |
+| 422 | `required` | The request has no file in `avatar` |
+| 422 | `image_file` | The file is not an image or is larger than 1,024 KB |
+
+</Errors>
+
+</Endpoint>
+
+<Endpoint id="delete-store-customers-me-avatar" method="DELETE" path="/store/customers/me/avatar" auth="customer">
+
+<Params title="Query parameters">
+
+<Field name="fields[customers]" type="string">
+  Comma-separated attributes to return, such as `first_name,last_name`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
 To go back to the generated picture, delete the upload:
 
 ```bash title="Request"
@@ -204,6 +319,16 @@ curl -X DELETE http://localhost:8000/store/customers/me/avatar \
 ```
 
 The API answers `200 OK` with the profile, where `avatar_type` is `avatar_ui` and `avatar` is the generated URL again.
+
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 401 | `unauthenticated` | The request has no valid customer token |
+
+</Errors>
+
+</Endpoint>
 
 ## Addresses
 
@@ -215,6 +340,20 @@ Every address request is scoped to the owner of the token. An address ID that be
 
 The list returns every address of the customer, newest first, in one response. It is not paginated.
 
+<Endpoint id="get-store-customers-me-addresses" method="GET" path="/store/customers/me/addresses" auth="customer">
+
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  `country` adds the country of each address, a `countries` resource described in [Countries](/3.x/store-api/store#countries).
+</Field>
+
+<Field name="fields[addresses]" type="string">
+  Comma-separated attributes to return, such as `street_address,city,postal_code`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
 ```bash title="Request"
 curl http://localhost:8000/store/customers/me/addresses \
   -H "Accept: application/vnd.api+json" \
@@ -223,7 +362,7 @@ curl http://localhost:8000/store/customers/me/addresses \
 
 The API answers `200 OK` with an array of `addresses` resources:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": [
         {
@@ -253,65 +392,89 @@ The API answers `200 OK` with an array of `addresses` resources:
 
 `country_code` is the two-letter ISO code of the country, and `type` is `shipping` or `billing`.
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 401 | `unauthenticated` | The request has no valid customer token |
+
+</Errors>
+
+</Endpoint>
+
 ### Saving an Address
 
 The storefront saves an address from the account area, or after a checkout when the customer ticks a "save this address" box.
 
-<ApiTable name="POST /store/customers/me/addresses" label="Parameter">
+<Endpoint id="post-store-customers-me-addresses" method="POST" path="/store/customers/me/addresses" auth="customer">
 
-<ParamField path="first_name" type="string" required>
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  `country` adds the country of the address, a `countries` resource described in [Countries](/3.x/store-api/store#countries).
+</Field>
+
+<Field name="fields[addresses]" type="string">
+  Comma-separated attributes to return, such as `street_address,city,postal_code`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+<Params title="Body">
+
+<Field name="first_name" type="string" required>
   First name, up to 255 characters.
-</ParamField>
+</Field>
 
-<ParamField path="last_name" type="string" required>
+<Field name="last_name" type="string" required>
   Last name, up to 255 characters.
-</ParamField>
+</Field>
 
-<ParamField path="company_name" type="string">
+<Field name="company_name" type="string, null">
   Company, up to 255 characters.
-</ParamField>
+</Field>
 
-<ParamField path="street_address" type="string" required>
+<Field name="street_address" type="string" required>
   Street and number, up to 255 characters.
-</ParamField>
+</Field>
 
-<ParamField path="street_address_plus" type="string">
+<Field name="street_address_plus" type="string, null">
   Second address line, such as an apartment or a floor, up to 255 characters.
-</ParamField>
+</Field>
 
-<ParamField path="postal_code" type="string" required>
+<Field name="postal_code" type="string" required>
   Postal code, up to 255 characters.
-</ParamField>
+</Field>
 
-<ParamField path="city" type="string" required>
+<Field name="city" type="string" required>
   City, up to 255 characters.
-</ParamField>
+</Field>
 
-<ParamField path="state" type="string">
+<Field name="state" type="string, null">
   State or region, such as `NY`, up to 255 characters.
-</ParamField>
+</Field>
 
-<ParamField path="country_code" type="string" required>
+<Field name="country_code" type="string" required>
   Two-letter ISO code of the country, such as `FR` or `US`. Upper-cased before validation.
-</ParamField>
+</Field>
 
-<ParamField path="type" type="string" required>
+<Field name="type" type="string" required>
   `shipping` or `billing`.
-</ParamField>
+</Field>
 
-<ParamField path="phone_number" type="string">
+<Field name="phone_number" type="string, null">
   Phone number, up to 255 characters.
-</ParamField>
+</Field>
 
-<ParamField path="shipping_default" type="boolean">
+<Field name="shipping_default" type="boolean">
   `true` makes this address the default shipping address of the customer.
-</ParamField>
+</Field>
 
-<ParamField path="billing_default" type="boolean">
+<Field name="billing_default" type="boolean">
   `true` makes this address the default billing address of the customer.
-</ParamField>
+</Field>
 
-</ApiTable>
+</Params>
 
 ```bash title="Request"
 curl -X POST http://localhost:8000/store/customers/me/addresses \
@@ -337,6 +500,18 @@ The API answers `201 Created` with the new address, in the shape of the list abo
 
 An unknown country code answers `422` with the `exists` code on `/data/attributes/country_code`.
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 401 | `unauthenticated` | The request has no valid customer token |
+| 422 | `exists` | `country_code` is not a known country |
+| 422 | Rule name, such as `required` | Another field fails validation |
+
+</Errors>
+
+</Endpoint>
+
 ### Default Addresses
 
 A customer has at most one default shipping address and one default billing address. Setting `shipping_default` or `billing_default` to `true` on an address, when saving or updating it, removes that flag from the other addresses of the customer, so the checkout can pick the default without asking.
@@ -344,6 +519,84 @@ A customer has at most one default shipping address and one default billing addr
 The values `1` and `"1"` count as `true` and move the default the same way.
 
 ### Updating and Deleting an Address
+
+<Endpoint id="patch-store-customers-me-addresses-addressid" method="PATCH" path="/store/customers/me/addresses/{addressId}" auth="customer">
+
+<Params title="Path parameters">
+
+<Field name="addressId" type="string" required>
+  The `id` of the `addresses` resource.
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  `country` adds the country of the address, a `countries` resource described in [Countries](/3.x/store-api/store#countries).
+</Field>
+
+<Field name="fields[addresses]" type="string">
+  Comma-separated attributes to return, such as `street_address,city,postal_code`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+<Params title="Body">
+
+<Field name="first_name" type="string">
+  First name, up to 255 characters.
+</Field>
+
+<Field name="last_name" type="string">
+  Last name, up to 255 characters.
+</Field>
+
+<Field name="company_name" type="string, null">
+  Company, up to 255 characters.
+</Field>
+
+<Field name="street_address" type="string">
+  Street and number, up to 255 characters.
+</Field>
+
+<Field name="street_address_plus" type="string, null">
+  Second address line, such as an apartment or a floor, up to 255 characters.
+</Field>
+
+<Field name="postal_code" type="string">
+  Postal code, up to 255 characters.
+</Field>
+
+<Field name="city" type="string">
+  City, up to 255 characters.
+</Field>
+
+<Field name="state" type="string, null">
+  State or region, such as `NY`, up to 255 characters.
+</Field>
+
+<Field name="country_code" type="string">
+  Two-letter ISO code of the country, such as `FR` or `US`. Upper-cased before validation.
+</Field>
+
+<Field name="type" type="string">
+  `shipping` or `billing`.
+</Field>
+
+<Field name="phone_number" type="string, null">
+  Phone number, up to 255 characters.
+</Field>
+
+<Field name="shipping_default" type="boolean">
+  `true` makes this address the default shipping address of the customer.
+</Field>
+
+<Field name="billing_default" type="boolean">
+  `true` makes this address the default billing address of the customer.
+</Field>
+
+</Params>
 
 An update takes the same fields as [Saving an address](#saving-an-address), all optional. Send only what changed:
 
@@ -357,6 +610,29 @@ curl -X PATCH http://localhost:8000/store/customers/me/addresses/01JZ8KB7C8D9E0F
 
 The API answers `200 OK` with the updated address.
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 401 | `unauthenticated` | The request has no valid customer token |
+| 404 | `not_found` | The customer has no address with this ID |
+| 422 | `exists` | `country_code` is not a known country |
+| 422 | Rule name, such as `boolean` | Another field fails validation |
+
+</Errors>
+
+</Endpoint>
+
+<Endpoint id="delete-store-customers-me-addresses-addressid" method="DELETE" path="/store/customers/me/addresses/{addressId}" auth="customer">
+
+<Params title="Path parameters">
+
+<Field name="addressId" type="string" required>
+  The `id` of the `addresses` resource.
+</Field>
+
+</Params>
+
 A delete removes the address for good:
 
 ```bash title="Request"
@@ -366,6 +642,17 @@ curl -X DELETE http://localhost:8000/store/customers/me/addresses/01JZ8KB7C8D9E0
 ```
 
 The API answers `204 No Content`, with no body. Deleting a default address leaves the customer without a default of that kind until another address gets the flag.
+
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 401 | `unauthenticated` | The request has no valid customer token |
+| 404 | `not_found` | The customer has no address with this ID |
+
+</Errors>
+
+</Endpoint>
 
 ### Using a Saved Address at Checkout
 
@@ -386,11 +673,50 @@ Most visitors fill a cart before they sign in. When they sign in at checkout, th
 
 The login and registration requests accept the guest cart ID as `cart_id` and run this same transfer, returning the resulting cart ID in `meta.cart_id`, as [Logging in](/3.x/store-api/authentication#logging-in) shows. The transfer endpoint is for a customer who is already signed in when the guest cart appears, such as a second tab or a token restored from storage.
 
+<Endpoint id="post-store-carts-cartid-transfer" method="POST" path="/store/carts/{cartId}/transfer" auth="customer" limit="checkout">
+
+<Params title="Path parameters">
+
+<Field name="cartId" type="string" required>
+  The ID of the guest cart.
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  Related resources to return with the cart, listed in [Reading a Cart](/3.x/store-api/cart#reading-a-cart).
+</Field>
+
+<Field name="fields[carts]" type="string">
+  Comma-separated attributes to return, such as `lines_count,total`. See [Sparse fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
 ```bash title="Request"
 curl -X POST http://localhost:8000/store/carts/01JZ9A1B2C3D4E5F6G7H8J9K0M/transfer \
   -H "Accept: application/vnd.api+json" \
   -H "Authorization: Bearer 1|customer-token"
 ```
+
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 401 | `unauthenticated` | The request has no valid customer token |
+| 403 | `forbidden` | The cart belongs to another customer |
+| 404 | `not_found` | No cart has this ID |
+| 409 | `cart_completed` | The cart is already an order |
+| 409 | `payment_session_collected` | The guest cart is already paid at the payment provider |
+| 409 | `payment_session_in_progress` | Another request is opening a payment session on the cart, retry after `Retry-After` |
+| 503 | `payment_provider_unavailable` | The payment provider did not answer while the transfer released the payment session, retry after `Retry-After` |
+| 400 | `bad_request` | An `include` path outside the cart list |
+
+</Errors>
+
+</Endpoint>
 
 ### What the Transfer Does
 
@@ -413,7 +739,7 @@ Unless it has a payment session open, the cart that results is priced again from
 
 The API answers `200 OK` with the resulting cart, in the shape the [Cart](/3.x/store-api/cart) guide describes. `meta.price_changes` lists the lines whose unit price changed in the transfer, with the price before and after, in cents:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": {
         "id": "01JZ7Q4R5S6T7V8W9X0Y1Z2A3B",

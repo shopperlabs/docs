@@ -11,18 +11,42 @@ Orders are read-only in the Store API. The storefront never changes an order: th
 
 The confirmation lookup and the shipment tracking sit in the public route group and work without a token. The account endpoints need the bearer token of a signed-in customer, described in [Logging in](/3.x/store-api/authentication#logging-in).
 
-| Method | Path | Purpose | Customer token |
-|--------|------|---------|----------------|
-| `GET` | `/store/orders/{orderId}` | Order confirmation | No |
-| `GET` | `/store/customers/me/orders` | Order history | Yes |
-| `GET` | `/store/customers/me/orders/{orderId}` | Order details | Yes |
-| `GET` | `/store/shipments/{shipmentId}` | Shipment tracking | No |
-| `GET` | `/store/customers/me/orders/{orderId}/items/{itemId}/files/{fileId}` | Download link of a purchased file | Yes |
-| `GET` | `/store/files/{fileId}` | The file itself, through a signed link | No, the signature grants access |
+<Routes>
+  <Route method="GET" path="/store/orders/{orderId}" href="#get-store-orders-orderid">Order confirmation</Route>
+  <Route method="GET" path="/store/customers/me/orders" href="#get-store-customers-me-orders">Order history</Route>
+  <Route method="GET" path="/store/customers/me/orders/{orderId}" href="#get-store-customers-me-orders-orderid">Order details</Route>
+  <Route method="GET" path="/store/shipments/{shipmentId}" href="#get-store-shipments-shipmentid">Shipment tracking</Route>
+  <Route method="GET" path="/store/customers/me/orders/{orderId}/items/{itemId}/files/{fileId}" href="#get-store-customers-me-orders-orderid-items-itemid-files-fileid">Download link of a purchased file</Route>
+  <Route method="GET" path="/store/files/{fileId}" href="#get-store-files-fileid">The file itself, through a signed link</Route>
+</Routes>
 
 ## Order Confirmation
 
-The confirmation page thanks the customer and recaps what they bought, for guests and customers alike. The checkout returns the ID of the new order, as the [Checkout](/3.x/store-api/checkout) guide shows, and the storefront reads the order with it. This order belongs to a signed-in customer, so the request carries their token, as [Who Can Read an Order](#who-can-read-an-order) explains:
+The confirmation page thanks the customer and recaps what they bought, for guests and customers alike. The checkout returns the ID of the new order, as the [Checkout](/3.x/store-api/checkout) guide shows, and the storefront reads the order with it.
+
+<Endpoint id="get-store-orders-orderid" method="GET" path="/store/orders/{orderId}" auth="owner">
+
+<Params title="Path parameters">
+
+<Field name="orderId" type="string" required>
+  The order ID, the `id` of the order the checkout returns.
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  `items` only, as [Who Can Read an Order](#who-can-read-an-order) explains.
+</Field>
+
+<Field name="fields[orders]" type="string">
+  Attributes to return, comma-separated, such as `number,status`. See [Sparse Fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+This order belongs to a signed-in customer, so the request carries their token, as [Who Can Read an Order](#who-can-read-an-order) explains:
 
 ```bash title="Request"
 curl "http://localhost:8000/store/orders/01JQ8Z6N4W2T5V3K9R7M1H0XAB?include=items" \
@@ -32,7 +56,7 @@ curl "http://localhost:8000/store/orders/01JQ8Z6N4W2T5V3K9R7M1H0XAB?include=item
 
 The API answers `200 OK` with the order and its lines in `included`:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": {
         "id": "01JQ8Z6N4W2T5V3K9R7M1H0XAB",
@@ -88,6 +112,17 @@ The API answers `200 OK` with the order and its lines in `included`:
 }
 ```
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 404 | `not_found` | No order with this ID, or a customer order read without that customer's token |
+| 422 | `include_not_allowed` | An include other than `items` |
+
+</Errors>
+
+</Endpoint>
+
 ### Who Can Read an Order
 
 The confirmation lookup needs no token, so a guest can see the order they just placed. Access follows from who placed the order:
@@ -108,7 +143,7 @@ Because a guest order is readable by its ID alone, this endpoint returns less th
 
 Any other include answers `422` with the `include_not_allowed` code:
 
-```json title="Response"
+```json title="Response 422"
 {
     "errors": [
         {
@@ -130,19 +165,53 @@ The account endpoints answer an include outside their list with `400 bad_request
 
 The confirmation, the history and the details all return the same `orders` resource. Its attributes summarize the order; the lines, addresses and shipments come through includes.
 
-| Attribute | Type | Description |
-|-----------|------|-------------|
-| `number` | string | The number the customer sees, such as `ORD-20261117-000042`. The format is set in the shop configuration, as [Orders](/3.x/orders#order-number-generation) describes. |
-| `status` | string | Where the order stands for the merchant. |
-| `payment_status` | string | Where the payment stands. |
-| `shipping_status` | string | Where the delivery stands, across every package. |
-| `total` | integer | Sum of the lines in cents, after line discounts, without shipping. |
-| `tax_amount` | integer | Tax of the order in cents. |
-| `shipping_amount` | integer | Shipping cost in cents. |
-| `price_amount` | integer | What the customer paid, in cents. |
-| `currency_code` | string | ISO code of the order currency, such as `EUR`. |
-| `email` | string or null | Email the order was placed with. |
-| `created_at` | string | When the order was placed, ISO 8601. |
+<Attributes title="orders attributes">
+
+<Field name="number" type="string">
+  The number the customer sees, such as `ORD-20261117-000042`. The format is set in the shop configuration, as [Orders](/3.x/orders#order-number-generation) describes.
+</Field>
+
+<Field name="status" type="string">
+  Where the order stands for the merchant.
+</Field>
+
+<Field name="payment_status" type="string">
+  Where the payment stands.
+</Field>
+
+<Field name="shipping_status" type="string">
+  Where the delivery stands, across every package.
+</Field>
+
+<Field name="total" type="integer">
+  Sum of the lines in cents, after line discounts, without shipping.
+</Field>
+
+<Field name="tax_amount" type="integer">
+  Tax of the order in cents.
+</Field>
+
+<Field name="shipping_amount" type="integer, null">
+  Shipping cost in cents.
+</Field>
+
+<Field name="price_amount" type="integer">
+  What the customer paid, in cents.
+</Field>
+
+<Field name="currency_code" type="string">
+  ISO code of the order currency, such as `EUR`.
+</Field>
+
+<Field name="email" type="string, null">
+  Email the order was placed with.
+</Field>
+
+<Field name="created_at" type="string">
+  When the order was placed, ISO 8601.
+</Field>
+
+</Attributes>
 
 ### Amounts
 
@@ -178,6 +247,42 @@ The order keeps a copy of the addresses and of each line as they were at checkou
 
 The account area lists the orders of the customer, newest first, with their number, statuses and amount. The list returns only the orders of the token owner.
 
+<Endpoint id="get-store-customers-me-orders" method="GET" path="/store/customers/me/orders" auth="customer">
+
+The list accepts these query parameters, described in [JSON:API Conventions](/3.x/store-api/json-api):
+
+<Params title="Query parameters">
+
+<Field name="filter[status]" type="string">
+  One order status or several, comma-separated, such as `processing` or `new,processing`. Keeps the orders in those statuses. See [Filters](/3.x/store-api/json-api#filters).
+</Field>
+
+<Field name="sort" type="string" default="-created_at">
+  `created_at` or `-created_at`: oldest or newest first. See [Sorting](/3.x/store-api/json-api#sorting).
+</Field>
+
+<Field name="include" type="string">
+  Relationships to add, comma-separated: `items`, `shippingAddress`, `billingAddress`, `paymentMethod`, `shippings`, `shippings.events`, `refund`. See [Includes](/3.x/store-api/json-api#includes).
+</Field>
+
+<Field name="page[size]" type="integer" default="15">
+  Orders per page, 1 to 100.
+</Field>
+
+<Field name="page[number]" type="integer">
+  Page to return, 1 to 100.
+</Field>
+
+<Field name="page[cursor]" type="string">
+  The cursor of a previous page. Switches to cursor pagination. See [Pagination](/3.x/store-api/json-api#pagination).
+</Field>
+
+<Field name="fields[orders]" type="string">
+  Attributes to return, comma-separated, such as `number,status`. See [Sparse Fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
 ```bash title="Request"
 curl http://localhost:8000/store/customers/me/orders \
   -H "Accept: application/vnd.api+json" \
@@ -186,7 +291,7 @@ curl http://localhost:8000/store/customers/me/orders \
 
 The API answers `200 OK` with a page of orders, the pagination links and the page details:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": [
         {
@@ -247,20 +352,23 @@ The API answers `200 OK` with a page of orders, the pagination links and the pag
 }
 ```
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 401 | `unauthenticated` | The request has no valid customer token |
+| 400 | `bad_request` | A filter, sort or include outside the list |
+| 422 | `filter_too_wide` | `filter[status]` lists more than 50 values |
+
+</Errors>
+
+</Endpoint>
+
 The list carries the order summaries only. Open one order with [Order details](#order-details) to show its lines and shipments, or add includes to the list when the history page shows more than the summary.
 
 ### Filters, Sorting and Includes
 
-The list accepts these query parameters, described in [JSON:API Conventions](/3.x/store-api/json-api):
-
-| Parameter | Values | Description |
-|-----------|--------|-------------|
-| `filter[status]` | One order status, such as `processing` | Keeps the orders in that status. See [Filters](/3.x/store-api/json-api#filters). |
-| `sort` | `created_at`, `-created_at` | Oldest or newest first. The default is `-created_at`. See [Sorting](/3.x/store-api/json-api#sorting). |
-| `include` | `items`, `shippingAddress`, `billingAddress`, `paymentMethod`, `shippings`, `shippings.events`, `refund` | Relationships to add, comma-separated. See [Includes](/3.x/store-api/json-api#includes). |
-| `page[size]` | 1 to 100 | Orders per page. The default is 15. |
-| `page[number]` | 1 to 100 | Page to return. |
-| `page[cursor]` | The cursor of a previous page | Switches to cursor pagination. See [Pagination](/3.x/store-api/json-api#pagination). |
+The parameters of the [order list](#get-store-customers-me-orders) combine, so each tab of the history page is one request. `filter[status]` takes one [status](#statuses) or several, comma-separated, such as `new,processing`. `sort=created_at` lists the oldest orders first, and `include` adds the relationships the page shows, such as `items` for the order lines.
 
 For a tab that shows the orders still on their way:
 
@@ -272,7 +380,31 @@ curl -g "http://localhost:8000/store/customers/me/orders?filter[status]=processi
 
 ## Order Details
 
-The order page of the account shows everything the customer may need after buying: the lines, where the parcel goes, how they paid, the packages and their tracking, and a refund when there is one. Ask for what the page shows with `include`:
+The order page of the account shows everything the customer may need after buying: the lines, where the parcel goes, how they paid, the packages and their tracking, and a refund when there is one.
+
+<Endpoint id="get-store-customers-me-orders-orderid" method="GET" path="/store/customers/me/orders/{orderId}" auth="customer">
+
+<Params title="Path parameters">
+
+<Field name="orderId" type="string" required>
+  The order ID, the `id` of an order of the history.
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  Relationships to add, comma-separated: `items`, `shippingAddress`, `billingAddress`, `paymentMethod`, `shippings`, `shippings.events`, `refund`. See [Includes](/3.x/store-api/json-api#includes).
+</Field>
+
+<Field name="fields[orders]" type="string">
+  Attributes to return, comma-separated, such as `number,status`. See [Sparse Fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
+
+Ask for what the page shows with `include`:
 
 ```bash title="Request"
 curl "http://localhost:8000/store/customers/me/orders/01JQ8Z6N4W2T5V3K9R7M1H0XAB?include=items,shippingAddress,shippings.events" \
@@ -282,7 +414,7 @@ curl "http://localhost:8000/store/customers/me/orders/01JQ8Z6N4W2T5V3K9R7M1H0XAB
 
 The API answers `200 OK` with the order and the included resources. This order is paid, so the item of the Sneaker Care Guide, a downloadable product, lists its files:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": {
         "id": "01JQ8Z6N4W2T5V3K9R7M1H0XAB",
@@ -418,15 +550,49 @@ The API answers `200 OK` with the order and the included resources. This order i
 }
 ```
 
-The includes are the ones of the [order history](#filters-sorting-and-includes). Without `include`, the response carries the attributes only. Events included through `shippings.events` come in no set order: sort them by `occurred_at` before you draw a timeline. The [shipment endpoint](#tracking-a-shipment) returns them sorted.
+The includes are the ones of the [order history](#get-store-customers-me-orders). Without `include`, the response carries the attributes only. Events included through `shippings.events` come in no set order: sort them by `occurred_at` before you draw a timeline. The [shipment endpoint](#tracking-a-shipment) returns them sorted.
 
 An order of another customer answers `404 not_found`, like an ID that does not exist. An include outside the list answers `400 bad_request`.
+
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 401 | `unauthenticated` | The request has no valid customer token |
+| 404 | `not_found` | No order with this ID among the orders of the customer |
+| 400 | `bad_request` | An include outside the list |
+
+</Errors>
+
+</Endpoint>
 
 ## Tracking a Shipment
 
 A tracking page shows where a package is, without asking the customer to sign in, so it works from a link in a shipping email. An order can ship in several packages; each one is a shipment with its own ID, carrier and tracking number.
 
 The storefront gets the shipment ID from `include=shippings` on the [order details](#order-details), where each `order-shippings` resource is one package. A guest has no account to read, so pass the ID in the email you send when the package ships: the `shipment.*` webhooks carry it as the `id` of the package, as [Webhooks](/3.x/webhooks#shipment-data) describes.
+
+<Endpoint id="get-store-shipments-shipmentid" method="GET" path="/store/shipments/{shipmentId}" auth="public">
+
+<Params title="Path parameters">
+
+<Field name="shipmentId" type="string" required>
+  The shipment ID, the `id` of an `order-shippings` resource or of the package in a `shipment.*` webhook.
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="include" type="string">
+  `events` only.
+</Field>
+
+<Field name="fields[order-shippings]" type="string">
+  Attributes to return, comma-separated, such as `status,tracking_url`. See [Sparse Fieldsets](/3.x/store-api/json-api#sparse-fieldsets).
+</Field>
+
+</Params>
 
 ```bash title="Request"
 curl "http://localhost:8000/store/shipments/01JQ9B2C4D6E8F0G1H3J5K7M9N?include=events" \
@@ -435,7 +601,7 @@ curl "http://localhost:8000/store/shipments/01JQ9B2C4D6E8F0G1H3J5K7M9N?include=e
 
 The API answers `200 OK` with the shipment and its tracking events, oldest first:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": {
         "id": "01JQ9B2C4D6E8F0G1H3J5K7M9N",
@@ -489,20 +655,74 @@ The API answers `200 OK` with the shipment and its tracking events, oldest first
 }
 ```
 
-| Attribute | Description |
-|-----------|-------------|
-| `status` | Where the package stands: `pending`, `picked_up`, `in_transit`, `at_sorting_center`, `out_for_delivery`, `delivered`, `delivery_failed` or `returned`. |
-| `carrier_name` | Name of the carrier, or `null` when the package has none. |
-| `tracking_number`, `tracking_url` | The carrier references, to show or link to the carrier's own tracking page. |
-| `shipped_at`, `received_at`, `returned_at` | When the package left, was delivered and came back, ISO 8601, or `null`. |
+<Attributes title="order-shippings attributes">
+
+<Field name="status" type="string, null">
+  Where the package stands: `pending`, `picked_up`, `in_transit`, `at_sorting_center`, `out_for_delivery`, `delivered`, `delivery_failed` or `returned`.
+</Field>
+
+<Field name="carrier_name" type="string, null">
+  Name of the carrier, or `null` when the package has none.
+</Field>
+
+<Field name="tracking_number" type="string, null">
+  The carrier reference, to show to the customer.
+</Field>
+
+<Field name="tracking_url" type="string, null">
+  The carrier's own tracking page, to link to.
+</Field>
+
+<Field name="shipped_at" type="string, null">
+  When the package left, ISO 8601, or `null`.
+</Field>
+
+<Field name="received_at" type="string, null">
+  When the package was delivered, ISO 8601, or `null`.
+</Field>
+
+<Field name="returned_at" type="string, null">
+  When the package came back, ISO 8601, or `null`.
+</Field>
+
+</Attributes>
 
 Each event has a `status` from the same list, a `description` and a `location` from the carrier, `latitude` and `longitude` as strings with seven decimals (or `null`), and `occurred_at`, the time the carrier reported. The [Fulfillment](/3.x/fulfillment#shipment-status-package-level) page describes the shipment statuses and how carriers report events.
 
 `events` is the only include of this endpoint; any other answers `400 bad_request`. An unknown shipment ID answers `404 not_found`.
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 404 | `not_found` | No shipment with this ID |
+| 400 | `bad_request` | An include other than `events` |
+
+</Errors>
+
+</Endpoint>
+
 ## Downloading Purchased Files
 
 A customer who buys a digital product, such as a PDF guide or a font pack, downloads its files from their account. The files sit on a private disk with no public URL, so the storefront asks the API for a short-lived link each time the customer clicks **Download**.
+
+<Endpoint id="get-store-customers-me-orders-orderid-items-itemid-files-fileid" method="GET" path="/store/customers/me/orders/{orderId}/items/{itemId}/files/{fileId}" auth="customer">
+
+<Params title="Path parameters">
+
+<Field name="orderId" type="string" required>
+  The order ID.
+</Field>
+
+<Field name="itemId" type="string" required>
+  The `id` of the `order-items` resource.
+</Field>
+
+<Field name="fileId" type="string" required>
+  The `id` of one of the `files` of the item.
+</Field>
+
+</Params>
 
 <Steps>
 <Step title="Read the order with its items">
@@ -530,7 +750,7 @@ Redirect the browser, or open a new tab, to the `url` of the response right away
 
 The API answers `200 OK` with the link and the moment it expires. This response is a plain `data` object, not a JSON:API resource:
 
-```json title="Response"
+```json title="Response 200"
 {
     "data": {
         "url": "http://localhost:8000/store/files/4b1f0c2e-8d6a-4f3e-9a51-6c2d7e9b0a13?expires=1794995232&signature=b7e3c1f0a9d24e6b8c5f1a7d3e9b2c4f6a8d0e2b4c6f8a1d3e5b7c9f0a2d4e6b",
@@ -541,16 +761,87 @@ The API answers `200 OK` with the link and the moment it expires. This response 
 
 The link works for five minutes. Ask for a new one at every click rather than storing it, and never put it in an email: anyone holding the link downloads the file until it expires. The API keeps no count of links or downloads per customer: only the general [rate limit](/3.x/store-api#rate-limits) of the Store API applies.
 
+<Errors>
+
+| Status | Code | When |
+|--------|------|------|
+| 401 | `unauthenticated` | The request has no valid customer token |
+| 403 | `forbidden` | The order is not paid yet: "The files of this order are available once it is paid." |
+| 404 | `not_found` | The order is not one of the customer's, the item is not in the order, or the file does not belong to the product of the item |
+
+</Errors>
+
+</Endpoint>
+
 The shape of the link depends on the disk that holds the files, the `shopper.media.storage.files_disk` setting described in [Products](/3.x/products#downloadable-files):
 
 - On an S3 disk, the link is a temporary URL of the bucket, and the download goes straight to S3.
 - On any other disk, such as the default `local` disk, the link points to `GET /store/files/{fileId}`, a route signed by your app, which streams the file. A link that was altered or has expired answers `403`.
 
+<Endpoint id="get-store-files-fileid" method="GET" path="/store/files/{fileId}" auth="signed">
+
+<Params title="Path parameters">
+
+<Field name="fileId" type="string" required>
+  The file `id`, set by the API in the `url` of the download link.
+</Field>
+
+</Params>
+
+<Params title="Query parameters">
+
+<Field name="expires" type="integer" required>
+  Unix time at which the link expires, set by the API.
+</Field>
+
+<Field name="signature" type="string" required>
+  Signature of the URL, set by the API.
+</Field>
+
+</Params>
+
+The request needs no token: the signature grants access. Call the `url` of the download link as it is. With `-OJ`, curl saves the file under the name the API sends:
+
+```bash title="Request"
+curl -OJ "http://localhost:8000/store/files/4b1f0c2e-8d6a-4f3e-9a51-6c2d7e9b0a13?expires=1794995232&signature=b7e3c1f0a9d24e6b8c5f1a7d3e9b2c4f6a8d0e2b4c6f8a1d3e5b7c9f0a2d4e6b" \
+  -H "Accept: application/vnd.api+json"
+```
+
+The API answers `200 OK` and streams the file as an attachment named after the file. The body is the file itself; the headers below are trimmed to the ones about the file:
+
+```text title="Response 200"
+HTTP/1.1 200 OK
+Content-Disposition: attachment; filename=sneaker-care-guide.pdf
+Content-Type: application/pdf
+Content-Length: 2483012
+Cache-Control: no-cache, private
+```
+
+A link without its signature, with a changed parameter, or past its expiry answers `403` with the `forbidden` code:
+
+```json title="Response 403"
+{
+    "errors": [
+        {
+            "status": "403",
+            "code": "forbidden",
+            "title": "Forbidden",
+            "detail": "Invalid signature."
+        }
+    ]
+}
+```
+
+<Errors>
+
 | Status | Code | When |
 |--------|------|------|
-| `401` | `unauthenticated` | The request has no valid customer token. |
-| `403` | `forbidden` | The order is not paid yet: "The files of this order are available once it is paid." |
-| `404` | `not_found` | The order is not one of the customer's, the item is not in the order, or the file does not belong to the product of the item. |
+| 403 | `forbidden` | The signature is missing, altered or expired |
+| 404 | `not_found` | No file with this ID |
+
+</Errors>
+
+</Endpoint>
 
 Downloads go through the account only. A guest order has no file endpoint, so a store that sells digital products asks buyers to create an account, or sends the files another way.
 

@@ -483,6 +483,11 @@ figure.shiki > div > figcaption + * {
   font-weight: 500;
 }
 
+/* A class name or config key in inline code has no break point, so on a phone it pushes the page sideways. */
+.prose :where(:not(pre) > code):not(:where(.not-prose, .not-prose *)) {
+  overflow-wrap: break-word;
+}
+
 .prose :where(ul):not(:where(.not-prose, .not-prose *)) {
   list-style-type: square;
 }

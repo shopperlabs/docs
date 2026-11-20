@@ -8,7 +8,9 @@ import type { MDXComponents } from 'mdx/types';
 import Image from 'next/image';
 import { closeSync, openSync, readSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ReactNode } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
+import { Attributes, Endpoint, Errors, errorStatus, Field, Method, Params, Route, Routes } from '@/components/endpoint';
+import { badgeErrorStatuses } from '@/components/error-status';
 import { LaravelIcon, LivewireIcon } from '@/components/ui/brand-icons';
 import { Lined, type linings } from '@/components/ui/lined';
 
@@ -297,6 +299,9 @@ export function getMDXComponents(components?: MDXComponents) {
   return {
     ...defaultMdxComponents,
     pre: CodeBlockPre,
+    table: (props: ComponentProps<'table'>) => (
+      <defaultMdxComponents.table {...props}>{badgeErrorStatuses(props.children, errorStatus)}</defaultMdxComponents.table>
+    ),
     Callout,
     Note: (props: { children: ReactNode }) => <Callout type="note" {...props} />,
     Info: (props: { children: ReactNode }) => <Callout type="info" {...props} />,
@@ -311,6 +316,14 @@ export function getMDXComponents(components?: MDXComponents) {
     Screenshot,
     ApiTable,
     ParamField,
+    Endpoint,
+    Params,
+    Attributes,
+    Field,
+    Errors,
+    Routes,
+    Route,
+    Method,
     ...components,
   } satisfies MDXComponents;
 }
