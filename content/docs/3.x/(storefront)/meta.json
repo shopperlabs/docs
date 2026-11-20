@@ -4,6 +4,12 @@
   "root": true,
   "pages": [
     "storefront",
+    "---Starter Kits---",
+    "starter-kits/index",
+    "livewire-starter-kit",
+    "react-starter-kit",
+    "vue-starter-kit",
+    "starter-kits/creating",
     "---Store API---",
     "store-api/index",
     "store-api/authentication",

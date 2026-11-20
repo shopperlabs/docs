@@ -47,11 +47,7 @@
     "---System---",
     "media",
     "two-factor",
-    "---Storefront---",
-    "starter-kits",
-    "livewire-starter-kit",
-    "react-starter-kit",
-    "vue-starter-kit",
+    "---Releases---",
     "upgrade"
   ]
 }

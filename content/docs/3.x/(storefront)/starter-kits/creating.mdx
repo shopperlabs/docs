@@ -1,0 +1,356 @@
+---
+title: Creating a Starter Kit
+description: Build a starter kit from a working Shopper storefront with shopper:kit:init and shopper:kit:export, then publish it and list it on the Shopper website.
+---
+
+A starter kit is a Git repository that holds the files of a storefront and a `shopper-kit.yaml` manifest. You do not assemble it by hand: you build the storefront in a Laravel application that runs Shopper, and two Artisan commands turn it into a kit. `shopper:kit:init` creates the kit with its manifest, and `shopper:kit:export` copies the storefront files from the application into it. This page builds `acme/storefront`, a Livewire storefront, then publishes it and lists it on the Shopper website. [Starter Kits](/3.x/starter-kits) covers what the installer does with the kit.
+
+## Developing the Storefront
+
+The application you build the storefront in is the source of the kit: every file the kit ships is a file of that application, and every Composer package the kit needs is required there. Start from a new Laravel application with Shopper [installed](/3.x/installation), so the kit holds your storefront and nothing else, then write the storefront as in any Laravel project: routes, controllers or Livewire components, views, CSS and JavaScript.
+
+You can also start from one of the [official kits](/3.x/starter-kits#available-kits): install it in the application, then change it. Your kit then ships the official kit's files with your changes.
+
+The kit is copied into other projects, so its code reads API keys and service credentials from the configuration, never from a value written in a file. Each project sets its own in its `.env` file, which a kit never ships.
+
+## Creating the Kit
+
+Run `shopper:kit:init` from the application. Create the kit next to the application rather than inside it, with the `--path` option, so the kit gets a Git repository of its own:
+
+```bash
+php artisan shopper:kit:init --path=../storefront
+```
+
+Without `--path`, the command creates a folder named after the package, `storefront` in this example, at the root of the application, inside the application's repository. When the folder already exists, the command asks whether to overwrite it, and deletes it if you confirm.
+
+The command asks five questions:
+
+| Prompt | Default | Used for |
+|--------|---------|----------|
+| Kit name | None, required | The `name` of the manifest and the title of the README |
+| Package name (vendor/name) | None, required | The `name` of `composer.json`, the install command in the README, and the folder name without `--path` |
+| Description | Empty | The `description` of `composer.json` and of the manifest |
+| Author | The vendor of the package name | The `author` of the manifest and the author in `composer.json` |
+| Stack | None, at least one | The `stack` of the manifest |
+
+The package name accepts lowercase letters, digits and hyphens on each side of the slash, such as `acme/storefront`. The **Stack** prompt is a searchable list of the technologies the Shopper website knows: type to filter it, move with the arrow keys, press the space bar on each technology the kit uses, then press Enter.
+
+The kit starts with three files:
+
+```text
+storefront/
+├── README.md
+├── composer.json
+└── shopper-kit.yaml
+```
+
+The `composer.json` names the package:
+
+```json title="composer.json"
+{
+    "name": "acme/storefront",
+    "description": "A Livewire storefront for Shopper.",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "acme"
+        }
+    ]
+}
+```
+
+The manifest holds your answers, the Shopper, PHP and Laravel versions of Shopper 3, and four paths to export:
+
+```yaml title="shopper-kit.yaml"
+name: 'Acme Storefront'
+description: 'A Livewire storefront for Shopper.'
+version: 1.0.0
+author: acme
+url: ''
+preview: ''
+docs: ''
+stack: [livewire, blade]
+
+shopper: ^3.0
+php: ^8.3
+laravel: ^12.68|^13.27
+
+export_paths:
+  - resources/views
+  - resources/css
+  - resources/js
+  - routes
+```
+
+The `README.md` has the kit name, the install command and a link to the Shopper documentation. Replace it before you publish the kit: the Shopper website shows it as the kit's page, as described in [Writing the README](#writing-the-readme).
+
+## The Manifest
+
+The manifest tells the installer what to copy into a project, which packages to install and which commands to run, and gives the Shopper website what it shows about the kit. Once the storefront is written, the manifest of `acme/storefront` reads:
+
+```yaml title="shopper-kit.yaml"
+name: 'Acme Storefront'
+description: 'A Livewire storefront for Shopper.'
+version: 1.0.0
+author: acme
+url: 'https://github.com/acme/storefront'
+preview: 'https://demo.example.com'
+docs: 'https://github.com/acme/storefront#readme'
+stack: [livewire, blade, alpinejs]
+
+shopper: ^3.0
+php: ^8.3
+laravel: ^12.68|^13.27
+
+screenshots:
+  - .github/screenshots/home.webp
+  - .github/screenshots/product.webp
+
+export_paths:
+  - app/Livewire
+  - resources/views
+  - resources/css
+  - resources/js
+  - routes/web.php
+
+dependencies:
+  livewire/flux: ^2.20
+
+post_install:
+  - 'php artisan migrate'
+  - 'php artisan storage:link'
+  - 'npm install && npm run build'
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Name of the kit |
+| `export_paths` | Yes | Files and directories copied from the application into the kit, then from the kit into each project |
+| `description` | No | One sentence about the kit |
+| `version` | No | Version of the kit, `0.0.0` by default |
+| `author` | No | Author name |
+| `url` | No | Repository URL |
+| `shopper` | No | Shopper version constraint, `*` by default |
+| `php` | No | PHP version constraint, `*` by default |
+| `laravel` | No | Laravel version constraint, `*` by default |
+| `dependencies` | No | Composer packages the installer requires in the project, as `package: constraint` |
+| `dev_dependencies` | No | Composer packages the installer requires as development dependencies |
+| `post_install` | No | Commands the installer runs in the project once the files are copied |
+| `stack` | No | Technologies the kit uses |
+| `preview` | No | URL of a live demo |
+| `docs` | No | URL of the kit's documentation |
+| `screenshots` | No | Paths of images in the kit's repository |
+
+The Shopper website reads `description`, `version`, `url`, `stack`, `preview`, `docs` and `screenshots` for the kit's page. The installer ignores them, except `version`, which it writes to the [state file](/3.x/starter-kits#the-shopper-kit-state-file) of the project. Keep `version` equal to the Git tag of the release.
+
+### Version Constraints
+
+Before it copies anything, the installer compares `shopper`, `php` and `laravel` with the project. When a constraint is not met, it prints a warning and asks whether to continue, and `--force` continues without asking. A constraint of `*` is not checked. The Shopper website reads the `shopper` constraint to show which Shopper versions the kit supports, such as 3.x for `^3.0`.
+
+### Export Paths
+
+Each path is relative to the application root, and the installer copies it to the same path in the project. A directory is copied with its files and subdirectories, except hidden files such as `.gitkeep`: list a hidden file on its own line to ship it. List the files your storefront owns rather than whole directories such as `config` or `app`, which would ship every file in them, including the ones each Laravel application already has. The installer asks before it overwrites a file of the project.
+
+Some paths never leave a project. The export stops on `composer.json`, `composer.lock`, `shopper-kit.yaml`, `.env`, `vendor`, `node_modules` and `.git`. The installer never copies `.env`, `.env.*`, `composer.json`, `composer.lock`, `vendor`, `.git` and `node_modules`, nor a path that contains `..` or starts with `/`.
+
+### Dependencies
+
+The installer requires the packages of `dependencies` in one `composer require`, then those of `dev_dependencies` with `--dev`. When Composer cannot install one of them, the whole command fails and installs none of its packages: the installer prints a warning and goes on. The export replaces each constraint with the one the application's `composer.json` requires, so you can list a package with `'*'` and let the export write its version.
+
+Front-end packages are not dependencies of the manifest: add `package.json` to `export_paths`, and `npm install` to `post_install`.
+
+### Post-install Commands
+
+The installer lists the commands and runs them once you confirm, in order, from the project root, with a limit of five minutes each. A command that fails prints a warning, and the next one runs. A command that contains `|`, `&`, `;`, `>` or `<` runs through the shell, so `npm install && npm run build` works.
+
+### Stack and Screenshots
+
+The Shopper website shows the `stack` values it knows: `livewire`, `blade`, `inertia`, `alpinejs`, `react`, `vue`, `svelte`, `angular`, `nextjs`, `nuxt`, `remix`, `tanstack`, `astro`, `expo` and `flutter`.
+
+A screenshot is the path of an image in the kit's repository, such as `.github/screenshots/home.webp`. The website drops a screenshot given as a URL on another host. Store the images under `.github`, which the export keeps when it [clears the kit](#exporting-the-storefront), and leave them out of `export_paths`: the projects that install the kit do not need them.
+
+<Note>
+The export writes the manifest again, in the order shown above. A comment, or a key the manifest does not know, is lost at each export.
+</Note>
+
+## The composer.json File
+
+The kit's `composer.json` gives Composer the package name, and the kit needs nothing more in it. The installer requires the kit only to read its manifest and copy its files, then removes it from the project. List the packages the storefront needs in the manifest's `dependencies`, not in the `require` of the kit's `composer.json`: only the manifest's packages are added to the project's `composer.json`.
+
+The export never changes this file, and `--clear` keeps it.
+
+## Exporting the Storefront
+
+Run `shopper:kit:export` from the application, with the path of the kit. A relative path starts from the application root:
+
+```bash
+php artisan shopper:kit:export ../storefront
+```
+
+The command reads the kit's manifest, checks each export path, then copies every path of `export_paths` from the application into the kit, replacing the files already there. It then sets each dependency to the application's constraint and writes the manifest again.
+
+The export stops without copying anything when the folder has no manifest, or when an export path is forbidden or missing from the application:
+
+```text
+No shopper-kit.yaml found at [../storefront]. Run shopper:kit:init first.
+Export path [.env] is forbidden and cannot be exported.
+Export path [app/Http/Controllers/Shop] does not exist in your project.
+```
+
+It warns, and exports anyway, when a dependency is not required by the application, when a `stack` value is not one the Shopper website knows, and when a screenshot is missing from the kit:
+
+```text
+Dependency [spatie/laravel-sitemap] is listed in shopper-kit.yaml but not installed in your project.
+Stack [tailwind] is not a known technology and will not appear on the listing.
+Screenshot [.github/screenshots/home.webp] does not exist in the kit.
+```
+
+The export copies files and never deletes any, so a file you delete or rename in the application stays in the kit. The `--clear` option empties the kit first:
+
+```bash
+php artisan shopper:kit:export ../storefront --clear
+```
+
+It keeps the `.git` and `.github` directories, `README.md`, `CHANGELOG.md`, `LICENSE`, `LICENSE.md`, `composer.json` and the manifest, and deletes everything else, a `.gitignore` included.
+
+Export again each time you change the storefront, then commit the changes in the kit's repository.
+
+## Testing the Kit
+
+The installer finds a kit on Packagist, or in a public repository on GitHub, GitLab or Bitbucket, and installs its latest stable version. Test the kit the way a developer installs it: from its repository, in a new application.
+
+<Steps>
+<Step title="Push the kit">
+On GitHub, create a public repository with the path of the package name, `acme/storefront`. Without Packagist, the installer looks for the kit at `github.com/acme/storefront`, then at the same path on Bitbucket and GitLab. Commit the kit and push it:
+
+```bash
+cd ../storefront
+
+git init -b main
+
+git add .
+
+git commit -m "Release 1.0.0"
+
+git remote add origin git@github.com:acme/storefront.git
+
+git push -u origin main
+```
+</Step>
+<Step title="Tag a release">
+Tag the version of the manifest and push the tag:
+
+```bash
+git tag 1.0.0
+
+git push origin 1.0.0
+```
+</Step>
+<Step title="Install the kit in a new application">
+In a new Laravel application with Shopper [installed](/3.x/installation), run the installer with the package name:
+
+```bash
+php artisan shopper:kit:install acme/storefront
+```
+</Step>
+<Step title="Check the result">
+Read the installer's output: it goes on after a dependency or a post-install command fails, and prints a warning for each one. Then open the storefront, go through the catalog, the cart and the checkout, and check that `.shopper-kit` lists the files you expect.
+</Step>
+</Steps>
+
+<Warning>
+The installer cannot install a kit that is not pushed and tagged. It looks for the package on Packagist and on the three hosts before Composer runs, so a Composer path repository in the application does not help. Without a tag, Composer only finds the `dev-main` version, which an application that accepts stable versions refuses.
+</Warning>
+
+To fix something, change the storefront in the application, export, commit, tag a new version and install it again in a new application.
+
+## Publishing the Kit
+
+A kit reaches developers through its repository, and through the Shopper website once it is [listed](#listing-on-the-shopper-website).
+
+### Versioning
+
+Number the releases with [semantic versioning](https://semver.org), and keep the `version` of the manifest equal to the tag. A kit is copied once: a project that installed `1.0.0` never receives `1.1.0`, so describe each change in the changelog, where the developers who installed an earlier version can port it by hand. Release a new major version when the kit moves to a new Shopper major, with its `shopper` constraint.
+
+### Publishing on Packagist
+
+Packagist is optional. Without it, the installer finds the kit on GitHub, GitLab or Bitbucket at the path of its package name, and adds the repository to the project's `composer.json` during the install. With Packagist, the repository can have any path. Submit the kit as described for add-ons in [Publishing on Packagist](/3.x/addons/publishing#publishing-on-packagist).
+
+### Writing the README
+
+The Shopper website shows the README of the kit as its page. It drops the first heading, since the page shows the kit's name, removes raw HTML, and turns relative links and images into links to the repository. Describe what the storefront covers, and how to configure it once installed: the services it needs, such as a Stripe key, and the commands to run.
+
+The website also reads a `## Features` section: its `###` headings become the groups of features, and the bold text that starts each bullet becomes a feature.
+
+````markdown title="README.md"
+# Acme Storefront
+
+A Livewire storefront for Shopper.
+
+## Features
+
+### Catalog
+
+- **Product listing** with filters by category and brand
+- **Search** on product names
+
+### Checkout
+
+- **One-page checkout** with Stripe
+
+## Installation
+
+```bash
+php artisan shopper:kit:install acme/storefront
+```
+````
+
+The website shows `CHANGELOG.md` as the kit's release notes.
+
+## Listing on the Shopper Website
+
+The Shopper website lists the kits of the [starter kit registry](https://github.com/shopperlabs/starter-kits), a public repository. You list a kit with a pull request that adds it to the registry.
+
+<Steps>
+<Step title="Fork the registry">
+Fork `shopperlabs/starter-kits` on GitHub.
+</Step>
+<Step title="Add the kit">
+Add an entry for the kit to the `kits` array of `registry.json`:
+
+```json title="registry.json"
+{
+    "name": "Acme Storefront",
+    "slug": "acme-storefront",
+    "package": "acme/storefront",
+    "repo": "acme/storefront",
+    "description": "A Livewire storefront for Shopper with a one-page Stripe checkout.",
+    "author": "acme",
+    "shopper": "^3.0",
+    "tags": ["livewire", "storefront"],
+    "official": false,
+    "preview": null
+}
+```
+</Step>
+<Step title="Open a pull request">
+Open a pull request to the registry. A workflow validates the entry, and the kit is listed once the pull request is merged.
+</Step>
+</Steps>
+
+| Field | Value |
+|-------|-------|
+| `name` | Name of the kit |
+| `slug` | Unique identifier in the website URL, lowercase letters, digits and hyphens |
+| `package` | The Composer name, `vendor/name` |
+| `repo` | The GitHub repository, `owner/repo` |
+| `description` | 10 to 200 characters |
+| `author` | Author or organization name |
+| `shopper` | Shopper version constraint, such as `^3.0` |
+| `tags` | At least one, lowercase, such as `livewire`, `inertia`, `blade`, `vue`, `react`, `storefront`, `headless` or `minimal` |
+| `official` | `false`: only the kits Shopper maintains are official |
+| `preview` | URL of a live demo, or `null` |
+
+The workflow checks the JSON against the registry's schema, refuses a `slug` or a `package` already in the registry, and checks that the GitHub repository exists and has a `shopper-kit.yaml` at its root.
+
+Once the entry is merged, the website reads the manifest, the README and the changelog from the default branch of the repository, along with the date of its last push. It shows the manifest's name, description, version, stack, requirements, dependencies, preview, documentation link and screenshots, and falls back to the registry entry for a description or a preview the manifest leaves empty. The website refreshes this every 24 hours, so a change to the repository can take a day to show. A kit whose manifest the website cannot read does not appear.

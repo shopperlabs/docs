@@ -1,39 +1,43 @@
 ---
-title: Vue Starter Kit
-sidebarTitle: Vue
-description: A production-ready storefront built with Inertia, Vue 3, shadcn-vue and Tailwind CSS v4.
+title: React Starter Kit
+sidebarTitle: React
+description: A Shopper storefront built with Inertia, React 19, shadcn/ui and Tailwind CSS v4.
 ---
 
-The Vue Starter Kit is a complete storefront for Shopper, built with [Inertia.js](https://inertiajs.com/) and [Vue 3](https://vuejs.org/). It keeps the full power of Laravel on the backend, with no separate API layer to maintain, while delivering a modern single-page application experience on the frontend. The design system uses [shadcn-vue](https://www.shadcn-vue.com/) components and [Tailwind CSS v4](https://tailwindcss.com/), and every route is fully type-safe thanks to [Laravel Wayfinder](https://github.com/laravel/wayfinder) and a PHP-to-TypeScript transformer.
+The React Starter Kit is a complete storefront for Shopper, built with [Inertia.js](https://inertiajs.com/) and [React 19](https://react.dev/). It keeps the full power of Laravel on the backend, with no separate API layer to maintain, while delivering a modern single-page application experience on the frontend. The design system uses [shadcn/ui](https://ui.shadcn.com/) components and [Tailwind CSS v4](https://tailwindcss.com/), and every route is fully type-safe thanks to [Laravel Wayfinder](https://github.com/laravel/wayfinder) and a PHP-to-TypeScript transformer.
 
-<Screenshot src="/images/v2/inertia-starterkit.png" alt="Vue Starter Kit storefront" />
+<Screenshot src="/images/v2/inertia-starterkit.png" alt="React Starter Kit storefront" />
 
 ## Prerequisites
+
+The kit's manifest requires these PHP, Laravel and Shopper versions, and its Vite version needs the Node.js versions below.
 
 | Requirement | Version |
 |-------------|---------|
 | PHP | 8.4+ |
 | Laravel | 12.0+ |
-| Shopper | 2.9+ |
-| Node.js | 20+ |
+| Shopper | 2.11+ |
+| Node.js | 20.19+ or 22.12+ |
 
 ## Installation
 
 The `shopper:kit:install` command is built into Shopper. No additional package is required.
 
 ```bash
-php artisan shopper:kit:install shopperlabs/vue-starter-kit
+php artisan shopper:kit:install shopperlabs/react-starter-kit
 ```
 
 The installer downloads the kit, reads its [manifest](/2.x/starter-kits#the-manifest), copies all storefront files into your project, and installs the following dependencies.
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `inertiajs/inertia-laravel` | ^3.0 | Inertia server-side adapter for Laravel |
-| `laravel/fortify` | ^1.34 | Authentication backend (login, register, 2FA) |
-| `laravel/wayfinder` | ^0.1.14 | Typed route helpers generated from your routes |
-| `spatie/laravel-typescript-transformer` | ^3.2 | Generates TypeScript types from PHP DTOs and enums |
-| `shopper/stripe` | ^2.9 | Stripe payment integration |
+| Package | Purpose |
+|---------|---------|
+| `inertiajs/inertia-laravel` | Inertia server-side adapter for Laravel |
+| `laravel/fortify` | Authentication backend (login, register, 2FA) |
+| `laravel/wayfinder` | Typed route helpers generated from your routes |
+| `spatie/laravel-typescript-transformer` | Generates TypeScript types from PHP DTOs and enums |
+| `shopper/stripe` | Stripe payment integration |
+
+It also installs `laravel/boost` and `laravel/pao` as development dependencies.
 
 After installing dependencies, the kit runs its post-install commands: database migrations, storage symlink creation, npm install, and the frontend asset build.
 
@@ -44,15 +48,15 @@ On an existing project, create a new branch before installing so you can review 
 
 ```bash
 git checkout -b storefront
-php artisan shopper:kit:install shopperlabs/vue-starter-kit
+php artisan shopper:kit:install shopperlabs/react-starter-kit
 ```
 </Tip>
 
 ## Project Structure
 
-The starter kit publishes files into standard Laravel directories. The backend is shared with the [React Starter Kit](/2.x/react-starter-kit); only the `resources/js` frontend differs. Here is the full structure.
+The starter kit publishes files into standard Laravel directories. The backend is shared with the [Vue Starter Kit](/2.x/vue-starter-kit); only the `resources/js` frontend differs. Here is the full structure.
 
-```
+```text
 app/
 ├── Actions/
 │   ├── Cart/
@@ -111,8 +115,8 @@ resources/js/
 ├── components/
 │   ├── account/       # Order status badge
 │   ├── shop/          # Product cards, price display, zone selector, Stripe form
-│   └── ui/            # shadcn-vue primitives (button, dialog, select, ...)
-├── composables/       # useCart, useShop, useStripeElements, useAppearance
+│   └── ui/            # shadcn/ui primitives (button, dialog, select, ...)
+├── hooks/             # useCart, useShop, useStripeElements, useAppearance
 ├── layouts/           # Storefront, account, settings, and auth layouts
 ├── lib/               # format, stripe, and utility helpers
 ├── pages/
@@ -121,7 +125,7 @@ resources/js/
 │   ├── settings/      # Profile, appearance, security
 │   └── shop/          # Home, catalog, product, cart, checkout
 ├── types/             # Shared and generated TypeScript types
-└── app.ts             # Inertia application entry point
+└── app.tsx            # Inertia application entry point
 
 routes/
 ├── web.php            # Storefront, checkout, account routes
@@ -134,9 +138,11 @@ tests/
 
 ## Routing
 
-The starter kit defines all storefront routes in `routes/web.php`. Unlike the Livewire kit, each page is rendered by a dedicated controller that returns an Inertia response. Routes are named so you can reference them through Wayfinder in your Vue components.
+The starter kit defines all storefront routes in `routes/web.php`. Unlike the Livewire kit, each page is rendered by a dedicated controller that returns an Inertia response. Routes are named so you can reference them through Wayfinder in your React components.
 
 ### Public Routes
+
+These routes are open to guests.
 
 | Route | Controller | Description |
 |-------|-----------|-------------|
@@ -146,14 +152,14 @@ The starter kit defines all storefront routes in `routes/web.php`. Unlike the Li
 | `GET /categories` | `Shop\CategoryController@index` | All categories |
 | `GET /categories/{category:slug}` | `Shop\CategoryController@show` | Products in a category |
 | `GET /collections/{collection:slug}` | `Shop\CollectionController@show` | Products in a collection |
-| `GET /search` | `Shop\SearchController` | Full-text search across products |
+| `GET /search` | `Shop\SearchController` | Product search by name |
 | `GET /cart` | `Shop\CartController@index` | Shopping cart |
 
 Cart mutations are exposed as their own throttled endpoints: `POST /cart` adds a line, `PATCH /cart/{line}` updates a quantity, `DELETE /cart/{line}` removes a line, and `DELETE /cart` clears the cart. The active pricing zone is changed with `PATCH /zone`.
 
 ### Authenticated Routes
 
-These routes require the user to be logged in and have a verified email.
+These routes use the `auth` and `verified` middleware, except the profile page (`GET` and `PATCH /settings/profile`), which only requires a login. The `verified` middleware blocks unverified customers only when your `User` model implements Laravel's `MustVerifyEmail` contract, which the kit's model does not.
 
 | Route | Controller | Description |
 |-------|-----------|-------------|
@@ -171,7 +177,7 @@ The checkout flow posts to dedicated endpoints for each step (`checkout/shipping
 
 ## Architecture
 
-The starter kit follows a clear separation of concerns. Business logic lives in Action classes, data structures in DTOs, HTTP handling in controllers, and UI in Vue components. This makes it straightforward to modify any part of the storefront without affecting others.
+The starter kit follows a clear separation of concerns. Business logic lives in Action classes, data structures in DTOs, HTTP handling in controllers, and UI in React components. This makes it straightforward to modify any part of the storefront without affecting others.
 
 ### Actions
 
@@ -200,14 +206,14 @@ Order creation is wrapped in `CreateOrder`, which uses `Cache::lock` for idempot
 
 ### DTOs
 
-Data Transfer Objects provide type-safe structures for data passed between the backend and the Vue frontend. Because the kit uses the TypeScript Transformer, these DTOs also become TypeScript types your components can import.
+Data Transfer Objects provide type-safe structures for data passed between the backend and the React frontend. Because the kit uses the TypeScript Transformer, these DTOs also become TypeScript types your components can import.
 
 | DTO | Purpose |
 |-----|---------|
 | `AddressData` | Structured address data for forms and checkout |
 | `CountryByZoneData` | Zone session data (zone ID, country code, currency code) |
-| `PriceData` | Formatted price with amount, currency, and comparison price |
-| `ProductReviewsData` | Aggregated review data (average rating, count, distribution) |
+| `PriceData` | Current price, compare-at price, and discount percentage |
+| `ProductReviewsData` | Product reviews with the average rating and the review count |
 
 ### Controllers
 
@@ -221,7 +227,7 @@ use Inertia\Response;
 public function show(Product $product): Response
 {
     return Inertia::render('shop/product', [
-        'product' => $product->load('variants', 'medias'),
+        'product' => $product->load('variants', 'media'),
     ]);
 }
 ```
@@ -242,27 +248,31 @@ The `HandleInertiaRequests` middleware shares global data with every page, so yo
 ],
 ```
 
-On the frontend, the `useShop` composable reads this shared data, and `useCart` exposes the cart count and mutation helpers.
+On the frontend, the `useShop` hook reads this shared data, including the cart count, and `useCart` exposes the cart mutations: `add`, `update`, `remove`, and `clear`.
 
 ### Models
 
 The starter kit publishes model files that extend Shopper's base models. These are configured in `config/shopper/models.php` so that Shopper's internals use your extended versions.
 
-```php
-// app/Models/Product.php
-class Product extends Shopper\Models\Product
-{
-    use App\Concerns\InteractsWithStorefrontMedia;
+```php title="app/Models/Product.php"
+namespace App\Models;
 
-    // Add your own methods, scopes, or relationships here
+use App\Concerns\InteractsWithStorefrontMedia;
+use App\Traits\HasProductPricing;
+use Shopper\Models\Product as Model;
+
+final class Product extends Model
+{
+    use HasProductPricing;
+    use InteractsWithStorefrontMedia;
 }
 ```
 
-You can add custom logic directly to these models. Any method you add is available throughout the storefront and in Shopper's admin panel. The `InteractsWithStorefrontMedia` trait appends `thumbnail` and `images` attributes to every JSON response, so your Vue components receive ready-to-use media URLs.
+You can add custom logic directly to these models. Any method you add is available throughout the storefront and in Shopper's admin panel. The `InteractsWithStorefrontMedia` trait appends `thumbnail` and `images` attributes to every JSON response, so your React components receive ready-to-use media URLs.
 
 ### CheckoutSession
 
-The `CheckoutSession` class defines constants for session keys used throughout the checkout flow. This provides a single place to reference all checkout-related session data.
+The `CheckoutSession` class defines constants for the session keys that hold the customer's checkout choices: addresses, delivery option, and payment method.
 
 ```php
 use App\CheckoutSession;
@@ -270,6 +280,7 @@ use App\CheckoutSession;
 session()->get(CheckoutSession::KEY);              // 'checkout'
 session()->get(CheckoutSession::SHIPPING_ADDRESS); // 'checkout.shipping_address'
 session()->get(CheckoutSession::BILLING_ADDRESS);  // 'checkout.billing_address'
+session()->get(CheckoutSession::SAME_AS_SHIPPING); // 'checkout.same_as_shipping'
 session()->get(CheckoutSession::SHIPPING_OPTION);  // 'checkout.shipping_option'
 session()->get(CheckoutSession::PAYMENT);          // 'checkout.payment'
 ```
@@ -282,11 +293,11 @@ The `app/helpers.php` file defines three global functions used across the storef
 |----------|---------|
 | `cartSession()` | Returns the current cart or creates a new one with the active zone, currency, and channel |
 | `current_currency()` | Returns the currency code for the selected zone, or the store default from `shopper_currency()` |
-| `current_tax_label()` | Returns the tax label ("TTC" or "HT") based on the zone's tax configuration |
+| `current_tax_label()` | Returns the tax label ("TTC" or "HT") from the tax zone of the selected country, or an empty string when no zone is selected |
 
 ### Type Safety
 
-This kit is type-safe end to end. Three tools work together so your Vue components never guess at the shape of backend data.
+This kit is type-safe end to end. Three tools work together so your React components never guess at the shape of backend data.
 
 | Tool | What it provides |
 |------|------------------|
@@ -294,7 +305,7 @@ This kit is type-safe end to end. Three tools work together so your Vue componen
 | TypeScript Transformer | Generates TypeScript definitions from your PHP DTOs and enums into `resources/js/types` |
 | `@shopperlabs/shopper-types` | Shared domain types (Address, Cart, Order, Product, and enums) published as an npm package |
 
-The `TypeScriptTransformerServiceProvider` registers the transformer. Run the generation command after changing a DTO to refresh the TypeScript types your components import.
+The `TypeScriptTransformerServiceProvider` registers the transformer and writes the types to `resources/js/types/generated.d.ts`. Run `php artisan typescript:transform` after changing a DTO to refresh the TypeScript types your components import.
 
 ## Checkout Flow
 
@@ -304,19 +315,19 @@ The checkout is a multi-step process handled by `CheckoutController`. Each step 
 
 **Step 2 - Delivery Options.** The `BuildShippingPackages` action builds package data from the cart, then `FetchDeliveryRates` queries configured [carriers](/2.x/carriers) for available shipping rates based on the address and packages. The customer selects a delivery option.
 
-**Step 3 - Payment.** `FetchPaymentMethods` loads available [payment methods](/2.x/payments) for the customer's country. When the customer places the order, the `CreateOrder` action converts the cart into an order inside a database transaction, adds shipping costs, and initiates payment processing through Shopper's `PaymentProcessingService`.
+**Step 3 - Payment.** `FetchPaymentMethods` loads available [payment methods](/2.x/payments) for the customer's country. For a manual method such as cash on delivery, placing the order runs the `CreateOrder` action, which converts the cart into an order inside a database transaction and adds the shipping cost. The controller then initiates payment processing through Shopper's `PaymentProcessingService`.
 
-For Stripe payments, the customer is redirected to a dedicated payment page (`StripePaymentController`) that renders the Stripe Payment Element through the `useStripeElements` composable. The `StripeWebhookController` handles payment confirmation webhooks.
+When the customer selects Stripe, the checkout creates a Stripe PaymentIntent before any order exists and renders the Stripe Payment Element on the payment step, through the `StripePaymentForm` component and the `useStripeElements` hook. Once the payment is confirmed, Stripe sends the customer back to `checkout/stripe-return`, where the kit checks the PaymentIntent and only then creates the order. The `StripeWebhookController` checks the webhook signature and updates the order's payment status when Stripe reports a payment as authorized, captured, failed, canceled, or refunded.
 
 ## Zones and Currency
 
-The starter kit uses Shopper's [zone system](/2.x/zones) for multi-currency and regional pricing. The `ZoneSelector` component in the footer lets customers pick their country. When a zone is selected, the `ZoneSessionManager` stores a `CountryByZoneData` DTO in the session with the zone ID, country code, and currency code. All prices across the storefront update to reflect the zone's currency through the shared `shop` prop.
+The starter kit uses Shopper's [zone system](/2.x/zones) for multi-currency and regional pricing. The `ZoneSelector` component in the footer lets customers pick their country. When a customer picks a country, the `ZoneSessionManager` stores its country code in the session and resolves it on each request into a `CountryByZoneData` DTO with the zone, the country, and the currency code. All prices across the storefront update to reflect the zone's currency through the shared `shop` prop.
 
 If no zone is selected, the storefront falls back to your store's default currency from `shopper_currency()`.
 
-The `current_tax_label()` helper checks the zone's tax configuration to display "TTC" (tax-inclusive) or "HT" (tax-exclusive) labels alongside prices.
+The `current_tax_label()` helper reads the tax zone of the selected country to display "TTC" (tax-inclusive) or "HT" (tax-exclusive) labels alongside prices.
 
-To enable zone selection, create at least one active zone in your Shopper admin panel. You can optionally set a default zone using the `SHOPPER_DEFAULT_ZONE` environment variable.
+To enable zone selection, create at least one active zone in your Shopper admin panel.
 
 ## Customization
 
@@ -324,45 +335,48 @@ Once installed, every file belongs to your project. Here are the most common cus
 
 ### Styling
 
-All views use shadcn-vue components and Tailwind CSS v4. Modify colors, spacing, and layouts by editing the components in `resources/js`. UI primitives live in `resources/js/components/ui/`, and the storefront chrome is in `resources/js/layouts/storefront/`.
+All views use shadcn/ui components and Tailwind CSS v4. Modify colors, spacing, and layouts by editing the components in `resources/js`. UI primitives live in `resources/js/components/ui/`, and the storefront chrome is in `resources/js/layouts/storefront/`.
 
 ### Pages
 
-Each page is a Vue single-file component in `resources/js/pages/`. Edit any `.vue` file to change a page's layout or content. To change the data a page receives, edit its controller in `app/Http/Controllers/`.
+Each page is a React component in `resources/js/pages/`. Edit any `.tsx` file to change a page's layout or content. To change the data a page receives, edit its controller in `app/Http/Controllers/`.
 
 ### Checkout
 
 To modify the checkout flow, edit the action classes in `app/Actions/Checkout/`. Each action handles one concern, so you can change how shipping rates are calculated without touching payment logic.
 
-To add a new payment provider, implement the provider using Shopper's [payment system](/2.x/payments) and register it in your admin panel. The checkout will automatically pick it up through `FetchPaymentMethods`.
+To add a new payment provider, implement the provider using Shopper's [payment system](/2.x/payments), then add the payment method in your admin panel and enable it on your zones. The checkout will automatically pick it up through `FetchPaymentMethods`.
 
 ### Adding Pages
 
-Create a controller, register a named route in `routes/web.php`, and add the matching Vue component under `resources/js/pages/`.
+Create a controller, register a named route in `routes/web.php`, and add the matching React component under `resources/js/pages/`. The layout is picked from the page name in `resources/js/app.tsx`: pages under `shop/` get the storefront header and footer.
 
-```php
+```php title="app/Http/Controllers/Shop/AboutController.php"
+namespace App\Http\Controllers\Shop;
+
+use App\Http\Controllers\Controller;
 use Inertia\Inertia;
 use Inertia\Response;
 
-class AboutController extends Controller
+final class AboutController extends Controller
 {
     public function __invoke(): Response
     {
-        return Inertia::render('about');
+        return Inertia::render('shop/about');
     }
 }
 ```
 
-```php
-// routes/web.php
-Route::get('about', AboutController::class)->name('about');
+```php title="routes/web.php"
+use App\Http\Controllers\Shop\AboutController;
+
+Route::get('about', AboutController::class)->name('shop.about');
 ```
 
-```vue
-<!-- resources/js/pages/about.vue -->
-<template>
-    <h1>About Us</h1>
-</template>
+```tsx title="resources/js/pages/shop/about.tsx"
+export default function About() {
+    return <h1>About Us</h1>;
+}
 ```
 
 ### Models
@@ -376,7 +390,7 @@ class Product extends Shopper\Models\Product
 {
     public function scopeFeatured(Builder $query): Builder
     {
-        return $query->where('is_featured', true);
+        return $query->where('featured', true);
     }
 }
 ```

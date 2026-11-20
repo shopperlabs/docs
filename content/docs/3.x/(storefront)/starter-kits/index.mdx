@@ -1,0 +1,150 @@
+---
+title: Starter Kits
+sidebarTitle: Overview
+description: Complete storefronts that the installer copies into your Laravel application, and how to build and publish your own.
+---
+
+Shopper ships the admin panel and the commerce models, and no storefront. You build the customer side with the technology you prefer: Blade, Livewire or Inertia inside your Laravel application, or a separate front end on the [Store API](/3.x/store-api).
+
+If you would rather start from a working storefront than from a blank page, Shopper provides **Starter Kits**. A kit is a complete storefront (catalog pages, cart, checkout with Stripe and customer accounts) that the installer copies into your Laravel application. Once installed, the code belongs to you. Modify anything, delete what you don't need, or use it as a reference to build something different.
+
+## Available Kits
+
+Shopper maintains three kits. They cover the same pages: a home page, the product listing with categories, collections and search, the product page, the cart, a checkout that takes payment with Stripe, and a customer account with orders, addresses, and profile and security settings. They differ in the front-end stack.
+
+### Livewire
+
+The [Livewire Starter Kit](/3.x/livewire-starter-kit) is a Laravel storefront built with [Livewire](https://livewire.laravel.com/), [Flux UI](https://fluxui.dev) and [Tailwind CSS](https://tailwindcss.com/). Every page is a Livewire component rendered with Blade.
+
+Because the Shopper admin panel is also built with Livewire, you can reuse patterns and components across your admin and storefront.
+
+### React
+
+The [React Starter Kit](/3.x/react-starter-kit) is an [Inertia](https://inertiajs.com/) storefront built with [React](https://react.dev/), TypeScript, [shadcn/ui](https://ui.shadcn.com/) and [Tailwind CSS](https://tailwindcss.com/). Laravel controllers pass the data to each page, so there is no separate API layer, and [Wayfinder](https://github.com/laravel/wayfinder) generates typed functions for the Laravel routes the pages call.
+
+### Vue
+
+The [Vue Starter Kit](/3.x/vue-starter-kit) is an [Inertia](https://inertiajs.com/) storefront built with [Vue](https://vuejs.org/), TypeScript, [shadcn-vue](https://www.shadcn-vue.com/) and [Tailwind CSS](https://tailwindcss.com/). Like the React kit, it renders Inertia pages from Laravel controllers and calls the routes through Wayfinder.
+
+## Installing a Starter Kit
+
+A kit installs into a Laravel application where Shopper is installed. Start from a new application: the kit replaces files that the Laravel skeleton ships.
+
+<Steps>
+<Step title="Create a Laravel application">
+Create a new Laravel 12 or 13 application:
+
+```bash
+composer create-project laravel/laravel my-store
+
+cd my-store
+```
+</Step>
+<Step title="Install Shopper">
+Install Shopper and create your admin user, as described in [Installation](/3.x/installation).
+</Step>
+<Step title="Install the kit">
+Run the installer with the package name of the kit:
+
+```bash
+php artisan shopper:kit:install shopperlabs/livewire-starter-kit
+```
+
+The installer asks before it overwrites each file of your application, then before it runs the kit's post-install commands.
+</Step>
+<Step title="Finish the setup">
+Follow the page of the kit you installed: it lists the settings to add to `.env`, such as your Stripe keys, and how to build the front-end assets.
+</Step>
+</Steps>
+
+The other kits install the same way, with `shopperlabs/react-starter-kit` or `shopperlabs/vue-starter-kit`.
+
+## How It Works
+
+The `shopper:kit:install` command is built into Shopper, so no additional package is required. It performs the following pipeline:
+
+1. **Backup** your `composer.json` for rollback if anything fails
+2. **Detect** the kit package on Packagist, GitHub, Bitbucket, or GitLab
+3. **Download** the kit temporarily via `composer require`
+4. **Read** the `shopper-kit.yaml` manifest from the kit package
+5. **Validate** PHP, Laravel, and Shopper version constraints, and ask whether to continue when one is not met
+6. **Copy** files from the kit into your project according to `export_paths`
+7. **Install** Composer dependencies declared in the manifest
+8. **Run** post-install commands (migrations, storage link, asset build), after you confirm them
+9. **Write** a `.shopper-kit` state file tracking installed files with SHA-256 hashes
+10. **Remove** the kit package, and the repository entry added in step 2, from your `composer.json`
+11. **Clean up** the backup file
+
+After installation, every file lives in your project. The kit package is gone from your dependencies. The [manifest](/3.x/starter-kits/creating#the-manifest) of the kit decides which files are copied, which packages are installed and which commands run.
+
+<Warning>
+Install a kit on a new application. A kit replaces files that the Laravel skeleton ships, such as `routes/web.php` and `bootstrap/app.php`, and the Inertia kits also replace `package.json`. The installer asks before overwriting each existing file.
+</Warning>
+
+The command accepts four options:
+
+| Option | Description |
+|--------|-------------|
+| `--force` | Skip every confirmation: overwrite existing files, run the post-install commands, and continue when a version constraint is not met |
+| `--path=` | Copy the kit files, run the post-install commands and write the state file in another directory than the project root |
+| `--no-deps` | Skip the Composer dependencies declared in the manifest |
+| `--no-post-install` | Skip the post-install commands |
+
+## The `.shopper-kit` State File
+
+After installation, a `.shopper-kit` file is created at the root of your project. It records which kit was installed, its version, and the SHA-256 hash of every copied file.
+
+```json title=".shopper-kit"
+{
+    "kit": "shopperlabs/livewire-starter-kit",
+    "version": "2.0.0",
+    "installed_at": "2026-11-20T14:32:00+00:00",
+    "files": {
+        "app/Livewire/Pages/Home.php": "3f1c9b0e7d4a5c2e8b6f0a1d9e7c5b3a2f4e6d8c0b1a3f5e7d9c2b4a6e8f0d1c",
+        "resources/views/pages/home.blade.php": "9a2e4c6b8d0f1e3a5c7b9d2f4e6a8c0b1d3f5e7a9c2b4d6f8e0a1c3b5d7f9e2a"
+    }
+}
+```
+
+Commit this file. When you run `shopper:kit:install` again in the same project, the installer reads it and asks before installing over the existing kit. The hashes record each file as the kit shipped it, so you can tell later which files you changed.
+
+## Starter Kits vs Themes
+
+Starter kits are not themes. In Shopper, a [theme](/3.x/themes) only sets the colors of the admin panel. On e-commerce platforms that ship storefront themes, a theme is a runtime dependency: the store relies on it, receives its updates, and can switch to another one from the admin. A starter kit is scaffolding used once: the installer copies files into your project, installs dependencies, and removes itself. There is no package to update and nothing active at runtime.
+
+If you want to "switch" starter kits, you start a new project. This is by design: you get full ownership and can change every line of code, at the cost of not being able to swap front ends with a click.
+
+```text
+Starter Kit                          Storefront theme
+--------------------------------     --------------------------------
+Scaffold, used once                  Runtime, active permanently
+Code belongs to the developer        Managed by the platform
+Not switchable                       Switchable from admin
+Manual merge for updates             Update = dependency upgrade
+```
+
+## Scope
+
+A starter kit installs into a Laravel application: the installer is an Artisan command that copies files into the project and adds Composer packages to it. The kits available today render the storefront from Laravel, with Livewire or Inertia, and read the Shopper models directly.
+
+A storefront that runs on its own server, such as a Next.js or Nuxt site or a mobile app, calls the [Store API](/3.x/store-api) instead. The [Storefront](/3.x/storefront) page compares the two approaches.
+
+## Creating Your Own Starter Kit
+
+Any storefront you build on Shopper can become a starter kit. You write it in a Laravel application, create the kit with `shopper:kit:init`, copy the storefront into it with `shopper:kit:export`, and publish it on GitHub, GitLab, Bitbucket or Packagist. Anyone can then install it with `shopper:kit:install`, and a pull request to the starter kit registry lists it on the Shopper website.
+
+<Cards>
+  <Card title="Creating a Starter Kit" href="/3.x/starter-kits/creating">
+    Scaffold, export, test, publish and list your own kit.
+  </Card>
+</Cards>
+
+## Frequently Asked Questions
+
+### How do I update a kit I installed?
+
+There is nothing to update: the files belong to your project, and a new version of the kit only reaches the projects that install it afterwards. To bring a fix from a new version into your store, read the kit's changelog and apply the change by hand. The hashes of the [state file](#the-shopper-kit-state-file) tell you which files you changed since the install, and which ones you can replace with the new version as they are.
+
+### Can I install a kit in an existing application?
+
+The installer runs in any Laravel application where Shopper is installed, and asks before it overwrites each file. In an application that already has its own routes, layouts or `package.json`, overwriting them breaks what you built, and refusing leaves the kit incomplete. Install the kit in a new application instead, then copy the parts you want into yours.

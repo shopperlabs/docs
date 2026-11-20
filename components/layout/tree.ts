@@ -156,6 +156,8 @@ const equivalents: Record<string, Record<string, string>> = {
     '/money': '/pricing#money-storage-standard',
     '/payments/stripe': '/addons/stripe',
     '/settings': '/setup-store#settings-model',
+    '/starter-kits/creating': '/starter-kits#creating-your-own-starter-kit',
+    '/storefront': '/starter-kits',
     '/team': '/acl#admin-user-creation',
     '/themes': '/extending/control-panel#customize-shopper-theme',
   },

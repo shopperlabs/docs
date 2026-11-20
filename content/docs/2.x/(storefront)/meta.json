@@ -1,0 +1,11 @@
+{
+  "title": "Storefront",
+  "root": true,
+  "pages": [
+    "---Starter Kits---",
+    "starter-kits",
+    "livewire-starter-kit",
+    "react-starter-kit",
+    "vue-starter-kit"
+  ]
+}

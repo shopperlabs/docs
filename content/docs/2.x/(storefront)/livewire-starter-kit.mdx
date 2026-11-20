@@ -1,7 +1,7 @@
 ---
 title: Livewire Starter Kit
 sidebarTitle: Livewire
-description: A production-ready storefront built with Livewire 3, Flux UI and Tailwind CSS v4.
+description: A complete storefront built with Livewire 3, Flux UI and Tailwind CSS v4.
 ---
 
 The Livewire Starter Kit is a complete storefront for Shopper, built entirely within the Laravel ecosystem. It uses [Livewire 3](https://livewire.laravel.com/) for reactive components, [Flux UI](https://fluxui.dev) for the design system, and [Tailwind CSS v4](https://tailwindcss.com/) for styling. Because Shopper's admin panel is also built with Livewire, you can reuse patterns and components across your admin and storefront.
@@ -10,11 +10,13 @@ The Livewire Starter Kit is a complete storefront for Shopper, built entirely wi
 
 ## Prerequisites
 
+The installer checks the PHP, Laravel and Shopper versions of the kit's manifest before it copies anything.
+
 | Requirement | Version |
 |-------------|---------|
 | PHP | 8.4+ |
-| Laravel | 12.0+ |
-| Shopper | 2.7+ |
+| Laravel | 11.48+ |
+| Shopper | 2.11.1+ |
 | Node.js | 20+ |
 
 ## Installation
@@ -27,17 +29,24 @@ php artisan shopper:kit:install shopperlabs/livewire-starter-kit
 
 The installer downloads the kit, reads its [manifest](/2.x/starter-kits#the-manifest), copies all storefront files into your project, and installs the following dependencies.
 
-| Package | Version | Purpose |
-|---------|---------|---------|
-| `livewire/livewire` | ^3.7 | Reactive server-driven components |
-| `livewire/flux` | ^2.0 | UI component library (buttons, inputs, modals, cards) |
-| `livewire/volt` | ^1.7 | Single-file Livewire components |
-| `laravel/fortify` | ^1.25 | Authentication backend (login, register, 2FA) |
-| `shopper/stripe` | ^2.7 | Stripe payment integration |
+| Package | Purpose |
+|---------|---------|
+| `livewire/flux` | UI component library (buttons, inputs, modals, cards) |
+| `livewire/volt` | Single-file Livewire components |
+| `laravel/fortify` | Authentication backend (login, register, 2FA) |
+| `shopper/stripe` | Stripe payment integration |
+| `laravel/boost` | Development dependency for AI-assisted development |
 
-After installing dependencies, the kit runs its post-install commands: database migrations, storage symlink creation, and frontend asset build.
+After installing dependencies, the kit runs its post-install commands: `php artisan migrate` and `php artisan storage:link`.
 
 Once complete, the kit package is removed from your `composer.json`. The code is yours.
+
+The post-install commands do not build the frontend assets. Install the npm packages and build them once the installer finishes:
+
+```bash
+npm install
+npm run build
+```
 
 <Tip>
 On an existing project, create a new branch before installing so you can review every change.
@@ -52,7 +61,7 @@ php artisan shopper:kit:install shopperlabs/livewire-starter-kit
 
 The starter kit publishes files into standard Laravel directories. Here is the full structure.
 
-```
+```text
 app/
 ├── Actions/
 │   ├── Cart/
@@ -81,6 +90,7 @@ app/
 │   ├── PriceData.php
 │   └── ProductReviewsData.php
 ├── Http/Controllers/
+│   ├── StripeReturnController.php
 │   └── StripeWebhookController.php
 ├── Livewire/
 │   ├── Account/
@@ -149,6 +159,8 @@ The starter kit defines all storefront routes in `routes/web.php`. Each page is 
 
 ### Public Routes
 
+These routes are open to guests.
+
 | Route | Component | Description |
 |-------|-----------|-------------|
 | `/` | `Home` | Homepage with featured collections, products, and categories |
@@ -162,13 +174,15 @@ The starter kit defines all storefront routes in `routes/web.php`. Each page is 
 
 ### Authenticated Routes
 
-These routes require the user to be logged in and have a verified email.
+These routes require the user to be logged in and have a verified email. The `/profile/edit` route only requires the user to be logged in.
 
 | Route | Component | Description |
 |-------|-----------|-------------|
 | `/checkout` | `Checkout` | Multi-step checkout flow |
-| `/checkout/payment/{number}` | `StripePayment` | Stripe Payment Element |
+| `/checkout/payment` | `StripePayment` | Stripe Payment Element |
+| `/checkout/payment/return` | `StripeReturnController` | Creates the order once Stripe confirms the payment |
 | `/checkout/success/{order}` | Volt page | Order confirmation |
+| `/dashboard` | Blade view | Customer dashboard with links to orders and addresses |
 | `/account/orders` | Volt page | Order history |
 | `/account/orders/{order}` | Volt page | Order detail |
 | `/account/addresses` | `Addresses` | Address management |
@@ -214,17 +228,21 @@ Data Transfer Objects provide type-safe structures for data passed between compo
 | `AddressData` | Structured address data for forms and checkout |
 | `CountryByZoneData` | Zone session data (zone ID, country code, currency code) |
 | `PriceData` | Formatted price with amount, currency, and comparison price |
-| `ProductReviewsData` | Aggregated review data (average rating, count, distribution) |
+| `ProductReviewsData` | Aggregated review data (reviews, average rating, total count) |
 
 ### Models
 
 The starter kit publishes model files that extend Shopper's base models. These are configured in `config/shopper/models.php` so that Shopper's internals use your extended versions.
 
-```php
-// app/Models/Product.php
-class Product extends Shopper\Models\Product
+```php title="app/Models/Product.php"
+namespace App\Models;
+
+use App\Traits\HasProductPricing;
+use Shopper\Models\Product as Model;
+
+final class Product extends Model
 {
-    // Add your own methods, scopes, or relationships here
+    use HasProductPricing;
 }
 ```
 
@@ -251,7 +269,7 @@ The `app/helpers.php` file defines three global functions used across the storef
 |----------|---------|
 | `cartSession()` | Returns the current cart or creates a new one with the active zone, currency, and channel |
 | `current_currency()` | Returns the currency code for the selected zone, or the store default |
-| `current_tax_label()` | Returns the tax label ("TTC" or "HT") based on the zone's tax configuration |
+| `current_tax_label()` | Returns the tax label ("TTC" or "HT") from the tax zone of the selected country, or an empty string when no zone is selected |
 
 ## Checkout Flow
 
@@ -261,19 +279,19 @@ The checkout is a multi-step process handled by the `Checkout` Livewire componen
 
 **Step 2 - Delivery Options.** The `BuildShippingPackages` action builds package data from the cart, then `FetchDeliveryRates` queries configured [carriers](/2.x/carriers) for available shipping rates based on the address and packages. The customer selects a delivery option.
 
-**Step 3 - Payment.** `FetchPaymentMethods` loads available [payment methods](/2.x/payments) for the customer's country. When the customer places the order, the `CreateOrder` action converts the cart into an order inside a database transaction, adds shipping costs, and initiates payment processing through Shopper's `PaymentProcessingService`.
+**Step 3 - Payment.** `FetchPaymentMethods` loads available [payment methods](/2.x/payments) for the customer's country. When the customer places the order with a manual payment method, the `CreateOrder` action converts the cart into an order inside a database transaction, adds shipping costs, and initiates payment processing through Shopper's `PaymentProcessingService`.
 
-For Stripe payments, the customer is redirected to a dedicated payment page (`StripePayment`) that renders the Stripe Payment Element. The `StripeWebhookController` handles payment confirmation webhooks.
+For Stripe payments, the order does not exist yet when the customer leaves the checkout. The checkout creates a Stripe PaymentIntent for the cart total plus shipping and redirects to a dedicated payment page (`StripePayment`) that renders the Stripe Payment Element. Once Stripe confirms the payment, the `StripeReturnController` checks the PaymentIntent status, creates the order with the `CreateOrder` action, and redirects to the confirmation page. The `StripeWebhookController` then updates the order's payment status from Stripe events.
 
 ## Zones and Currency
 
 The starter kit uses Shopper's [zone system](/2.x/zones) for multi-currency and regional pricing. The `ZoneSelector` component in the footer lets customers pick their country. When a zone is selected, the `ZoneSessionManager` stores a `CountryByZoneData` DTO in the session with the zone ID, country code, and currency code. All prices across the storefront update to reflect the zone's currency.
 
-If no zone is selected, the storefront falls back to your store's default currency from `config('shopper.core.currency')`.
+If no zone is selected, the storefront falls back to the default currency set in your store settings, returned by `shopper_currency()`.
 
-The `current_tax_label()` helper checks the zone's tax configuration to display "TTC" (tax-inclusive) or "HT" (tax-exclusive) labels alongside prices.
+The `current_tax_label()` helper reads the tax zone of the selected country to display "TTC" (tax-inclusive) or "HT" (tax-exclusive) labels alongside prices.
 
-To enable zone selection, create at least one active zone in your Shopper admin panel. You can optionally set a default zone using the `SHOPPER_DEFAULT_ZONE` environment variable.
+To enable zone selection, create at least one active zone in your Shopper admin panel. When your zones cover a single country, the `ZoneSelector` selects it automatically on the first visit.
 
 ## Customization
 
@@ -289,8 +307,8 @@ The homepage is composed of three independent Livewire components, each with its
 
 | Component | View | What it shows |
 |-----------|------|---------------|
-| `FeaturedCollections` | `pages/home/featured-collections.blade.php` | Manual collections |
-| `FeaturedProducts` | `pages/home/featured-products.blade.php` | Latest published products |
+| `FeaturedCollections` | `pages/home/featured-collections.blade.php` | The three collections with the most products |
+| `FeaturedProducts` | `pages/home/featured-products.blade.php` | Up to eight published products marked as featured |
 | `ShopByCategory` | `pages/home/shop-by-category.blade.php` | Root categories |
 
 Remove or reorder these components in `resources/views/pages/home.blade.php` to change the homepage layout.
@@ -305,7 +323,9 @@ To add a new payment provider, implement the provider using Shopper's [payment s
 
 Create a new Livewire component and register a route in `routes/web.php`. Follow the existing pattern of full-page components in `app/Livewire/Pages/`.
 
-```php
+```php title="app/Livewire/Pages/About.php"
+namespace App\Livewire\Pages;
+
 use Illuminate\Contracts\View\View;
 use Livewire\Component;
 
@@ -319,8 +339,9 @@ class About extends Component
 }
 ```
 
-```php
-// routes/web.php
+```php title="routes/web.php"
+use App\Livewire\Pages\About;
+
 Route::get('about', About::class)->name('about');
 ```
 
@@ -328,14 +349,17 @@ Route::get('about', About::class)->name('about');
 
 Add methods, scopes, or relationships directly to the model files in `app/Models/`. These models extend Shopper's base models, so all existing functionality is preserved.
 
-```php
-use Illuminate\Database\Eloquent\Builder;
+```php title="app/Models/Product.php"
+namespace App\Models;
 
-class Product extends Shopper\Models\Product
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Models\Product as Model;
+
+final class Product extends Model
 {
     public function scopeFeatured(Builder $query): Builder
     {
-        return $query->where('is_featured', true);
+        return $query->where('featured', true);
     }
 }
 ```

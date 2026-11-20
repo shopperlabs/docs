@@ -4,6 +4,54 @@ sidebarTitle: Overview
 description: Sell from a starter kit, or build your own front end on the Store API.
 ---
 
-Storefront covers the customer side of a Shopper store: the starter kits, the Store API that serves products, carts, checkout, customers and orders as JSON:API, and the JavaScript SDK that wraps it.
+The storefront is the customer side of a Shopper store: the pages where customers browse products, fill a cart, pay and follow their orders. Shopper ships the admin panel and the commerce models, and leaves the storefront to you. You build it in one of two places: inside the Laravel application that runs Shopper, or as a separate front end that calls the Store API.
 
-The [Store API](/3.x/store-api) guides cover every endpoint a storefront calls, from the catalog to the order history. The starter kit and SDK pages are being written during the 3.0 release candidate.
+## Choosing an Approach
+
+A storefront inside your Laravel application renders its pages with Blade, Livewire or Inertia and reads the Shopper models directly in PHP. One application serves the admin panel and the store, and customers log in with a Laravel session. The fastest way to start is a [starter kit](/3.x/starter-kits), a complete storefront that the installer copies into your application.
+
+A separate front end runs on its own server or device, such as a Next.js or Nuxt site or a mobile app. It reads and writes everything through the [Store API](/3.x/store-api), an HTTP API that the `shopper/api` package adds to your Laravel application. Customers log in with a bearer token, and you deploy the front end apart from the Laravel application that serves the admin panel and the API.
+
+| | Inside Laravel | Separate front end |
+|---|---|---|
+| Built with | Blade, Livewire, or Inertia with React or Vue | Any framework or platform that sends HTTP requests |
+| Reads store data | Shopper models, in PHP | Store API, as JSON:API documents |
+| Customer login | Laravel session | Sanctum bearer token |
+| Deployment | One Laravel application | The Laravel application, plus the front end |
+| Starting point | A starter kit | The Store API guides and the JavaScript SDK |
+
+Start from a starter kit when your team works in Laravel and wants a store running quickly: the catalog, the cart, a Stripe checkout and the customer account are already written, and you change the code from there. Build on the Store API when the store has to run outside Laravel: a front end your team already builds in another framework, a mobile app, or several clients sharing the same catalog and carts.
+
+Both approaches work on the same data. A product published in the admin panel appears in a starter kit and on the Store API at once, and an order placed through either one shows in the admin panel.
+
+## Starter Kits
+
+Shopper maintains three starter kits. They cover the same pages (home, catalog, product, cart, checkout with Stripe, customer account) and differ in their front-end stack. The [Starter Kits](/3.x/starter-kits) page explains how the installer works and how to build a kit of your own.
+
+<Cards className="@lg:grid-cols-3">
+  <Card title="Livewire" href="/3.x/livewire-starter-kit">
+    Livewire components and Flux UI, rendered with Blade.
+  </Card>
+  <Card title="React" href="/3.x/react-starter-kit">
+    Inertia pages in React and TypeScript, with shadcn/ui.
+  </Card>
+  <Card title="Vue" href="/3.x/vue-starter-kit">
+    Inertia pages in Vue and TypeScript, with shadcn-vue.
+  </Card>
+</Cards>
+
+## Store API
+
+The Store API serves the catalog, carts, checkout, customer accounts and orders. A visitor browses and checks out as a guest without credentials; a customer account adds saved addresses, an order history and carts that follow the customer across devices. The JavaScript SDK, `@shopperlabs/shopper-sdk`, wraps the API in a typed client for front ends written in JavaScript or TypeScript.
+
+<Cards>
+  <Card title="Store API" href="/3.x/store-api">
+    Install the API, then read its base URL, route groups, headers and rate limits.
+  </Card>
+  <Card title="Authentication" href="/3.x/store-api/authentication">
+    Register and log in customers, and send their bearer token.
+  </Card>
+  <Card title="Checkout" href="/3.x/store-api/checkout">
+    Choose shipping and payment, open a payment session and turn the cart into an order.
+  </Card>
+</Cards>

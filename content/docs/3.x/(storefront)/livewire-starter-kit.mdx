@@ -1,0 +1,484 @@
+---
+title: Livewire Starter Kit
+sidebarTitle: Livewire
+description: A Shopper storefront built with Livewire 4, Flux UI and Tailwind CSS v4, installed into your Laravel application with one command.
+---
+
+The Livewire Starter Kit is a storefront for Shopper built with [Livewire 4](https://livewire.laravel.com/) and Blade. Each page is a Livewire component that queries the Shopper models directly, so the kit does not go through the [Store API](/3.x/store-api) and there is no separate API layer to maintain. The interface uses [Flux UI](https://fluxui.dev) components and [Tailwind CSS v4](https://tailwindcss.com/), and [Laravel Fortify](https://laravel.com/docs/fortify) handles authentication. Because the Shopper admin panel is also built with Livewire, you can reuse the same patterns in your admin and your storefront.
+
+The kit is installed once, with the [starter kit installer](/3.x/starter-kits#how-it-works). Every file it copies belongs to your project afterwards.
+
+## Prerequisites
+
+The installer checks the PHP, Laravel and Shopper versions of the kit's manifest before it copies anything, and the Vite version of the Laravel skeleton needs the Node.js versions below. Shopper must already be [installed](/3.x/installation) in the application.
+
+| Requirement | Version |
+|-------------|---------|
+| PHP | 8.3+ |
+| Laravel | 12.68+ or 13.27+ |
+| Shopper | 3.0+ |
+| Node.js | 20.19+ or 22.12+ |
+
+## Installation
+
+Run the installer in a new Laravel application where Shopper is installed, as described in [Installing a Starter Kit](/3.x/starter-kits#installing-a-starter-kit), with the package name of the kit:
+
+```bash
+php artisan shopper:kit:install shopperlabs/livewire-starter-kit
+```
+
+The installer downloads the kit, reads its [manifest](/3.x/starter-kits/creating#the-manifest) and copies the storefront files into your project. On a new Laravel application, the kit replaces 13 files of the skeleton, such as `routes/web.php`, `bootstrap/app.php`, `app/Models/User.php`, `resources/css/app.css` and `config/shopper/models.php`, and the installer asks before overwriting each of them. It then installs these Composer packages:
+
+| Package | Purpose |
+|---------|---------|
+| `livewire/livewire` | Reactive server-driven components |
+| `livewire/flux` | UI component library (buttons, inputs, modals, cards) |
+| `livewire/blaze` | Folds Blade components into their parent templates for faster rendering |
+| `laravel/fortify` | Authentication backend (login, register, password reset, email verification, two-factor authentication) |
+| `danharrin/livewire-rate-limiting` | Rate limits on Livewire actions, such as adding to the cart or placing an order |
+| `shopper/stripe` | Stripe payment driver |
+
+It also installs `laravel/boost` as a development dependency.
+
+Once you confirm them, the installer runs the kit's post-install commands: `php artisan migrate`, which adds the two-factor authentication columns to the `users` table, and `php artisan storage:link`. It then writes a `.shopper-kit` file that lists every copied file and removes the kit package from your `composer.json`.
+
+## First Run
+
+The kit ships Blade views and a stylesheet, and it uses the `vite.config.js` and `resources/js/app.js` files of the Laravel skeleton. The post-install commands do not touch npm, so run these steps from the root of your project.
+
+<Steps>
+<Step>
+
+Install the npm packages and build the assets:
+
+```bash
+npm install
+npm run build
+```
+
+</Step>
+<Step>
+
+Start the development server:
+
+```bash
+php artisan serve
+```
+
+</Step>
+</Steps>
+
+The home page, the catalog, the categories, the search, the cart and the login and register pages now answer at `http://localhost:8000`. The checkout, account and settings pages send guests to the login page.
+
+### Store Data
+
+A new store has no products, so every listing renders empty until you add a catalog. Sign in to the [admin panel](/3.x/installation#access-the-admin-panel), complete the [setup wizard](/3.x/setup-store#setup-wizard), then create the data a purchase goes through:
+
+1. A [zone](/3.x/zones) with the countries you sell to and their [currency](/3.x/currencies), such as a United States zone in USD. Enable a payment method on it, such as the cash on delivery method that Shopper seeds, and a [carrier](/3.x/carriers) with at least one shipping option, such as "Standard" at `500` cents.
+2. A default [inventory location](/3.x/locations). Carrier rates are quoted from its address, and without one the checkout offers flat rates only.
+3. A [category](/3.x/categories) for the storefront navigation and the "Shop by category" section of the home page.
+4. A [product](/3.x/products) that is visible and published, with a price in the zone's currency and stock in the inventory location. A canvas tote bag at `2500` cents ($25.00) works. Mark it as featured to show it on the home page.
+
+With this data, the storefront selects the United States on the first visit, since it is the only country of the enabled zones. A customer adds the tote bag to the cart, registers, confirms their email address, and checks out with cash on delivery: the bag and the standard shipping make an order of `3000` cents. With the `log` mailer of a new Laravel application, the verification email is written to `storage/logs/laravel.log`.
+
+## Project Structure
+
+The starter kit publishes files into standard Laravel directories. Here is the structure it adds to your project.
+
+```text
+app/
+├── Actions/
+│   ├── Cart/
+│   │   └── AddToCart.php
+│   ├── Checkout/
+│   │   ├── BuildShippingPackages.php
+│   │   ├── CompleteCheckout.php
+│   │   ├── CreatePaymentSession.php
+│   │   ├── FetchDeliveryRates.php
+│   │   ├── FetchPaymentMethods.php
+│   │   └── RefreshShipping.php
+│   ├── Fortify/
+│   │   ├── CreateNewUser.php
+│   │   └── ResetUserPassword.php
+│   ├── Product/
+│   │   ├── BuildVariantOptions.php
+│   │   └── ResolveVariantAvailability.php
+│   ├── GetCountriesByZone.php
+│   └── ZoneSessionManager.php
+├── Concerns/
+│   ├── HandlesCartConflicts.php
+│   ├── PasswordValidationRules.php
+│   └── ProfileValidationRules.php
+├── DTO/
+│   ├── CountryByZoneData.php
+│   └── PriceData.php
+├── Exceptions/
+│   └── CheckoutException.php
+├── Http/Controllers/
+│   ├── PaymentWebhookController.php
+│   └── StripeReturnController.php
+├── Livewire/
+│   ├── Account/
+│   │   ├── AddressForm.php
+│   │   └── Addresses.php
+│   ├── Actions/
+│   │   └── Logout.php
+│   ├── Home/
+│   │   ├── FeaturedCollections.php
+│   │   ├── FeaturedProducts.php
+│   │   └── ShopByCategory.php
+│   ├── Pages/
+│   │   ├── Cart.php
+│   │   ├── CategoryIndex.php
+│   │   ├── CategoryShow.php
+│   │   ├── Checkout.php
+│   │   ├── CollectionShow.php
+│   │   ├── Home.php
+│   │   ├── ProductIndex.php
+│   │   ├── ProductShow.php
+│   │   ├── SearchProducts.php
+│   │   └── StripePayment.php
+│   ├── CartCount.php
+│   ├── StoreFooter.php
+│   ├── StoreHeader.php
+│   └── ZoneSelector.php
+├── Models/
+│   ├── Category.php
+│   ├── Channel.php
+│   ├── Product.php
+│   ├── ProductVariant.php
+│   └── User.php
+├── Providers/
+│   ├── AppServiceProvider.php
+│   └── FortifyServiceProvider.php
+├── Traits/
+│   └── HasProductPricing.php
+└── helpers.php
+
+resources/
+├── css/
+│   └── app.css
+└── views/
+    ├── components/
+    ├── layouts/
+    │   ├── account.blade.php
+    │   ├── auth.blade.php
+    │   └── store.blade.php
+    ├── livewire/
+    ├── pages/
+    │   ├── account/
+    │   ├── auth/
+    │   ├── home/
+    │   ├── settings/
+    │   ├── shop/
+    │   └── home.blade.php
+    ├── partials/
+    └── dashboard.blade.php
+
+config/
+├── fortify.php
+├── livewire.php
+└── shopper/
+    ├── features.php
+    └── models.php
+
+routes/
+├── settings.php
+├── web.php
+└── webhooks.php
+
+tests/
+├── Feature/
+│   ├── Auth/
+│   ├── Settings/
+│   ├── Shop/
+│   ├── DashboardTest.php
+│   └── ExampleTest.php
+├── Unit/
+├── Pest.php
+└── TestCase.php
+```
+
+The classes of `app/Livewire/Pages` render the views of `resources/views/pages/shop` and `resources/views/pages/home.blade.php`. The `components` folder holds the Blade components shared by the pages, such as the product card, the price display, the address form fields and the order summary. The `pages/auth` folder holds the Fortify views, and `pages/account` and `pages/settings` hold single-file Livewire components.
+
+## Routing
+
+The starter kit defines the storefront routes in `routes/web.php`, the account settings routes in `routes/settings.php` and the payment webhook route in `routes/webhooks.php`. Every route is named, so your views can link to them with `route()`.
+
+### Public Routes
+
+These routes are open to guests.
+
+| Route | Component | Description |
+|-------|-----------|-------------|
+| `GET /` | `Pages\Home` | Homepage with featured collections, featured products and categories |
+| `GET /shop` | `Pages\ProductIndex` | Product catalog with search, a category filter and sorting |
+| `GET /shop/{product:slug}` | `Pages\ProductShow` | Product detail with variant selection |
+| `GET /categories` | `Pages\CategoryIndex` | All categories |
+| `GET /categories/{category:slug}` | `Pages\CategoryShow` | Products in a category |
+| `GET /collections/{collection:slug}` | `Pages\CollectionShow` | Products in a collection |
+| `GET /search` | `Pages\SearchProducts` | Search products, from 2 characters |
+| `GET /cart` | `Pages\Cart` | Shopping cart with discount codes |
+
+The cart changes run as Livewire actions on these pages, with their own limits: a customer can add a product to the cart 30 times per minute and try 5 discount codes per minute, and `GET /search` answers 30 requests per minute. Fortify registers the authentication routes, such as `/login`, `/register` and `/forgot-password`, and renders them with the views of `resources/views/pages/auth`.
+
+### Authenticated Routes
+
+These routes require the user to be logged in with a verified email address. The kit's `User` model implements `MustVerifyEmail`, so a new customer confirms their email address before the checkout opens. The profile settings page requires the login only, and `/profile` redirects to it.
+
+| Route | Component | Description |
+|-------|-----------|-------------|
+| `GET /checkout` | `Pages\Checkout` | Multi-step checkout flow |
+| `GET /checkout/payment` | `Pages\StripePayment` | Stripe Payment Element |
+| `GET /checkout/payment/return` | `StripeReturnController` | Return URL of a Stripe payment, creates the order |
+| `GET /checkout/success/{order}` | `pages::shop.checkout-success` | Order confirmation |
+| `GET /account/orders` | `pages::account.orders` | Order history |
+| `GET /account/orders/{order}` | `pages::account.order-show` | Order detail |
+| `GET /account/addresses` | `Account\Addresses` | Address management |
+| `GET /dashboard` | `dashboard` view | Account overview, where Fortify redirects after a login or a registration |
+| `GET /profile/edit` | `pages::settings.profile` | Profile settings |
+| `GET /profile/appearance` | `pages::settings.appearance` | Light, dark or system appearance |
+| `GET /profile/security` | `pages::settings.security` | Password and two-factor authentication, after the password confirmation |
+
+Payment providers send their webhooks to `POST /webhooks/{driver}`, such as `/webhooks/stripe`, limited to 300 requests per minute. `bootstrap/app.php` loads this route outside the `web` middleware group, so it has no session and no CSRF check.
+
+## Architecture
+
+The starter kit separates business logic in Action classes, data structures in DTOs, and the interface in Livewire components and Blade views. You can change one part of the storefront without touching the others.
+
+### Actions
+
+Actions are single-responsibility classes that hold the business logic. They are resolved from the container, so you can swap an implementation or add dependencies to it. Each one receives the product, the cart or the zone it works on:
+
+```php
+use App\Actions\Cart\AddToCart;
+use App\Actions\Checkout\CompleteCheckout;
+use App\Actions\Checkout\FetchDeliveryRates;
+
+resolve(AddToCart::class)->handle($product, $variant, quantity: 2);
+resolve(FetchDeliveryRates::class)->handle($cart);
+resolve(CompleteCheckout::class)->handle($cart);
+```
+
+The checkout uses six actions.
+
+| Action | Responsibility |
+|--------|---------------|
+| `BuildShippingPackages` | Packs the cart lines into one package, with their total weight and the largest dimensions, for carrier rate requests |
+| `FetchDeliveryRates` | Quotes the carriers of the cart's zone and keeps the options in the cart's currency, with a warning for each carrier that fails |
+| `RefreshShipping` | Quotes the chosen delivery option again before the order is created |
+| `FetchPaymentMethods` | Lists the payment methods enabled on a zone that the storefront can check out with: manual methods and Stripe |
+| `CreatePaymentSession` | Opens a payment with the provider for the cart total, or resumes the open one when nothing changed |
+| `CompleteCheckout` | Turns the cart into an order |
+
+`CompleteCheckout` checks that the payment method is still available on the zone, quotes the delivery option again through `RefreshShipping`, and refuses the order when the option is gone or its price went up. It then converts the cart into an order and records the initiated payment. Called again on the same cart, it returns the order it already created, so a double submit or a refreshed Stripe return never creates two orders.
+
+On the product page, `BuildVariantOptions` lists the attributes of a product with their values and maps each variant to its values and stock. `ResolveVariantAvailability` then tells, for the options the customer selected, which values still lead to a variant in stock or open to backorders.
+
+### DTOs
+
+Data Transfer Objects give a typed shape to the data passed between actions, components and views.
+
+| DTO | Purpose |
+|-----|---------|
+| `CountryByZoneData` | Selected zone and country (zone ID, code and name, country ID, name, code and flag, currency code) |
+| `PriceData` | Price with its comparison price and discount percentage |
+
+### Livewire Components
+
+Each storefront page is a full-page Livewire component in `app/Livewire/Pages/`. `config/livewire.php` sets `layouts::store` as the default layout, so every page renders inside `resources/views/layouts/store.blade.php`, with the `StoreHeader` and `StoreFooter` components. The order confirmation, order history and settings pages are single-file components in `resources/views/pages/`, registered with `Route::livewire()`. The order history and settings pages, like the `Account\Addresses` component, set the `layouts.account` layout with the `#[Layout]` attribute.
+
+Components that change the cart dispatch a `cart-updated` event, which the `CartCount` component in the header listens to. The `addToCart` action of the product page shows the pattern:
+
+```php title="app/Livewire/Pages/ProductShow.php"
+public function addToCart(): void
+{
+    try {
+        $this->rateLimit(30);
+    } catch (TooManyRequestsException) {
+        $this->dispatch('notify', type: 'error', message: __('Too many attempts. Please slow down.'));
+
+        return;
+    }
+
+    $this->quantity = max(1, min($this->quantity, 10));
+
+    if ($this->product->canUseVariants() && $this->product->variants->isNotEmpty() && ! $this->selectedVariant) {
+        $this->dispatch('notify', type: 'error', message: __('Please select all options.'));
+
+        return;
+    }
+
+    try {
+        resolve(AddToCart::class)->handle($this->product, $this->selectedVariant, $this->quantity);
+
+        $this->dispatch('cart-updated');
+        $this->dispatch('notify', type: 'success', message: __('Product added to cart!'));
+    } catch (InsufficientStockException) {
+        $this->dispatch('notify', type: 'error', message: __('Insufficient stock available.'));
+    } catch (MissingPriceException) {
+        $this->dispatch('notify', type: 'error', message: __('This product is not available in your currency.'));
+    } catch (QuantityRuleViolationException $exception) {
+        $this->dispatch('notify', type: 'error', message: $exception->getMessage());
+    }
+}
+```
+
+The `notify` event shows a toast. The `HandlesCartConflicts` trait, used by the cart, product, checkout and zone components, turns a cart that another request is updating, or a payment provider that does not answer, into the same toast instead of an error page.
+
+### Models
+
+The starter kit publishes models that extend the Shopper models. `Category`, `Channel`, `Product` and `ProductVariant` are registered in `config/shopper/models.php`, so that Shopper and its admin panel use them too. The kit also ships its own `User` model, with Fortify's `TwoFactorAuthenticatable` trait and Shopper's `InteractsWithShopper` trait.
+
+```php title="app/Models/Product.php"
+namespace App\Models;
+
+use App\Traits\HasProductPricing;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Models\Product as Model;
+
+final class Product extends Model
+{
+    use HasProductPricing;
+
+    #[Scope]
+    protected function withCurrentPrices(Builder $query): Builder
+    {
+        return $query->with([
+            'prices' => fn ($q) => $q->whereRelation('currency', 'code', current_currency())->with('currency'),
+        ]);
+    }
+}
+```
+
+`HasProductPricing`, used by `Product` and `ProductVariant`, resolves the price of a product or variant in the current currency, for the logged-in customer and the selected zone, and returns a `PriceData` DTO. The `withCurrentPrices` scope loads only the prices in the current currency, for the listings.
+
+### Helpers
+
+The `app/helpers.php` file defines three global functions used across the storefront.
+
+| Function | Purpose |
+|----------|---------|
+| `cartSession()` | Returns the current cart or creates one with the active currency, the default channel and the selected zone |
+| `current_currency()` | Returns the currency code for the selected zone, or the store default from `shopper_currency()` |
+| `current_tax_label()` | Returns the tax label ("TTC" or "HT") from the tax zone of the selected country, or an empty string when no country is selected |
+
+## Checkout Flow
+
+The checkout is a multi-step process handled by the `Checkout` component. Each step validates its data and saves it on the cart through Shopper's `CartManager`, so a customer who comes back to the checkout finds their address, delivery option and payment method already filled in.
+
+**Step 1 - Shipping Address.** The customer enters a new address or selects one of their saved addresses in the countries of their zone. The address is saved on the cart as the shipping and the billing address, with the country selected in the storefront.
+
+**Step 2 - Delivery Options.** `FetchDeliveryRates` builds the package with `BuildShippingPackages` and quotes the [carriers](/3.x/carriers) of the cart's zone for that address, from the default inventory location. The customer selects a delivery option.
+
+**Step 3 - Payment.** `FetchPaymentMethods` lists the [payment methods](/3.x/payments) enabled on the cart's zone. For a manual method, such as cash on delivery, placing the order runs `CompleteCheckout`, then starts the payment through Shopper's `PaymentProcessingService` and shows the confirmation page.
+
+For Stripe payments, placing the order sends the customer to `/checkout/payment`. The `StripePayment` component runs `CreatePaymentSession`, which opens a Stripe PaymentIntent for the cart total without creating an order, and renders the Stripe Payment Element. Once Stripe confirms the payment, it sends the customer back to `/checkout/payment/return`. The `StripeReturnController` retrieves the PaymentIntent and runs `CompleteCheckout` when the payment is authorized, captured or processing. When the order cannot be created, it refunds the payment and sends the customer back to the cart.
+
+The Stripe driver reads its keys from your `.env` file. The [Stripe](/3.x/payments/stripe#configuration) page describes each of them and the capture method:
+
+```bash title=".env"
+STRIPE_SECRET_KEY=sk_test_...
+STRIPE_PUBLISHABLE_KEY=pk_test_...
+STRIPE_WEBHOOK_SECRET=whsec_...
+```
+
+Customers see Stripe at the checkout once a payment method with the `stripe` driver is enabled on their zone, as described in [Payment Method Setup](/3.x/payments/stripe#payment-method-setup), and once the secret key and the webhook secret are set.
+
+The payment status of the order comes from the provider's webhooks, which `PaymentWebhookController` hands to Shopper. The route answers `404` until the Stripe driver is configured. In the Stripe Dashboard, create a webhook endpoint with the URL `https://your-store.test/webhooks/stripe` and select the [events](/3.x/payments/stripe#handled-events) the driver handles. Keep the scheduler and a queue worker running, as described in [Run the Scheduler and a Queue Worker](/3.x/installation#run-the-scheduler-and-a-queue-worker): Shopper reconciles the payments it missed on a schedule.
+
+## Zones and Currency
+
+The starter kit uses Shopper's [zones](/3.x/zones) for multi-currency and regional pricing. The `ZoneSelector` component in the footer lets customers pick their country among the countries of the enabled zones. On the first visit, it opens a country dialog when the zones hold more than one country, and selects the country by itself when they hold only one. The `ZoneSessionManager` then stores a `CountryByZoneData` DTO in the session, with the zone, the country and its currency. Prices across the storefront follow the zone's currency.
+
+When a customer changes country, the `ZoneSelector` moves the cart to the new zone. It removes the lines that have no price in the new currency and tells the customer, prices the other lines in the new currency, checks the discount codes again, and resets the delivery option, the payment method and any open payment session.
+
+When no country is selected, the storefront uses the default currency of your store from `shopper_currency()`, and the cart has no zone, so the checkout offers no delivery option or payment method.
+
+The `current_tax_label()` helper reads the tax zone of the selected country to display "TTC" (tax-inclusive) or "HT" (tax-exclusive) next to prices.
+
+To let customers pick a country, create at least one enabled zone in the admin panel.
+
+## Customization
+
+Once installed, every file belongs to your project. These are the places you will change most often.
+
+### Styling
+
+All pages use Flux UI components and Tailwind CSS v4. The theme lives in `resources/css/app.css`: the fonts, and the accent color that Flux uses for primary buttons, links and focus states. Change the accent variables in the `@theme` block, and in the `.dark` layer below it for dark mode:
+
+```css title="resources/css/app.css"
+@theme {
+  --color-accent: var(--color-teal-600);
+  --color-accent-content: var(--color-teal-600);
+  --color-accent-foreground: var(--color-white);
+}
+```
+
+The fonts are loaded in `resources/views/partials/head.blade.php`. The storefront header and footer are the `store-header` and `store-footer` views in `resources/views/livewire/`, and the shared Blade components, such as `product-card` and `price-display`, live in `resources/views/components/`.
+
+### Homepage Sections
+
+The homepage is composed of three independent Livewire components, each with its own view and cache.
+
+| Component | View | What it shows |
+|-----------|------|---------------|
+| `FeaturedCollections` | `pages/home/featured-collections.blade.php` | The three collections with the most products, cached for two hours |
+| `FeaturedProducts` | `pages/home/featured-products.blade.php` | Up to eight published products marked as featured, cached for 15 minutes per currency |
+| `ShopByCategory` | `pages/home/shop-by-category.blade.php` | Up to eight enabled root categories with products, cached for two hours |
+
+Remove or reorder these components in `resources/views/pages/home.blade.php` to change the homepage layout.
+
+### Checkout
+
+The checkout actions live in `app/Actions/Checkout/`. Each one handles one concern, so you can change how shipping rates are calculated without touching the payment logic.
+
+To add a payment provider, implement it with Shopper's [payment system](/3.x/payments), register it in the admin panel, and enable it on the zones where customers can use it. `FetchPaymentMethods` only lists the drivers of its `SUPPORTED_DRIVERS` constant, `manual` and `stripe`, so add the new driver there once its payment page and return route exist.
+
+### Adding Pages
+
+A new page takes a single-file Livewire component under `resources/views/pages/` and a named route in `routes/web.php`. The component renders in the `store` layout by default.
+
+```blade title="resources/views/pages/about.blade.php"
+<?php
+
+use Livewire\Attributes\Title;
+use Livewire\Component;
+
+new #[Title('About Us')] class extends Component {}; ?>
+
+<div>
+    <h1>About Us</h1>
+</div>
+```
+
+```php title="routes/web.php"
+Route::livewire('about', 'pages::about')->name('about');
+```
+
+For a page with more logic, follow the class components of `app/Livewire/Pages/` and register it with `Route::get()`.
+
+### Models
+
+Add methods, scopes, or relationships directly to the models in `app/Models/`. They extend the Shopper models, so everything Shopper defines on them keeps working. For example, a `featured` scope goes next to the kit's `withCurrentPrices` scope:
+
+```php title="app/Models/Product.php"
+namespace App\Models;
+
+use App\Traits\HasProductPricing;
+use Illuminate\Database\Eloquent\Attributes\Scope;
+use Illuminate\Database\Eloquent\Builder;
+use Shopper\Models\Product as Model;
+
+final class Product extends Model
+{
+    use HasProductPricing;
+
+    #[Scope]
+    protected function featured(Builder $query): Builder
+    {
+        return $query->where('featured', true);
+    }
+}
+```
