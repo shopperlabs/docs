@@ -16,7 +16,7 @@ export function PageSiblings({ prev, next }: { prev?: Sibling; next?: Sibling })
   return (
     <nav
       aria-label="Page navigation"
-      className="mt-12 grid items-start gap-8 border-t border-zinc-100 pt-8 sm:grid-cols-2 dark:border-white/6"
+      className="mt-12 grid items-start gap-8 border-t border-zinc-200 pt-8 sm:grid-cols-2 dark:border-white/10"
     >
       {prev ? (
         <SiblingLink link={prev} direction="prev" label={prev.section ? 'Previous section' : 'Previous'} />
@@ -52,7 +52,7 @@ function SiblingLink({ link, direction, label }: { link: Sibling; direction: 'pr
         'group/sib flex min-w-0 flex-col',
         isNext && 'sm:items-end sm:text-right',
         link.section
-          ? 'gap-1.5 rounded-xl bg-zinc-50 p-4 transition-colors duration-200 hover:bg-zinc-100/70 dark:bg-white/4 dark:hover:bg-white/6'
+          ? 'gap-1.5 rounded-xl bg-muted/70 p-4 transition-colors duration-200 hover:bg-muted dark:bg-white/4 dark:hover:bg-white/6'
           : 'gap-1 rounded-lg',
         FOCUS,
       )}

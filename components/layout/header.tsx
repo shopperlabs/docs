@@ -47,13 +47,13 @@ export function Header({
   }, []);
 
   return (
-    <header className="sticky top-0 z-40 border-b border-zinc-500/5 bg-background/90 backdrop-blur-md dark:border-white/6">
+    <header className="sticky top-0 z-40 border-b border-zinc-200 bg-background/90 backdrop-blur-md dark:border-white/10">
       <div className="px-4 lg:px-12">
         {/* Three equal columns put the search bar on the page centre. */}
         <div
           className={clsx(
             'flex h-header items-center gap-x-4',
-            sectioned && 'md:border-b md:border-zinc-500/5 md:dark:border-white/6',
+            sectioned && 'md:border-b md:border-zinc-200 md:dark:border-white/10',
           )}
         >
           <div className="flex min-w-0 flex-1 items-center gap-x-2 lg:gap-x-4">
@@ -91,7 +91,7 @@ export function Header({
               <MenuItems
                 anchor={{ to: 'bottom start', gap: 3 }}
                 transition
-                className="z-50 max-h-[420px] min-w-(--button-width) origin-top-left overflow-y-auto rounded-2xl border border-zinc-200 bg-white p-1 shadow-xl shadow-zinc-500/5 transition duration-100 ease-out focus:outline-hidden data-closed:scale-95 data-closed:opacity-0 dark:border-white/[0.07] dark:bg-zinc-950 dark:shadow-none"
+                className="z-50 max-h-[420px] min-w-(--button-width) origin-top-left overflow-y-auto rounded-2xl border border-zinc-200 bg-popover p-1 shadow-xl shadow-zinc-500/5 transition duration-100 ease-out focus:outline-hidden data-closed:scale-95 data-closed:opacity-0 dark:border-white/[0.07] dark:shadow-none"
               >
                 {versions(tree).map((version) => {
                   const current = version === scope.version;

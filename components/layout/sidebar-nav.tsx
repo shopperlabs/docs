@@ -13,8 +13,8 @@ function itemClassName(active: boolean) {
     'focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 focus-visible:outline-hidden',
     active
       ? clsx(
-          'bg-foreground/2.5 font-medium text-foreground dark:bg-white/2.5',
-          "before:absolute before:inset-y-1 before:left-2 before:w-px before:bg-brand before:content-['']",
+          'bg-brand-600/6 font-medium text-brand-700 dark:bg-brand-400/10 dark:text-brand-300',
+          "before:absolute before:inset-y-1 before:left-2 before:w-px before:bg-brand before:content-[''] dark:before:bg-brand-400",
         )
       : 'text-muted-foreground hover:text-foreground',
   );

@@ -17,6 +17,19 @@
   --color-brand-950: #172554;
   --color-brand: #2563eb;
 
+  /* zinc-* utilities render Tailwind's slate, the gray that shares the brand blue's hue. */
+  --color-zinc-50: oklch(98.4% 0.003 247.858);
+  --color-zinc-100: oklch(96.8% 0.007 247.896);
+  --color-zinc-200: oklch(92.9% 0.013 255.508);
+  --color-zinc-300: oklch(86.9% 0.022 252.894);
+  --color-zinc-400: oklch(70.4% 0.04 256.788);
+  --color-zinc-500: oklch(55.4% 0.046 257.417);
+  --color-zinc-600: oklch(44.6% 0.043 257.281);
+  --color-zinc-700: oklch(37.2% 0.044 257.287);
+  --color-zinc-800: oklch(27.9% 0.041 260.031);
+  --color-zinc-900: oklch(20.8% 0.042 265.755);
+  --color-zinc-950: oklch(12.9% 0.042 264.695);
+
   --font-sans: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
   --font-display: var(--font-inter), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
@@ -159,18 +172,18 @@
 }
 
 @layer base {
-  /* Zinc steps of Tailwind, the marketing site's grays. */
+  /* Grays tinted toward the brand blue (OKLCH hue 262), so neither mode reads as plain white or black. */
   :root {
-    --background: 0 0% 100%;
-    --foreground: 240 10% 3.9%;
+    --background: 218 93.4% 98.2%;
+    --foreground: 221 37.2% 10.9%;
     --card: 0 0% 100%;
-    --card-foreground: 240 10% 3.9%;
+    --card-foreground: 221 37.2% 10.9%;
     --popover: 0 0% 100%;
-    --popover-foreground: 240 10% 3.9%;
-    --muted: 240 4.8% 95.9%;
-    --muted-foreground: 240 3.8% 46.1%;
-    --border: 240 5.9% 90%;
-    --input: 240 5.9% 90%;
+    --popover-foreground: 221 37.2% 10.9%;
+    --muted: 218 49.4% 94.9%;
+    --muted-foreground: 217 14.7% 42.9%;
+    --border: 218 33% 90%;
+    --input: 218 33% 90%;
     --ring: 221 83% 53%;
     --primary: 221 83% 53%;
     --primary-foreground: 0 0% 98%;
@@ -178,21 +191,21 @@
     /* The sticky band's height plus 8px. */
     --nav-offset: 72px;
 
-    --fd-background: 0 0% 100%;
-    --fd-foreground: 240 10% 3.9%;
-    --fd-muted: 240 4.8% 95.9%;
-    --fd-muted-foreground: 240 3.8% 46.1%;
+    --fd-background: 218 93.4% 98.2%;
+    --fd-foreground: 221 37.2% 10.9%;
+    --fd-muted: 218 49.4% 94.9%;
+    --fd-muted-foreground: 217 14.7% 42.9%;
     --fd-popover: 0 0% 100%;
-    --fd-popover-foreground: 240 10% 3.9%;
+    --fd-popover-foreground: 221 37.2% 10.9%;
     --fd-card: 0 0% 100%;
-    --fd-card-foreground: 240 10% 3.9%;
-    --fd-border: 240 5.9% 90%;
+    --fd-card-foreground: 221 37.2% 10.9%;
+    --fd-border: 218 33% 90%;
     --fd-primary: 221 83% 53%;
     --fd-primary-foreground: 0 0% 98%;
-    --fd-secondary: 240 4.8% 95.9%;
-    --fd-secondary-foreground: 240 10% 3.9%;
-    --fd-accent: 240 4.9% 83.9%;
-    --fd-accent-foreground: 240 10% 3.9%;
+    --fd-secondary: 218 49.4% 94.9%;
+    --fd-secondary-foreground: 221 37.2% 10.9%;
+    --fd-accent: 218 31.6% 87.1%;
+    --fd-accent-foreground: 221 37.2% 10.9%;
     --fd-ring: 221 83% 53%;
     --fd-info: 205 85% 45%;
     --fd-warning: 38 92% 50%;
@@ -209,35 +222,35 @@
   }
 
   .dark {
-    --background: 240 10% 3.9%;
-    --foreground: 240 5.9% 90%;
-    --card: 240 5.9% 10%;
-    --card-foreground: 240 5.9% 90%;
-    --popover: 240 5.9% 10%;
-    --popover-foreground: 240 5.9% 90%;
-    --muted: 240 3.7% 15.9%;
-    --muted-foreground: 240 5% 64.9%;
-    --border: 240 3.7% 15.9%;
-    --input: 240 3.7% 15.9%;
+    --background: 219 24.4% 11.7%;
+    --foreground: 218 24.5% 91.6%;
+    --card: 219 22.2% 14.6%;
+    --card-foreground: 218 24.5% 91.6%;
+    --popover: 219 22.2% 14.6%;
+    --popover-foreground: 218 24.5% 91.6%;
+    --muted: 218 20.3% 18.1%;
+    --muted-foreground: 218 14.2% 66.1%;
+    --border: 218 17.8% 21.1%;
+    --input: 218 17.8% 21.1%;
     --ring: 217 91% 60%;
-    --primary: 217 91% 60%;
+    --primary: 213 94% 68%;
     --primary-foreground: 0 0% 98%;
 
-    --fd-background: 240 10% 3.9%;
-    --fd-foreground: 240 5.9% 90%;
-    --fd-muted: 240 3.7% 15.9%;
-    --fd-muted-foreground: 240 5% 64.9%;
-    --fd-popover: 240 5.9% 10%;
-    --fd-popover-foreground: 240 5.9% 90%;
-    --fd-card: 240 5.9% 10%;
-    --fd-card-foreground: 240 5.9% 90%;
-    --fd-border: 240 3.7% 15.9%;
-    --fd-primary: 217 91% 60%;
+    --fd-background: 219 24.4% 11.7%;
+    --fd-foreground: 218 24.5% 91.6%;
+    --fd-muted: 218 20.3% 18.1%;
+    --fd-muted-foreground: 218 14.2% 66.1%;
+    --fd-popover: 219 22.2% 14.6%;
+    --fd-popover-foreground: 218 24.5% 91.6%;
+    --fd-card: 219 22.2% 14.6%;
+    --fd-card-foreground: 218 24.5% 91.6%;
+    --fd-border: 218 17.8% 21.1%;
+    --fd-primary: 213 94% 68%;
     --fd-primary-foreground: 0 0% 98%;
-    --fd-secondary: 240 3.7% 15.9%;
-    --fd-secondary-foreground: 240 5.9% 90%;
-    --fd-accent: 240 5.3% 26.1%;
-    --fd-accent-foreground: 240 5.9% 90%;
+    --fd-secondary: 218 20.3% 18.1%;
+    --fd-secondary-foreground: 218 24.5% 91.6%;
+    --fd-accent: 218 18.4% 26.5%;
+    --fd-accent-foreground: 218 24.5% 91.6%;
     --fd-ring: 217 91% 60%;
     --fd-info: 205 85% 60%;
     --fd-warning: 38 92% 50%;
@@ -352,6 +365,22 @@
   --gray-950: 9 9 11;
 }
 
+/* The footer is the marketing site's footer: it keeps Tailwind's real zinc, not the slate that zinc-* renders in
+   the rest of the docs. */
+footer[aria-label='Site footer'] {
+  --color-zinc-50: oklch(98.5% 0 none);
+  --color-zinc-100: oklch(96.7% 0.001 286.375);
+  --color-zinc-200: oklch(92% 0.004 286.32);
+  --color-zinc-300: oklch(87.1% 0.006 286.286);
+  --color-zinc-400: oklch(70.5% 0.015 286.067);
+  --color-zinc-500: oklch(55.2% 0.016 285.938);
+  --color-zinc-600: oklch(44.2% 0.017 285.786);
+  --color-zinc-700: oklch(37% 0.013 285.805);
+  --color-zinc-800: oklch(27.4% 0.006 286.033);
+  --color-zinc-900: oklch(21% 0.006 285.885);
+  --color-zinc-950: oklch(14.1% 0.005 285.823);
+}
+
 .prose :where(h1, h2, h3, h4),
 h1 {
   font-weight: 500;
@@ -364,13 +393,47 @@ h1 {
   font-family: var(--font-display);
 }
 
-/* Fumadocs code blocks take the marketing site's FileWindow look: a zinc-50 bezel (an outer shadow, so the
-   code keeps the prose's left edge), a white frame and the title as a file tab on the bar. */
+/* Fumadocs code blocks keep the marketing site's FileWindow shape (an outer bezel, so the code keeps the prose's
+   left edge, and the title as a file tab on the bar) but stay dark in both modes, on a navy drawn from the brand
+   blue. The scoped tokens recolor what Fumadocs draws inside: title, copy button, highlighted and diff lines. */
 figure.shiki {
+  --border: 222 25.9% 19.8%;
+  --fd-border: 222 25.9% 19.8%;
+  --fd-card: 222 48.4% 9.4%;
+  --fd-card-foreground: 214 31.8% 91.4%;
+  --fd-secondary: 222 40.2% 11.7%;
+  --fd-muted-foreground: 218 15.9% 63.9%;
+  --fd-accent: 222 25.9% 19.8%;
+  --fd-accent-foreground: 214 31.8% 91.4%;
+  --fd-primary: 213 94% 68%;
+  --fd-diff-remove: rgba(230, 30, 100, 0.18);
+  --fd-diff-remove-symbol: rgb(255, 80, 130);
+  --fd-diff-add: rgba(20, 210, 120, 0.15);
+  --fd-diff-add-symbol: rgb(60, 220, 130);
+
   margin-block: 1.5rem;
-  border-color: var(--color-zinc-200);
-  background-color: white;
-  box-shadow: 0 0 0 8px var(--color-zinc-50);
+  border-color: hsl(var(--fd-border));
+  background-color: hsl(var(--fd-card));
+  box-shadow: 0 0 0 8px color-mix(in oklab, hsl(var(--foreground)) 4%, transparent);
+  color-scheme: dark;
+}
+
+/* Fumadocs paints tokens with the light theme outside `.dark`, made for a light block. The block is dark in both
+   modes, so its tokens always take the dark theme (GitHub Dark). */
+figure.shiki:not(.not-fumadocs-codeblock *) code span {
+  color: var(--shiki-dark);
+  font-style: var(--shiki-dark-font-style);
+}
+
+/* GitHub Dark's comment gray (#6A737D) is 3.85:1 on this navy; GitHub Dark Default's (#8b949e) is 6:1. */
+figure.shiki:not(.not-fumadocs-codeblock *) code span[style*='--shiki-dark:#6A737D' i] {
+  color: #8b949e;
+}
+
+/* Fumadocs dims removed lines to 0.7, which drops their tokens under 4.5:1; the red background and the minus sign
+   already mark them. */
+figure.shiki:not(.not-fumadocs-codeblock *) .diff.remove {
+  opacity: 1;
 }
 
 figure.shiki > div:has(> figcaption) {
@@ -378,14 +441,14 @@ figure.shiki > div:has(> figcaption) {
   gap: 0;
   align-items: stretch;
   padding-inline: 0 1rem;
-  border-color: var(--color-zinc-100);
-  background-color: color-mix(in oklab, var(--color-zinc-50) 60%, transparent);
+  border-color: hsl(var(--fd-border));
+  background-color: hsl(var(--fd-secondary));
 }
 
 figure.shiki > div > :is(figcaption, :has(+ figcaption)) {
   margin-bottom: -1px;
-  border-bottom: 1px solid white;
-  background-color: white;
+  border-bottom: 1px solid hsl(var(--fd-card));
+  background-color: hsl(var(--fd-card));
 }
 
 /* The language icon, which Fumadocs puts before the title: it joins the tab. */
@@ -400,11 +463,11 @@ figure.shiki > div > figcaption {
   min-width: 0;
   align-content: center;
   padding-inline: 0.5rem 1rem;
-  border-right: 1px solid var(--color-zinc-100);
+  border-right: 1px solid hsl(var(--fd-border));
   font-family: var(--font-mono);
   font-size: 0.75rem;
   line-height: 1.25rem;
-  color: var(--color-zinc-800);
+  color: hsl(var(--fd-card-foreground));
 }
 
 figure.shiki > div > figcaption:first-child {
@@ -414,27 +477,6 @@ figure.shiki > div > figcaption:first-child {
 figure.shiki > div > figcaption + * {
   align-self: center;
   margin-left: auto;
-}
-
-.dark figure.shiki {
-  border-color: rgb(255 255 255 / 0.1);
-  background-color: var(--color-zinc-950);
-  box-shadow: 0 0 0 8px rgb(255 255 255 / 0.03);
-}
-
-.dark figure.shiki > div:has(> figcaption) {
-  border-color: rgb(255 255 255 / 0.1);
-  background-color: rgb(255 255 255 / 0.02);
-}
-
-.dark figure.shiki > div > :is(figcaption, :has(+ figcaption)) {
-  border-bottom-color: var(--color-zinc-950);
-  background-color: var(--color-zinc-950);
-}
-
-.dark figure.shiki > div > figcaption {
-  border-right-color: rgb(255 255 255 / 0.1);
-  color: var(--color-zinc-300);
 }
 
 .prose :where(b, strong) {

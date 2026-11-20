@@ -75,7 +75,7 @@ export function MobileSections({ tree, onNavigate }: { tree: TreeNode[]; onNavig
       </button>
 
       {open ? (
-        <div className="border-t border-zinc-100 p-1 dark:border-white/6">
+        <div className="border-t border-zinc-200 p-1 dark:border-white/10">
           <ul role="list" className="list-none">
             {scope.tabs.map((tab) => {
               const active = !scope.home && tab === scope.tab;

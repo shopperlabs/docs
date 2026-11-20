@@ -37,7 +37,7 @@ export function RailShell({
         <div className="lg:grid lg:grid-cols-[var(--spacing-sidebar)_minmax(0,1fr)]">
           <aside
             aria-label="Documentation sidebar"
-            className="sticky top-subheader hidden h-[calc(100dvh-var(--spacing-subheader))] border-r border-zinc-100 lg:block dark:border-white/6"
+            className="sticky top-subheader hidden h-[calc(100dvh-var(--spacing-subheader))] border-r border-zinc-200 lg:block dark:border-white/10"
           >
             <Sidebar nodes={nodes} navClassName="px-6 pb-10" header={<SectionHeading name={sectionName} />} />
           </aside>

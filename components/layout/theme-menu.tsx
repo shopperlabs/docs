@@ -36,7 +36,7 @@ export function ThemeMenu() {
       <MenuItems
         anchor={{ to: 'bottom end', gap: 1 }}
         transition
-        className="z-50 min-w-32 origin-top-right rounded-2xl border border-zinc-200 bg-white p-1 shadow-xl shadow-zinc-500/5 transition duration-100 ease-out focus:outline-hidden data-closed:scale-95 data-closed:opacity-0 dark:border-white/10 dark:bg-zinc-950 dark:shadow-none"
+        className="z-50 min-w-32 origin-top-right rounded-2xl border border-zinc-200 bg-popover p-1 shadow-xl shadow-zinc-500/5 transition duration-100 ease-out focus:outline-hidden data-closed:scale-95 data-closed:opacity-0 dark:border-white/10 dark:shadow-none"
       >
         {THEMES.map((option) => {
           const active = option.value === current.value;

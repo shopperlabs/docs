@@ -114,7 +114,7 @@ export function TileGrid({ tiles, className }: { tiles: Tile[]; className?: stri
           <li key={title} className="flex">
             <AnyLink
               href={href}
-              className="group relative flex w-full flex-col bg-background p-6 transition-colors duration-200 hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:outline-hidden focus-visible:ring-inset dark:hover:bg-white/3"
+              className="group relative flex w-full flex-col bg-card p-6 transition-colors duration-200 hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:outline-hidden focus-visible:ring-inset dark:hover:bg-white/3"
             >
               <ArrowUpRight
                 aria-hidden

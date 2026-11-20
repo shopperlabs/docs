@@ -53,7 +53,7 @@ export function MobileDrawer({
         <DialogTitle className="sr-only">Documentation navigation</DialogTitle>
         <Description className="sr-only">Browse the documentation sections and pages.</Description>
 
-        <div className="flex h-header shrink-0 items-center justify-between border-b border-zinc-100 px-4 dark:border-white/6">
+        <div className="flex h-header shrink-0 items-center justify-between border-b border-zinc-200 px-4 dark:border-white/10">
           <Logo />
           <button
             type="button"

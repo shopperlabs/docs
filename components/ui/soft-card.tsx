@@ -29,7 +29,7 @@ export function SoftCard({
       {...props}
       className={clsx(
         className,
-        'group flex flex-col rounded-2xl bg-zinc-50 [--card-inset:--spacing(1)] [--card-px:--spacing(6)] [--card-section-px:calc(var(--card-px)-var(--card-inset))] [--card-section-py:var(--card-px)] dark:bg-zinc-800/50 [:where(&)]:py-(--card-inset)',
+        'group flex flex-col rounded-2xl bg-muted/70 [--card-inset:--spacing(1)] [--card-px:--spacing(6)] [--card-section-px:calc(var(--card-px)-var(--card-inset))] [--card-section-py:var(--card-px)] dark:bg-zinc-800/50 [:where(&)]:py-(--card-inset)',
       )}
     >
       <header className="flex flex-wrap items-start justify-between gap-4 [:where(&)]:px-(--card-px) [:where(&)]:py-4">
@@ -39,7 +39,7 @@ export function SoftCard({
               {title}
             </h3>
             {description && (
-              <p className="mt-0.5 text-base/6 text-pretty text-zinc-500 sm:text-sm/6 dark:text-zinc-400">
+              <p className="mt-0.5 text-base/6 text-pretty text-zinc-600 sm:text-sm/6 dark:text-zinc-400">
                 {description}
               </p>
             )}

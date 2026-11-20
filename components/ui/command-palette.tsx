@@ -136,7 +136,7 @@ export function CommandPalette({
             className,
             sizes[size],
             'mx-auto w-full divide-y divide-zinc-950/5 overflow-hidden rounded-xl',
-            'bg-white dark:divide-white/10 dark:bg-zinc-900',
+            'bg-popover dark:divide-white/10',
             'shadow-lg ring-1 ring-zinc-950/10 dark:ring-white/10 dark:ring-inset',
             'forced-colors:outline',
             'transition duration-100 will-change-transform data-closed:translate-y-4 data-closed:opacity-0 data-enter:ease-out data-leave:ease-in motion-reduce:duration-0 sm:data-closed:translate-y-0 sm:data-closed:scale-95',

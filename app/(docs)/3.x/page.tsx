@@ -207,7 +207,7 @@ export default async function Home() {
         <Lined>
           <ol role="list" className={`${frame} sm:grid-cols-3`}>
             {steps.map((step) => (
-              <li key={step.title} className="flex flex-col bg-background p-6">
+              <li key={step.title} className="flex flex-col bg-card p-6">
                 <h3 className="text-base/6 font-semibold text-zinc-950 dark:text-white">{step.title}</h3>
                 <p className="mt-1 text-sm/6 text-pretty text-zinc-600 dark:text-zinc-400">{step.text}</p>
                 <p className="mt-auto flex flex-wrap gap-x-4 gap-y-1 pt-4 text-sm/6">
@@ -231,7 +231,7 @@ export default async function Home() {
                 .filter((page) => page.url !== href)
                 .slice(0, 3);
               return (
-                <li key={href} className="flex flex-col bg-background p-6">
+                <li key={href} className="flex flex-col bg-card p-6">
                   <h3 className="text-base/6 font-semibold text-zinc-950 dark:text-white">
                     <Link href={href} className="hover:text-primary focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:outline-hidden">
                       {name}
@@ -267,7 +267,7 @@ export default async function Home() {
         <Lined>
           <ul role="list" className={`${frame} sm:grid-cols-2 lg:grid-cols-3`}>
             {DOMAINS.map((domain) => (
-              <li key={domain.name} className="flex flex-col bg-background p-6">
+              <li key={domain.name} className="flex flex-col bg-card p-6">
                 <h3 className="flex items-center gap-3 text-base/6 font-semibold text-zinc-950 dark:text-white">
                   <img src={`/images/home/domains/${domain.glyph}.svg`} alt="" className="h-10 w-auto shrink-0" />
                   {domain.name}
@@ -295,7 +295,7 @@ export default async function Home() {
         <Lined>
           <ul role="list" className={`${frame} sm:grid-cols-2 lg:grid-cols-3`}>
             {news.map((entry) => (
-              <li key={entry.title} className="flex flex-col bg-background p-6">
+              <li key={entry.title} className="flex flex-col bg-card p-6">
                 <h3 className="text-base/6 font-semibold text-zinc-950 dark:text-white">{entry.title}</h3>
                 <p className="mt-1 text-sm/6 text-pretty text-zinc-600 dark:text-zinc-400 [&_code]:font-mono [&_code]:text-[0.8125rem] [&_code]:text-zinc-950 dark:[&_code]:text-white">{entry.text}</p>
                 <p className="mt-auto pt-4 text-sm/6">
