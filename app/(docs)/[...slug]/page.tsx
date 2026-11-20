@@ -26,11 +26,11 @@ const crumbLink =
 // `data-[popup-open]:` stays in Fumadocs' spelling, not the canonical `data-popup-open:`: `cn` drops their
 // `data-[popup-open]:bg-fd-accent` only when the variant is written the same way.
 const pageAction = [
-  'relative isolate border-zinc-950/10 bg-transparent px-3 font-mono text-xs/5 tracking-wide text-zinc-950 uppercase',
-  'hover:border-zinc-950/20 hover:bg-transparent hover:text-zinc-950 data-[popup-open]:bg-transparent',
+  'relative isolate border-zinc-950/10 bg-white px-3 font-mono text-xs/5 tracking-wide text-zinc-950 uppercase',
+  'hover:border-zinc-950/20 hover:bg-white hover:text-zinc-950 data-[popup-open]:bg-white',
   'after:absolute after:inset-0 after:-z-10 after:origin-right after:scale-x-0 after:bg-zinc-950/4 after:transition-transform after:duration-300 after:ease-out motion-reduce:after:transition-none',
   'hover:after:origin-left hover:after:scale-x-100 data-popup-open:after:origin-left data-popup-open:after:scale-x-100',
-  'dark:border-white/15 dark:text-white dark:after:bg-white/5 dark:hover:border-white/25 dark:hover:text-white',
+  'dark:border-white/15 dark:bg-transparent dark:text-white dark:after:bg-white/5 dark:hover:border-white/25 dark:hover:bg-transparent dark:hover:text-white dark:data-popup-open:bg-transparent',
 ].join(' ');
 
 export default async function Page(props: PageProps<'/[...slug]'>) {

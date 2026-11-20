@@ -492,6 +492,16 @@ figure.shiki > div > figcaption + * {
   color: var(--color-fd-primary);
 }
 
+/* The page actions' Open menu (Fumadocs' ViewOptionsPopover) passes no class to its popup, 60% opaque, so in light
+   mode it takes the tinted page's color; its rows hover in `fd-accent`, a gray sized for buttons. */
+:root:not(.dark) .bg-fd-popover\/60 {
+  background-color: hsl(var(--fd-popover));
+}
+
+:root:not(.dark) .bg-fd-popover\/60 a:hover {
+  background-color: var(--color-brand-50);
+}
+
 html > body[data-scroll-locked] {
   margin-right: 0px !important;
   --removed-body-scroll-bar-size: 0px !important;
