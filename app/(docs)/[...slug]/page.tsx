@@ -43,7 +43,11 @@ export default async function Page(props: PageProps<'/[...slug]'>) {
   const githubUrl = `https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/content/docs/${page.path}`;
   const tree = getDocsTree();
   const scope = scopeFor(tree, page.url);
-  const { prev, next } = pageSiblings(tree, page.url);
+  const { prev, next } = pageSiblings(
+    tree,
+    page.url,
+    (url) => source.getPages().find((entry) => entry.url === url)?.data.description,
+  );
   const toc = page.data.toc;
   // A flat version (3.x, 1.x) has a single section named after nothing in particular.
   const showSection = scope.tab.folder !== scope.version && scope.tab.name !== page.data.title;

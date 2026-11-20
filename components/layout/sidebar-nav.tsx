@@ -5,7 +5,8 @@ import { ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { useEffect, useId, useMemo, useState, useSyncExternalStore, type ReactNode } from 'react';
-import { containsActive, firstUrl, samePath, type TreeFolder, type TreeItem, type TreeNode } from './tree';
+import { parseOpenGroups, toGroups, withGroup, type NavGroup } from './sidebar-groups';
+import { containsActive, samePath, type TreeFolder, type TreeItem, type TreeNode } from './tree';
 
 function itemClassName(active: boolean) {
   return clsx(
@@ -53,14 +54,12 @@ function subscribe(listener: () => void) {
   };
 }
 
-// Same reference until a write, as useSyncExternalStore requires. Storage can throw (private mode, blocked site data)
-// or hold something other than a list, written by hand or by an older format.
+// Same reference until a write, as useSyncExternalStore requires. Storage can throw (private mode, blocked site data).
 function readOpenGroups(version: string): string[] {
   let groups = openGroups.get(version);
   if (!groups) {
     try {
-      const stored: unknown = JSON.parse(sessionStorage.getItem(`shopper-docs-navigation:${version}`) ?? '[]');
-      groups = Array.isArray(stored) ? stored : NO_GROUPS;
+      groups = parseOpenGroups(sessionStorage.getItem(`shopper-docs-navigation:${version}`));
     } catch {
       groups = NO_GROUPS;
     }
@@ -71,8 +70,8 @@ function readOpenGroups(version: string): string[] {
 
 function writeOpenGroup(version: string, id: string, open: boolean) {
   const groups = readOpenGroups(version);
-  if (groups.includes(id) === open) return;
-  const next = open ? [...groups, id] : groups.filter((group) => group !== id);
+  const next = withGroup(groups, id, open);
+  if (next === groups) return;
   openGroups.set(version, next);
   try {
     sessionStorage.setItem(`shopper-docs-navigation:${version}`, JSON.stringify(next));
@@ -234,66 +233,11 @@ function NodeItems({ nodes, depth, onNavigate }: { nodes: TreeNode[]; depth: num
   });
 }
 
-type NavGroup = {
-  key: string;
-  title?: string;
-  nodes: TreeNode[];
-};
-
-/**
- * Splits the tree into titled groups. Two title sources: the separators of
- * `meta.json`, and top-level folders, whose pages are lifted to the root
- * instead of living behind a chevron. Such a folder's index page becomes the
- * group's first entry, "Overview".
- */
-function toGroups(nodes: TreeNode[]): NavGroup[] {
-  const labelFor = (siblings: TreeNode[]) =>
-    siblings.some(
-      (n) => n.type === 'page' && typeof n.name === 'string' && n.name.trim().toLowerCase() === 'overview',
-    )
-      ? 'Introduction'
-      : 'Overview';
-
-  const groups: NavGroup[] = [];
-  let current: NavGroup = { key: 'g0', nodes: [] };
-
-  function flush() {
-    if (current.nodes.length > 0) groups.push(current);
-    current = { key: `g${groups.length + 1}`, title: undefined, nodes: [] };
-  }
-
-  for (const node of nodes) {
-    if (node.type === 'separator') {
-      flush();
-      current.title = typeof node.name === 'string' ? node.name : undefined;
-      continue;
-    }
-    if (node.type === 'folder') {
-      flush();
-      const index = node.index;
-      const rest = index
-        ? node.children.filter((child) => child.type !== 'page' || child.url !== index.url)
-        : node.children;
-      groups.push({
-        key: `f${groups.length}`,
-        title: typeof node.name === 'string' ? node.name : undefined,
-        nodes: index ? [{ ...index, name: labelFor(rest) }, ...rest] : rest,
-      });
-      continue;
-    }
-    current.nodes.push(node);
-  }
-  flush();
-
-  return groups;
-}
-
 function NavigationGroup({ group, onNavigate }: { group: NavGroup; onNavigate?: () => void }) {
   const pathname = usePathname();
   const contentId = useId();
-  // Titles repeat across the tabs of a version (2.x Documentation and User Guide both have "Sales"); URLs do not.
   const [open, setOpen] = useFold(
-    `group:${firstUrl(group.nodes[0])}`,
+    group.id,
     group.title !== undefined && group.nodes.some((node) => containsActive(node, pathname)),
   );
 
@@ -347,7 +291,7 @@ export function SidebarNav({ nodes, onNavigate }: { nodes: TreeNode[]; onNavigat
     <nav aria-label="Documentation navigation">
       <ul className="list-none pb-10" role="list">
         {groups.map((group) => (
-          <NavigationGroup key={group.key} group={group} onNavigate={onNavigate} />
+          <NavigationGroup key={group.id} group={group} onNavigate={onNavigate} />
         ))}
       </ul>
     </nav>

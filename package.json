@@ -5,7 +5,8 @@
     "build": "next build",
     "dev": "next dev",
     "start": "next start",
-    "types:check": "next typegen && tsc --noEmit"
+    "types:check": "next typegen && tsc --noEmit",
+    "test": "node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON --test 'components/**/*.test.ts' 'lib/**/*.test.ts' 'scripts/check-*.mjs'"
   },
   "dependencies": {
     "@headlessui/react": "^2.2.10",

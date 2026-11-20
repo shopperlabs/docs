@@ -5,13 +5,7 @@ import Link from 'next/link';
 import { AnyLink, ArrowLink, buttons, filler, frame, Section, TileGrid, type Tile } from '@/components/home/sections';
 import { Lined } from '@/components/ui/lined';
 import { VersionMark } from '@/components/home/version-mark';
-import {
-  firstUrl,
-  flattenPages,
-  tabsFor,
-  versions,
-  type TreeFolder,
-} from '@/components/layout/tree';
+import { domainHref, firstUrl, flattenPages, tabsFor, versions } from '@/components/layout/tree';
 import { DiscordIcon, GithubIcon, XIcon } from '@/components/ui/brand-icons';
 import { InstallCommand } from '@/components/ui/install-command';
 import { links } from '@/lib/shared';
@@ -61,26 +55,6 @@ const COMMUNITY: Tile[] = [
   { title: 'X', description: 'Releases and news.', href: links.x, Icon: XIcon },
   { title: 'Contributing', description: 'Report a bug, propose a change, open a pull request.', href: links.contributing, Icon: GitPullRequest },
 ];
-
-/**
- * The first page a tab files under a domain: the folder of that name (User
- * Guide groups), or the first page of the section that the separator of that
- * name opens, stopping at the next separator (Documentation). The tab's
- * overview until that page is written.
- */
-function domainHref(tab: TreeFolder, domain: string): string {
-  const at = tab.children.findIndex((node) => node.type !== 'page' && node.name === domain);
-  const node = tab.children[at];
-  if (node?.type === 'folder') return firstUrl(node) ?? firstUrl(tab)!;
-  if (node?.type === 'separator') {
-    for (const next of tab.children.slice(at + 1)) {
-      if (next.type === 'separator') break;
-      const url = firstUrl(next);
-      if (url) return url;
-    }
-  }
-  return firstUrl(tab)!;
-}
 
 const COMMANDS = ['composer require shopper/framework', 'php artisan shopper:install'];
 

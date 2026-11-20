@@ -1,0 +1,18 @@
+{
+  "/": "resources/js/content/features.ts",
+  "/getting-started": "resources/js/content/home.ts, navigation.ts, compare/*.ts",
+  "/store-api": "resources/js/content/home.ts, headless.ts",
+  "/sdk": "resources/js/content/home.ts",
+  "/starter-kits": "resources/js/content/starter-kits.ts",
+  "/llms.txt": "resources/js/content/home.ts",
+  "/3.x/upgrade": "resources/js/content/navigation.ts",
+  "/3.x/products": "resources/js/content/features.ts",
+  "/3.x/cart": "resources/js/content/features.ts",
+  "/3.x/discounts": "resources/js/content/features.ts",
+  "/3.x/taxes": "resources/js/content/features.ts",
+  "/3.x/payments": "resources/js/content/features.ts",
+  "/3.x/orders": "resources/js/content/features.ts",
+  "/3.x/carriers": "resources/js/content/features.ts",
+  "/3.x/customers": "resources/js/content/features.ts",
+  "/3.x/configuration": "resources/js/content/features.ts"
+}

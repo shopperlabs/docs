@@ -184,3 +184,30 @@ export function versionHref(target: TreeFolder, current: TreeFolder, pathname: s
   );
   return path ? `${versionPath(target)}${path}` : versionHome(target);
 }
+
+/**
+ * The first page a tab files under a domain: the folder of that name (User
+ * Guide groups), or the first page of the section that the separator of that
+ * name opens, stopping at the next separator (Documentation). The tab's
+ * overview until that page is written.
+ */
+export function domainHref(tab: TreeFolder, domain: string): string {
+  const at = tab.children.findIndex((node) => node.type !== 'page' && node.name === domain);
+  const node = tab.children[at];
+  if (node?.type === 'folder') return firstUrl(node) ?? firstUrl(tab)!;
+  if (node?.type === 'separator') {
+    for (const next of tab.children.slice(at + 1)) {
+      if (next.type === 'separator') break;
+      const url = firstUrl(next);
+      if (url) return url;
+    }
+  }
+  return firstUrl(tab)!;
+}
+
+/** The upgrade guide of the version read; 1.x has none, so its readers get the current release's. */
+export function upgradeGuide(tree: TreeNode[], pathname: string): string {
+  const read = versionFor(tree, pathname);
+  const url = `/${read.$id}/upgrade`;
+  return flattenPages(read.children).some((page) => page.url === url) ? url : `/${versions(tree)[0].$id}/upgrade`;
+}

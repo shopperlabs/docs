@@ -19,7 +19,7 @@ import { InstallCommand } from '@/components/ui/install-command';
 import { TouchTarget } from '@/components/ui/touch-target';
 import { links, siteUrl } from '@/lib/shared';
 import { Logo } from './logo';
-import { flattenPages, versionFor, versionHome, versions, type TreeNode } from './tree';
+import { upgradeGuide, versionHome, versions, type TreeNode } from './tree';
 
 type FooterLink = { label: ReactNode; href: string; ext?: boolean; Icon?: ComponentType<{ className?: string }> };
 
@@ -114,13 +114,6 @@ function Wordmark() {
       </p>
     </div>
   );
-}
-
-/** The upgrade guide of the version read; 1.x has none, so its readers get the current release's. */
-function upgradeGuide(tree: TreeNode[], pathname: string): string {
-  const read = versionFor(tree, pathname);
-  const url = `/${read.$id}/upgrade`;
-  return flattenPages(read.children).some((page) => page.url === url) ? url : `/${versions(tree)[0].$id}/upgrade`;
 }
 
 export function Footer({ tree, stars }: { tree: TreeNode[]; stars?: number }) {
