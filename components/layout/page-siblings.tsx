@@ -4,7 +4,7 @@ import clsx from 'clsx';
 import type { Sibling } from '@/lib/siblings';
 
 const FOCUS =
-  'focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 focus-visible:outline-hidden';
+  'focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden dark:focus-visible:ring-brand-400';
 
 /**
  * A link that leaves the section becomes a soft card with the section's

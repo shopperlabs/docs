@@ -20,10 +20,10 @@ const RESOURCES = [
 ];
 
 const ROW =
-  'flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2 text-base/6 transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:outline-hidden';
+  'flex min-h-11 w-full items-center gap-2.5 rounded-lg px-2 text-base/6 transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-hidden dark:focus-visible:ring-brand-400';
 
 const SUB =
-  'flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-[15px]/[22px] transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:outline-hidden';
+  'flex min-h-10 items-center gap-1.5 rounded-lg px-2 text-[15px]/[22px] transition-colors duration-200 focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-hidden dark:focus-visible:ring-brand-400';
 
 const DIVIDER = 'mx-2 my-1 h-px bg-zinc-100 dark:bg-white/6';
 
@@ -65,7 +65,7 @@ export function MobileSections({ tree, onNavigate }: { tree: TreeNode[]; onNavig
         type="button"
         aria-expanded={open}
         onClick={() => setOpen((value) => !value)}
-        className={clsx(ROW, 'min-h-12 rounded-none px-3 font-medium text-foreground')}
+        className={clsx(ROW, 'min-h-12 rounded-none px-3 font-medium text-foreground focus-visible:ring-inset')}
       >
         <span className="min-w-0 flex-1 truncate text-left">{scope.tab.name}</span>
         <ChevronDown

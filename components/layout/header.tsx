@@ -62,7 +62,7 @@ export function Header({
               aria-label={drawerOpen ? 'Close menu' : 'Open menu'}
               aria-expanded={drawerOpen}
               onClick={onMenuClick}
-              className="relative inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 focus-visible:outline-hidden lg:hidden dark:hover:bg-white/6"
+              className="relative inline-flex size-9 shrink-0 items-center justify-center rounded-lg text-muted-foreground transition-colors duration-200 hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden lg:hidden dark:hover:bg-white/6 dark:focus-visible:ring-brand-400"
             >
               <TouchTarget />
               <MenuIcon className="size-4.5" />
@@ -100,14 +100,19 @@ export function Header({
                       <Link
                         href={versionHref(version, scope.version, pathname)}
                         aria-current={current ? 'true' : undefined}
-                        className="flex items-center gap-2 rounded-xl py-2 pr-4 pl-2.5 text-sm/5 font-medium data-focus:bg-zinc-600/5 dark:data-focus:bg-zinc-200/5"
+                        className="group flex items-center gap-2 rounded-xl py-2 pr-4 pl-2.5 text-sm/5 font-medium data-focus:bg-brand-600"
                       >
                         <span
-                          className={clsx('flex-1', current ? 'text-primary' : 'text-zinc-800 dark:text-zinc-300')}
+                          className={clsx(
+                            'flex-1 group-data-focus:text-white',
+                            current ? 'text-primary' : 'text-zinc-800 dark:text-zinc-300',
+                          )}
                         >
                           {version.name}
                         </span>
-                        {current ? <Check className="size-4 shrink-0 text-primary" aria-hidden /> : null}
+                        {current ? (
+                          <Check className="size-4 shrink-0 text-primary group-data-focus:text-white" aria-hidden />
+                        ) : null}
                       </Link>
                     </MenuItem>
                   );
@@ -126,7 +131,7 @@ export function Header({
               href={links.github}
               target="_blank"
               rel="noreferrer"
-              className="hidden min-w-0 items-center gap-1.5 font-mono text-xs font-medium tracking-wide whitespace-nowrap text-zinc-600 hover:text-zinc-900 focus-visible:rounded focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:outline-hidden lg:flex dark:text-zinc-400 dark:hover:text-zinc-300"
+              className="hidden min-w-0 items-center gap-1.5 font-mono text-xs font-medium tracking-wide whitespace-nowrap text-zinc-600 hover:text-zinc-900 focus-visible:rounded focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-hidden lg:flex dark:text-zinc-400 dark:hover:text-zinc-300 dark:focus-visible:ring-brand-400"
             >
               <GithubIcon className="size-4 shrink-0" />
               <span className="truncate">

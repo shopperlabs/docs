@@ -10,7 +10,7 @@ import { containsActive, firstUrl, samePath, type TreeFolder, type TreeItem, typ
 function itemClassName(active: boolean) {
   return clsx(
     'relative flex min-h-[32px] items-center justify-between gap-2 rounded-lg py-1 pr-3 text-base/6 transition select-none sm:text-sm/6',
-    'focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 focus-visible:outline-hidden',
+    'focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden dark:focus-visible:ring-brand-400',
     active
       ? clsx(
           'bg-brand-600/6 font-medium text-brand-700 dark:bg-brand-400/10 dark:text-brand-300',
@@ -169,7 +169,7 @@ function FolderGroup({ folder, depth, onNavigate }: { folder: TreeFolder; depth:
             aria-controls={contentId}
             aria-label={open ? 'Collapse section' : 'Expand section'}
             onClick={() => setOpen(!open)}
-            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-200 hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 focus-visible:outline-hidden"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors duration-200 hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden dark:focus-visible:ring-brand-400"
           >
             <ChevronRight
               className={clsx('size-3.5 transition-transform duration-200', open && 'rotate-90')}
@@ -317,7 +317,7 @@ function NavigationGroup({ group, onNavigate }: { group: NavGroup; onNavigate?: 
             onClick={() => setOpen(!open)}
             className={clsx(
               '-mx-1 flex w-[calc(100%+0.5rem)] items-center justify-between gap-2 rounded-md px-1 text-left text-foreground transition-colors duration-200 hover:text-brand-700 dark:hover:text-brand-300',
-              'focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:outline-hidden',
+              'focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-hidden dark:focus-visible:ring-brand-400',
             )}
           >
             <span className="min-w-0 truncate">{group.title}</span>

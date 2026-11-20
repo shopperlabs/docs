@@ -20,7 +20,7 @@ import { pageSiblings } from '@/lib/siblings';
 import { getDocsTree, source } from '@/lib/source';
 
 const crumbLink =
-  'transition-colors duration-200 hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 focus-visible:outline-hidden';
+  'transition-colors duration-200 hover:text-foreground focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden dark:focus-visible:ring-brand-400';
 
 // The marketing site's outline button, over Fumadocs' secondary one: its fill sweeps in from the left.
 // `data-[popup-open]:` stays in Fumadocs' spelling, not the canonical `data-popup-open:`: `cn` drops their

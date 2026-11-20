@@ -233,7 +233,7 @@ export default async function Home() {
               return (
                 <li key={href} className="flex flex-col bg-card p-6">
                   <h3 className="text-base/6 font-semibold text-zinc-950 dark:text-white">
-                    <Link href={href} className="hover:text-primary focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:outline-hidden">
+                    <Link href={href} className="hover:text-primary focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-hidden dark:focus-visible:ring-brand-400">
                       {name}
                     </Link>
                   </h3>

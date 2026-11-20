@@ -26,7 +26,7 @@ export function MobileTOC({ toc }: { toc: TOCItemType[] }) {
           'flex w-full items-center justify-between px-4 py-3.5',
           'min-h-[44px] font-mono text-xs font-medium tracking-wide text-foreground uppercase',
           'transition-colors duration-200 hover:bg-muted/30',
-          'focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 focus-visible:outline-hidden',
+          'focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden dark:focus-visible:ring-brand-400',
         )}
       >
         <span className="flex items-center gap-2">
@@ -55,7 +55,7 @@ export function MobileTOC({ toc }: { toc: TOCItemType[] }) {
                   className={clsx(
                     'block rounded-md py-2 text-sm text-muted-foreground transition-colors duration-200',
                     'hover:text-foreground',
-                    'focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 focus-visible:outline-hidden',
+                    'focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden dark:focus-visible:ring-brand-400',
                     'data-[active=true]:font-medium data-[active=true]:text-brand-700 dark:data-[active=true]:text-brand-300',
                   )}
                   style={{ paddingLeft: `${(item.depth - minDepth) * 0.75 + 0.75}rem` }}

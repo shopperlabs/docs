@@ -84,7 +84,7 @@ export function ArrowLink({ href, children }: { href: string; children: ReactNod
   return (
     <AnyLink
       href={href}
-      className="group inline-flex items-center gap-1.5 font-medium text-primary underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:outline-hidden"
+      className="group inline-flex items-center gap-1.5 font-medium text-primary underline-offset-4 hover:underline focus-visible:rounded-sm focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-hidden dark:focus-visible:ring-brand-400"
     >
       {children}
       <Arrow
@@ -114,7 +114,7 @@ export function TileGrid({ tiles, className }: { tiles: Tile[]; className?: stri
           <li key={title} className="flex">
             <AnyLink
               href={href}
-              className="group relative flex w-full flex-col bg-card p-6 transition-colors duration-200 hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:outline-hidden focus-visible:ring-inset dark:hover:bg-white/3"
+              className="group relative flex w-full flex-col bg-card p-6 transition-colors duration-200 hover:bg-zinc-50 focus-visible:ring-2 focus-visible:ring-brand focus-visible:outline-hidden focus-visible:ring-inset dark:hover:bg-white/3 dark:focus-visible:ring-brand-400"
             >
               <ArrowUpRight
                 aria-hidden

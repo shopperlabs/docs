@@ -25,7 +25,7 @@ export function ThemeMenu() {
     <Menu>
       <MenuButton
         aria-label={`Theme: ${current.label}`}
-        className="group relative flex shrink-0 items-center justify-center rounded-lg p-2 focus:outline-hidden data-focus:ring-2 data-focus:ring-brand/50"
+        className="group relative flex shrink-0 items-center justify-center rounded-lg p-2 focus:outline-hidden data-focus:ring-2 data-focus:ring-brand dark:data-focus:ring-brand-400"
       >
         <TouchTarget />
         <current.icon
@@ -46,7 +46,7 @@ export function ThemeMenu() {
                 type="button"
                 onClick={() => setTheme(option.value)}
                 className={clsx(
-                  'flex w-full items-center justify-between gap-2 rounded-xl p-2 text-sm/5 data-focus:bg-zinc-950/5 dark:data-focus:bg-white/5',
+                  'flex w-full items-center justify-between gap-2 rounded-xl p-2 text-sm/5 data-focus:bg-brand-600 data-focus:text-white',
                   active ? 'font-medium text-primary' : 'text-zinc-950/70 dark:text-white/70',
                 )}
               >

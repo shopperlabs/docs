@@ -37,7 +37,7 @@ export function TableOfContents({ toc }: { toc: TOCItemType[] }) {
                     '-ml-px block border-l-2 border-transparent py-1 leading-snug text-muted-foreground',
                     'transition-colors duration-200',
                     'hover:text-foreground',
-                    'focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 focus-visible:outline-hidden',
+                    'focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden dark:focus-visible:ring-brand-400',
                     'data-[active=true]:border-brand data-[active=true]:font-medium',
                     'data-[active=true]:text-brand-700 dark:data-[active=true]:text-brand-300',
                   )}
@@ -59,7 +59,7 @@ export function TableOfContents({ toc }: { toc: TOCItemType[] }) {
           className={clsx(
             'mt-4 inline-flex items-center gap-1.5 text-xs text-muted-foreground',
             'transition-colors duration-200 hover:text-foreground',
-            'focus-visible:ring-2 focus-visible:ring-brand/50 focus-visible:ring-offset-2 focus-visible:outline-hidden',
+            'focus-visible:ring-2 focus-visible:ring-brand focus-visible:ring-offset-2 focus-visible:ring-offset-background focus-visible:outline-hidden dark:focus-visible:ring-brand-400',
           )}
         >
           <ArrowUp className="size-3.5" aria-hidden />
