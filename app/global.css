@@ -487,8 +487,10 @@ figure.shiki > div > figcaption + * {
   list-style-type: square;
 }
 
+/* Fumadocs sets links to 500, which Instrument Sans draws close to bold next to body text; the color and the
+   underline already mark them. */
 .prose :where(a):not(:where([data-card], .not-prose, .not-prose *)) {
-  font-weight: 500;
+  font-weight: inherit;
   color: var(--color-fd-primary);
 }
 

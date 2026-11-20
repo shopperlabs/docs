@@ -74,7 +74,7 @@ function Callout({ type = 'info', title, children }: { type?: string; title?: Re
 
   return (
     <Lined tone={tone} className="my-6">
-      <div role="note" className={clsx('flex gap-3 border p-4 text-sm', box)}>
+      <div role="note" className={clsx('flex gap-3 border bg-white p-4 text-sm dark:bg-transparent', box)}>
         <Icon aria-hidden className={clsx('mt-0.5 size-4 shrink-0', icon)} />
         <div className="flex min-w-0 flex-1 flex-col gap-2">
           {title ? <p className="my-0! font-medium text-foreground">{title}</p> : null}
