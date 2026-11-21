@@ -23,7 +23,7 @@ interface Customer extends Entity {
   avatar_type: string
   timezone?: string | null
   opt_in: boolean
-  last_login_at: string | null
+  last_login_at?: string | null
   last_login_ip?: string | null
   addresses?: Address[]
 }
