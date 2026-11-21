@@ -227,17 +227,7 @@ A legal page resource has the type `legals` and carries `title`, `slug`, `conten
 }
 ```
 
-The filters and sorts come from the `resources.legal` entry of `config/shopper/api.php`:
-
-```php title="config/shopper/api.php"
-'resources' => [
-    'legal' => [
-        'filters' => ['title' => 'partial'],
-        'sorts' => ['title', 'updated_at'],
-        'includes' => [],
-    ],
-],
-```
+The filter and the sorts come from the `filters()` and `sorts()` methods of `Shopper\Api\Http\Resources\LegalResource`, and [Extending the Allowlists](/3.x/store-api/json-api#extending-the-allowlists) shows how to change them.
 
 The JavaScript SDK wraps both endpoints:
 

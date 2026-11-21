@@ -3,7 +3,7 @@ title: Custom Endpoints
 description: Call your own Store API routes, the routes of an add-on and the options the SDK does not wrap with store.fetch(), buildQuery() and flatten().
 ---
 
-The SDK wraps the routes Shopper ships. An app adds its own, such as a store locator or a wishlist, with the `ShopperApi` facade described in [Adding Your Own Routes](/3.x/store-api#adding-your-own-routes). `store.fetch()` calls any of them with what the built-in methods send: the customer token, the zone and channel headers and the language, and it throws the same `ShopperApiError`.
+The SDK wraps the routes Shopper ships. An app adds its own, such as a store locator or a wishlist, with the `ShopperApi` facade described in [Adding Your Own Routes](/3.x/store-api#adding-your-own-routes), and an [add-on](/3.x/addons/store-api#registering-routes) can register more. `store.fetch()` calls any of them with what the built-in methods send: the customer token, the zone and channel headers and the language, and it throws the same `ShopperApiError`.
 
 ## Calling a Route
 

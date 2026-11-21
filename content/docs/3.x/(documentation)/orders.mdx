@@ -682,7 +682,7 @@ The Store API places orders and lets customers read them. Orders are returned by
 
 An order resource has the `orders` type and its public ID as `id`. Its attributes are `number`, `status`, `payment_status`, `shipping_status`, `total` (the [order total](#order-total) of the items), `tax_amount`, `shipping_amount`, `price_amount`, `currency_code`, `email` (read it from the account endpoints) and `created_at`. When `GET /store/customers/me/orders/{orderId}` includes `items` and the payment status is Paid or Partially refunded, each item of a virtual product also carries `files`: the `id`, `name`, `extension` and `size` of each file, which the download endpoint above takes.
 
-The account endpoints read these parameters from `resources.order` in `config/shopper/api.php`. The list accepts all three, a single order accepts `include`:
+The account endpoints accept the parameters that `OrderResource` declares in its `filters()`, `sorts()` and `includes()` methods. The list accepts all three, a single order accepts `include`:
 
 | Parameter | Values |
 |-----------|--------|

@@ -835,7 +835,7 @@ The Store API exposes products read-only, and only published products:
 
 A product resource has the `products` type and its public ID as `id`. Its attributes are the name, slug, SKU, barcode, summary, description, `featured`, type, publication date, SEO fields, metadata, images, thumbnail, prices in every enabled currency and calculated price in the request currency (none for a variant product), and the stock: `stock` and `in_stock` for a standard or virtual product, `in_stock` alone for a variant or external product. A virtual product adds its `files`, without URLs (see [Downloadable Files](/3.x/products#downloadable-files)), an external product its `external_id`.
 
-The list endpoint accepts these parameters. The filters, sorts and includes other than `currency`, `price_min` and `price_max` are set under `resources.product` in `config/shopper/api.php`, so you can add or remove them:
+The list endpoint accepts these parameters. The filters, sorts and includes other than `currency`, `price_min` and `price_max` come from `ProductResource`, and you can add or remove them as [Extending the Allowlists](/3.x/store-api/json-api#extending-the-allowlists) shows:
 
 | Parameter | Values |
 |-----------|--------|

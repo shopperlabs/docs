@@ -3,7 +3,7 @@ title: "JSON:API Conventions"
 description: "The shape of Store API documents, and the include, fields, filter, sort and page parameters that every endpoint reads the same way."
 ---
 
-The Store API answers with [JSON:API](https://jsonapi.org) documents, built on Laravel's JSON:API resources. This page covers what every endpoint shares: the shape of a document, the query parameters that change a response, how amounts and languages come back, and the allowlists in `config/shopper/api.php` that decide which filters, sorts and includes a client may request. Each guide lists the values its own endpoints accept.
+The Store API answers with [JSON:API](https://jsonapi.org) documents, built on Laravel's JSON:API resources. This page covers what every endpoint shares: the shape of a document, the query parameters that change a response, how amounts and languages come back, and the allowlists of the resource classes that decide which filters, sorts and includes a client may request. Each guide lists the values its own endpoints accept.
 
 JSON:API applies to responses only. Request bodies are flat JSON objects, such as `{"quantity": 2}`, sent with `Content-Type: application/json`: the API never reads a `data.attributes` envelope.
 
@@ -314,78 +314,88 @@ The `Accept-Language` header selects the language of the response among the loca
 
 ## Allowlists
 
-A client may only filter, sort and include what the shop allows. The allowlists sit in `resources` of `config/shopper/api.php`, one entry per resource. Filters and sorts apply to the listing of a resource, includes to its listing and to its show endpoint:
+A client may only filter, sort and include what the shop allows. Each resource class of `Shopper\Api\Http\Resources` declares its allowlists in three static methods: `filters()`, `sorts()` and `includes()`. Filters and sorts apply to the listing of a resource, includes to its listing and to its show endpoint:
 
-| Key | Endpoints | Filters | Sorts | Includes |
-|-----|-----------|---------|-------|----------|
-| `product` | `/products`, `/products/{slug}` | `name`, `sku`, `q`, `featured`, `in_stock`, `category`, `category_tree`, `collection`, `brand`, `tag`, `option` | `name`, `created_at`, `published_at`, `price` | `brand`, `variants`, `categories`, `collections`, `options`, `tags`, `relatedProducts`, `rating`, `price_range` |
-| `category` | `/categories`, `/categories/{slug}` | `name` | `name`, `position` | `parent`, `children`, `ancestors`, `products`, `products_count` |
-| `collection` | `/collections`, `/collections/{slug}` | `name` | `name` | `products` |
-| `brand` | `/brands`, `/brands/{slug}` | `name` | `name`, `position` | `products` |
-| `attribute` | `/attributes` | `name` | `name` | None |
-| `tag` | `/tags` | `name` | `name` | `products` |
-| `country` | `/countries`, `/countries/{code}` | `name`, `cca2`, `cca3`, `region`, `zone` | `name` | `zones` |
-| `zone` | `/zones`, `/zones/{code}` | `name`, `code` | `name` | `currency`, `countries` |
-| `currency` | `/currencies`, `/currencies/{code}` | `name`, `code` | `name`, `code` | None |
-| `cart` | The cart endpoints that answer with the cart | None | None | `lines`, `lines.purchasable`, `lines.purchasable.product`, `addresses`, `paymentMethod` |
-| `order` | `/customers/me/orders`, `/customers/me/orders/{orderId}` | `status` | `created_at` | `items`, `shippingAddress`, `billingAddress`, `paymentMethod`, `shippings`, `shippings.events`, `refund` |
-| `review` | `/products/{slug}/reviews` | `rating` | `created_at`, `rating` | None |
-| `legal` | `/legals`, `/legals/{slug}` | `title` | `title`, `updated_at` | None |
+| Resource | Endpoints | Filters | Sorts | Includes |
+|----------|-----------|---------|-------|----------|
+| `ProductResource` | `/products`, `/products/{slug}` | `name`, `sku`, `q`, `featured`, `in_stock`, `category`, `category_tree`, `collection`, `brand`, `tag`, `option` | `name`, `created_at`, `published_at`, `price` | `brand`, `variants`, `categories`, `collections`, `options`, `tags`, `relatedProducts`, `rating`, `price_range` |
+| `CategoryResource` | `/categories`, `/categories/{slug}` | `name` | `name`, `position` | `parent`, `children`, `ancestors`, `products`, `products_count` |
+| `CollectionResource` | `/collections`, `/collections/{slug}` | `name` | `name` | `products` |
+| `BrandResource` | `/brands`, `/brands/{slug}` | `name` | `name`, `position` | `products` |
+| `AttributeResource` | `/attributes` | `name` | `name` | None |
+| `TagResource` | `/tags` | `name` | `name` | `products` |
+| `CountryResource` | `/countries`, `/countries/{code}` | `name`, `cca2`, `cca3`, `region`, `zone` | `name` | `zones` |
+| `ZoneResource` | `/zones`, `/zones/{code}` | `name`, `code` | `name` | `currency`, `countries` |
+| `CurrencyResource` | `/currencies`, `/currencies/{code}` | `name`, `code` | `name`, `code` | None |
+| `CartResource` | The cart endpoints that answer with the cart | None | None | `lines`, `lines.purchasable`, `lines.purchasable.product`, `addresses`, `paymentMethod` |
+| `OrderResource` | `/customers/me/orders`, `/customers/me/orders/{orderId}` | `status` | `created_at` | `items`, `shippingAddress`, `billingAddress`, `paymentMethod`, `shippings`, `shippings.events`, `refund` |
+| `ReviewResource` | `/products/{slug}/reviews` | `rating` | `created_at`, `rating` | None |
+| `LegalResource` | `/legals`, `/legals/{slug}` | `title` | `title`, `updated_at` | None |
 
-The `review` entry also holds `latest_limit`, the number of reviews `GET /store/reviews` returns (20). The guides describe what each filter and include does.
+`GET /store/reviews` returns the 20 latest reviews, and `reviews.latest_limit` in `config/shopper/api.php` changes that number. The guides describe what each filter and include does.
 
 ## Extending the Allowlists
 
-`php artisan shopper:api:install` publishes `config/shopper/api.php`, and you change the allowlists there. Each resource of your file is merged with the package defaults one level down: a key your file declares, such as `filters`, replaces the default list of that key, and the keys and resources your file leaves out keep the package defaults, including those a later Shopper release adds. When you change a list, keep the default entries you still want in it.
+A storefront sometimes needs a filter, a sort or an include the shop does not allow yet, such as looking a product up by its barcode. To add one, extend the resource class, override the static method of the list and register your class with the `ApiResource` facade. The endpoints of that resource then read the lists from your class: the filters and sorts on the listing, the includes on the listing and on the show endpoint.
 
-Each list takes entries of these forms:
+This class adds an exact `barcode` filter to the products. It spreads `parent::filters()` first, so the default filters stay, including those a later Shopper release adds:
 
-| Entry | Effect |
-|-------|--------|
-| `'name' => 'partial'`, or `'name'` without a key | Filter: the column contains the value, ignoring case |
-| `'sku' => 'exact'` | Filter: the column equals the value |
-| `'zone' => ['exact', 'zones.code']` | Filter: a column of a relation equals the value |
-| `'category' => 'scope'` | Filter: calls the `category` query scope of the model |
-| `'in_stock' => ['scope', 'availability']` | Filter: calls a scope with another name, here `availability` |
-| `'name'` in `sorts` | Sort: by the column of that name |
-| `'price' => ['field', 'min_price']` in `sorts` | Sort: by another column or select alias, here the lowest price |
-| `'tags'` in `includes` | Include: loads the relation with all its rows |
-| `'brand' => EnabledRelation::class` in `includes` | Include: runs an include class, which keeps only the public rows |
-| `'categories' => ['categories.parent']` in `include_loads` | Loads these relations too when the include is requested, so that the response does not query each record |
+```php title="app/Http/Resources/StoreProductResource.php"
+namespace App\Http\Resources;
 
-A plain include loads every related row, enabled or not. For a relation that holds drafts or disabled records, use one of the include classes of `Shopper\Api\Http\Includes`: `EnabledRelation` and `PublishedRelation` apply the `enabled` and `published` scopes of the related model. An include class implements `Spatie\QueryBuilder\Includes\IncludeInterface`, so you can write your own.
+use Shopper\Api\Http\Resources\ProductResource;
+use Spatie\QueryBuilder\AllowedFilter;
 
-To let a storefront look a product up by its barcode, add an exact filter to the `filters` list of `product` in the published file:
-
-```php title="config/shopper/api.php"
-'resources' => [
-    'product' => [
-        'filters' => [
-            'name' => 'partial',
-            'sku' => 'exact',
-            'barcode' => 'exact',
-            'q' => ['scope', 'matching'],
-            'featured' => 'exact',
-            'in_stock' => ['scope', 'availability'],
-            'category' => 'scope',
-            'category_tree' => ['scope', 'categoryTree'],
-            'collection' => ['scope', 'collection'],
-            'brand' => ['scope', 'byBrand'],
-            'tag' => ['scope', 'tag'],
-            'option' => ['scope', 'option'],
-        ],
-    ],
-],
+class StoreProductResource extends ProductResource
+{
+    public static function filters(): array
+    {
+        return [
+            ...parent::filters(),
+            AllowedFilter::exact('barcode'),
+        ];
+    }
+}
 ```
 
-The listing now accepts the new filter:
+This `boot` method of a service provider makes the Store API use your class in place of `ProductResource`:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Http\Resources\StoreProductResource;
+use Shopper\Api\Facades\ApiResource;
+use Shopper\Api\Http\Resources\ProductResource;
+
+public function boot(): void
+{
+    ApiResource::replace(ProductResource::class, StoreProductResource::class);
+}
+```
+
+This request looks the product up by its barcode:
 
 ```bash title="Request"
 curl -g "http://localhost:8000/store/products?filter[barcode]=3700123456789" \
   -H "Accept: application/vnd.api+json"
 ```
 
-When the configuration is cached, run `php artisan config:cache` again after the change.
+The lists hold the objects of [Laravel Query Builder](https://spatie.be/docs/laravel-query-builder/v7/introduction), which the Store API runs its queries with. The default lists use these forms:
+
+| Entry | Effect |
+|-------|--------|
+| `AllowedFilter::partial('name')` in `filters()` | Filter: the column contains the value, ignoring case |
+| `AllowedFilter::exact('sku')` in `filters()` | Filter: the column equals the value |
+| `AllowedFilter::exact('zone', 'zones.code')` in `filters()` | Filter: a column of a relation equals the value |
+| `AllowedFilter::scope('category')` in `filters()` | Filter: calls the `category` query scope of the model |
+| `AllowedFilter::scope('in_stock', 'availability')` in `filters()` | Filter: calls a scope with another name, here `availability` |
+| `'name'` in `sorts()` | Sort: by the column of that name |
+| `AllowedSort::field('price', 'min_price')` in `sorts()` | Sort: by another column or select alias, here the lowest price |
+| `'tags'` in `includes()` | Include: loads the relation with all its rows |
+| `AllowedInclude::custom('brand', new EnabledRelation)` in `includes()` | Include: runs an include class, which keeps only the public rows |
+| `'categories' => ['categories.parent']` in `includeLoads()` | Loads these relations too when the include is requested, so that the response does not query each record |
+
+A plain include loads every related row, enabled or not. For a relation that holds drafts or disabled records, pass one of the include classes of `Shopper\Api\Http\Includes` to `AllowedInclude::custom()`: `EnabledRelation` and `PublishedRelation` apply the `enabled` and `published` scopes of the related model. An include class implements `Spatie\QueryBuilder\Includes\IncludeInterface`, so you can write your own.
+
+To remove a default entry, return a list without it instead of spreading the parent list. An include you add also needs its relationship in `toRelationships()`, as [Replacing a Resource](#replacing-a-resource) explains.
 
 ### Replacing a Resource
 
@@ -422,9 +432,40 @@ public function boot(): void
 }
 ```
 
-Every endpoint then serializes products with your class, in `data`, in listings and in `included`. `replace()` also takes an array that maps several stock classes to their replacements. A replacement must extend the class it replaces, or `replace()` throws an `InvalidArgumentException`. The `type` of a resource cannot change.
+Every endpoint then serializes products with your class, in `data`, in listings and in `included`, and reads the allowlists and the relations to load from it. `replace()` also takes an array that maps several stock classes to their replacements. A replacement must extend the class it replaces, or `replace()` throws an `InvalidArgumentException`. The `type` of a resource cannot change. One class can both change the allowlists and add attributes: a resource takes one replacement only, and the last `replace()` call wins.
 
-A new include also needs its relationship declared in `toRelationships()` of the resource: the document only shows the relationships the resource declares, even when the include is in the allowlist. Override `toRelationships()` in the replacement and add your relation to the array the parent method returns.
+A new include also needs its relationship declared in `toRelationships()` of the resource. Laravel's JSON:API resource leaves out the relationships a resource does not declare, so an include that is in `includes()` but missing from `toRelationships()` answers `200` without the relation. Override `toRelationships()` in the replacement and add your relation to the array the parent method returns.
+
+### Loading Relations
+
+An attribute that reads a relation, such as the names of the tags of a product, runs one query per product: 24 queries on a listing of 24 products. The static `eagerLoads()` method lists the relations the Store API loads together with the records of a resource, on every query that serializes it. `ProductResource` loads `prices.currency` and `media` this way.
+
+This replacement sends the names of the tags of each product, and adds `tags` to the relations it loads, so a listing reads the tags of all its products in one query:
+
+```php title="app/Http/Resources/StoreProductResource.php"
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Shopper\Api\Http\Resources\ProductResource;
+
+class StoreProductResource extends ProductResource
+{
+    public static function eagerLoads(): array
+    {
+        return [...parent::eagerLoads(), 'tags'];
+    }
+
+    public function toAttributes(Request $request): array
+    {
+        return [
+            ...parent::toAttributes($request),
+            'tag_names' => $this->tags->pluck('name'),
+        ];
+    }
+}
+```
+
+An add-on does not replace the resource, since the store keeps that replacement for itself. It registers its relations with `ApiResource::eagerLoad()` on the stock class, and the Store API loads them for the replacement too, as [Extending the Store API](/3.x/addons/store-api#loading-the-relations) shows.
 
 ## Next Steps
 

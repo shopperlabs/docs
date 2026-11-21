@@ -498,16 +498,11 @@ On the products endpoints, `include=rating` adds `rating`, the average of the ap
 curl "https://example.com/store/products?include=rating"
 ```
 
-The `review` entry of `config/shopper/api.php` sets the allowed filters and sorts of the reviews endpoint and the `latest_limit` of `/store/reviews`, 20 by default:
+The `rating` filter and the `created_at` and `rating` sorts of the product reviews endpoint come from `Shopper\Api\Http\Resources\ReviewResource`, and [Extending the Allowlists](/3.x/store-api/json-api#extending-the-allowlists) shows how to change them. The number of reviews `/store/reviews` returns, 20 by default, is set by `reviews.latest_limit` in `config/shopper/api.php`:
 
 ```php title="config/shopper/api.php"
-'resources' => [
-    'review' => [
-        'filters' => ['rating' => 'exact'],
-        'sorts' => ['created_at', 'rating'],
-        'includes' => [],
-        'latest_limit' => 20,
-    ],
+'reviews' => [
+    'latest_limit' => 20,
 ],
 ```
 

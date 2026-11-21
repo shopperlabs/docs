@@ -438,7 +438,7 @@ The product relationships are `brand`, `categories`, `collections`, `tags`, `rel
 
 ### Filters, Sorting and Includes
 
-The listing accepts the filters, sorts and includes of `resources.product` in `config/shopper/api.php`. A comma inside one filter means OR, such as `filter[brand]=maison-cuir,nordic-steps`, and different filters combine with AND. A filter accepts up to 50 values; more returns `422` with the code `filter_too_wide`. An unknown filter, sort or include returns `400` with the code `bad_request`. The [Errors](/3.x/store-api/errors#error-codes) page lists every code.
+The listing accepts the filters, sorts and includes that `ProductResource` declares, and [Extending the Allowlists](/3.x/store-api/json-api#extending-the-allowlists) shows how to add your own. A comma inside one filter means OR, such as `filter[brand]=maison-cuir,nordic-steps`, and different filters combine with AND. A filter accepts up to 50 values; more returns `422` with the code `filter_too_wide`. An unknown filter, sort or include returns `400` with the code `bad_request`. The [Errors](/3.x/store-api/errors#error-codes) page lists every code.
 
 The includes add related records, or extra attributes computed on demand:
 
@@ -1868,7 +1868,7 @@ A home page testimonials block shows the most recent reviews of the whole shop.
 
 </Params>
 
-`/store/reviews` returns the latest approved reviews, newest first, capped at 20 by `resources.review.latest_limit` in `config/shopper/api.php`:
+`/store/reviews` returns the latest approved reviews, newest first, capped at 20 by `reviews.latest_limit` in `config/shopper/api.php`:
 
 ```bash title="Request"
 curl http://localhost:8000/store/reviews \

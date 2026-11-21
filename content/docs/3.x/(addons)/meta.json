@@ -1,11 +1,12 @@
 {
   "title": "Add-ons",
-  "description": "Build, register and publish add-ons that extend the Shopper admin panel.",
+  "description": "Build, register and publish add-ons that extend the Shopper admin panel and the Store API.",
   "root": true,
   "pages": [
     "addons/index",
     "addons/creating",
     "addons/admin-panel",
+    "addons/store-api",
     "addons/publishing"
   ]
 }

@@ -100,6 +100,8 @@ return Application::configure(basePath: dirname(__DIR__))
 
 The groups do not include `SubstituteBindings`, so route parameters reach your controller as strings: look the record up yourself, by its public ID or its slug as the Shopper controllers do. The current customer, zone and channel are request attributes: `$request->attributes->get('shopper_customer')`, `shopper_zone` and `shopper_channel`, each `null` when nothing resolved.
 
+An add-on registers its routes with the same facade, from the `boot()` method of its add-on class, as [Extending the Store API](/3.x/addons/store-api#registering-routes) shows.
+
 ## Request Headers
 
 The API reads a few request headers to know the response format, the pricing zone, the sales channel and the language. None of them is required: without them, the API falls back to the defaults of the shop.
@@ -224,9 +226,9 @@ The `store` and `authenticated` middleware lists are separate: a middleware list
 | `token_expiration` | `env('SHOPPER_API_TOKEN_EXPIRATION', 43200)` | Lifetime of a customer token in minutes (30 days). `null` or `0` means no expiry |
 | `settings.expose` | Store name, contact, address, logo, currencies | The shop settings `GET /store/settings` returns |
 | `settings.max_age` | `300` | Seconds a client may cache the settings response |
-| `resources` | One entry per resource | The filters, sorts and includes each listing accepts |
+| `reviews.latest_limit` | `20` | The number of reviews `GET /store/reviews` returns |
 
-The [JSON:API Conventions](/3.x/store-api/json-api#extending-the-allowlists) page explains how to change the `resources` entries.
+The filters, sorts and includes each listing accepts are not in this file: each resource class declares them, as [Extending the Allowlists](/3.x/store-api/json-api#extending-the-allowlists) explains.
 
 ## Your First Request
 

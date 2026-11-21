@@ -1,0 +1,211 @@
+---
+title: Extending the Store API
+description: Add attributes to the products of the Store API and register Store API routes from a Shopper add-on, so a storefront can read its data.
+---
+
+An add-on that stores data in the admin panel often has something to show on the storefront: the points a product earns, the products pinned on a product image. A storefront reads the shop through the [Store API](/3.x/store-api), and an add-on reaches it in two ways. When its data belongs to a product, it adds attributes to the product the API already returns. When its data stands on its own, it registers its own routes.
+
+Media Hotspots, the add-on that pins other products on the images of a product, takes the first way, and this page uses its code as the example. The routes continue the `acme/loyalty` add-on of [Creating an Add-on](/3.x/addons/creating) and [Extending the Admin Panel](/3.x/addons/admin-panel).
+
+## Adding Attributes to a Product
+
+A storefront that shows a product with its hotspots wants them in the product it already loads, not in one more request per image. The Store API serializes every product with one resource class, `Shopper\Api\Http\Resources\ProductResource`, and a store [replaces that class](/3.x/store-api/json-api#replacing-a-resource) with its own to add attributes. A resource takes one replacement only: the last `ApiResource::replace()` call wins. An add-on that called it would drop the replacement of the store, or the one of another add-on, so an add-on never calls it. It ships a trait instead, and the store adds the trait to its own resource class.
+
+The trait of Media Hotspots, `Shopper\MediaHotspots\Concerns\SerializesMediaHotspots`, gives the resource an `imagesWithHotspots()` method, which returns the images of the product, each with the hotspots pinned on it. This resource of the store sends them as the `images` attribute, in place of the images without hotspots:
+
+```php title="app/Http/Resources/StoreProductResource.php"
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Shopper\Api\Http\Resources\ProductResource;
+use Shopper\MediaHotspots\Concerns\SerializesMediaHotspots;
+
+class StoreProductResource extends ProductResource
+{
+    use SerializesMediaHotspots;
+
+    public function toAttributes(Request $request): array
+    {
+        return [
+            ...parent::toAttributes($request),
+            'images' => $this->imagesWithHotspots(),
+        ];
+    }
+}
+```
+
+The store registers its class in the `boot` method of a service provider, as for any replacement:
+
+```php title="app/Providers/AppServiceProvider.php"
+use App\Http\Resources\StoreProductResource;
+use Shopper\Api\Facades\ApiResource;
+use Shopper\Api\Http\Resources\ProductResource;
+
+public function boot(): void
+{
+    ApiResource::replace(ProductResource::class, StoreProductResource::class);
+}
+```
+
+Inside the trait, `$this->resource` is the product model, so the methods of the trait read the product the resource serializes. When a second add-on ships a trait, the store uses both in the same class, `use SerializesMediaHotspots, SerializesLoyaltyPoints;`, and merges the attributes of each in `toAttributes()`. PHP refuses a class whose traits declare the same method, so name the methods of your trait after what your add-on adds, as `imagesWithHotspots()` does.
+
+## Loading the Relations
+
+The trait reads the hotspots through a relation of the product. On a listing of 24 products, reading that relation on each product runs 24 queries. The Store API loads the relations a resource lists in its static `eagerLoads()` method together with the products it returns: the product listing, a single product, the related products, the products a category, a collection, a brand or a tag includes, and the products of the cart lines. The store keeps the replacement of `ProductResource` for itself, so an add-on does not override that method: it registers its relations with `ApiResource::eagerLoad()`, and the 24 products then load their hotspots in one query.
+
+Call it from the `boot()` method of the add-on class. Shopper calls `boot()` only for an enabled add-on, so the relations stop loading when the store disables the add-on. This is the `boot()` method of Media Hotspots:
+
+```php title="src/MediaHotspotsAddon.php"
+use Shopper\Api\Facades\ApiResource;
+use Shopper\Api\Http\Resources\ProductResource;
+use Shopper\ShopperPanel;
+
+public function boot(ShopperPanel $panel): void
+{
+    if (class_exists(ApiResource::class)) {
+        ApiResource::eagerLoad(ProductResource::class, [
+            'mediaHotspots.product.media',
+            'mediaHotspots.product.prices.currency',
+            'mediaHotspots.product.channels',
+        ]);
+    }
+}
+```
+
+Each path follows the relations of the product with dots, as Laravel's `with()` does: the hotspots, the product each hotspot points to, and the images, prices and sales channels of that product, which decide what the hotspot shows. The Store API ships in its own package, `shopper/api`, so the `class_exists()` check keeps the add-on working in a store that does not install it.
+
+`eagerLoad()` registers the paths on the stock `ProductResource` class, and the Store API loads them for the replacement of the store too, whichever of `replace()` and `eagerLoad()` runs first. The calls of several add-ons add up, and a path registered twice loads once. The method takes paths only, not closures that constrain the query. A store adds its own relations by overriding `eagerLoads()` in its replacement, as [Loading Relations](/3.x/store-api/json-api#loading-relations) shows.
+
+The relation must exist on the product model. Media Hotspots declares it in the `boot` method of its service provider, with `resolveRelationUsing()` on the class that `config('shopper.models.product')` names, so the relation also exists when a store replaces the product model. The trait checks `relationLoaded('mediaHotspots')` before it reads the relation, and runs its own query when the relation is not loaded, such as for a product serialized outside the Store API.
+
+## Registering Routes
+
+The loyalty add-on lets a storefront show how many points a product earns, and how many points the customer holds. That data belongs to no resource of the Store API, so the add-on registers its own routes with the `ShopperApi` facade, the one an application uses in [Adding Your Own Routes](/3.x/store-api#adding-your-own-routes). Each route then gets the prefix, the rate limit, the zone, the channel and the error format of the built-in routes.
+
+Register them in the `boot()` method of the add-on class, for the same reason as the relations: a disabled add-on is never booted, so its routes stop answering. The service provider of the package runs even for a disabled add-on, so routes registered there would keep answering. This `boot()` method registers a public route and a route of the authenticated group:
+
+```php title="src/LoyaltyAddon.php"
+use Acme\Loyalty\Http\Controllers\CustomerPointsController;
+use Acme\Loyalty\Http\Controllers\ProductRewardController;
+use Illuminate\Support\Facades\Route;
+use Shopper\Http\Facades\ShopperApi;
+use Shopper\ShopperPanel;
+
+public function boot(ShopperPanel $panel): void
+{
+    ShopperApi::store(function (): void {
+        Route::get('/products/{slug}/loyalty-rewards', ProductRewardController::class);
+    });
+
+    ShopperApi::authenticated(function (): void {
+        Route::get('/customers/me/loyalty', CustomerPointsController::class);
+    });
+}
+```
+
+The routes answer at `/store/products/{slug}/loyalty-rewards` and `/store/customers/me/loyalty`, or under the prefix the store configured. Pick paths the Store API does not use already: `php artisan route:list --path=store` lists them. The admin routes of the add-on stay in `addonRoutes()`, called from `register()`: Shopper ignores `addonRoutes()` called from `boot()`.
+
+## Looking Up a Product
+
+The groups of the Store API do not include `SubstituteBindings`, so `{slug}` reaches the controller as a string, and the controller looks the product up itself. It must find only the products a visitor can see, as `GET /store/products/{slug}` does. The `publish()` scope keeps the published products, and the `applyChannelScope()` method of the `Shopper\Api\Concerns\ResolvesChannel` trait keeps the products of the sales channel of the request, when the request names one. `firstOrFail()` then answers a missing product with a `404` in the [error format](/3.x/store-api/errors) of the Store API, as for any exception under the API prefix. This controller returns the points a product earns:
+
+```php title="src/Http/Controllers/ProductRewardController.php"
+namespace Acme\Loyalty\Http\Controllers;
+
+use Acme\Loyalty\Http\Resources\ProductRewardResource;
+use Acme\Loyalty\Models\ProductReward;
+use Shopper\Api\Concerns\ResolvesChannel;
+use Shopper\Core\Models\Contracts\Product;
+
+final class ProductRewardController
+{
+    use ResolvesChannel;
+
+    public function __invoke(string $slug): ProductRewardResource
+    {
+        $product = $this->applyChannelScope(
+            resolve(Product::class)::query()->publish()->where('slug', $slug)
+        )->firstOrFail();
+
+        return ProductRewardResource::make(
+            ProductReward::query()->where('product_id', $product->getKey())->firstOrFail()
+        );
+    }
+}
+```
+
+`resolve(Product::class)` returns the product model the store configured, so the lookup works on a replaced model too. The controller of `/customers/me/loyalty` has nothing to look up: in the authenticated group, `$request->user()` returns the customer of the token, so the controller reads the points of that customer and never takes a customer ID from the request.
+
+## Returning JSON:API
+
+The SDK reads every response as a JSON:API document, so a route returns a resource built on Laravel's `JsonApiResource`, the class the Shopper resources extend, as [Returning JSON:API From Your Routes](/3.x/sdk/custom-endpoints#returning-jsonapi-from-your-routes) explains. This resource gives each reward the `loyalty-rewards` type and sends its points:
+
+```php title="src/Http/Resources/ProductRewardResource.php"
+namespace Acme\Loyalty\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\JsonApi\JsonApiResource;
+
+class ProductRewardResource extends JsonApiResource
+{
+    public function toType(Request $request): string
+    {
+        return 'loyalty-rewards';
+    }
+
+    public function toAttributes(Request $request): array
+    {
+        return [
+            'points' => $this->points,
+        ];
+    }
+}
+```
+
+Start the type with the name of the add-on, as `loyalty-rewards` does, so that it never matches a type of the Store API or of another add-on.
+
+## Calling the Routes From a Storefront
+
+The SDK has no method for the routes of an add-on, so a storefront calls them with [`store.fetch()`](/3.x/sdk/custom-endpoints), which sends the customer token, the zone and channel headers and the language, as the built-in methods do. This call reads the points the product of the page earns:
+
+```ts
+import { sdk } from '@/lib/shopper'
+
+type LoyaltyReward = {
+  id: string
+  points: number
+}
+
+const { data } = await sdk.store.fetch<LoyaltyReward>(`/products/${product.slug}/loyalty-rewards`)
+
+const reward = data as LoyaltyReward
+```
+
+The attributes an add-on adds to a product need no call of their own: they come with the products that `sdk.store.product.retrieve()` and `sdk.store.product.list()` return. The `Product` type of the SDK does not declare them, so extend it with the shape the README of the add-on gives. This type adds the hotspots of Media Hotspots to the images of a product:
+
+```ts
+import type { Media, Product } from '@shopperlabs/shopper-sdk'
+
+type Hotspot = {
+  x: number
+  y: number
+  product: { id: string; name: string; slug: string }
+}
+
+type ProductWithHotspots = Omit<Product, 'images'> & {
+  images: Array<Media & { hotspots: Hotspot[] }>
+}
+
+const product = (await sdk.store.product.retrieve('classic-leather-sneaker')) as ProductWithHotspots
+```
+
+## Documenting the API in the README
+
+The Shopper documentation does not list the attributes and routes of each add-on: a store developer finds them in the README of the add-on, next to its installation steps. The README of Media Hotspots has a Store API section with its trait, the resource of the store and the `replace()` call. Give yours one too. Besides what [Writing the README](/3.x/addons/publishing#writing-the-readme) lists, it gives:
+
+- The trait, the methods a store calls and the attributes they return, with the resource class of the store.
+- The relations the add-on registers with `ApiResource::eagerLoad()`.
+- Each route: its method and path, its group, its parameters and the attributes of its resource.
+- The `store.fetch()` call and the TypeScript type of the response.
+
+Before you publish the add-on, [Publishing an Add-on](/3.x/addons/publishing) covers versions, releases and the listing on the Shopper website.

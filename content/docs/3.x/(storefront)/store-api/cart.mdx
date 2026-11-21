@@ -322,7 +322,7 @@ A storefront reads the cart to render the basket page or the mini cart. The tota
 
 </Params>
 
-The cart document carries only the cart attributes by default. The `include` query parameter adds related resources, as described in [Includes](/3.x/store-api/json-api#includes). The cart accepts these paths, set in `resources.cart.includes` of `config/shopper/api.php`:
+The cart document carries only the cart attributes by default. The `include` query parameter adds related resources, as described in [Includes](/3.x/store-api/json-api#includes). The cart accepts these paths, which `CartResource` declares in its `includes()` method:
 
 | Include | Adds |
 |---------|------|
