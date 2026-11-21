@@ -3,6 +3,20 @@
   "description": "Configuration keys, commands, events, permissions and types, one table per kind.",
   "root": true,
   "pages": [
-    "index"
+    "index",
+    "---Laravel---",
+    "configuration",
+    "commands",
+    "---TypeScript---",
+    "typescript-types",
+    "types/product",
+    "types/catalog",
+    "types/cart",
+    "types/checkout",
+    "types/order",
+    "types/customer",
+    "types/promotions",
+    "types/taxes",
+    "types/store"
   ]
 }

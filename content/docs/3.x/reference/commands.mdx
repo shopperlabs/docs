@@ -1,0 +1,85 @@
+---
+title: Artisan Commands
+description: The Artisan commands the Shopper packages register, with their arguments, options and defaults, and the ones Shopper adds to the scheduler.
+---
+
+The Shopper packages register the Artisan commands below. Each table gives the arguments and options with their defaults, says when Shopper runs the command from the Laravel [Scheduler](/3.x/installation#scheduler), and links to the section that explains it.
+
+## Installation
+
+These commands set up Shopper in a Laravel application. `shopper/framework` registers `shopper:install` and `shopper:user`, and `shopper/api` registers `shopper:api:install`.
+
+| Command | Arguments and options | Description | Docs |
+|---------|-----------------------|-------------|------|
+| `shopper:install` | None | Publishes the `shopper-config` files, the Media Library migrations and the Filament assets, runs `shopper:link`, then asks to run the migrations and the seeders. Hidden from `php artisan list` once `config/shopper/admin.php` exists, and then only prints the manual steps. | [Run the Installer](/3.x/installation#run-the-installer) |
+| `shopper:user` | None | Asks for an email, a first name, a last name and a password of at least 6 characters, then creates a user with the role set in `shopper.admin.roles.admin`. Fails when that role does not exist yet. | [Create an Admin User](/3.x/installation#create-an-admin-user) |
+| `shopper:api:install` | None | Publishes the Sanctum migrations and the Shopper configuration, offers to add `HasApiTokens` to the user model, then asks to run the migrations. | [Installation](/3.x/store-api#installation) |
+
+## Upgrade
+
+The `shopper/upgrade` package registers these commands to move a 2.x application to 3.x. The two data commands record their run in the `settings` table and skip a second run unless you pass `--force`.
+
+| Command | Arguments and options | Description | Docs |
+|---------|-----------------------|-------------|------|
+| `shopper:upgrade` | `--path=`: the paths Rector processes, comma-separated. Default: `app`. `--force`: runs every step without asking. | Runs `migrate --force`, `shopper:upgrade:rector`, `shopper:upgrade:permissions --force`, `shopper:upgrade:fix-zero-decimal-currencies --force`, `shopper:stock:reconcile --fix`, `shopper:link --force` and `shopper:files:secure`, in this order. | [Running the Upgrade](/3.x/upgrade#running-the-upgrade) |
+| `shopper:upgrade:rector` | `--path=`: the paths to process, comma-separated. Default: `app`. `--dry-run`: shows the changes without writing them. | Applies the 2.x to 3.x class renames to your code with Rector. Fails when `vendor/bin/rector` is missing. | [Running the Upgrade](/3.x/upgrade#running-the-upgrade) |
+| `shopper:upgrade:permissions` | `--dry-run`: lists the renames without changing data. `--force`: skips the confirmation and runs again after a first run. | Renames the 2.x permissions to dot notation, for example `read_orders` to `orders.read`, and regroups them. | [Upgrading From 2.x](/3.x/acl#upgrading-from-2x) |
+| `shopper:upgrade:fix-zero-decimal-currencies` | `--dry-run`: lists the rows to fix without changing data. `--force`: skips the confirmation and runs again after a first run. | Divides by 100 the amounts in zero-decimal currencies that 2.x stored multiplied by 100. | [Zero-decimal Amounts](/3.x/upgrade#zero-decimal-amounts) |
+
+## Admin Panel
+
+`shopper/framework` registers these commands to publish the panel files, link its assets and create admin pages.
+
+| Command | Arguments and options | Description | Docs |
+|---------|-----------------------|-------------|------|
+| `shopper:publish` | `--force`: overwrites the files already published. | Publishes the configuration files and the translations of the `shopper-config`, `shopper-translations` and `shopper-core-translations` tags. | [Configuration Files](/3.x/configuration#configuration-files) |
+| `shopper:component:publish` | `name`: the section to publish, such as `product`. Optional; without it and without `--all`, the command asks. `--all`: publishes every section. `--force`: overwrites the files already published. | Copies the component configuration of a section to `config/shopper/components/{name}.php`. | [Components](/3.x/configuration#components) |
+| `shopper:link` | `--relative`: creates the links with relative paths. `--force`: recreates the existing links. | Runs `storage:link`, then links `public/vendor/shopper` to the panel assets and removes the 2.x link at `public/{prefix}`. | [Run the Installer](/3.x/installation#run-the-installer) |
+| `make:shopper-page` | `name`: the page class, such as `Blog/PostIndex`. Optional; the command asks when it is missing. `-f`, `--force`: overwrites existing files. | Creates a Livewire page class and its view in the namespace and the view path set by `shopper.admin.pages`. | [The make:shopper-page Command](/3.x/extending/controllers#make-shopper-page) |
+| `shopper:page` | Same as `make:shopper-page`. | Runs `make:shopper-page` under the `shopper` namespace. | [The make:shopper-page Command](/3.x/extending/controllers#make-shopper-page) |
+
+## Starter Kits
+
+`shopper/framework` registers these commands to install a storefront starter kit and to build your own.
+
+| Command | Arguments and options | Description | Docs |
+|---------|-----------------------|-------------|------|
+| `shopper:kit:install` | `kit`: the kit package, such as `shopperlabs/livewire-starter-kit`. Required. `--path=`: the directory to install into. Default: the project root. `--force`: skips every confirmation. `--no-deps`: skips the Composer dependencies of the manifest. `--no-post-install`: skips the post-install commands. | Requires the kit with Composer, copies its files, installs its dependencies, runs its post-install commands, writes the `.shopper-kit` state file, then removes the kit package. | [How It Works](/3.x/starter-kits#how-it-works) |
+| `shopper:kit:init` | `--path=`: the directory of the new kit. Default: the package name without its vendor, at the project root. | Asks for the kit name, package, description, author and stack, then writes `composer.json`, `shopper-kit.yaml` and `README.md`. | [Creating the Kit](/3.x/starter-kits/creating#creating-the-kit) |
+| `shopper:kit:export` | `path`: the kit directory, relative to the project root or absolute. Required. `--clear`: empties the directory first, except `.git`, `.github`, `README.md`, `CHANGELOG.md`, `LICENSE`, `LICENSE.md`, `composer.json` and `shopper-kit.yaml`. | Copies the paths listed in the kit's `shopper-kit.yaml` from the project into the kit. Fails when the directory has no `shopper-kit.yaml`. | [Exporting the Storefront](/3.x/starter-kits/creating#exporting-the-storefront) |
+
+## Catalog
+
+`shopper/core` registers `shopper:collections:sync` and `shopper/framework` registers `shopper:files:secure`. Shopper schedules neither.
+
+| Command | Arguments and options | Description | Docs |
+|---------|-----------------------|-------------|------|
+| `shopper:collections:sync` | `--collection=`: the ID of one collection. Default: every automatic collection. | Syncs the products of each automatic collection with its rules. The docs show how to schedule it hourly. | [Manual Sync Command](/3.x/collections#manual-sync-command) |
+| `shopper:files:secure` | None | Moves the `files` collection of virtual products to the disk set in `shopper.media.storage.files_disk`. Default: `local`. | [Downloadable Files](/3.x/products#downloadable-files) |
+
+## Orders, Carts and Stock
+
+`shopper/core` registers `shopper:orders:reclaim` and `shopper:stock:reconcile`, and `shopper/cart` registers `shopper:prune-carts`.
+
+| Command | Arguments and options | Description | Docs |
+|---------|-----------------------|-------------|------|
+| `shopper:orders:reclaim` | `--hours=`: the age after which an unpaid order is cancelled. Default: `shopper.orders.reclaim_pending_after_hours` (24). | Releases and cancels the new orders still unpaid after the window, so their reserved stock returns to sale. Skips the orders whose payment method has no driver or the `manual` driver. Scheduled hourly without overlap while `reclaim_pending_after_hours` is set. | [Reclaiming Pending Orders](/3.x/orders#reclaiming-pending-orders) |
+| `shopper:prune-carts` | `--days=`: the days without activity after which a cart is deleted. Default: `shopper.cart.prune_after_days` (30). | Deletes the carts never completed and not updated within the window. Scheduled daily. | [Pruning](/3.x/cart#pruning) |
+| `shopper:stock:reconcile` | `--fix`: rewrites the drifted stock levels from the ledger. | Compares each stock level with the sum of its inventory history and lists the rows that differ. Without `--fix`, exits with a failure code when a row differs. Not scheduled. | [Reconciling Stock Levels](/3.x/locations#reconciling-stock-levels) |
+
+## Payments and Shipping
+
+`shopper/payment` and `shopper/shipping` register these commands only when the application runs in the console.
+
+| Command | Arguments and options | Description | Docs |
+|---------|-----------------------|-------------|------|
+| `shopper:payments:reconcile` | `--pull`: checks the pending payments and refunds with the provider, for the drivers that can look them up. `--minutes=`: the minimum age of the pending payments and refunds to check. Default: `15`. | Applies the provider events that arrived before their order existed and reports the orphaned payments. Scheduled every 15 minutes with `--pull` and without overlap while `shopper.payment.reconciliation.schedule` is on. | [Reconciling Payments](/3.x/payments#reconciling-payments) |
+| `shopper:shipments:sync-tracking` | None | Queues a tracking refresh for each shipment with a tracking number that is neither delivered nor returned, when its carrier supports tracking and sends no webhooks. Scheduled every 30 minutes while `shopper.shipping.tracking.sync` is on. | [Tracking Sync](/3.x/fulfillment#tracking-sync) |
+
+## Webhooks
+
+`shopper/core` registers this command to recover the webhook deliveries that never reached a worker.
+
+| Command | Arguments and options | Description | Docs |
+|---------|-----------------------|-------------|------|
+| `shopper:webhooks:redispatch` | None | Requeues the deliveries that failed to dispatch and the ones still pending after 15 minutes, on the `shopper.webhooks.queue` queue. Scheduled every 15 minutes. | [Redispatching](/3.x/webhooks#redispatching) |

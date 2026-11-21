@@ -1,0 +1,227 @@
+---
+title: TypeScript Types
+sidebarTitle: Overview
+description: TypeScript types for the resources of the Shopper Store API, shared by the JavaScript SDK and any TypeScript storefront.
+---
+
+The `@shopperlabs/shopper-types` package holds the TypeScript types of the resources Shopper exposes, such as `Product`, `Cart`, `Order` and `Customer`, with the enums of their statuses and units. It contains type declarations, the enums and one helper function, and has no runtime dependency. The [JavaScript SDK](/3.x/sdk) returns these shapes from its methods, flattened from the JSON:API documents of the [Store API](/3.x/store-api).
+
+## Installation
+
+A storefront built on the SDK does not install this package: `@shopperlabs/shopper-sdk` depends on it and re-exports its types, as described in [Installation](/3.x/sdk#installation). Install it on its own for code that calls the Store API without the SDK, or to use the enums and `isNoDivisionCurrency()` as values. Run this command in the folder of your storefront:
+
+```bash
+npm install @shopperlabs/shopper-types
+```
+
+The package is compiled to CommonJS and ships its type declarations in `dist/index.d.ts`. TypeScript and bundlers import it with `import`.
+
+## Usage
+
+A storefront on the SDK imports the types from the SDK. The objects the SDK methods return type every `id` as a string, and the [TypeScript](/3.x/sdk#typescript) section of the SDK page shows how to keep that with `Flattened<Cart>`. This line imports two resource types from the SDK:
+
+```ts
+import type { Order, Product } from '@shopperlabs/shopper-sdk'
+```
+
+The SDK re-exports the types only. An enum member or `isNoDivisionCurrency()` used as a value comes from `@shopperlabs/shopper-types`. This function compares the payment status of an order with a member of the `PaymentStatus` enum:
+
+```ts
+import { PaymentStatus, type Order } from '@shopperlabs/shopper-types'
+
+export function isPaid(order: Order): boolean {
+  return order.payment_status === PaymentStatus.PAID
+}
+```
+
+Every amount is an integer in cents, as in the Store API. The [Money](/3.x/money) page covers cents and formatting.
+
+## ResourceId
+
+Every `id` and every foreign key, such as `product_id` or `zone_id`, is typed `ResourceId`. The Store API sends each `id` as a string: the public ID of the record for most resources, described in [Public IDs](/3.x/models#public-ids), `"store"` for the store settings, the database key of a legal page, `{carrier_code}:{service_code}` for a shipping option, and the reference of the payment provider for a payment session. The number covers code that reads Eloquent models directly, such as the Inertia starter kits. This is the definition:
+
+```ts
+type ResourceId = string | number
+```
+
+## Common Interfaces
+
+The resource types extend or embed the interfaces of this section.
+
+### Entity
+
+`Entity` holds the fields every stored record has: `id`, `public_id` (the ULID the Store API sends as the `id`), and its dates as ISO 8601 strings. `deleted_at` is set on a soft-deleted record. This is the definition:
+
+```ts
+interface Entity {
+  id: ResourceId
+  public_id?: string
+  created_at?: string
+  updated_at?: string
+  deleted_at?: string | null
+}
+```
+
+### Price
+
+`Price` is one price of a product or a variant in one currency, an entry of their `prices` array. `amount`, `compare_amount` (the "compare at" price to strike through) and `cost_amount` are in cents. The Store API sends `public_id`, `amount`, `compare_amount` and `currency_code`; the other fields are filled in the admin panel. See [Prices, Currency and Stock](/3.x/store-api/catalog#prices-currency-and-stock). This is the definition:
+
+```ts
+interface Price {
+  id?: ResourceId
+  public_id?: string
+  amount: number | null
+  compare_amount: number | null
+  cost_amount?: number | null
+  currency_id?: ResourceId
+  currency_code: string
+  currency?: Currency
+}
+```
+
+### PriceRange
+
+`PriceRange` is the lowest and highest price of a product in the currency resolved for the request, in cents. A variant product aggregates the prices of its variants. Products carry it as `price_range`, and the product listing with `include=price_range` returns the same shape in `meta.price_range`, the range over every matching product, as described in [Price Filters and Sorting](/3.x/store-api/catalog#price-filters-and-sorting). This is the definition:
+
+```ts
+interface PriceRange {
+  currency_code: string
+  min: number
+  max: number
+}
+```
+
+### CalculatedPrice
+
+`CalculatedPrice` is the price to display and charge for the shopper of the request (customer, zone and channel), in cents and in the resolved currency. Products without variants and variants carry it as `calculated_price` on the product listing and the product page. `compare_amount` is the amount to strike through, `original_amount` the catalog amount before a price rule, and `meta` the public details a custom price resolver adds, such as the price list applied. This is the definition:
+
+```ts
+interface CalculatedPrice {
+  amount: number
+  compare_amount: number | null
+  original_amount: number | null
+  currency_code: string
+  meta: Record<string, unknown> | null
+}
+```
+
+### QuantityRule
+
+`QuantityRule` holds the quantities a shopper can order of a product or a variant, sent as `quantity_rule`. `maximum` is `null` without an upper limit, and every quantity must be a multiple of `increment`. See [Stock and Quantity Rules](/3.x/store-api/cart#stock-and-quantity-rules). This is the definition:
+
+```ts
+interface QuantityRule {
+  minimum: number
+  maximum: number | null
+  increment: number
+}
+```
+
+### ShippingFields
+
+`ShippingFields` holds the dimensions and the weight of a product or a variant, each value with its unit. This is the definition:
+
+```ts
+interface ShippingFields {
+  width_unit: Length
+  width_value: number | null
+  weight_unit: Weight
+  weight_value: number | null
+  height_unit: Length
+  height_value: number | null
+  depth_unit: Length
+  depth_value: number | null
+  volume_unit: Volume
+  volume_value: number | null
+}
+```
+
+### SEOFields
+
+`SEOFields` holds the values of the page `<title>` and meta description. Products, categories, brands and collections extend it. This is the definition:
+
+```ts
+interface SEOFields {
+  seo_title?: string | null
+  seo_description?: string | null
+}
+```
+
+### Metadata
+
+`Metadata` is the free-form data the merchant or your code stores on a record, or `null`. This is the definition:
+
+```ts
+type Metadata = Record<string, unknown> | null
+```
+
+## Units
+
+The units of `ShippingFields` are string enums.
+
+### Weight
+
+`Weight` is the unit of `weight_value`. This is the definition:
+
+```ts
+enum Weight {
+  KG = 'kg',
+  G = 'g',
+  LBS = 'lbs',
+}
+```
+
+### Length
+
+`Length` is the unit of `width_value`, `height_value` and `depth_value`. This is the definition:
+
+```ts
+enum Length {
+  M = 'm',
+  CM = 'cm',
+  MM = 'mm',
+  FT = 'ft',
+  IN = 'in',
+}
+```
+
+### Volume
+
+`Volume` is the unit of `volume_value`. This is the definition:
+
+```ts
+enum Volume {
+  L = 'l',
+  ML = 'ml',
+  GAL = 'gal',
+  FLOZ = 'floz',
+}
+```
+
+## Helpers
+
+The package exports one function.
+
+### isNoDivisionCurrency
+
+`isNoDivisionCurrency()` returns `true` for a currency whose amounts have no cents, so an amount in cents is already the amount to display. The currencies are `BIF`, `CLP`, `DJF`, `GNF`, `HTG`, `JPY`, `KMF`, `KRW`, `MGA`, `PYG`, `RWF`, `VND`, `VUV`, `XAF`, `XAG`, `XAU`, `XDR`, `XOF` and `XPF`. [Formatting in JavaScript](/3.x/money#formatting-in-javascript) uses it to format an amount. This is the signature:
+
+```ts
+function isNoDivisionCurrency(currency: string): boolean
+```
+
+## Available Types
+
+The other types are grouped by domain, one page each:
+
+| Page | Types |
+|------|-------|
+| [Product](/3.x/reference/types/product) | `Product`, `ProductVariant`, `ProductTag`, product options, media, downloadable files and reviews |
+| [Catalog](/3.x/reference/types/catalog) | `Category`, `Brand`, `Collection`, `Attribute`, `Channel`, `Supplier` and `Inventory` |
+| [Cart](/3.x/reference/types/cart) | `Cart`, its lines, addresses, promotions, adjustments and tax lines |
+| [Checkout](/3.x/reference/types/checkout) | `ShippingOption`, `PaymentMethod`, `PaymentSession`, `Carrier` and `CarrierOption` |
+| [Order](/3.x/reference/types/order) | `Order`, its items, addresses, shipments, refund, tax lines and payment transactions |
+| [Customer](/3.x/reference/types/customer) | `Customer` and `Address` |
+| [Store](/3.x/reference/types/store) | `StoreSettings`, `Legal`, `Zone`, `Country` and `Currency` |
+| [Promotions](/3.x/reference/types/promotions) | `Discount` and `Campaign` |
+| [Taxes](/3.x/reference/types/taxes) | `TaxZone`, `TaxRate`, `TaxRateRule` and `TaxProvider` |

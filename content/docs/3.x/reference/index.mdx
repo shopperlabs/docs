@@ -4,6 +4,39 @@ sidebarTitle: Overview
 description: Configuration keys, Artisan commands, events, permissions, render hooks, Store API endpoints and TypeScript types.
 ---
 
-Reference lists what Shopper exposes, one table per kind, each row checked against the 3.x code.
+Reference lists what Shopper exposes, one table per kind, each row checked against the 3.x code. The Documentation pages explain when and why to use each item; these tables are for looking one up.
 
-Until a table is published here, the [2.x TypeScript types](/2.x/reference/typescript-types) page covers the types as they were in 2.x.
+## Laravel Application
+
+These tables cover the Composer packages: the configuration files, the commands, the events, the permissions of the admin panel and the places where the panel renders your own views.
+
+<Cards>
+  <Card title="Configuration" icon="settings" href="/3.x/reference/configuration">
+    Every key of the Shopper configuration files, with its default and its environment variable.
+  </Card>
+  <Card title="Artisan Commands" icon="square-terminal" href="/3.x/reference/commands">
+    Every command, with its arguments and options.
+  </Card>
+  <Card title="Events" icon="zap" href="/3.x/events">
+    The events Shopper dispatches and the moment each one fires.
+  </Card>
+  <Card title="Permissions" icon="shield-check" href="/3.x/acl#seeded-permissions">
+    The permissions the installer seeds and the screens each one opens.
+  </Card>
+  <Card title="Render Hooks" icon="anchor" href="/3.x/render-hooks">
+    The named places of the admin panel where your own views render.
+  </Card>
+</Cards>
+
+## Storefront
+
+These pages cover what a storefront reads: the endpoints of the Store API and the TypeScript types of the resources it returns.
+
+<Cards>
+  <Card title="Store API" icon="globe" href="/3.x/store-api">
+    The endpoints, with a request and a response for each domain.
+  </Card>
+  <Card title="TypeScript Types" icon="braces" href="/3.x/reference/typescript-types">
+    The types of `@shopperlabs/shopper-types`, which the SDK returns.
+  </Card>
+</Cards>

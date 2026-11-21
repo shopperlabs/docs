@@ -1,0 +1,389 @@
+---
+title: Configuration
+description: Every key of the Shopper 3.x configuration files, with its default value, its environment variable and the page that explains it.
+---
+
+This page lists every key of the Shopper configuration files, with its default value and the environment variable that sets it. `php artisan shopper:install` publishes the main files to `config/shopper`, and `php artisan vendor:publish --tag=shopper-config` publishes them again; the files with their own command are listed in [Files](#files).
+
+## Files [#files]
+
+Each Composer package merges its files under the key below, so a file you do not publish keeps the package defaults. The last column is the option of `php artisan vendor:publish` that copies the file into your application.
+
+| Key | Package | Published to | Published with |
+|-----|---------|--------------|----------------|
+| [`shopper.addons`](#shopper-addons) | `shopper/framework` | `config/shopper/addons.php` | `--tag=shopper-config` |
+| [`shopper.admin`](#shopper-admin) | `shopper/framework` | `config/shopper/admin.php` | `--tag=shopper-config` |
+| [`shopper.auth`](#shopper-auth) | `shopper/framework` | `config/shopper/auth.php` | `--tag=shopper-config` |
+| [`shopper.features`](#shopper-features) | `shopper/framework` | `config/shopper/features.php` | `--tag=shopper-config` |
+| [`shopper.media`](#shopper-media) | `shopper/framework` | `config/shopper/media.php` | `--tag=shopper-config` |
+| [`shopper.models`](#shopper-models) | `shopper/framework` | `config/shopper/models.php` | `--tag=shopper-config` |
+| [`shopper.routes`](#shopper-routes) | `shopper/framework` | `config/shopper/routes.php` | `--tag=shopper-config` |
+| [`shopper.settings`](#shopper-settings) | `shopper/framework` | `config/shopper/settings.php` | `--tag=shopper-config` |
+| [`shopper.themes`](#shopper-themes) | `shopper/framework` | `config/shopper/themes.php` | `--tag=shopper-config` |
+| [`shopper.components.{name}`](#shopper-components) | `shopper/framework` | `config/shopper/components/{name}.php` | `php artisan shopper:component:publish`, no tag |
+| [`shopper.core`](#shopper-core) | `shopper/core` | `config/shopper/core.php` | `--tag=shopper-config` |
+| [`shopper.orders`](#shopper-orders) | `shopper/core` | `config/shopper/orders.php` | `--tag=shopper-config` |
+| [`shopper.search`](#shopper-search) | `shopper/core` | `config/shopper/search.php` | `--tag=shopper-config` |
+| [`shopper.webhooks`](#shopper-webhooks) | `shopper/core` | `config/shopper/webhooks.php` | `--tag=shopper-config` |
+| [`shopper.cart`](#shopper-cart) | `shopper/cart` | `config/shopper/cart.php` | `--tag=shopper-config` |
+| [`shopper.payment`](#shopper-payment) | `shopper/payment` | `config/shopper/payment.php` | `--tag=shopper-config` |
+| [`shopper.shipping`](#shopper-shipping) | `shopper/shipping` | `config/shopper/shipping.php` | `--tag=shopper-config` |
+| [`shopper.api`](#shopper-api) | `shopper/api` | `config/shopper/api.php` | `--tag=shopper-config` |
+| [`shopper.http`](#shopper-http) | `shopper/http` | `config/shopper/http.php` | `--tag=shopper-config` |
+| [`shopper.stripe`](#shopper-stripe) | `shopper/stripe` | `config/shopper/stripe.php` | `--tag=shopper-stripe-config` |
+| [`shopper.fedex`](#shopper-fedex) | `shopper/fedex` | `config/shopper/fedex.php` | `--tag=shopper-fedex-config` |
+| [`shopper.ups`](#shopper-ups) | `shopper/ups` | `config/shopper/ups.php` | `--tag=shopper-ups-config` |
+| [`shopper.usps`](#shopper-usps) | `shopper/usps` | `config/shopper/usps.php` | `--tag=shopper-usps-config` |
+| [`sidebar`](#sidebar) | `shopper/sidebar` | `config/sidebar.php` | `--tag=sidebar-config` |
+
+`php artisan shopper:publish` publishes the `shopper-config` tag together with the translation files. `shopper/upgrade` has no configuration file.
+
+## shopper.addons [#shopper-addons]
+
+`config/shopper/addons.php` turns installed add-ons off. It ships empty, so every installed add-on is active.
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.addons.{id}` | `true` | | `false` disables the add-on with this ID, see [Disabling an Add-on](/3.x/addons#disabling-an-addon) |
+
+## shopper.admin [#shopper-admin]
+
+`config/shopper/admin.php` sets the URL, the branding, the roles and the languages of the admin panel.
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.admin.prefix` | `cpanel` | `SHOPPER_PREFIX` | URL prefix of the admin panel, see [Admin Panel](/3.x/configuration#admin-panel) |
+| `shopper.admin.domain` | `null` | `SHOPPER_DOMAIN` | Domain the admin routes answer on. `null` serves them on every domain |
+| `shopper.admin.pages.namespace` | `App\Livewire\Shopper` | | Namespace of the classes `make:shopper-page` creates, see [Custom Pages](/3.x/configuration#custom-pages) |
+| `shopper.admin.pages.view_path` | `resource_path('views/livewire/shopper')` | | Folder of the Blade views `make:shopper-page` creates |
+| `shopper.admin.roles.admin` | `administrator` | | Role with access to every screen, given by `shopper:user`, see [Roles](/3.x/acl#roles) |
+| `shopper.admin.roles.manager` | `manager` | | Staff role. Users with this role or the administrator role are staff, the others are customers |
+| `shopper.admin.roles.user` | `user` | | Customer role, given to customers created in the panel or registered through the Store API, see [Role Configuration](/3.x/customers#role-configuration) |
+| `shopper.admin.brand` | `null` | | Logo path under `public`, shown on the login page and in the sidebar header. `null` shows the Shopper logo, see [Branding Logo](/3.x/extending/control-panel#branding-logo) |
+| `shopper.admin.favicon` | `null` | | Favicon URL of the panel pages. `null` keeps the Shopper favicons |
+| `shopper.admin.avatar.color` | `1d4ed8` | | Text color, in hex without `#`, of the generated avatar of a user without a photo, see [Avatar Colors](/3.x/configuration#avatar-colors) |
+| `shopper.admin.avatar.bg_color` | `dbeafe` | | Background color of that avatar |
+| `shopper.admin.primary_color` | `Color::Blue` | | Primary color of the panel, any palette of `Filament\Support\Colors\Color`, see [Admin Panel](/3.x/configuration#admin-panel) |
+| `shopper.admin.locales` | `en`, `fr` | | Languages of the panel language switcher, each with a `label` and a `flag`. The Store API accepts the same list, see [Locales](/3.x/configuration#locales) and [Language](/3.x/store-api#language) |
+| `shopper.admin.icon-picker.cache` | `true` | | Caches the search results of the icon picker field |
+| `shopper.admin.icon-picker.duration` | `7 days` | | How long those results stay cached |
+| `shopper.admin.notifications.database.enabled` | `false` | | Sends order, payment and import notifications to the database and shows the bell in the panel header, see [Enabling Database Notifications](/3.x/notifications#enabling-database-notifications) |
+| `shopper.admin.notifications.database.polling_interval` | `30s` | | How often the panel checks for new notifications, see [Polling and Broadcasting](/3.x/notifications#polling-and-broadcasting) |
+
+## shopper.auth [#shopper-auth]
+
+`config/shopper/auth.php` sets how staff sign in to the admin panel.
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.auth.guard` | `web` | | Authentication guard of the admin panel, see [Authentication](/3.x/configuration#authentication) |
+| `shopper.auth.2fa_enabled` | `false` | `SHOPPER_ENABLED_TWO_FACTOR` | Lets staff turn on two-factor authentication from their account page, see [Two-Factor Configuration](/3.x/two-factor#configuration) |
+| `shopper.auth.passkeys_enabled` | `false` | `SHOPPER_ENABLED_PASSKEYS` | Adds passkey sign-in to the login page and passkey management to the account page, see [Passkeys](/3.x/two-factor#passkeys) |
+| `shopper.auth.password_reset` | `true` | | `false` removes the forgot password link and the password reset routes |
+
+## shopper.features [#shopper-features]
+
+`config/shopper/features.php` turns the optional sections of the admin panel on and off. Each value is a `Shopper\Enum\FeatureState` case, see [Feature Flags](/3.x/configuration#feature-flags).
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.features.attribute` | `FeatureState::Enabled` | | [Attributes](/3.x/attributes) section and the attribute fields of products |
+| `shopper.features.brand` | `FeatureState::Enabled` | | [Brands](/3.x/brands) section and the brand field of products |
+| `shopper.features.campaign` | `FeatureState::Enabled` | | [Campaigns](/3.x/campaigns) section |
+| `shopper.features.category` | `FeatureState::Enabled` | | [Categories](/3.x/categories) section and the category field of products |
+| `shopper.features.collection` | `FeatureState::Enabled` | | [Collections](/3.x/collections) section |
+| `shopper.features.discount` | `FeatureState::Enabled` | | [Discounts](/3.x/discounts) section |
+| `shopper.features.review` | `FeatureState::Enabled` | | [Reviews](/3.x/reviews) section |
+| `shopper.features.supplier` | `FeatureState::Disabled` | | [Suppliers](/3.x/suppliers) section and the supplier field of products |
+| `shopper.features.tag` | `FeatureState::Enabled` | | [Tags](/3.x/product-tags) section and the tag field of products |
+
+## shopper.media [#shopper-media]
+
+`config/shopper/media.php` sets the media collections, disks, accepted types, size limits and image conversions of the catalog.
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.media.storage.collection_name` | `uploads` | | Media collection of the image galleries of products, variants, brands, categories and collections, see [Storage Disk](/3.x/media#storage-disk) |
+| `shopper.media.storage.thumbnail_collection` | `thumbnail` | | Media collection of the single main image of those models |
+| `shopper.media.storage.disk_name` | `public` | | Disk of the galleries and thumbnails |
+| `shopper.media.storage.files_disk` | `local` | | Disk of the downloadable files of virtual products. Keep it private, see [Downloadable Files](/3.x/products#downloadable-files) |
+| `shopper.media.accepts_mime_types` | `image/jpeg`, `image/png`, `image/webp`, `image/avif` | | Image types the upload fields accept, see [Accepts MIME Types](/3.x/media#accepts-mime-types) |
+| `shopper.media.accepts_file_types` | the 10 built-in types: PDF, ZIP, RAR, 7z, Word, Excel, plain text and CSV | | MIME types accepted for the downloadable files of virtual products |
+| `shopper.media.max_size.thumbnail` | `1024` | | Largest thumbnail upload in the admin forms, in kilobytes, see [Media Filesize](/3.x/media#media-filesize) |
+| `shopper.media.max_size.images` | `2048` | | Largest gallery image upload in the admin forms, in kilobytes |
+| `shopper.media.conversions.large.width` | `800` | | Width in pixels of the `large` conversion, see [Image Conversions](/3.x/media#image-conversions) |
+| `shopper.media.conversions.large.height` | `800` | | Height in pixels of the `large` conversion |
+| `shopper.media.conversions.medium.width` | `500` | | Width in pixels of the `medium` conversion |
+| `shopper.media.conversions.medium.height` | `500` | | Height in pixels of the `medium` conversion |
+
+## shopper.models [#shopper-models]
+
+`config/shopper/models.php` maps each swappable model to the class Shopper uses, as [Swapping a Model](/3.x/models#swapping-a-model) explains. The cart models live in [`shopper.cart`](#shopper-cart).
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.models.address` | `Shopper\Core\Models\Address` | | Customer addresses |
+| `shopper.models.brand` | `Shopper\Models\Brand` | | Brands |
+| `shopper.models.category` | `Shopper\Models\Category` | | Categories |
+| `shopper.models.collection` | `Shopper\Models\Collection` | | Collections |
+| `shopper.models.product` | `Shopper\Models\Product` | | Products |
+| `shopper.models.variant` | `Shopper\Models\ProductVariant` | | Product variants |
+| `shopper.models.attribute_product` | `Shopper\Models\AttributeProduct` | | Pivot between attributes and products |
+| `shopper.models.channel` | `Shopper\Core\Models\Channel` | | Sales channels |
+| `shopper.models.inventory` | `Shopper\Core\Models\Inventory` | | Inventory locations |
+| `shopper.models.order` | `Shopper\Core\Models\Order` | | Orders |
+| `shopper.models.supplier` | `Shopper\Core\Models\Supplier` | | Suppliers |
+| `shopper.models.tax_zone` | `Shopper\Core\Models\TaxZone` | | Tax zones |
+| `shopper.models.tax_rate` | `Shopper\Core\Models\TaxRate` | | Tax rates |
+
+## shopper.routes [#shopper-routes]
+
+`config/shopper/routes.php` extends the routes of the admin panel.
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.routes.middleware` | `[]` | | Middleware added to every authenticated admin route, see [Middleware](/3.x/configuration#middleware) |
+| `shopper.routes.custom_file` | `null` | | Path of a route file loaded inside the authenticated admin group, with the `shopper.` name prefix, see [Custom Routes](/3.x/configuration#custom-routes) |
+
+## shopper.settings [#shopper-settings]
+
+`config/shopper/settings.php` lists the cards of the Settings page.
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.settings.items` | the 12 built-in settings items | | Setting item classes, each mapped to `true` or `false`. `false` hides a card and a new class adds one, see [Settings](/3.x/configuration#settings) and [Adding a Settings Page](/3.x/configuration#adding-a-settings-page) |
+
+## shopper.themes [#shopper-themes]
+
+`config/shopper/themes.php` registers the color themes of the admin panel.
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.themes.default` | `default` | | Theme used until a merchant picks one on the Appearance page, see [The Active Theme](/3.x/themes#the-active-theme) |
+| `shopper.themes.registered` | the 3 built-in themes: `default`, `midnight`, `evergreen` | | Themes offered on the Appearance page, each with a `name`, an `author`, `has_dark` and an optional `css` stylesheet, see [Themes](/3.x/themes#configuration) |
+
+## shopper.components [#shopper-components]
+
+The twelve files in `config/components` of `shopper/framework` list the Livewire classes of each admin screen, and Shopper registers each key of `pages` and `components` as the alias `shopper-{key}`. They have no `vendor:publish` tag: `php artisan shopper:component:publish {name}` copies one to `config/shopper/components/{name}.php` and `--all` copies them all, see [Components](/3.x/configuration#components).
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.components.account.pages` | `account-index` | | Account page of the signed-in user |
+| `shopper.components.account.components` | the 6 built-in components | | Profile, password, two-factor, passkeys and devices blocks of the account page, and the user menu |
+| `shopper.components.brand.pages` | `brand-index` | | Brands page |
+| `shopper.components.brand.components` | `slide-overs.brand-form` | | Form that creates and edits a brand |
+| `shopper.components.campaign.pages` | `campaign-index`, `campaign-create`, `campaign-edit` | | Campaign list, creation and edit pages |
+| `shopper.components.category.pages` | `category-index` | | Categories page |
+| `shopper.components.category.components` | `slide-overs.category-form`, `slide-overs.re-order-categories` | | Category form and category reordering panel |
+| `shopper.components.collection.pages` | `collection-index`, `collection-edit` | | Collection list and edit pages |
+| `shopper.components.collection.components` | the 4 built-in components | | Product list, rules and creation panels of collections |
+| `shopper.components.customer.pages` | `customer-index`, `customer-create`, `customer-show` | | Customer list, creation and detail pages |
+| `shopper.components.customer.components` | `customers.addresses`, `customers.orders`, `customers.profile` | | Tabs of the customer detail page |
+| `shopper.components.dashboard.pages` | `dashboard` | | Dashboard page, see [Replacing the Page](/3.x/dashboard#replacing-the-page) |
+| `shopper.components.dashboard.components` | `locale-switcher` | | Language switcher of the panel |
+| `shopper.components.discount.pages` | `discount-index`, `discount-edit` | | Discount list and edit pages |
+| `shopper.components.discount.components` | the 4 built-in components | | Promotion form, product and customer pickers, and stats panel of discounts |
+| `shopper.components.order.pages` | `order-index`, `order-detail`, `order-shipments`, `order-abandoned-carts` | | Order list, order detail, shipments and abandoned carts pages |
+| `shopper.components.order.components` | the 9 built-in components | | Blocks of the order detail page, and the shipment and abandoned cart panels |
+| `shopper.components.product.sections` | the 10 built-in sections | | Tab classes of the product edit page, each mapped to `true` or `false`. `false` hides a tab, see [Product Sections](/3.x/addons/admin-panel#product-sections) |
+| `shopper.components.product.pages` | the 15 built-in pages | | Product list, the tabs of the product edit page, the variant page, and the attribute, supplier and tag pages |
+| `shopper.components.product.components` | the 15 built-in components | | Product actions, import, pricing, variant and attribute panels, and the supplier form |
+| `shopper.components.review.pages` | `review-index` | | Reviews page |
+| `shopper.components.review.components` | `slide-overs.review-detail` | | Review detail panel |
+| `shopper.components.setting.pages` | the 15 built-in pages | | Settings pages: general, appearance, locations, legal, channels, payment methods, carriers, team, zones, taxes, currencies and webhooks |
+| `shopper.components.setting.components` | the 14 built-in components | | Forms and panels of the settings pages |
+
+## shopper.core [#shopper-core]
+
+`config/shopper/core.php` sets the table prefix, the barcode format, the import batch size and the category tree cache.
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.core.table_prefix` | `sh_` | | Prefix of every Shopper table name. Set it before the first migration, see [Database Table Prefix](/3.x/configuration#database-table-prefix) and [Table Names](/3.x/models#table-names) |
+| `shopper.core.barcode_type` | `C128` | | Barcode symbology the variant page draws, see [SKU and Barcode](/3.x/product-variants#sku-and-barcode) |
+| `shopper.core.import.chunk_size` | `25` | | Products per queued job of a product import, see [Import Configuration](/3.x/import#configuration) |
+| `shopper.core.cache.category_tree` | `3600` | | Seconds the category tree stays cached. `null` turns the cache off, see [Tree Cache](/3.x/categories#tree-cache) |
+
+## shopper.orders [#shopper-orders]
+
+`config/shopper/orders.php` sets the order number format and the reclaim of unpaid orders, see [Orders](/3.x/configuration#orders).
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.orders.generator.prefix` | `ORD` | | First part of every order number. Empty leaves it out, see [Order Number Generation](/3.x/orders#order-number-generation) |
+| `shopper.orders.generator.separator` | `-` | | Characters between the parts of the number |
+| `shopper.orders.generator.date_format` | `Ymd` | | PHP date format of the middle part. Empty leaves the date out |
+| `shopper.orders.generator.start_sequence_from` | `0` | | Number added to the order ID to form the sequence |
+| `shopper.orders.generator.pad_length` | `6` | | Length the sequence is padded to |
+| `shopper.orders.generator.pad_string` | `0` | | Character the sequence is padded with, on the left |
+| `shopper.orders.reclaim_pending_after_hours` | `24` | | Hours after which `shopper:orders:reclaim` cancels an unpaid order. `null` takes the command off the schedule, see [Reclaiming Pending Orders](/3.x/orders#reclaiming-pending-orders) |
+
+## shopper.search [#shopper-search]
+
+`config/shopper/search.php` sets the Scout engine and the indexer of each searchable model.
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.search.engine_map` | `[]` | | Scout driver per model class. A model not listed uses `SCOUT_DRIVER`, see [Choosing an Engine per Model](/3.x/search#choosing-an-engine-per-model) |
+| `shopper.search.indexers` | the 5 built-in indexers: brands, categories, collections, orders and products | | Indexer class per model class, which builds the search document of the model. Shopper adds `CustomerIndexer` for the user model when the list has no entry for it, see [Custom Indexers](/3.x/search#custom-indexers) |
+| `shopper.search.facets` | `brand` and `categories` on products | | Facet fields per model, each with a `label`. Only the `shopper/search` add-on reads this key, see [Facets](/3.x/search#facets) |
+
+## shopper.webhooks [#shopper-webhooks]
+
+`config/shopper/webhooks.php` sets the events, destinations, delivery and retention of outgoing webhooks, see [Webhooks Configuration](/3.x/webhooks#configuration).
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.webhooks.events` | the 13 built-in events | | Event classes a subscription can listen to, each mapped to its public name. Remove a line to stop offering that event, see [Registering Custom Events](/3.x/webhooks#registering-custom-events) |
+| `shopper.webhooks.database.connection` | `null` | `SHOPPER_WEBHOOKS_DB_CONNECTION` | Database connection of the subscriptions, events and deliveries. `null` uses the default connection |
+| `shopper.webhooks.allowed_hosts` | `[]` | `SHOPPER_WEBHOOKS_ALLOWED_HOSTS` | Hosts webhooks may be sent to, comma-separated in the env variable. Empty allows any public host, see [Endpoint Restrictions](/3.x/webhooks#endpoint-restrictions) |
+| `shopper.webhooks.max_subscriptions` | `50` | `SHOPPER_WEBHOOKS_MAX_SUBSCRIPTIONS` | Most subscriptions the admin panel creates |
+| `shopper.webhooks.queue` | `webhooks` | `SHOPPER_WEBHOOKS_QUEUE` | Queue of the delivery jobs, see [Deliveries and Retries](/3.x/webhooks#deliveries-and-retries) |
+| `shopper.webhooks.backoff` | `[10, 30, 60, 300, 1800, 3600, 7200, 14400, 28800, 43200]` | | Seconds before each retry of a delivery |
+| `shopper.webhooks.disable_after_failures` | `15` | | Failed deliveries in a row that deactivate a subscription |
+| `shopper.webhooks.timeout` | `10` | | Seconds Shopper waits for the endpoint to answer |
+| `shopper.webhooks.signature_tolerance` | `300` | | Seconds `WebhookSignature::verify()` accepts between the signature timestamp and the current time, see [Signatures](/3.x/webhooks#signatures) |
+| `shopper.webhooks.prune.succeeded_after_days` | `7` | | Age in days at which succeeded deliveries are pruned, see [Pruning](/3.x/webhooks#pruning) |
+| `shopper.webhooks.prune.failed_after_days` | `90` | | Age in days at which the other deliveries, then the events, are pruned |
+
+## shopper.cart [#shopper-cart]
+
+`config/shopper/cart.php` sets the cart calculation, the session, the cart lifetime and the cart models, see [Cart Configuration](/3.x/cart#configuration).
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.cart.pipelines.cart` | the 5 built-in steps: `CalculateLines`, `ApplyAutomaticPromotions`, `ApplyDiscounts`, `CalculateTax`, `Calculate` | | Pipeline classes that compute the cart totals, in order, see [Default Pipeline](/3.x/cart#default-pipeline) and [Custom Pipeline](/3.x/cart#custom-pipeline) |
+| `shopper.cart.max_promotions` | `5` | | Most promotions applied to one cart, see [Maximum Stacked Promotions](/3.x/discounts#maximum-stacked-promotions) |
+| `shopper.cart.session.key` | `shopper_cart` | | Session key that holds the ID of the visitor's cart, see [Session Management](/3.x/cart#session-management) |
+| `shopper.cart.session.auto_create` | `false` | | `true` makes `Cart::current()` create a cart when the session has none |
+| `shopper.cart.abandoned_after_minutes` | `60` | | Minutes without activity before a cart counts as abandoned, see [Abandoned Carts](/3.x/cart#abandoned-carts) |
+| `shopper.cart.totals_ttl_minutes` | `15` | | Minutes `totals()` returns the stored totals before it computes them again, see [Stored Totals](/3.x/cart#stored-totals) |
+| `shopper.cart.prune_after_days` | `30` | | Age in days of the open carts the daily `shopper:prune-carts` deletes, see [Pruning](/3.x/cart#pruning) |
+| `shopper.cart.models.cart` | `Shopper\Cart\Models\Cart` | | Cart model, see [Model Swapping](/3.x/cart#model-swapping) |
+| `shopper.cart.models.cart_line` | `Shopper\Cart\Models\CartLine` | | Cart line model |
+
+## shopper.payment [#shopper-payment]
+
+`config/shopper/payment.php` sets the reconciliation of payments with the providers, see [Payments Configuration](/3.x/payments#configuration).
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.payment.reconciliation.pull_on_completion` | `true` | `PAYMENT_PULL_ON_COMPLETION` | Queues a provider check when a cart completes with its payment still pending, see [Reconciling Payments](/3.x/payments#reconciling-payments) |
+| `shopper.payment.reconciliation.schedule` | `true` | `PAYMENT_RECONCILE_SCHEDULE` | Schedules `shopper:payments:reconcile --pull` every 15 minutes |
+| `shopper.payment.reconciliation.queue` | `null` | `PAYMENT_RECONCILE_QUEUE` | Queue of the provider checks. `null` uses the default queue |
+| `shopper.payment.reconciliation.backoff` | `[60, 300, 900]` | | Seconds before each retry of a provider check |
+| `shopper.payment.reconciliation.prune_after_days` | `90` | `PAYMENT_WEBHOOK_EVENTS_PRUNE_AFTER_DAYS` | Age in days at which received provider events are pruned |
+| `shopper.payment.reconciliation.orphan_after_minutes` | `30` | `PAYMENT_ORPHAN_AFTER_MINUTES` | Minutes before a collected payment without an order counts as orphaned, see [Orphaned Payments](/3.x/payments#orphaned-payments) |
+| `shopper.payment.reconciliation.orphans` | `alert` | `PAYMENT_ORPHANS` | `alert` reports orphaned payments, `refund` also refunds them |
+
+## shopper.shipping [#shopper-shipping]
+
+`config/shopper/shipping.php` sets the package units, the quote cache and the tracking sync, see [Driver Configuration](/3.x/carriers#driver-configuration).
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.shipping.units` | `metric` | `SHIPPING_UNITS` | Units of the packages the Store API builds from a cart: `metric` (cm, kg) or `imperial` (in, lb) |
+| `shopper.shipping.rates_cache_ttl` | `600` | `SHIPPING_RATES_CACHE_TTL` | Seconds a live carrier quote stays cached. `0` turns the cache off, see [Rate Caching](/3.x/carriers#rate-caching) |
+| `shopper.shipping.tracking.sync` | `true` | `SHIPPING_TRACKING_SYNC` | Schedules `shopper:shipments:sync-tracking` every 30 minutes, see [Tracking Sync](/3.x/fulfillment#tracking-sync) |
+| `shopper.shipping.tracking.queue` | `null` | `SHIPPING_TRACKING_QUEUE` | Queue of the tracking jobs. `null` uses the default queue |
+| `shopper.shipping.tracking.backoff` | `[60, 300, 900]` | | Seconds before each retry of a tracking job |
+
+## shopper.api [#shopper-api]
+
+`config/shopper/api.php` sets what the Store API endpoints return, see [Store API Configuration](/3.x/store-api#configuration).
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.api.pagination.per_page` | `15` | `SHOPPER_API_PER_PAGE` | Items per page when a request sends no `page[size]`, see [Pagination](/3.x/store-api/json-api#pagination) |
+| `shopper.api.pagination.max_per_page` | `100` | | Largest `page[size]` accepted |
+| `shopper.api.pagination.max_page` | `100` | | Deepest `page[number]` accepted, see [Page Numbers](/3.x/store-api/json-api#page-numbers) |
+| `shopper.api.token_expiration` | `43200` | `SHOPPER_API_TOKEN_EXPIRATION` | Lifetime of a customer token in minutes (30 days). `null` or `0` never expires, see [Token Expiration](/3.x/store-api/authentication#token-expiration) |
+| `shopper.api.reviews.latest_limit` | `20` | | Number of reviews `GET /store/reviews` returns, see [Latest Reviews](/3.x/store-api/catalog#latest-reviews) |
+| `shopper.api.settings.expose` | the 15 built-in setting keys | | Store settings `GET /store/settings` returns, see [Reading the Store Settings](/3.x/store-api/store#reading-the-store-settings) and [Settings from the Store API](/3.x/settings#store-api) |
+| `shopper.api.settings.max_age` | `300` | | Seconds set as `max-age` and `s-maxage` in the `Cache-Control` header of `GET /store/settings`, see [Caching the Settings](/3.x/store-api/store#caching-the-settings) |
+
+## shopper.http [#shopper-http]
+
+`config/shopper/http.php` sets the prefix, the rate limits, the zone and channel resolution and the middleware of the Store API routes.
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.http.prefix` | `store` | `SHOPPER_API_PREFIX` | Path prefix of every Store API route, see [Base URL](/3.x/store-api#base-url) |
+| `shopper.http.rate_limiters.shopper-api` | `120` | | Requests per minute on every public and authenticated route, see [Rate Limits](/3.x/store-api#rate-limits) |
+| `shopper.http.rate_limiters.shopper-api-auth` | `20` | | Requests per minute on the register, login and password reset routes |
+| `shopper.http.rate_limiters.shopper-api-checkout` | `30` | | Requests per minute on the cart creation, cart line, promotion, payment and completion routes |
+| `shopper.http.rate_limiters.shopper-api-webhook` | `120` | | Requests per minute on the webhook routes |
+| `shopper.http.login_failures` | `5` | | Failed logins allowed per email and IP address within a minute, see [Failed Logins](/3.x/store-api/authentication#failed-logins) |
+| `shopper.http.zone.resolver` | `Shopper\Http\Zone\DefaultZoneResolver` | | Class that resolves the zone of a request, see [Custom Resolver](/3.x/zones#custom-resolver) |
+| `shopper.http.zone.header` | `X-Shopper-Zone` | | Request header that carries the zone code, see [Zone](/3.x/store-api#zone) |
+| `shopper.http.zone.default_code` | `null` | `SHOPPER_API_DEFAULT_ZONE` | Zone code used when a request sends none |
+| `shopper.http.zone.cache_ttl` | `60` | | Seconds a resolved zone stays cached. `0` turns the cache off, see [Resolving a Zone](/3.x/zones#resolving-a-zone) |
+| `shopper.http.channel.resolver` | `Shopper\Http\Channel\DefaultChannelResolver` | | Class that resolves the sales channel of a request, see [Custom Resolver](/3.x/channels#custom-resolver) |
+| `shopper.http.channel.header` | `X-Shopper-Channel` | | Request header that carries the channel slug, see [Sales Channel](/3.x/store-api#sales-channel) |
+| `shopper.http.channel.default_slug` | `null` | `SHOPPER_API_DEFAULT_CHANNEL` | Channel slug used when a request sends none |
+| `shopper.http.channel.cache_ttl` | `60` | | Seconds a resolved channel stays cached. `0` turns the cache off, see [The Store API](/3.x/channels#the-store-api) |
+| `shopper.http.middleware.store` | `[]` | | Middleware appended to the public route group, see [Route Groups](/3.x/store-api#route-groups) |
+| `shopper.http.middleware.authenticated` | `[]` | | Middleware appended to the authenticated route group |
+| `shopper.http.middleware.webhook` | `[]` | | Middleware appended to the webhook route group |
+
+## shopper.stripe [#shopper-stripe]
+
+`config/shopper/stripe.php` holds the Stripe credentials and capture method. Publish it with `php artisan vendor:publish --tag=shopper-stripe-config`, see [Stripe Configuration](/3.x/payments/stripe#configuration).
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.stripe.enabled` | `false` | `PAYMENT_STRIPE_ENABLED` | Lists `stripe` in `Payment::configuredDrivers()` |
+| `shopper.stripe.secret_key` | `null` | `STRIPE_SECRET_KEY` | Secret API key of every call to Stripe. Its prefix sets the [test mode](/3.x/payments/stripe#test-mode) |
+| `shopper.stripe.publishable_key` | `null` | `STRIPE_PUBLISHABLE_KEY` | Publishable key returned to the storefront with each payment, for Stripe.js |
+| `shopper.stripe.webhook_secret` | `null` | `STRIPE_WEBHOOK_SECRET` | Signing secret that verifies each Stripe event, see [Webhooks](/3.x/payments/stripe#webhooks) |
+| `shopper.stripe.capture_method` | `manual` | `STRIPE_CAPTURE_METHOD` | `manual` authorizes the card at checkout and captures later, `automatic` captures at once, see [Capture Method](/3.x/payments/stripe#capture-method) |
+
+## shopper.fedex [#shopper-fedex]
+
+`config/shopper/fedex.php` holds the FedEx credentials. Publish it with `php artisan vendor:publish --tag=shopper-fedex-config`, see [FedEx Credentials](/3.x/carriers/fedex#credentials).
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.fedex.enabled` | `false` | `SHIPPING_FEDEX_ENABLED` | Lists `fedex` in `Shipping::configuredDrivers()`. Live rates depend on the credentials only, see [Driver Configuration](/3.x/carriers#driver-configuration) |
+| `shopper.fedex.sandbox` | `false` | `SHIPPING_SANDBOX` | Sends requests to the FedEx sandbox. The variable is shared with UPS and USPS, see [Sandbox Mode](/3.x/carriers/fedex#sandbox-mode) |
+| `shopper.fedex.client_id` | `null` | `FEDEX_CLIENT_ID` | API key of your FedEx project |
+| `shopper.fedex.client_secret` | `null` | `FEDEX_CLIENT_SECRET` | Secret key of your FedEx project |
+| `shopper.fedex.account_number` | `null` | `FEDEX_ACCOUNT_NUMBER` | FedEx account the rates are quoted against |
+
+## shopper.ups [#shopper-ups]
+
+`config/shopper/ups.php` holds the UPS credentials. Publish it with `php artisan vendor:publish --tag=shopper-ups-config`, see [UPS Credentials](/3.x/carriers/ups#credentials).
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.ups.enabled` | `false` | `SHIPPING_UPS_ENABLED` | Lists `ups` in `Shipping::configuredDrivers()`. Live rates depend on the credentials only, see [Driver Configuration](/3.x/carriers#driver-configuration) |
+| `shopper.ups.sandbox` | `false` | `SHIPPING_SANDBOX` | Sends requests to the UPS sandbox. The variable is shared with FedEx and USPS, see [Sandbox Mode](/3.x/carriers/ups#sandbox-mode) |
+| `shopper.ups.client_id` | `null` | `UPS_CLIENT_ID` | Client ID of your UPS app |
+| `shopper.ups.client_secret` | `null` | `UPS_CLIENT_SECRET` | Client secret of your UPS app |
+| `shopper.ups.user_id` | `null` | `UPS_USER_ID` | User ID of your UPS account |
+| `shopper.ups.account_number` | `null` | `UPS_ACCOUNT_NUMBER` | UPS account number, sent as the shipper number |
+
+## shopper.usps [#shopper-usps]
+
+`config/shopper/usps.php` holds the USPS credentials. Publish it with `php artisan vendor:publish --tag=shopper-usps-config`, see [USPS Credentials](/3.x/carriers/usps#credentials).
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `shopper.usps.enabled` | `false` | `SHIPPING_USPS_ENABLED` | Lists `usps` in `Shipping::configuredDrivers()`. Live rates depend on the credentials only, see [Driver Configuration](/3.x/carriers#driver-configuration) |
+| `shopper.usps.sandbox` | `false` | `SHIPPING_SANDBOX` | Sends requests to the USPS sandbox. The variable is shared with FedEx and UPS, see [Sandbox Mode](/3.x/carriers/usps#sandbox-mode) |
+| `shopper.usps.client_id` | `null` | `USPS_CLIENT_ID` | Consumer key of your USPS app |
+| `shopper.usps.client_secret` | `null` | `USPS_CLIENT_SECRET` | Consumer secret of your USPS app |
+
+## sidebar [#sidebar]
+
+`config/sidebar.php` sets the cache, the size and the breadcrumbs of the sidebar. Publish it with `php artisan vendor:publish --tag=sidebar-config`, see [Sidebar Configuration](/3.x/sidebar/configuration#configuration-options).
+
+| Key | Default | Env | Description |
+|-----|---------|-----|-------------|
+| `sidebar.cache.method` | `null` | | `null` builds the sidebar on every request, `static` caches one copy for every user, `user-based` one copy per user, see [Caching](/3.x/sidebar/configuration#caching) |
+| `sidebar.cache.duration` | `1440` | | Minutes a cached sidebar is kept |
+| `sidebar.width` | `15rem` | | Width of the expanded sidebar, see [Dimensions](/3.x/sidebar/configuration#dimensions) |
+| `sidebar.collapsed_width` | `4.5rem` | | Width of the collapsed sidebar |
+| `sidebar.breakpoint` | `1024` | | Viewport width in pixels below which the sidebar works as a drawer, see [Responsive Breakpoint](/3.x/sidebar/configuration#responsive-breakpoint) |
+| `sidebar.collapsible` | `true` | | `false` stops the sidebar from collapsing to icons, see [Collapsible](/3.x/sidebar/configuration#collapsible) |
+| `sidebar.breadcrumbs.view` | `sidebar::breadcrumbs` | | Blade view of the breadcrumb trail. Shopper sets it to `shopper::components.breadcrumbs` when it registers, see [Breadcrumbs](/3.x/sidebar/configuration#breadcrumbs) |

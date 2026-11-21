@@ -1,0 +1,287 @@
+---
+title: Catalog Types
+description: TypeScript types of categories, brands, collections, attributes, channels, suppliers and inventory locations.
+---
+
+The types of this page describe how the catalog is organized around products. The Store API [Catalog](/3.x/store-api/catalog) guide lists the endpoints that return categories, brands, collections and attributes, and the SDK [Catalog](/3.x/sdk/catalog) page shows the methods that call them.
+
+## Category
+
+`Category` is a category of the catalog, returned by `GET /store/categories` and `GET /store/categories/{slug}`, and by the `categories` include of a product. `parent_id` is the `id` of the parent category, or `null` on a root. `ancestors` holds the enabled ancestors, root first, for a breadcrumb. `depth` is 0 on a root, and `products_count` counts the published products of the category and of its enabled subcategories in the sales channel of the request. See [Reading a Category](/3.x/store-api/catalog#reading-a-category). This is the definition:
+
+```ts
+interface Category extends Entity, SEOFields {
+  name: string
+  slug: string
+  description: string | null
+  is_enabled: boolean
+  position: number
+  parent_id: ResourceId | null
+  metadata: Metadata
+  thumbnail?: Media | null
+  parent?: Category
+  children?: Category[]
+  ancestors?: Category[]
+  products?: Product[]
+  depth?: number | null
+  products_count?: number
+}
+```
+
+### CategoryTreeNode
+
+`CategoryTreeNode` is one node of `GET /store/categories/tree`, which returns the enabled branches nested in one request for a navigation menu. The tree is not a JSON:API document: each node carries its fields and its `children` directly. See [The Category Tree](/3.x/store-api/catalog#the-category-tree). This is the definition:
+
+```ts
+interface CategoryTreeNode {
+  id: ResourceId
+  name: string
+  slug: string
+  position: number
+  children: CategoryTreeNode[]
+}
+```
+
+## Brand
+
+`Brand` is a brand of products, returned by `GET /store/brands` and `GET /store/brands/{slug}`, and by the `brand` include of a product. See [Brands](/3.x/store-api/catalog#brands). This is the definition:
+
+```ts
+interface Brand extends Entity, SEOFields {
+  name: string
+  slug: string | null
+  website: string | null
+  description: string | null
+  position: number
+  is_enabled: boolean
+  metadata: Metadata
+  thumbnail?: Media | null
+}
+```
+
+## Collection
+
+`Collection` is a group of products the merchant curates, returned by `GET /store/collections` and `GET /store/collections/{slug}`, and by the `collections` include of a product. `match_conditions` and `rules` apply to automatic collections. See [Collections](/3.x/store-api/catalog#collections). This is the definition:
+
+```ts
+interface Collection extends Entity, SEOFields {
+  name: string
+  slug: string
+  description?: string | null
+  type: CollectionType
+  match_conditions: CollectionCondition | null
+  sort: string | null
+  published_at: string | null
+  metadata: Metadata
+  thumbnail?: Media | null
+  rules?: CollectionRule[]
+  zones?: Zone[]
+  products?: Product[]
+}
+```
+
+### CollectionType
+
+`CollectionType` is the `type` of a collection: `manual` when the merchant picks the products, `auto` when rules select them. See [Collection Types](/3.x/collections#collection-types). This is the definition:
+
+```ts
+enum CollectionType {
+  MANUAL = 'manual',
+  AUTO = 'auto',
+}
+```
+
+### CollectionCondition
+
+`CollectionCondition` is the `match_conditions` of an automatic collection: `all` keeps the products that match every rule, `any` the products that match at least one. A collection without a value behaves as `any`. This is the definition:
+
+```ts
+enum CollectionCondition {
+  ALL = 'all',
+  ANY = 'any',
+}
+```
+
+### CollectionRule
+
+`CollectionRule` is one rule of an automatic collection, which compares a product field with `value`. See [Collection Rules](/3.x/collections#collection-rules). This is the definition:
+
+```ts
+interface CollectionRule extends Entity {
+  rule: CollectionRuleType
+  operator: CollectionOperator
+  value: string
+  collection_id: ResourceId
+  collection?: Collection
+}
+```
+
+### CollectionRuleType
+
+`CollectionRuleType` is the product field a collection rule reads, in its `rule` field. See [Rule Types](/3.x/collections#rule-types). This is the definition:
+
+```ts
+enum CollectionRuleType {
+  PRODUCT_TITLE = 'product_title',
+  PRODUCT_BRAND = 'product_brand',
+  PRODUCT_CATEGORY = 'product_category',
+  PRODUCT_PRICE = 'product_price',
+  COMPARE_AT_PRICE = 'compare_at_price',
+  INVENTORY_STOCK = 'inventory_stock',
+  PRODUCT_CREATED_AT = 'product_created_at',
+  PRODUCT_FEATURED = 'product_featured',
+  PRODUCT_RATING = 'product_rating',
+  PRODUCT_SALES_COUNT = 'product_sales_count',
+}
+```
+
+### CollectionOperator
+
+`CollectionOperator` is the comparison of a collection rule, in its `operator` field. See [Operators](/3.x/collections#operators). This is the definition:
+
+```ts
+enum CollectionOperator {
+  EQUALS_TO = 'equals_to',
+  NOT_EQUAL_TO = 'not_equal_to',
+  LESS_THAN = 'less_than',
+  GREATER_THAN = 'greater_than',
+  STARTS_WITH = 'starts_with',
+  ENDS_WITH = 'ends_with',
+  CONTAINS = 'contains',
+  NOT_CONTAINS = 'not_contains',
+}
+```
+
+## Attribute
+
+`Attribute` is a product attribute, such as a size or a color, returned by `GET /store/attributes` with its `values` for a filter sidebar. The listing returns the filterable attributes of the `checkbox`, `colorpicker` and `select` types. See [Attributes](/3.x/store-api/catalog#attributes). This is the definition:
+
+```ts
+interface Attribute extends Entity {
+  name: string
+  slug: string
+  type?: FieldType
+  icon?: string | null
+  description?: string | null
+  is_enabled?: boolean
+  is_searchable?: boolean
+  is_filterable?: boolean
+  type_formatted?: string
+  values?: AttributeValue[]
+}
+```
+
+### AttributeValue
+
+`AttributeValue` is one predefined value of an attribute. `key` is the stored value, a hex code for a color, and `value` the label to show; pass either to `filter[option]` of the product listing. `id` and `attribute_id` are set by admin code only. This is the definition:
+
+```ts
+interface AttributeValue {
+  id?: ResourceId
+  value: string | number
+  key: string
+  position: number
+  attribute_id?: ResourceId
+  attribute?: Attribute
+}
+```
+
+### FieldType
+
+`FieldType` is the `type` of an attribute and of a product option. See [Field Types](/3.x/attributes#field-types). This is the definition:
+
+```ts
+enum FieldType {
+  TEXT = 'text',
+  NUMBER = 'number',
+  RICH_TEXT = 'richtext',
+  SELECT = 'select',
+  CHECKBOX = 'checkbox',
+  COLOR_PICKER = 'colorpicker',
+  DATE_PICKER = 'datepicker',
+}
+```
+
+## Channel
+
+`Channel` is a sales channel, such as a web store or a marketplace. The Store API does not return channels: a request picks its channel with the `X-Shopper-Channel` header, as described in [The Store API](/3.x/channels#the-store-api). The type serves code that reads the channels from the application. This is the definition:
+
+```ts
+interface Channel extends Entity {
+  name: string
+  slug: string | null
+  description: string | null
+  timezone: string | null
+  url: string | null
+  is_default: boolean
+  is_enabled: boolean
+  metadata: Metadata
+  products?: Product[]
+}
+```
+
+## Supplier
+
+`Supplier` is a supplier of products, used for dropshipping. The Store API does not return suppliers. See [Suppliers](/3.x/suppliers). This is the definition:
+
+```ts
+interface Supplier extends Entity {
+  name: string
+  slug: string | null
+  email: string | null
+  phone: string | null
+  contact_name: string | null
+  website: string | null
+  description: string | null
+  notes: string | null
+  is_enabled: boolean
+  metadata: Metadata
+}
+```
+
+## Inventory
+
+`Inventory` is a location that holds stock, such as a warehouse or a shop. The Store API does not return locations: products and variants carry their stock as `stock` and `in_stock`. See [Locations](/3.x/locations). This is the definition:
+
+```ts
+interface Inventory extends Entity {
+  name: string
+  code: string
+  email: string
+  city: string
+  state: string | null
+  description: string | null
+  street_address: string | null
+  street_address_plus: string | null
+  postal_code: string
+  phone_number: string | null
+  is_default: boolean
+  priority: number
+  latitude: number
+  longitude: number
+  country_id: ResourceId
+  country?: Country
+  histories?: InventoryHistory[]
+}
+```
+
+### InventoryHistory
+
+`InventoryHistory` is one stock movement of a product or a variant at a location, an entry of the stock ledger. `quantity` is the quantity after the movement and `old_quantity` the quantity before it. `stockable_type` and `stockable_id` name the product or the variant, and `reference_type` and `reference_id` the record that caused the movement. This is the definition:
+
+```ts
+interface InventoryHistory extends Entity {
+  quantity: number
+  old_quantity: number | null
+  event: string | null
+  description: string | null
+  user_id: ResourceId | null
+  inventory_id: ResourceId
+  stockable_id: ResourceId
+  stockable_type: string
+  reference_id?: ResourceId | null
+  reference_type?: string | null
+  adjustment?: string | number
+  inventory?: Inventory
+}
+```

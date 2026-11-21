@@ -1,0 +1,212 @@
+---
+title: Product Types
+description: TypeScript types of products, variants, tags, product options, media, downloadable files and reviews.
+---
+
+The types of this page describe what the product listing and the product page return. The Store API [Catalog](/3.x/store-api/catalog) guide lists every attribute and include, and the SDK [Catalog](/3.x/sdk/catalog) page shows the methods that return them.
+
+## Product
+
+`Product` is a product of the catalog, returned by `GET /store/products` and `GET /store/products/{slug}`, and embedded in categories, brands, collections and tags with `include=products`. The Store API leaves out an attribute that does not apply to the product type or needs an include, so most fields are optional. `prices`, `price_range` and `calculated_price` are in cents. `calculated_price` and `quantity_rule` are set on products without variants; a variant product carries them on each variant. `rating` and `reviews_count` come with `include=rating`, and `options` with `include=options`. [The Product Resource](/3.x/store-api/catalog#the-product-resource) describes each attribute. This is the definition:
+
+```ts
+interface Product extends Entity, SEOFields, ShippingFields {
+  name: string
+  slug: string
+  sku?: string | null
+  barcode: string | null
+  summary: string | null
+  description: string | null
+  security_stock: number | null
+  featured: boolean
+  is_visible: boolean
+  allow_backorder: boolean
+  type: ProductType | null
+  published_at: string | null
+  external_id: string | null
+  stock?: number
+  in_stock?: boolean
+  supplier_id?: ResourceId | null
+  brand_id: ResourceId | null
+  metadata: Metadata
+  supplier?: Supplier
+  brand?: Brand
+  channels?: Channel[]
+  categories?: Category[]
+  options?: ProductOption[]
+  collections?: Collection[]
+  tags?: ProductTag[]
+  variants?: ProductVariant[]
+  relatedProducts?: Product[]
+  images?: Media[] | null
+  thumbnail?: Media | null
+  files?: ProductFile[] | null
+  reviews?: Review[]
+  rating?: number | null
+  reviews_count?: number
+  prices?: Price[]
+  price_range?: PriceRange | null
+  calculated_price?: CalculatedPrice | null
+  quantity_rule?: QuantityRule | null
+}
+```
+
+### ProductType
+
+`ProductType` is the `type` of a product: a `standard` product holds its own price and stock, a `variant` product sells its variants, a `virtual` product skips shipping and can carry downloadable files, and an `external` product comes from a supplier, identified by `external_id`. The Store API refuses to add a `variant` or an `external` product itself to a cart. See [How Products Work](/3.x/products#how-products-work). This is the definition:
+
+```ts
+enum ProductType {
+  EXTERNAL = 'external',
+  VIRTUAL = 'virtual',
+  STANDARD = 'standard',
+  VARIANT = 'variant',
+}
+```
+
+### ProductOption
+
+`ProductOption` is an attribute the merchant set on a product, such as its sizes or its material, with only the values the product uses. Products carry them as `options` with `include=options`, as described in [Options](/3.x/store-api/catalog#options). `custom_value` holds the free text of a `text` option. This is the definition:
+
+```ts
+interface ProductOption {
+  name: string
+  slug: string
+  description: string | null
+  type: FieldType
+  icon: string | null
+  custom_value: string | null
+  values: ProductOptionValue[]
+}
+```
+
+### ProductOptionValue
+
+`ProductOptionValue` is one value of a product option. `key` is the stored value, a hex code for a color, and `value` the label to show; both work in `filter[option]` of the product listing. `swatch_url` is the swatch image set for this product and value. This is the definition:
+
+```ts
+interface ProductOptionValue {
+  value: string
+  key: string
+  position: number
+  swatch_url: string | null
+}
+```
+
+## ProductVariant
+
+`ProductVariant` is one variant of a variant product, such as a size and color combination, returned in `included` with `include=variants`, and as the `purchasable` of a cart line. `stock` and `in_stock` give its availability; `calculated_price` and `quantity_rule` are set on the product page only, so a listing reads the price of a variant from its `prices`. The prices are in cents. This is the definition:
+
+```ts
+interface ProductVariant extends Entity, ShippingFields {
+  name: string
+  sku?: string | null
+  barcode: string | null
+  ean: string | null
+  upc: string | null
+  position: number
+  allow_backorder: boolean
+  product_id: ResourceId
+  stock?: number
+  in_stock?: boolean
+  metadata: Metadata
+  product?: Product
+  values?: VariantOptionValue[]
+  images?: Media[] | null
+  thumbnail?: Media | null
+  prices?: Price[]
+  calculated_price?: CalculatedPrice | null
+  quantity_rule?: QuantityRule | null
+}
+```
+
+### VariantOptionValue
+
+`VariantOptionValue` is one option value a variant is built from, such as Color = Black, in the variant's `values`. The variant picker matches the visitor's choices against these values: `key` is the stored value (a hex code for a color) and `value` the label to show. This is the definition:
+
+```ts
+interface VariantOptionValue {
+  value: string
+  key: string
+  attribute: string
+  attribute_slug: string
+}
+```
+
+## ProductTag
+
+`ProductTag` is a tag of products, returned by `GET /store/tags` and by the `tags` include of a product. See [Tags](/3.x/store-api/catalog#tags). This is the definition:
+
+```ts
+interface ProductTag extends Entity {
+  name: string
+  slug: string | null
+  products?: Product[]
+}
+```
+
+## Media
+
+`Media` is an image, such as the `images` and `thumbnail` of a product, a variant, a category, a brand or a collection, or the `logo` of a carrier. `url` is the original file. `conversions` holds the resized images, keyed by conversion name (`large` and `medium` by default); a conversion added after the upload is missing until the media is regenerated, so fall back to `url`. The [Media](/3.x/media) page covers conversions. This is the definition:
+
+```ts
+interface Media {
+  id: ResourceId
+  url: string
+  conversions?: Record<string, string>
+  name?: string | null
+  extension?: string | null
+  created_at?: string
+  updated_at?: string
+}
+```
+
+## ProductFile
+
+`ProductFile` is a downloadable file of a virtual product, in the `files` of the product and of the order item that bought it. `size` is in bytes. It never carries a URL: the customer who paid for the order requests a temporary link, as described in [Downloading Purchased Files](/3.x/store-api/orders#downloading-purchased-files). This is the definition:
+
+```ts
+interface ProductFile {
+  id: ResourceId
+  name: string
+  extension: string
+  size: number
+}
+```
+
+## Review
+
+`Review` is an approved review of a product, returned by `GET /store/products/{slug}/reviews` and `GET /store/reviews`. `rating` goes from 1 to 5, and `author` is `null` when the account of the reviewer no longer exists. See [Reviews](/3.x/store-api/catalog#reviews). This is the definition:
+
+```ts
+interface Review extends Entity {
+  title: string | null
+  content: string | null
+  rating: number
+  is_recommended: boolean
+  author: ReviewAuthor | null
+}
+```
+
+### ReviewAuthor
+
+`ReviewAuthor` is the reviewer shown next to a review. `name` is the first name and the initial of the last name. `avatar` is the URL of the uploaded avatar, or `null`, in which case the storefront builds its own fallback from `name`. This is the definition:
+
+```ts
+interface ReviewAuthor {
+  name: string | null
+  avatar: string | null
+}
+```
+
+### ReviewAggregates
+
+`ReviewAggregates` is the `meta` of `GET /store/products/{slug}/reviews`, computed over the approved reviews. `average_rating` is rounded to one decimal, or `null` without reviews, and `rating_distribution` counts the reviews of each rating from 1 to 5. See [Reviews of a Product](/3.x/store-api/catalog#reviews-of-a-product). This is the definition:
+
+```ts
+interface ReviewAggregates {
+  reviews_count: number
+  average_rating: number | null
+  rating_distribution: Record<number, number>
+}
+```

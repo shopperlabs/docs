@@ -1,0 +1,71 @@
+---
+title: Tax Types
+description: TypeScript types of tax zones, tax rates, tax rate rules and tax providers.
+---
+
+The types of this page describe the tax configuration the merchant sets up in the admin panel. The Store API exposes no endpoint for tax zones or rates: a storefront reads the taxes of a cart in its `tax_total` and in the [`tax_lines`](/3.x/reference/types/cart#cartlinetaxline) of each line, as [From a Storefront](/3.x/taxes#from-a-storefront) describes. The tax lines of an order are typed [`OrderTaxLine`](/3.x/reference/types/order#ordertaxline).
+
+## TaxZone
+
+`TaxZone` is where a tax configuration applies: a country, and a province or state when `province_code` is set. `is_tax_inclusive` is `true` when the prices of the store already include tax, as with VAT. `display_name` is the translated name of the country, followed by the zone name when the zone has one. `provider_id` assigns a tax provider other than the default one. See [Tax Zones](/3.x/taxes#tax-zones). This is the definition:
+
+```ts
+interface TaxZone extends Entity {
+  name: string | null
+  country_id: ResourceId
+  province_code: string | null
+  is_tax_inclusive: boolean
+  parent_id: ResourceId | null
+  provider_id: ResourceId | null
+  metadata: Metadata
+  display_name: string
+  country?: Country
+  parent?: TaxZone | null
+  children?: TaxZone[]
+  rates?: TaxRate[]
+  provider?: TaxProvider | null
+}
+```
+
+## TaxRate
+
+`TaxRate` is one rate of a tax zone. `rate` is a percentage, `20` for 20%. The rate with `is_default` applies to every item of the zone that no rule targets. `name` is the label stored on the tax lines, such as `TVA 20%`. See [Tax Rates](/3.x/taxes#tax-rates). This is the definition:
+
+```ts
+interface TaxRate extends Entity {
+  name: string
+  code: string | null
+  rate: number
+  is_default: boolean
+  is_combinable: boolean
+  tax_zone_id: ResourceId
+  metadata: Metadata
+  taxZone?: TaxZone
+  rules?: TaxRateRule[]
+}
+```
+
+## TaxRateRule
+
+`TaxRateRule` applies a rate to some items instead of the default rate of the zone. `reference_type` is `product_type`, `product` or `category`, and `reference_id` holds the value to match. See [Tax Rate Rules](/3.x/taxes#tax-rate-rules). This is the definition:
+
+```ts
+interface TaxRateRule extends Entity {
+  reference_type: string
+  reference_id: ResourceId
+  tax_rate_id: ResourceId
+  taxRate?: TaxRate
+}
+```
+
+## TaxProvider
+
+`TaxProvider` assigns a tax calculation provider to tax zones. `identifier` is the unique code of the provider, and a zone whose provider is disabled uses the default provider. See [Tax Providers](/3.x/taxes#tax-providers). This is the definition:
+
+```ts
+interface TaxProvider extends Entity {
+  identifier: string
+  is_enabled: boolean
+  taxZones?: TaxZone[]
+}
+```

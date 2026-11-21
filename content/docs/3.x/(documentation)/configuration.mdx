@@ -28,7 +28,7 @@ Shopper publishes its configuration files to `config/shopper/` during installati
 | `payment.php` | payment | Reconciliation of pending payments |
 | `shipping.php` | shipping | Units, rates cache, shipment tracking sync |
 
-When `shopper/api` is installed, the same command also publishes `api.php` (pagination, token lifetime, filters and includes of each resource) and `http.php` (route prefix, rate limits, zone and channel resolution).
+When `shopper/api` is installed, the same command also publishes `api.php` (pagination, token lifetime, latest reviews limit, the store settings it exposes and their cache lifetime) and `http.php` (route prefix, rate limits, zone and channel resolution).
 
 Payment and carrier drivers publish their own file on demand, with the `shopper-stripe-config`, `shopper-fedex-config`, `shopper-ups-config` or `shopper-usps-config` tag, for example `php artisan vendor:publish --tag=shopper-stripe-config`. The [Payments](/3.x/payments) and [Carriers](/3.x/carriers) pages cover each driver.
 

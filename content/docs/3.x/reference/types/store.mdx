@@ -1,0 +1,158 @@
+---
+title: Store Types
+description: TypeScript types of the store settings, legal pages, countries, zones and currencies.
+---
+
+The types of this page describe the shop itself and the regions it sells to. The Store API [Store and Regions](/3.x/store-api/store) guide describes each endpoint, and the SDK [Store](/3.x/sdk/store) page shows the methods that return these types.
+
+## StoreSettings
+
+`StoreSettings` is the public identity of the shop, returned by `GET /store/settings`. Its `id` is always `"store"`. A value the merchant never filled in is `null`, and `about` is HTML. `default_locale` is the language of the response, picked from `supported_locales` with `Accept-Language`. `currencies` lists the codes of the enabled currencies the shop sells in, for a currency switcher. See [Reading the Store Settings](/3.x/store-api/store#reading-the-store-settings), and [Settings](/3.x/settings#store-api) to expose a setting of your own. This is the definition:
+
+```ts
+interface StoreSettings {
+  id: ResourceId
+  name: string | null
+  legal_name: string | null
+  about: string | null
+  email: string | null
+  phone_number: string | null
+  street_address: string | null
+  city: string | null
+  postal_code: string | null
+  state: string | null
+  country: SettingsCountry | null
+  logo: SettingsMedia | null
+  cover: SettingsMedia | null
+  social_links: SocialLink[]
+  default_currency: string | null
+  currencies: string[]
+  default_locale: string
+  supported_locales: LocaleOption[]
+}
+```
+
+### SettingsCountry
+
+`SettingsCountry` is the `country` of the shop address. `code` is the ISO 3166-1 alpha-2 code and `name` is translated in the language of the response. This is the definition:
+
+```ts
+interface SettingsCountry {
+  code: string
+  name: string
+}
+```
+
+### SettingsMedia
+
+`SettingsMedia` is the `logo` or the `cover` of the shop, with the absolute URL of the image. This is the definition:
+
+```ts
+interface SettingsMedia {
+  url: string
+}
+```
+
+### SocialLink
+
+`SocialLink` is one entry of `social_links`, such as `instagram`, in the order the merchant arranged them. `label` is the name of the platform to display. Links with an unknown platform or an empty URL are left out. This is the definition:
+
+```ts
+interface SocialLink {
+  platform: string
+  url: string
+  label: string
+}
+```
+
+### LocaleOption
+
+`LocaleOption` is one entry of `supported_locales`, for a language switcher: `code` is the locale code, such as `fr`, and `label` the name of the language. This is the definition:
+
+```ts
+interface LocaleOption {
+  code: string
+  label: string
+}
+```
+
+## Legal
+
+`Legal` is a legal page of the shop, returned by `GET /store/legals` and `GET /store/legals/{slug}`. Shopper creates four pages at install, with the slugs `refund`, `privacy`, `terms` and `shipping`, and the API returns the enabled ones only. Its `id` is the database key of the page. `content` is HTML, or `null` while the merchant has not written the page, and `updated_at` is the date to show as "Last updated". See [Legal Pages](/3.x/store-api/store#legal-pages). This is the definition:
+
+```ts
+interface Legal {
+  id: ResourceId
+  title: string
+  slug: string
+  content: string | null
+  updated_at: string
+}
+```
+
+## Country
+
+`Country` is a country of the world, returned by `GET /store/countries` and `GET /store/countries/{code}`, whether or not the shop sells there. `name` is the common English name and `translated_name` the name in the language of the request. `cca2` is the ISO 3166-1 alpha-2 code; the Store API accepts the alpha-3 code in the path but does not return `cca3`. `flag` is the URL of an SVG flag served by your app, and `zones` comes with `include=zones`. See [Countries](/3.x/store-api/store#countries). This is the definition:
+
+```ts
+interface Country {
+  id: ResourceId
+  public_id?: string
+  name: string
+  translated_name?: string
+  name_official?: string
+  region: string
+  subregion: string
+  cca3?: string
+  cca2: string
+  flag?: string
+  latitude?: number
+  longitude?: number
+  phone_calling_code?: Record<string, unknown>
+  currencies?: Record<string, unknown>
+  zones?: Zone[]
+}
+```
+
+## Zone
+
+`Zone` is a region of the shop with its own currency, carriers and payment methods, returned by `GET /store/zones` and `GET /store/zones/{code}`, enabled zones only. `code` is the value a storefront sends in the `X-Shopper-Zone` header to price the catalog and the cart for that zone. `currency_code` is the code of the zone currency. The Store API sends `name`, `slug`, `code`, `currency_code`, `metadata` and the dates, with `currency` and `countries` as includes; the other fields come from the admin panel. See [Zones](/3.x/store-api/store#zones) and [What the Zone Changes](/3.x/zones#what-the-zone-changes). This is the definition:
+
+```ts
+interface Zone extends Entity {
+  name: string
+  slug: string
+  code: string | null
+  is_enabled: boolean
+  currency_id?: ResourceId | null
+  metadata?: Metadata
+  carriers_name?: string
+  countries_name?: string
+  payments_name?: string
+  currency_code?: string
+  currency?: Currency
+  carriers?: Carrier[]
+  shippingOptions?: CarrierOption[]
+  paymentMethods?: PaymentMethod[]
+  countries?: Country[]
+  collections?: Collection[]
+}
+```
+
+## Currency
+
+`Currency` is a currency the shop can price in, returned by `GET /store/currencies` and `GET /store/currencies/{code}`, enabled currencies only. `format` is the display pattern stored with the currency. `exchange_rate` is the rate the merchant entered, and the API never uses it: every price comes from an amount set in that currency. See [Currencies](/3.x/store-api/store#currencies), and [Formatting in JavaScript](/3.x/money#formatting-in-javascript) to format an amount. This is the definition:
+
+```ts
+interface Currency {
+  id: ResourceId
+  public_id?: string
+  name: string
+  code: string
+  symbol: string
+  format: string
+  exchange_rate: number
+  is_enabled: boolean
+  zone?: Zone
+}
+```

@@ -102,7 +102,7 @@ The `order.*` events and `cart.completed` send the order. Amounts are integers i
 | `payment_status` | string | `pending`, `authorized`, `paid`, `partially_refunded`, `refunded` or `voided` |
 | `shipping_status` | string | `unfulfilled`, `partially_shipped`, `shipped`, `partially_delivered`, `delivered`, `partially_returned` or `returned` |
 | `price_amount` | integer | Order total |
-| `tax_amount` | integer | Tax total |
+| `tax_amount` | integer or null | Tax total |
 | `shipping_amount` | integer or null | Shipping cost |
 | `currency_code` | string | ISO 4217 code of the order currency |
 | `email` | string or null | Email of the customer |

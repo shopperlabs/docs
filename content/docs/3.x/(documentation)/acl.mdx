@@ -138,10 +138,10 @@ Every page of the admin panel checks its permission when it loads, and the actio
 |---------|---------------------|
 | Admin panel, every page | Administrator or manager role, or `system.dashboard` |
 | Dashboard widgets | `orders.browse`, `products.browse`, `customers.browse`, as listed on the [Dashboard](/3.x/dashboard#widgets) page |
-| Products | `products.browse` for the list, `products.create` to add a product or import a CSV file, `products.edit` for every tab of the product editor, `products.delete`, `attributes.delete` to remove an attribute from a product |
-| Variants | `products.edit` to open the variant page, `products.variants.create` to add variants, `products.variants.edit` to generate variants and to change a variant, its stock, its media and its prices, `products.variants.delete` |
+| Products | `products.browse` for the list, `products.create` to add a product or import a CSV file, `products.edit` for every tab of the product editor, `products.delete`, `attributes.delete` to remove an attribute from a product, `system.settings` to set the default product type from the add product form |
+| Variants | `products.edit` to open the variant page, `products.variants.create` to add variants, `products.variants.edit` to generate variants and to change a variant, its stock, its media and its prices, `products.variants.delete`. Generating variants also checks `products.variants.create` when it adds variants and `products.variants.delete` when it removes some |
 | Brands, categories, collections, attributes, suppliers, tags | `{resource}.browse` for the list, then `{resource}.create`, `{resource}.edit` and `{resource}.delete` for the matching actions |
-| Reviews | `reviews.browse` for the list, `reviews.edit` to approve or reject a review, `reviews.delete` |
+| Reviews | `reviews.browse` for the list, `reviews.edit` to approve or reject a review, `reviews.delete` to delete a review or mark it as spam |
 | Orders | `orders.browse` for the orders, shipments and abandoned carts lists, `orders.read` for an order or a shipment, `orders.edit` for every action on an order: status changes, notes, shipping labels, shipment events |
 | Customers | `customers.browse` for the list, `customers.read` for a customer, `customers.create`, `customers.delete` to anonymize a customer |
 | Discounts | `discounts.browse` for the list, `discounts.create` to add or duplicate a discount, `discounts.edit`, `discounts.delete` |

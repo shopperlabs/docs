@@ -1,0 +1,99 @@
+---
+title: Checkout Types
+description: TypeScript types of shipping options, payment methods, payment sessions, carriers and carrier options.
+---
+
+The types of this page describe the choices a customer makes at checkout and the payment the storefront collects. The Store API [Checkout](/3.x/store-api/checkout) guide describes each step and error code, and the SDK [Checkout](/3.x/sdk/checkout) page shows the methods that return these types.
+
+## ShippingOption
+
+`ShippingOption` is a delivery choice computed for a cart, returned by `GET /store/carts/{cartId}/shipping-options`. It is not stored: its `id` is `{carrier_code}:{service_code}`, the value the storefront sends to `POST /store/carts/{cartId}/shipping-method`, and the API quotes the option again when it is chosen, so `amount` is for display. `amount` is in cents, in the cart currency. `price_type` is `flat` for a fixed-price option set up for the zone, `calculated` for a live rate from a carrier; `estimated_days` and `estimated_delivery` are `null` for a fixed-price option. See [Shipping Options](/3.x/store-api/checkout#shipping-options). This is the definition:
+
+```ts
+interface ShippingOption {
+  id: ResourceId
+  name: string
+  carrier_name: string
+  carrier_code: string
+  service_code: string
+  amount: number
+  currency: string
+  price_type: 'flat' | 'calculated'
+  estimated_days: string | null
+  estimated_delivery: string | null
+}
+```
+
+## PaymentMethod
+
+`PaymentMethod` is a way to pay offered in the zone of the cart, returned by `GET /store/carts/{cartId}/payment-methods`, and by the `paymentMethod` include of a cart and of an order. `driver` tells the storefront which flow to run: a `manual` method collects offline and shows its `instructions`, any other driver collects online through a payment session. `logo` is the URL of the driver logo, or `null`. See [Payment Methods](/3.x/store-api/checkout#payment-methods). This is the definition:
+
+```ts
+interface PaymentMethod extends Entity {
+  title: string
+  slug: string
+  link_url?: string | null
+  description: string | null
+  instructions?: string | null
+  is_enabled?: boolean
+  driver: string | null
+  metadata?: Metadata
+  logo?: string | null
+  zones?: Zone[]
+}
+```
+
+## PaymentSession
+
+`PaymentSession` is the payment opened at the provider for the total of a cart, returned by `POST /store/carts/{cartId}/payment-session`. It is not stored. `id` is the reference of the provider, such as a Stripe PaymentIntent ID, `status` is the status at the provider, and `amount` is in cents. `client_secret` confirms the payment with the provider's browser SDK, `redirect_url` is the page of a driver that collects on its own page, and `data` holds the extras the driver sends, such as the Stripe publishable key. See [Opening a Payment Session](/3.x/store-api/checkout#opening-a-payment-session). This is the definition:
+
+```ts
+interface PaymentSession {
+  id: ResourceId
+  driver: string
+  status: string
+  amount: number | null
+  currency_code: string
+  client_secret: string | null
+  redirect_url: string | null
+  data: Record<string, unknown>
+}
+```
+
+## Carrier
+
+`Carrier` is a shipping carrier set up in the admin panel, with its options for each zone. The Store API does not return carriers: a storefront reads the [shipping options](#shippingoption) of the cart instead. `shipping_amount` is in cents. See [Carriers](/3.x/carriers). This is the definition:
+
+```ts
+interface Carrier extends Entity {
+  name: string
+  slug: string | null
+  driver: string | null
+  description: string | null
+  link_url: string | null
+  shipping_amount: number | null
+  is_enabled: boolean
+  metadata: Metadata
+  logo?: Media | null
+  options?: CarrierOption[]
+  zones?: Zone[]
+}
+```
+
+### CarrierOption
+
+`CarrierOption` is a fixed-price delivery option of a carrier in one zone. `price` is in cents. The Store API offers it to a cart as a `flat` shipping option. This is the definition:
+
+```ts
+interface CarrierOption extends Entity {
+  name: string
+  description: string | null
+  price: number
+  is_enabled: boolean
+  zone_id: ResourceId
+  carrier_id: ResourceId
+  metadata: Metadata
+  zone?: Zone
+  carrier?: Carrier
+}
+```

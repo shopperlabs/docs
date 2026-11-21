@@ -1,0 +1,182 @@
+---
+title: Promotion Types
+description: TypeScript types of discounts, their linked products and customers, and campaigns.
+---
+
+The types of this page describe the promotions the merchant sets up in the admin panel. The Store API has no endpoint that lists discounts or campaigns: a storefront sees the promotions of a cart in its `promotions`, typed [`AppliedCartPromotion`](/3.x/reference/types/cart#appliedcartpromotion), as the Store API [Cart](/3.x/store-api/cart#promotion-codes) guide describes.
+
+## Discount
+
+`Discount` is a discount code or an automatic promotion. `code` is `null` for an automatic promotion. `value` is a percentage from 1 to 100 when `type` is `percentage`, or an amount in cents when it is `fixed_amount`. `min_required_value` is a string: a minimum subtotal in cents or a minimum quantity, depending on `min_required`. `zone_id` limits the discount to one zone, and `null` applies it in every zone. `end_at` is `null` for a discount that never expires. A cart line references the discount it applied in the `discount` of a [line adjustment](/3.x/reference/types/cart#cartlineadjustment). See [Discounts](/3.x/discounts). This is the definition:
+
+```ts
+interface Discount extends Entity {
+  code: string | null
+  trigger: PromotionSource
+  type: DiscountType
+  value: number
+  apply_to: DiscountApplyTo
+  min_required: DiscountRequirement
+  min_required_value: string | null
+  eligibility: DiscountEligibility
+  usage_limit: number | null
+  total_use: number
+  usage_limit_per_user: boolean
+  is_active: boolean
+  exclusivity_class: ExclusivityClass
+  combinable: boolean
+  priority: number
+  campaign_id: ResourceId | null
+  zone_id: ResourceId | null
+  metadata: Metadata
+  start_at: string
+  end_at: string | null
+  zone?: Zone
+  campaign?: Campaign
+  items?: DiscountDetail[]
+}
+```
+
+### DiscountType
+
+`DiscountType` is the `type` of a discount, which sets what `value` holds. See [Discount Type](/3.x/discounts#discount-type). This is the definition:
+
+```ts
+enum DiscountType {
+  PERCENTAGE = 'percentage',
+  FIXED_AMOUNT = 'fixed_amount',
+}
+```
+
+### DiscountApplyTo
+
+`DiscountApplyTo` is the `apply_to` of a discount: every line of the cart, or the lines of the products linked to it. See [Discount Application](/3.x/discounts#discount-application). This is the definition:
+
+```ts
+enum DiscountApplyTo {
+  ORDER = 'order',
+  PRODUCTS = 'products',
+}
+```
+
+### DiscountEligibility
+
+`DiscountEligibility` is the `eligibility` of a discount: everyone, or the customers linked to it. See [Discount Eligibility](/3.x/discounts#discount-eligibility). This is the definition:
+
+```ts
+enum DiscountEligibility {
+  EVERYONE = 'everyone',
+  CUSTOMERS = 'customers',
+}
+```
+
+### DiscountRequirement
+
+`DiscountRequirement` is the `min_required` of a discount, the minimum a cart must reach for the discount to apply. See [Discount Requirements](/3.x/discounts#discount-requirements). This is the definition:
+
+```ts
+enum DiscountRequirement {
+  NONE = 'none',
+  PRICE = 'price',
+  QUANTITY = 'quantity',
+}
+```
+
+### PromotionSource
+
+`PromotionSource` is the `trigger` of a discount: a code the customer enters, or an automatic promotion. See [Automatic Discounts](/3.x/discounts#automatic-discounts). This is the definition:
+
+```ts
+enum PromotionSource {
+  CODE = 'code',
+  AUTOMATIC = 'automatic',
+}
+```
+
+### ExclusivityClass
+
+`ExclusivityClass` is the `exclusivity_class` of a discount. With `priority` and `combinable`, it decides how the discounts of a cart stack. See [Priority and Combination](/3.x/discounts#priority-and-combination). This is the definition:
+
+```ts
+enum ExclusivityClass {
+  ORDER = 'order',
+  PRODUCT = 'product',
+  SHIPPING = 'shipping',
+}
+```
+
+## DiscountDetail
+
+`DiscountDetail` links a discount to a product it applies to or a customer who can use it, an entry of its `items`. `discountable_type` and `discountable_id` name the linked model, and `condition` says why it is linked. This is the definition:
+
+```ts
+interface DiscountDetail extends Entity {
+  condition: DiscountCondition
+  discountable_type: string
+  discountable_id: ResourceId
+  discount_id: ResourceId
+  total_use: number
+  discount?: Discount
+}
+```
+
+### DiscountCondition
+
+`DiscountCondition` is the `condition` of a discount detail. See [Discount Condition](/3.x/discounts#discount-condition). This is the definition:
+
+```ts
+enum DiscountCondition {
+  APPLY_TO = 'apply_to',
+  ELIGIBILITY = 'eligibility',
+}
+```
+
+## Campaign
+
+`Campaign` groups discounts under one budget, in the currency of `currency_code`. `budget_amount` caps the total discount in cents and `budget_count` caps the number of orders; `null` sets no cap. `spent_amount` (in cents) and `used_count` track what the campaign has given so far. `status` is computed from the other fields. See [Campaigns](/3.x/campaigns). This is the definition:
+
+```ts
+interface Campaign extends Entity {
+  name: string
+  currency_code: string
+  is_active: boolean
+  budget_type: CampaignBudgetType
+  budget_amount: number | null
+  budget_count: number | null
+  spent_amount: number
+  used_count: number
+  status: CampaignStatus
+  starts_at: string
+  ends_at: string | null
+  metadata: Metadata
+  discounts?: Discount[]
+}
+```
+
+### CampaignBudgetType
+
+`CampaignBudgetType` is the `budget_type` of a campaign, which caps it enforces. See [Budgets](/3.x/campaigns#budgets). This is the definition:
+
+```ts
+enum CampaignBudgetType {
+  NONE = 'none',
+  SPEND = 'spend',
+  COUNT = 'count',
+  SPEND_AND_COUNT = 'spend_and_count',
+}
+```
+
+### CampaignStatus
+
+`CampaignStatus` is the `status` of a campaign. See [Campaign Status](/3.x/campaigns#campaign-status). This is the definition:
+
+```ts
+enum CampaignStatus {
+  DRAFT = 'draft',
+  SCHEDULED = 'scheduled',
+  ACTIVE = 'active',
+  DISABLED = 'disabled',
+  EXPIRED = 'expired',
+  BUDGET_EXHAUSTED = 'budget_exhausted',
+}
+```

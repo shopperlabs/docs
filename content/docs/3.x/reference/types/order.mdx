@@ -1,0 +1,317 @@
+---
+title: Order Types
+description: TypeScript types of orders, order items, order addresses, shipments, tracking events, refunds, tax lines and payment transactions.
+---
+
+The types of this page describe an order once the cart is placed. The Store API [Orders](/3.x/store-api/orders) guide describes each attribute and include, and the SDK [Orders](/3.x/sdk/orders) page shows the methods that return them.
+
+## Order
+
+`Order` is a placed order, returned by `POST /store/carts/{cartId}/complete`, `GET /store/orders/{orderId}`, `GET /store/customers/me/orders` and `GET /store/customers/me/orders/{orderId}`. Every amount is in cents. `price_amount` is the amount charged, with shipping and tax; `total` covers the lines after their discounts, without shipping, for a "Subtotal" row. The relations come through `include`: `items`, `shippingAddress`, `billingAddress`, `paymentMethod`, `shippings` and `refund`. `parent_order_id` and `children` link the orders of a split order. See [The Order Resource](/3.x/store-api/orders#the-order-resource). This is the definition:
+
+```ts
+interface Order extends Entity {
+  number: string
+  price_amount: number
+  tax_amount: number | null
+  shipping_amount?: number | null
+  total?: number
+  notes: string | null
+  currency_code: string
+  email?: string | null
+  status: OrderStatus
+  payment_status: PaymentStatus
+  shipping_status: ShippingStatus
+  cancelled_at: string | null
+  archived_at: string | null
+  zone_id: ResourceId | null
+  shipping_address_id: ResourceId | null
+  billing_address_id: ResourceId | null
+  payment_method_id: ResourceId | null
+  customer_id: ResourceId | null
+  channel_id: ResourceId | null
+  parent_order_id: ResourceId | null
+  metadata?: Metadata
+  shipping_option_id?: ResourceId | null
+  shippingOption?: CarrierOption
+  shippingAddress?: OrderAddress | null
+  billingAddress?: OrderAddress | null
+  paymentMethod?: PaymentMethod | null
+  zone?: Zone | null
+  channel?: Channel | null
+  parent?: Order | null
+  customer?: Customer
+  items?: OrderItem[]
+  shippings?: OrderShipping[]
+  children?: Order[]
+  refund?: OrderRefund
+}
+```
+
+### OrderStatus
+
+`OrderStatus` is the `status` of an order, where it stands for the merchant. See [Order Status](/3.x/orders#order-status). This is the definition:
+
+```ts
+enum OrderStatus {
+  NEW = 'new',
+  PROCESSING = 'processing',
+  COMPLETED = 'completed',
+  CANCELLED = 'cancelled',
+  ARCHIVED = 'archived',
+}
+```
+
+### PaymentStatus
+
+`PaymentStatus` is the `payment_status` of an order. See [Payment Status](/3.x/orders#payment-status). This is the definition:
+
+```ts
+enum PaymentStatus {
+  PENDING = 'pending',
+  AUTHORIZED = 'authorized',
+  PAID = 'paid',
+  PARTIALLY_REFUNDED = 'partially_refunded',
+  REFUNDED = 'refunded',
+  VOIDED = 'voided',
+}
+```
+
+### ShippingStatus
+
+`ShippingStatus` is the `shipping_status` of an order, across every package. See [Shipping Status](/3.x/orders#shipping-status). This is the definition:
+
+```ts
+enum ShippingStatus {
+  UNFULFILLED = 'unfulfilled',
+  PARTIALLY_SHIPPED = 'partially_shipped',
+  SHIPPED = 'shipped',
+  PARTIALLY_DELIVERED = 'partially_delivered',
+  DELIVERED = 'delivered',
+  PARTIALLY_RETURNED = 'partially_returned',
+  RETURNED = 'returned',
+}
+```
+
+## OrderItem
+
+`OrderItem` is one line of an order, a copy of the cart line made at checkout, returned with `include=items`. `unit_price_amount`, `tax_amount`, `discount_amount` and `total` are in cents. The Store API sends `name`, `sku`, `quantity`, `unit_price_amount`, `total`, `metadata` and `files`; the other fields are set by server-side code. `files` lists the downloadable files of a virtual product on a paid order read from the customer account. See [Downloading Purchased Files](/3.x/store-api/orders#downloading-purchased-files). This is the definition:
+
+```ts
+interface OrderItem extends Entity {
+  name: string
+  quantity: number
+  unit_price_amount: number
+  tax_amount: number
+  discount_amount: number
+  total: number
+  sku: string | null
+  product_id: ResourceId
+  product_type: string
+  order_id: ResourceId
+  order_shipping_id: ResourceId | null
+  fulfillment_status: FulfillmentStatus | null
+  metadata: Metadata
+  files?: ProductFile[]
+  order?: Order
+  taxLines?: OrderTaxLine[]
+  shipment?: OrderShipping
+}
+```
+
+### FulfillmentStatus
+
+`FulfillmentStatus` is the `fulfillment_status` of an order item. See [Fulfillment Status](/3.x/fulfillment#fulfillment-status). This is the definition:
+
+```ts
+enum FulfillmentStatus {
+  PENDING = 'pending',
+  FORWARDED_TO_SUPPLIER = 'forwarded_to_supplier',
+  PROCESSING = 'processing',
+  SHIPPED = 'shipped',
+  DELIVERED = 'delivered',
+  CANCELLED = 'cancelled',
+}
+```
+
+## OrderAddress
+
+`OrderAddress` is the shipping or the billing address of an order, a copy of the address made at checkout, returned with `include=shippingAddress` and `include=billingAddress`. The country comes as its name, `country_name`. This is the definition:
+
+```ts
+interface OrderAddress extends Entity {
+  first_name: string
+  last_name: string
+  full_name: string
+  street_address: string
+  street_address_plus: string | null
+  postal_code: string
+  city: string
+  state: string | null
+  company: string | null
+  phone: string | null
+  country_name: string | null
+  customer_id?: ResourceId | null
+  customer?: Customer
+}
+```
+
+## OrderShipping
+
+`OrderShipping` is one package of an order, returned with `include=shippings` and by `GET /store/shipments/{shipmentId}`, which a tracking page reads without signing in. See [Tracking a Shipment](/3.x/store-api/orders#tracking-a-shipment). This is the definition:
+
+```ts
+interface OrderShipping extends Entity {
+  status: ShipmentStatus | null
+  carrier_name?: string | null
+  shipped_at: string | null
+  received_at: string | null
+  returned_at: string | null
+  tracking_number: string | null
+  tracking_url: string | null
+  voucher: Record<string, unknown> | null
+  order_id: ResourceId
+  carrier_id: ResourceId | null
+  order?: Order
+  carrier?: Carrier
+  items?: OrderItem[]
+  events?: OrderShippingEvent[]
+  taxLines?: OrderTaxLine[]
+}
+```
+
+### ShipmentStatus
+
+`ShipmentStatus` is the `status` of a package and of each of its tracking events. See [Shipment Status (Package Level)](/3.x/fulfillment#shipment-status-package-level). This is the definition:
+
+```ts
+enum ShipmentStatus {
+  PENDING = 'pending',
+  PICKED_UP = 'picked_up',
+  IN_TRANSIT = 'in_transit',
+  AT_SORTING_CENTER = 'at_sorting_center',
+  OUT_FOR_DELIVERY = 'out_for_delivery',
+  DELIVERED = 'delivered',
+  DELIVERY_FAILED = 'delivery_failed',
+  RETURNED = 'returned',
+}
+```
+
+## OrderShippingEvent
+
+`OrderShippingEvent` is one tracking event a carrier reports for a package, returned with `include=events` on a shipment or `include=shippings.events` on an order, oldest first. `description` and `location` come from the carrier, and `occurred_at` is the time the carrier reported. This is the definition:
+
+```ts
+interface OrderShippingEvent {
+  id?: ResourceId
+  status: ShipmentStatus
+  description: string | null
+  location: string | null
+  latitude?: number | null
+  longitude?: number | null
+  metadata?: Metadata
+  occurred_at: string
+  created_at?: string
+  order_shipping_id?: ResourceId
+  shipment?: OrderShipping
+}
+```
+
+## OrderRefund
+
+`OrderRefund` is the refund of an order, returned with `include=refund`. `amount` is in cents, in the currency of `currency`. See [Order Refunds](/3.x/payments#order-refunds). This is the definition:
+
+```ts
+interface OrderRefund extends Entity {
+  reason: string | null
+  amount: number
+  status: OrderRefundStatus
+  notes: string | null
+  currency: string
+  order_id: ResourceId
+  user_id: ResourceId | null
+  metadata: Metadata
+  order?: Order
+}
+```
+
+### OrderRefundStatus
+
+`OrderRefundStatus` is the `status` of a refund. This is the definition:
+
+```ts
+enum OrderRefundStatus {
+  AWAITING = 'awaiting',
+  PENDING = 'pending',
+  TREATMENT = 'treatment',
+  PARTIAL_REFUND = 'partial_refund',
+  REFUNDED = 'refunded',
+  REJECTED = 'rejected',
+  CANCELLED = 'cancelled',
+}
+```
+
+## OrderTaxLine
+
+`OrderTaxLine` is one tax applied to an order item, copied from its cart line when the order is placed, in the `taxLines` of the item. The Store API does not return the tax lines of an order. `taxable_type` and `taxable_id` name the order item, `rate` is a percentage, `20` for 20%, and `amount` is in cents. See [Persisting Tax Lines on Orders](/3.x/taxes#persisting-tax-lines-on-orders). This is the definition:
+
+```ts
+interface OrderTaxLine extends Entity {
+  taxable_type: string
+  taxable_id: ResourceId
+  code: string
+  name: string
+  rate: number
+  amount: number
+  tax_rate_id: ResourceId | null
+  taxRate?: TaxRate | null
+}
+```
+
+## PaymentTransaction
+
+`PaymentTransaction` is one operation of a payment driver on an order, such as an authorization, a capture or a refund. The Store API does not return transactions. `amount` is in cents. See [Transaction Model](/3.x/payments#transaction-model). This is the definition:
+
+```ts
+interface PaymentTransaction extends Entity {
+  driver: string
+  type: TransactionType
+  status: TransactionStatus
+  amount: number
+  currency_code: string
+  reference: string | null
+  data: Record<string, unknown> | null
+  notes: string | null
+  metadata: Metadata
+  order_id: ResourceId | null
+  payment_method_id: ResourceId | null
+  order?: Order
+  paymentMethod?: PaymentMethod
+}
+```
+
+### TransactionType
+
+`TransactionType` is the `type` of a payment transaction. This is the definition:
+
+```ts
+enum TransactionType {
+  INITIATE = 'initiate',
+  AUTHORIZE = 'authorize',
+  CAPTURE = 'capture',
+  REFUND = 'refund',
+  CANCEL = 'cancel',
+}
+```
+
+### TransactionStatus
+
+`TransactionStatus` is the `status` of a payment transaction. This is the definition:
+
+```ts
+enum TransactionStatus {
+  PENDING = 'pending',
+  SUCCESS = 'success',
+  FAILED = 'failed',
+}
+```

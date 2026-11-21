@@ -1,0 +1,79 @@
+---
+title: Customer Types
+description: TypeScript types of customers and their saved addresses.
+---
+
+The types of this page describe the account of a signed-in customer. The Store API [Customers](/3.x/store-api/customers) guide describes each attribute and error code, and the SDK [Customers](/3.x/sdk/customers) page shows the methods that return them.
+
+## Customer
+
+`Customer` is the profile of a customer, returned by `GET /store/customers/me` and `PATCH /store/customers/me` for the customer the token belongs to. `avatar` is a URL: the uploaded picture when `avatar_type` is `storage`, a generated picture when it is `avatar_ui`. `email_verified` is sent by the Store API. The type declares `birth_date` as a `Date`, but the JSON carries a string, such as `"1992-04-18"`. See [Reading the Profile](/3.x/store-api/customers#reading-the-profile). This is the definition:
+
+```ts
+interface Customer extends Entity {
+  first_name: string | null
+  last_name: string
+  email: string
+  gender: GenderType | null
+  phone_number: string | null
+  birth_date: Date | null
+  email_verified_at: Date | null
+  email_verified?: boolean
+  avatar: string
+  avatar_type: string
+  timezone?: string | null
+  opt_in: boolean
+  last_login_at: string | null
+  last_login_ip?: string | null
+  addresses?: Address[]
+}
+```
+
+### GenderType
+
+`GenderType` is the `gender` of a customer. See [Gender Type](/3.x/customers#gender-type). This is the definition:
+
+```ts
+enum GenderType {
+  MALE = 'male',
+  FEMALE = 'female',
+}
+```
+
+## Address
+
+`Address` is an address the customer saved in their account, returned by `GET /store/customers/me/addresses` and the endpoints that save or update one. `country_code` is the ISO 3166-1 alpha-2 code of the country. A customer has at most one `shipping_default` and one `billing_default` address. See [Addresses](/3.x/store-api/customers#addresses), and [Using a Saved Address at Checkout](/3.x/store-api/customers#using-a-saved-address-at-checkout) to copy one to a cart. This is the definition:
+
+```ts
+interface Address extends Entity {
+  first_name: string | null
+  last_name: string
+  full_name?: string
+  company_name?: string | null
+  street_address: string
+  street_address_plus?: string | null
+  postal_code: string
+  city: string
+  state: string | null
+  phone_number?: string | null
+  type: AddressType
+  metadata?: Metadata
+  shipping_default: boolean
+  billing_default: boolean
+  user_id?: ResourceId
+  country_id?: ResourceId
+  country_code?: string
+  country?: Country
+}
+```
+
+### AddressType
+
+`AddressType` is the `type` of a saved address. See [Address Type](/3.x/customers#address-type). This is the definition:
+
+```ts
+enum AddressType {
+  BILLING = 'billing',
+  SHIPPING = 'shipping',
+}
+```

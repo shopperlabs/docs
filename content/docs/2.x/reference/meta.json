@@ -5,8 +5,8 @@
     "---TypeScript---",
     "typescript-types",
     "types/product",
+    "types/catalog",
     "types/order",
-    "types/customer",
-    "types/catalog"
+    "types/customer"
   ]
 }

@@ -1,0 +1,158 @@
+---
+title: Cart Types
+description: TypeScript types of carts, cart lines, cart addresses, applied promotions, line adjustments and line tax lines.
+---
+
+The types of this page describe the cart a storefront builds before checkout. The Store API [Cart](/3.x/store-api/cart) guide describes each attribute and error code, and the SDK [Cart](/3.x/sdk/cart) page shows the methods that return a cart.
+
+## Cart
+
+`Cart` is a shopping cart, returned by `POST /store/carts`, `GET /store/carts/{cartId}` and every endpoint that changes a cart. Every amount is in cents and computed by the cart pipeline. `total` is the amount to pay: when `tax_inclusive` is `true`, the prices already contain `tax_total`; when it is `false`, `total` adds `tax_total` on top. `shipping_option_id` is the chosen [shipping option](/3.x/reference/types/checkout#shippingoption), `{carrier_code}:{service_code}`. `paymentMethod` comes with `include=paymentMethod`. See [The Cart Resource](/3.x/store-api/cart#the-cart-resource). This is the definition:
+
+```ts
+interface Cart extends Entity {
+  currency_code: string
+  email?: string | null
+  promotions?: AppliedCartPromotion[]
+  completed_at: string | null
+  metadata?: Metadata
+  lines_count?: number
+  lines_quantity?: number
+  subtotal?: number
+  discount_total?: number
+  tax_total?: number
+  shipping_total?: number
+  total?: number
+  tax_inclusive?: boolean
+  shipping_option_id?: ResourceId | null
+  customer_id: ResourceId | null
+  channel_id: ResourceId | null
+  zone_id: ResourceId | null
+  lines?: CartLine[]
+  addresses?: CartAddress[]
+  customer?: Customer | null
+  channel?: Channel | null
+  zone?: Zone | null
+  paymentMethod?: PaymentMethod | null
+}
+```
+
+The SDK methods return the cart with `id` typed as a string. Type a variable that holds one as `Flattened<Cart>`, as shown in the SDK [TypeScript](/3.x/sdk#typescript) section.
+
+### AppliedCartPromotion
+
+`AppliedCartPromotion` is one promotion on a cart, an entry of its `promotions`. `code` is `null` for an automatic promotion. `amount` is what the promotion takes off the cart, in cents. `status` is `suppressed` when another promotion stacks it out or when its campaign budget cannot absorb it. See [Promotion Codes](/3.x/store-api/cart#promotion-codes). This is the definition:
+
+```ts
+interface AppliedCartPromotion {
+  code: string | null
+  source: 'code' | 'automatic'
+  amount: number
+  status: 'applied' | 'suppressed'
+}
+```
+
+## CartLine
+
+`CartLine` is one line of a cart, in its `lines`. `purchasable_type` is `product` or `variant`, and `purchasable` holds the product or the variant with `include=lines.purchasable`. `unit_price_amount` is the unit price frozen when the line was added, `subtotal` is `unit_price_amount` times `quantity`, and every amount is in cents. `is_custom_price` is `true` when the merchant set the price in the admin panel, which locks the price and the quantity of the line. This is the definition:
+
+```ts
+interface CartLine extends Entity {
+  cart_id?: ResourceId
+  purchasable_type?: 'product' | 'variant' | string
+  purchasable_id?: ResourceId
+  quantity: number
+  unit_price_amount: number
+  is_custom_price?: boolean
+  subtotal?: number
+  discount_total?: number
+  tax_total?: number
+  metadata: Metadata
+  cart?: Cart
+  purchasable?: Product | ProductVariant | null
+  adjustments?: CartLineAdjustment[]
+  tax_lines?: CartLineTaxLine[]
+}
+```
+
+### CartLineAdjustment
+
+`CartLineAdjustment` is one discount on a cart line, an entry of its `adjustments`. The Store API sends `amount`, in cents, and `code`; the other fields are set by server-side code. This is the definition:
+
+```ts
+interface CartLineAdjustment {
+  id?: ResourceId
+  cart_line_id?: ResourceId
+  amount: number
+  code: string | null
+  discount_id?: ResourceId | null
+  cart_line?: CartLine
+  discount?: Discount | null
+}
+```
+
+### CartLineTaxLine
+
+`CartLineTaxLine` is one tax on a cart line, an entry of its `tax_lines`. `rate` is a percentage, `20` for 20%, and `amount` is in cents. The Store API sends `code`, `name`, `rate` and `amount`; the other fields are set by server-side code. This is the definition:
+
+```ts
+interface CartLineTaxLine {
+  id?: ResourceId
+  cart_line_id?: ResourceId
+  code: string
+  name: string
+  rate: number
+  amount: number
+  tax_rate_id?: ResourceId | null
+  cart_line?: CartLine
+  tax_rate?: TaxRate | null
+}
+```
+
+### CartPriceChange
+
+`CartPriceChange` is one entry of `meta.price_changes`, returned when a customer takes over a guest cart: `line` is the `id` of the cart line, and `from` and `to` are its unit price before and after the transfer, in cents. See [Transferring a Guest Cart](/3.x/store-api/customers#transferring-a-guest-cart). This is the definition:
+
+```ts
+interface CartPriceChange {
+  line: ResourceId
+  from: number
+  to: number
+}
+```
+
+## CartAddress
+
+`CartAddress` is the shipping or the billing address of a cart, in its `addresses`, set with `POST /store/carts/{cartId}/addresses`. The Store API sends the country as `country_code`, the ISO 3166-1 alpha-2 code. See [Addresses](/3.x/store-api/cart#addresses). This is the definition:
+
+```ts
+interface CartAddress extends Entity {
+  cart_id: ResourceId
+  type: CartAddressType
+  country_id?: ResourceId | null
+  country_code?: string | null
+  first_name: string | null
+  last_name: string
+  company: string | null
+  address_1: string
+  address_2: string | null
+  city: string
+  state: string | null
+  postal_code: string
+  phone: string | null
+  full_name: string
+  cart?: Cart
+  country?: Country | null
+}
+```
+
+### CartAddressType
+
+`CartAddressType` is the `type` of a cart address. This is the definition:
+
+```ts
+enum CartAddressType {
+  BILLING = 'billing',
+  SHIPPING = 'shipping',
+}
+```

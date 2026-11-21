@@ -12,7 +12,7 @@ Each package has one job. The last column tells whether Composer installs the pa
 
 | Package | Role | Installed by |
 |---------|------|--------------|
-| `shopper/framework` | The admin panel: Livewire pages and components, roles and permissions, media on the catalog models, the `shopper:install` and `shopper:user` commands | You |
+| `shopper/framework` | The admin panel: Livewire pages and components, roles and permissions, media on the catalog models, `shopper:install`, `shopper:user` and the other [Artisan commands](/3.x/reference/commands) of the panel | You |
 | `shopper/core` | The e-commerce engine: models and their contracts, migrations, enums, observers, stock, prices, channels, search, outgoing webhooks | `shopper/framework` |
 | `shopper/cart` | Carts and their totals pipeline (lines, automatic promotions, discount codes, taxes), and the creation of an order from a cart | `shopper/framework` |
 | `shopper/payment` | The payment manager and its `manual` driver, payment transactions, payment provider events, reconciliation of pending payments | `shopper/framework` |

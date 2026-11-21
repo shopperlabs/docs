@@ -1013,8 +1013,8 @@ The cart resource has the type `carts` and the public ID of the cart as its `id`
 <Field name="promotions" type="array">
   The promotions on the cart.
 
-<Field name="code" type="string">
-  The promotion code.
+<Field name="code" type="string, null">
+  The promotion code, `null` for an automatic promotion.
 </Field>
 
 <Field name="source" type="string">
@@ -1126,8 +1126,8 @@ A `cart-lines` resource has these attributes:
   Discount amount, in cents.
 </Field>
 
-<Field name="code" type="string">
-  The promotion code.
+<Field name="code" type="string, null">
+  The promotion code, `null` for an automatic promotion.
 </Field>
 
 </Field>
