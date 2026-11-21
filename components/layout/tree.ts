@@ -179,8 +179,9 @@ const equivalents: Record<string, Record<string, string>> = {
 
 /**
  * Same page in another version when it exists there, the page that covers its
- * topic there (`equivalents`, for a page 3.x split out of a 2.x page), that
- * version's landing page otherwise.
+ * topic there (`equivalents`, for a page 3.x split out of a 2.x page), the same
+ * address otherwise, which answers 404: a page the version lacks is not
+ * replaced by another one.
  */
 export function versionHref(target: TreeFolder, current: TreeFolder, pathname: string): string {
   const relative = pathname.slice(versionPath(current).length);
@@ -190,7 +191,7 @@ export function versionHref(target: TreeFolder, current: TreeFolder, pathname: s
   const path = [relative, equivalents[target.$id ?? '']?.[relative]].find(
     (candidate) => candidate !== undefined && urls.has(`${versionPath(target)}${candidate.split('#')[0]}`),
   );
-  return path ? `${versionPath(target)}${path}` : versionHome(target);
+  return `${versionPath(target)}${path ?? relative}`;
 }
 
 /**

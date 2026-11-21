@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { globSync, readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import {
   activeTab,
@@ -109,14 +109,43 @@ test('no version link points at a redirect source, which Next prefetches in a lo
   );
 });
 
+test('no version switch from a page of content/docs lands on a redirect source', () => {
+  const sources = new Set<string>(
+    JSON.parse(readFileSync(new URL('../../redirects.json', import.meta.url), 'utf8')).map(
+      (redirect: { source: string }) => redirect.source,
+    ),
+  );
+  const urls = globSync('**/*.mdx', { cwd: new URL('../../content/docs', import.meta.url) }).map(
+    (file) =>
+      `/${file
+        .replace(/\.mdx$/, '')
+        .split('/')
+        .filter((segment) => !/^\(.+\)$/.test(segment))
+        .join('/')
+        .replace(/\/index$/, '')}`,
+  );
+  const content = [...new Set(urls.map((url) => url.split('/')[1]))].map((id) =>
+    version(id, urls.filter((url) => url.startsWith(`/${id}/`)).map(page)),
+  );
+  const switches = content.flatMap((current) =>
+    current.children.flatMap((node) =>
+      content.map((target) => versionHref(target, current, (node as TreeItem).url).split('#')[0]),
+    ),
+  );
+  assert.deepEqual(
+    switches.filter((link) => sources.has(link)),
+    [],
+  );
+});
+
 test('versionHref keeps the page when the target version has it', () => {
   assert.equal(versionHref(v2, v3, '/3.x/pricing'), '/2.x/pricing');
   assert.equal(versionHref(v3, v2, '/2.x/pricing'), '/3.x/pricing');
 });
 
-test('versionHref falls back to the first page of a version without the page', () => {
-  assert.equal(versionHref(v1, v3, '/3.x/store-api'), '/1.x/contributing');
-  assert.equal(versionHref(v3, v1, '/1.x/contributing'), '/3.x');
+test('versionHref keeps the address in a version without the page, which answers 404', () => {
+  assert.equal(versionHref(v1, v3, '/3.x/store-api'), '/1.x/store-api');
+  assert.equal(versionHref(v3, v1, '/1.x/contributing'), '/3.x/contributing');
 });
 
 test('versionHref sends a page with an equivalent to the page that covers its topic', () => {
@@ -132,8 +161,8 @@ test('versionHref sends a version root to the landing page of the target', () =>
   assert.equal(versionHref(v2, v3, '/3.x'), '/2.x/getting-started');
 });
 
-test('versionHref sends a page with neither a match nor an equivalent to the landing page', () => {
-  assert.equal(versionHref(v2, v3, '/3.x/store-api'), '/2.x/getting-started');
+test('versionHref sends a page with neither a match nor an equivalent to its 404 in the target', () => {
+  assert.equal(versionHref(v2, v3, '/3.x/store-api'), '/2.x/store-api');
 });
 
 test('versionHref reads no equivalent off the prototype for a path that is no page of the version', () => {
