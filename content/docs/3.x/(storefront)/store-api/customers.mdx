@@ -56,6 +56,8 @@ The storefront reads the profile to greet the customer, fill the account form an
 
 </Params>
 
+This request reads the profile of the customer the token belongs to:
+
 ```bash title="Request"
 curl http://localhost:8000/store/customers/me \
   -H "Accept: application/vnd.api+json" \
@@ -354,6 +356,8 @@ The list returns every address of the customer, newest first, in one response. I
 
 </Params>
 
+This request lists the addresses of the customer:
+
 ```bash title="Request"
 curl http://localhost:8000/store/customers/me/addresses \
   -H "Accept: application/vnd.api+json" \
@@ -475,6 +479,8 @@ The storefront saves an address from the account area, or after a checkout when 
 </Field>
 
 </Params>
+
+This request saves an address in Paris and makes it the default shipping address of the customer:
 
 ```bash title="Request"
 curl -X POST http://localhost:8000/store/customers/me/addresses \
@@ -694,6 +700,8 @@ The login and registration requests accept the guest cart ID as `cart_id` and ru
 </Field>
 
 </Params>
+
+This request attaches a guest cart to the customer the token belongs to:
 
 ```bash title="Request"
 curl -X POST http://localhost:8000/store/carts/01JZ9A1B2C3D4E5F6G7H8J9K0M/transfer \

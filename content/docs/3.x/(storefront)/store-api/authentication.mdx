@@ -189,6 +189,8 @@ Login checks an email and a password and issues a new token. Like registration, 
 
 </Params>
 
+This request logs Camille Martin in, and brings her guest cart into her account with `cart_id`:
+
 ```bash title="Request"
 curl -X POST "http://localhost:8000/store/auth/login" \
   -H "Accept: application/vnd.api+json" \

@@ -1,0 +1,181 @@
+---
+title: Cart
+description: Create a cart with the JavaScript SDK, add and change lines, set addresses, apply promotion codes and transfer a guest cart to a customer.
+---
+
+The cart holds what the visitor is about to buy, priced for their zone and currency, with the totals the basket page shows. The storefront creates it at the first "Add to cart", keeps its ID, and passes that ID to every cart method. The [Cart](/3.x/store-api/cart) guide of the Store API describes the cart resource, its totals and every error code.
+
+Every cart method that returns a cart includes its lines by default. Pass `include` to ask for more, or `include: []` for the cart without its lines.
+
+## Creating a Cart
+
+`cart.create()` creates an empty cart in the zone of the client, or in the default zone when the client sends no `X-Shopper-Zone` header. It takes an optional currency, email and metadata. Here, the first "Add to cart" creates a cart in euros and keeps its ID in the browser:
+
+```ts
+import { sdk } from '@/lib/shopper'
+
+const cart = await sdk.store.cart.create({ currency_code: 'EUR' })
+
+localStorage.setItem('shopper_cart', cart.id)
+```
+
+A cart created with the customer token belongs to that customer, and one created without it is a guest cart. The ID of a guest cart works like a session token: anyone who has it can read and change the cart. Keep it where the session lives, such as a cookie or the storage of the app, and out of URLs, as [Guest and Customer Carts](/3.x/store-api/cart#guest-and-customer-carts) explains.
+
+## Reading a Cart
+
+`cart.retrieve()` returns the cart with its lines and totals, for the basket page or the mini cart. Include the purchasable of each line to show its name and image. This basket page reads the cart, its number of items, its total and each line:
+
+```ts
+const cart = await sdk.store.cart.retrieve(cartId, {
+  include: ['lines', 'lines.purchasable', 'lines.purchasable.product'],
+})
+
+cart.lines_quantity // 3
+cart.total // 18900, in cents
+
+for (const line of cart.lines ?? []) {
+  line.quantity // 1
+  line.unit_price_amount // 9000
+  line.purchasable?.name // the name of the product or the variant
+}
+```
+
+A header badge only needs the counts, so it asks for the cart without its lines. This call reads the number of items to show on the cart icon:
+
+```ts
+const { lines_quantity } = await sdk.store.cart.retrieve(cartId, { include: [] })
+```
+
+The includes of a cart are `lines`, `lines.purchasable`, `lines.purchasable.product`, `addresses` and `paymentMethod`. A stored ID that answers `404` belongs to a cart deleted after 30 days without activity: create a new cart. A customer cart also answers `404` once the token expires, as [When the Token Expires](/3.x/sdk/authentication#when-the-token-expires) explains: log the customer in again instead.
+
+## Adding a Line
+
+`cart.createLineItem()` adds a product or a variant to the cart. Send the type and the ID of what the visitor picked; the API prices it in the currency of the cart and checks the stock. Here, the product page adds one unit of the variant the visitor picked:
+
+```ts
+const cart = await sdk.store.cart.createLineItem(cartId, {
+  purchasable_type: 'variant',
+  purchasable_id: variant.id,
+  quantity: 1,
+})
+```
+
+A product with variants is sold through them: adding it with `purchasable_type: 'product'` throws a `ShopperApiError` with the `variant_required` code. Adding the same variant again adds to the quantity of its line. `metadata` carries data of the line, such as an engraving. This call adds a product without variants with the initials to engrave:
+
+```ts
+await sdk.store.cart.createLineItem(cartId, {
+  purchasable_type: 'product',
+  purchasable_id: product.id,
+  metadata: { engraving: 'A.N.' },
+})
+```
+
+The stock and quantity checks throw `stock_insufficient` or `quantity_rule_violated`, with the rule in `meta`. [Errors With Meta](/3.x/sdk/errors#errors-with-meta) shows how to correct the quantity selector, and [Stock and Quantity Rules](/3.x/store-api/cart#stock-and-quantity-rules) lists the cases.
+
+## Updating and Removing Lines
+
+The quantity selector of the basket page calls `cart.updateLineItem()` with the `id` of the line. The quantity goes from 1 to 1,000,000; removing a line has its own method. The first call sets the quantity of a line to 2, and the second removes the line:
+
+```ts
+await sdk.store.cart.updateLineItem(cartId, line.id, { quantity: 2 })
+
+await sdk.store.cart.deleteLineItem(cartId, line.id)
+```
+
+Both return the cart with its new totals, so the basket page renders the response without reading the cart again.
+
+## Addresses
+
+`cart.setAddresses()` sets the shipping address, the billing address, or both, and the contact email at the same time. Taxes, live carrier rates and the order addresses come from the shipping address, so the cart needs it before checkout. Here, the checkout form sends one address for shipping and billing, with the email of the customer:
+
+```ts
+const address = {
+  first_name: 'Amara',
+  last_name: 'Ndiaye',
+  address_1: '12 Rue de Rivoli',
+  city: 'Paris',
+  postal_code: '75004',
+  phone: '+33612345678',
+  country_code: 'FR',
+}
+
+const cart = await sdk.store.cart.setAddresses(cartId, {
+  shipping_address: address,
+  billing_address: address,
+  email: 'amara@example.com',
+}, { include: ['lines', 'addresses'] })
+```
+
+Sending an address type again replaces it. A logged-in customer picks a saved address instead: [Using a Saved Address](/3.x/sdk/customers#using-a-saved-address) copies its fields into the cart address.
+
+## Promotion Codes
+
+`cart.applyPromotion()` applies a code the customer typed. A code that does not exist or does not apply to the cart throws `promotion_not_applicable`, and the cart stays as it was. This call applies the code `WELCOME10` and reads the discount it gives:
+
+```ts
+const cart = await sdk.store.cart.applyPromotion(cartId, 'WELCOME10')
+
+cart.promotions // [{ code: 'WELCOME10', source: 'code', amount: 1890, status: 'applied' }]
+cart.discount_total // 1890
+```
+
+`cart.removePromotion()` removes every code of the cart. Automatic promotions stay. The "Remove" link of the promotion field calls it:
+
+```ts
+await sdk.store.cart.removePromotion(cartId)
+```
+
+A cart with several codes removes one of them by sending the code in the body. `removePromotion()` sends no body, so call the route with `store.fetch()`. This call removes `WELCOME10` and keeps the other codes:
+
+```ts
+import type { Cart } from '@shopperlabs/shopper-sdk'
+
+const { data } = await sdk.store.fetch<Cart>(`/carts/${cartId}/promotion`, {
+  method: 'DELETE',
+  body: { code: 'WELCOME10' },
+  include: ['lines'],
+})
+
+const cart = data as Cart
+```
+
+[Promotion Codes](/3.x/store-api/cart#promotion-codes) describes the checks a code goes through.
+
+## Changing the Currency or the Zone
+
+`cart.update()` changes the currency of a currency switcher, the zone of a country picker, the email or the metadata of the cart. Send only the fields that change. Here, a visitor who picks the United States moves the cart to the `US` zone and to dollars:
+
+```ts
+const cart = await sdk.store.cart.update(cartId, { zone_code: 'US', currency_code: 'USD' })
+```
+
+The lines are priced again. A new zone removes the shipping method and the payment method, and a new currency removes the shipping method, as [Updating the Cart](/3.x/store-api/cart#updating-the-cart) details. Send the new zone to the catalog calls too, so the product pages and the cart show the same prices.
+
+## Transferring a Guest Cart
+
+Logging in or registering with `cart_id` already attaches the guest cart to the customer, as [Authentication](/3.x/sdk/authentication#logging-in) shows. `cart.transfer()` does the same for a customer who is already logged in when a guest cart appears, such as a cart started in another tab. This call moves the guest cart to the customer, keeps the ID of the returned cart and reads the prices that changed:
+
+```ts
+const { cart, price_changes } = await sdk.store.cart.transfer(guestCartId)
+
+localStorage.setItem('shopper_cart', cart.id)
+
+for (const change of price_changes) {
+  change.line // the line ID
+  change.from // 9000
+  change.to // 8500
+}
+```
+
+When the customer already has an open cart, the guest lines move into it and the guest cart is deleted, so keep the ID of the returned cart. `price_changes` lists the lines whose unit price changed, to tell the customer before checkout. [Transferring a Guest Cart](/3.x/store-api/customers#transferring-a-guest-cart) lists every case.
+
+## Next Steps
+
+<Cards>
+  <Card title="Checkout" href="/3.x/sdk/checkout">
+    Choose the shipping option and the payment method, then place the order.
+  </Card>
+  <Card title="The Cart Resource" href="/3.x/store-api/cart#the-cart-resource">
+    Every attribute of the cart, its lines and its addresses.
+  </Card>
+</Cards>

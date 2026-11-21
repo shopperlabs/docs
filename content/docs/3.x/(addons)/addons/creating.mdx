@@ -31,6 +31,8 @@ git remote add origin git@github.com:acme/loyalty.git
 Clone it rather than downloading the ZIP archive from GitHub: the archive leaves out `configure.php`, the tests and the workflows.
 </Step>
 <Step title="Run the configuration script">
+The script asks for the author, the vendor and the package name, then renames the files and namespaces of the skeleton after the add-on:
+
 ```bash
 php ./configure.php
 ```

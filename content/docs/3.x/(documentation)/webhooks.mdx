@@ -484,6 +484,8 @@ class OrderPaidPayload implements WebhookPayloadSerializer
 }
 ```
 
+This `boot` method gives the `order.paid` webhook that serializer:
+
 ```php title="app/Providers/AppServiceProvider.php"
 use App\Webhooks\OrderPaidPayload;
 use Shopper\Core\Events\Orders\OrderPaid;

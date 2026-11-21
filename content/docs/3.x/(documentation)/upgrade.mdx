@@ -135,6 +135,8 @@ $user->can('add_products'); // [!code --]
 $user->can('products.create'); // [!code ++]
 ```
 
+In Blade, the `@can` directives change the same way:
+
 ```blade
 @can('edit_products') <!-- [!code --] -->
 @can('products.edit') <!-- [!code ++] -->
@@ -620,7 +622,7 @@ The upgrade's Rector step removes the unused `use` statements of every file it s
 
 *Affects storefronts that import `@shopperlabs/shopper-types`, such as the 2.x Inertia starter kits.*
 
-The package moves from 1.0 to 3.0. `Entity.id` is a `ResourceId`, `string | number`, where 1.0 typed it as a number, and the `DateEntity` type is removed: dates are ISO 8601 strings.
+The package moves from 1.0 to 3.0. Every `id` is a `ResourceId`, `string | number`, so the types fit models with integer keys and models with UUIDs. 1.0 typed the `id` of `Entity`, `Currency` and `Country` as a number: code that passes one of these ids where a `number` is expected now converts it, with `Number(country.id)` for instance. The `DateEntity` type is removed: dates are ISO 8601 strings.
 
 ## Coming From a Release Before 2.7
 

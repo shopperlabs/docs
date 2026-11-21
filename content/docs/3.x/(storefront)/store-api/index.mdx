@@ -44,7 +44,7 @@ class User extends Authenticatable implements ShopperUser
 
 The routes register themselves when the package boots, so there is nothing to add to your route files. The package also schedules `sanctum:prune-expired --hours=24` once a day to delete expired customer tokens, which only runs when the [scheduler runs](/3.x/installation#run-the-scheduler-and-a-queue-worker).
 
-The installer ends with a few next steps, among them the install command of the JavaScript SDK, `@shopperlabs/shopper-sdk`. The guides of this section use plain HTTP requests, so they apply to any client.
+The installer ends with a few next steps, among them the install command of the [JavaScript SDK](/3.x/sdk), `@shopperlabs/shopper-sdk`. The guides of this section use plain HTTP requests, so they apply to any client.
 
 ## Base URL
 

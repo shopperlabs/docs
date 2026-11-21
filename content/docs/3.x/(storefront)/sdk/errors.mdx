@@ -1,0 +1,150 @@
+---
+title: Errors
+description: Catch ShopperApiError in the JavaScript SDK, show validation messages next to their fields and react to the error codes of the Store API.
+---
+
+Every SDK method throws a `ShopperApiError` when the API answers with a status outside the 2xx range. The error carries the HTTP status and the error objects of the response, so a storefront can show a message next to a form field, correct a quantity, or ask the customer to log in again. The [Errors](/3.x/store-api/errors) guide of the Store API describes the error object and lists every code.
+
+## Catching an Error
+
+`ShopperApiError` is exported by the SDK. Check for it with `instanceof`, then read the status and the code of the first error. Here, a promotion code that does not apply shows the message of the API, and any other error goes up:
+
+```ts
+import { ShopperApiError } from '@shopperlabs/shopper-sdk'
+import { sdk } from '@/lib/shopper'
+
+try {
+  await sdk.store.cart.applyPromotion(cartId, 'WELCOME10')
+} catch (error) {
+  if (error instanceof ShopperApiError && error.code === 'promotion_not_applicable') {
+    showMessage(error.message)
+  } else {
+    throw error
+  }
+}
+```
+
+The error has these members:
+
+<Attributes title="ShopperApiError">
+
+<Field name="status" type="number">
+  The HTTP status of the response, such as `422`.
+</Field>
+
+<Field name="errors" type="JsonApiError[]">
+  The error objects of the response, each with `status`, `code`, `title`, `detail`, `source` and `meta` when the API sets them, as [Error Object](/3.x/store-api/errors#error-object) describes.
+</Field>
+
+<Field name="message" type="string">
+  The `detail` of the first error, or its `title`, or `Request failed with status 500` when the response has no error object.
+</Field>
+
+<Field name="code" type="string | undefined">
+  The `code` of the first error.
+</Field>
+
+<Field name="codeFor(field)" type="string | undefined">
+  The `code` of the first error whose pointer names this field, such as `codeFor('email')`.
+</Field>
+
+<Field name="fields()" type="Record<string, string[]>">
+  The `detail` of each error, grouped by the field its pointer names. Errors without a pointer are left out.
+</Field>
+
+</Attributes>
+
+A response whose body is not JSON, such as an HTML error page from a proxy, gives a `ShopperApiError` with an empty `errors` array. A request that never reaches the API, because the network is down or the request is aborted, throws the error of `fetch` itself, such as a `TypeError` or an `AbortError`, never a `ShopperApiError`.
+
+## Validation Errors
+
+A request whose fields fail validation throws a `ShopperApiError` with status `422` and one error per message. `fields()` groups the messages by field, ready for a form: it removes the `/data/attributes/` prefix of the pointer and joins nested paths with dots, as [Reading the Pointer](/3.x/store-api/errors#reading-the-pointer) describes. This function sends the sign-up form and returns the messages of each field when the API refuses it:
+
+```ts title="app/register/form.ts"
+import { ShopperApiError } from '@shopperlabs/shopper-sdk'
+import { sdk } from '@/lib/shopper'
+
+export async function register(values: { last_name: string; email: string; password: string }) {
+  try {
+    await sdk.auth.register(values)
+
+    return { errors: {} }
+  } catch (error) {
+    if (error instanceof ShopperApiError && error.status === 422) {
+      return { errors: error.fields() }
+    }
+
+    throw error
+  }
+}
+```
+
+An email already in use gives `{ email: ['The email has already been taken.'] }`. Show the first message of each field under its input. `codeFor()` tells two errors on the same field apart, to word the message yourself or to offer an action. Here, an email already in use shows a link to the login page:
+
+```ts
+if (error.codeFor('email') === 'unique') {
+  showLoginLink()
+}
+```
+
+The checkout calls, `cart.createPaymentSession()` and `cart.complete()`, take no field: their pointer names the part of the cart that blocks the checkout, such as `shipping_method` or `payment_method`. `fields()` groups them under those names. Show them at the top of the checkout page.
+
+## Errors With Meta
+
+Some errors carry a `meta` object with the values that fix the request. A quantity that breaks the quantity rule of a price throws `quantity_rule_violated`, with the minimum, the maximum and the increment of the rule. This code sets the quantity selector back to a quantity the rule accepts:
+
+```ts
+try {
+  await sdk.store.cart.updateLineItem(cartId, lineId, { quantity: 3 })
+} catch (error) {
+  if (error instanceof ShopperApiError && error.code === 'quantity_rule_violated') {
+    const { minimum, increment } = error.errors[0].meta as { minimum: number | null; increment: number | null }
+
+    setQuantity(Math.max(minimum ?? 1, increment ?? 1))
+  } else {
+    throw error
+  }
+}
+```
+
+[Errors With Meta](/3.x/store-api/errors#errors-with-meta) lists the values of `meta`.
+
+## Rate Limits
+
+A client past a rate limit gets status `429` and the `rate_limited` code. The API sends the seconds to wait in the `Retry-After` header, as [Rate Limit Errors](/3.x/store-api/errors#rate-limit-errors) describes. `ShopperApiError` does not carry the response headers, so wrap `fetch` to read it. This client keeps the seconds to wait in `retryAfter` each time the API answers `429`:
+
+```ts title="lib/shopper.ts"
+import Shopper from '@shopperlabs/shopper-sdk'
+
+export let retryAfter = 0
+
+export const sdk = new Shopper({
+  baseUrl: import.meta.env.VITE_SHOPPER_URL,
+  fetch: async (input, init) => {
+    const response = await fetch(input, init)
+
+    if (response.status === 429) {
+      retryAfter = Number(response.headers.get('Retry-After'))
+    }
+
+    return response
+  },
+})
+```
+
+A login refused after five failures also answers `429`, and its `message` already gives the wait, such as `Too many login attempts. Please try again in 59 seconds.`.
+
+## Expired Tokens
+
+A `401` on a request that carried the customer token means the token expired or was revoked. The client clears the token and calls the `onUnauthorized` callback before it throws, as [When the Token Expires](/3.x/sdk/authentication#when-the-token-expires) describes, so the `catch` blocks of your pages do not each handle it.
+
+## Next Steps
+
+<Cards>
+  <Card title="Error Codes" href="/3.x/store-api/errors#error-codes">
+    Every code of the Store API, grouped by area, with the status that carries it.
+  </Card>
+  <Card title="Cart" href="/3.x/sdk/cart">
+    Add products to a cart and handle stock and quantity errors.
+  </Card>
+</Cards>

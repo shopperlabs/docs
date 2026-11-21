@@ -465,6 +465,8 @@ final class OriginChannelResolver implements ChannelResolver
 }
 ```
 
+This entry of `config/shopper/http.php` makes the Store API use the resolver:
+
 ```php title="config/shopper/http.php"
 'channel' => [
     'resolver' => App\Http\OriginChannelResolver::class,

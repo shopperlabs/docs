@@ -1,0 +1,115 @@
+---
+title: Custom Endpoints
+description: Call your own Store API routes, the routes of an add-on and the options the SDK does not wrap with store.fetch(), buildQuery() and flatten().
+---
+
+The SDK wraps the routes Shopper ships. An app adds its own, such as a store locator or a wishlist, with the `ShopperApi` facade described in [Adding Your Own Routes](/3.x/store-api#adding-your-own-routes). `store.fetch()` calls any of them with what the built-in methods send: the customer token, the zone and channel headers and the language, and it throws the same `ShopperApiError`.
+
+## Calling a Route
+
+`store.fetch()` takes a path relative to the Store API prefix, `/store` by default or the [`storePrefix`](/3.x/sdk#configuration) of the client. It sends a `GET` by default and returns the `data`, `meta` and `links` of the response. This call reads the store locations of your app, sorted by name, and sends the position of the visitor in the `near` parameter:
+
+```ts
+import { sdk } from '@/lib/shopper'
+
+type StoreLocation = {
+  id: string
+  name: string
+  city: string
+}
+
+const { data } = await sdk.store.fetch<StoreLocation>('/store-locations', {
+  sort: ['name'],
+  query: { near: '48.8566,2.3522' },
+})
+
+const locations = data as StoreLocation[]
+```
+
+The options are the ones of the built-in methods, `include`, `filter`, `sort`, `page` and `fields`, plus `query` for any other parameter, sent as it is. `data` is typed `T | T[] | null` because the SDK cannot know whether the route returns one resource, a list or nothing, so narrow it as above. A third argument, `init`, goes to `fetch` for an `AbortSignal` or the caching options of Next.js, as [Request Options](/3.x/sdk#request-options) shows.
+
+## Sending a Body
+
+`method` and `body` call the routes that write. A plain object goes as JSON, and a `FormData` goes as `multipart/form-data` for a route that takes a file. This call adds a product to the wishlist of the customer:
+
+```ts
+await sdk.store.fetch('/customers/me/wishlist', {
+  method: 'POST',
+  body: { product_id: product.id },
+})
+```
+
+A route of the authenticated group throws status `401` without a valid token. When the client sent a token that expired, `onUnauthorized` runs first, as on the account methods. A response without a body, such as `204 No Content`, returns `data: null`.
+
+The same call reaches the options of a built-in route that its method does not send, such as the `code` that removes one promotion code from a cart, as [Promotion Codes](/3.x/sdk/cart#promotion-codes) shows.
+
+## Returning JSON:API From Your Routes
+
+`store.fetch()` reads the response as a JSON:API document: each resource becomes one object with its `id` and its `attributes`, and the relationships listed in `included` are nested in it. A route that returns plain JSON, such as `{"data": [{"id": 1, "name": "Paris Marais"}]}`, comes back with the `id` alone. Return a JSON:API resource from your controller instead, with Laravel's `JsonApiResource`, the class the Shopper resources extend. This resource gives each store location the `store-locations` type, and sends its name and its city as attributes:
+
+```php title="app/Http/Resources/StoreLocationResource.php"
+namespace App\Http\Resources;
+
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\JsonApi\JsonApiResource;
+
+class StoreLocationResource extends JsonApiResource
+{
+    public function toType(Request $request): string
+    {
+        return 'store-locations';
+    }
+
+    public function toAttributes(Request $request): array
+    {
+        return [
+            'name' => $this->name,
+            'city' => $this->city,
+        ];
+    }
+}
+```
+
+The controller returns the resource, or its collection for a list. This one returns every store location, sorted by name:
+
+```php title="app/Http/Controllers/Store/StoreLocatorController.php"
+namespace App\Http\Controllers\Store;
+
+use App\Http\Resources\StoreLocationResource;
+use App\Models\StoreLocation;
+
+class StoreLocatorController
+{
+    public function __invoke()
+    {
+        return StoreLocationResource::collection(StoreLocation::query()->orderBy('name')->get());
+    }
+}
+```
+
+## Building Requests Yourself
+
+The SDK exports the two functions its methods use, for the requests that do not go through the client, such as a server route that caches a document or a worker that reads one from a key-value store. `buildQuery()` turns the options of a call into a query string, and `flatten()` turns a JSON:API document into objects. This code builds the query of a product listing, sends it with `fetch`, and turns the response into products:
+
+```ts
+import { buildQuery, flatten, type Product } from '@shopperlabs/shopper-sdk'
+
+const query = buildQuery({ include: ['brand'], filter: { category_tree: 'men' } })
+// '?include=brand&filter%5Bcategory_tree%5D=men'
+
+const response = await fetch(`https://shop.example.com/store/products${query}`)
+const products = flatten<Product>(await response.json()) as Product[]
+```
+
+A request sent this way carries none of the headers of the client: add the token, `X-Shopper-Zone` and `X-Shopper-Channel` yourself when the route needs them.
+
+## Next Steps
+
+<Cards>
+  <Card title="Store API" href="/3.x/store-api">
+    The route groups, the headers and the rate limits your routes share with the built-in ones.
+  </Card>
+  <Card title="Errors" href="/3.x/sdk/errors">
+    Catch the errors of a call and show the validation messages of a form.
+  </Card>
+</Cards>

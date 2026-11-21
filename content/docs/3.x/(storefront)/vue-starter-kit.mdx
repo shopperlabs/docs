@@ -427,7 +427,7 @@ To add a payment provider, implement it with Shopper's [payment system](/3.x/pay
 
 ### Adding Pages
 
-A new page takes a controller, a named route in `routes/web.php`, and a Vue component under `resources/js/pages/`. Name the page under `shop/` so it renders with the storefront header and footer.
+A new page takes a controller, a named route in `routes/web.php`, and a Vue component under `resources/js/pages/`. Name the page under `shop/` so it renders with the storefront header and footer. This controller renders the `shop/about` page:
 
 ```php title="app/Http/Controllers/AboutController.php"
 namespace App\Http\Controllers;
@@ -444,11 +444,15 @@ final class AboutController extends Controller
 }
 ```
 
+This route serves the page at `/about`, under the name `about`:
+
 ```php title="routes/web.php"
 use App\Http\Controllers\AboutController;
 
 Route::get('about', AboutController::class)->name('about');
 ```
+
+This component renders the title of the page inside the `Container` of the storefront:
 
 ```vue title="resources/js/pages/shop/about.vue"
 <script setup lang="ts">

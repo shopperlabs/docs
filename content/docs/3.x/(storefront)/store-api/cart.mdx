@@ -462,6 +462,8 @@ The quantity selector of the basket page changes a line through its ID, the `id`
 
 </Params>
 
+This request brings the line of sneakers from two pairs down to one:
+
 ```bash title="Request"
 curl -X PATCH http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/lines/01JD8Z7C1E3G5J7K9N1Q3S5V7W \
   -H "Accept: application/vnd.api+json" \
@@ -666,6 +668,8 @@ Each address object takes the same fields, listed under each one:
 
 </Params>
 
+This request sets a shipping address in Paris, and asks for the addresses back with `include=addresses`:
+
 ```bash title="Request"
 curl -X POST "http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/addresses?include=addresses" \
   -H "Accept: application/vnd.api+json" \
@@ -781,6 +785,8 @@ A promotion code entered by the customer is checked against the whole cart befor
 </Field>
 
 </Params>
+
+This request applies the code `WELCOME10` to the cart:
 
 ```bash title="Request"
 curl -X POST http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/promotion \
@@ -953,6 +959,8 @@ The cart itself has four fields a storefront changes after creating it: the curr
 </Field>
 
 </Params>
+
+This request switches the cart to US dollars:
 
 ```bash title="Request"
 curl -X PATCH http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C \

@@ -54,6 +54,8 @@ A label with a text.
   <PreviewLabel value="Supplier" />
 </ComponentPreview>
 
+This Blade sets the text with `value` and ties the label to the `supplier` field with `for`, so a click on the label focuses the field:
+
 ```blade
 <x-shopper::label for="supplier" value="Supplier" />
 ```
@@ -65,6 +67,8 @@ Set `isRequired` to add the asterisk.
 <ComponentPreview>
   <PreviewLabel value="Email" isRequired={true} />
 </ComponentPreview>
+
+This Blade sets `isRequired` on the label of the email field:
 
 ```blade
 <x-shopper::label for="email" value="Email" :isRequired="true" />

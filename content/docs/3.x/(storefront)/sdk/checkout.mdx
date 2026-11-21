@@ -1,0 +1,192 @@
+---
+title: Checkout
+description: Choose the shipping option and the payment method of a cart, pay with Stripe and place the order with the JavaScript SDK.
+---
+
+Checkout turns a cart into an order. The storefront shows the shipping options and payment methods the API offers for the cart, opens a payment at the provider for the amount the API computes, lets the customer pay, then completes the cart. The browser never sends an amount. The [Checkout](/3.x/store-api/checkout) guide of the Store API describes each step, the error codes and the payment webhooks.
+
+The checkout starts with a cart that holds lines, an email and a shipping address, set as [Cart](/3.x/sdk/cart#addresses) shows. It goes through four steps:
+
+<Steps>
+<Step title="Set the shipping method">
+List the shipping options of the cart and send back the one the customer picks.
+</Step>
+<Step title="Set the payment method">
+List the payment methods of the cart and send back the one the customer picks.
+</Step>
+<Step title="Open a payment session">
+Open the payment at the provider, then let the customer confirm it with the provider's browser SDK, such as Stripe.js.
+</Step>
+<Step title="Complete the cart">
+Place the order once the provider has confirmed the payment.
+</Step>
+</Steps>
+
+A cart that needs no delivery skips the first step, and a payment method that collects offline, such as a bank transfer, skips the third.
+
+## Shipping Options
+
+`cart.shippingOptions()` quotes the shipping options of the cart, from the carriers of its zone and its shipping address. It returns the options in `data` and the notices of the API in `warnings`. This call lists the options of the cart with their name, carrier and price:
+
+```ts
+import { sdk } from '@/lib/shopper'
+
+const { data: options, warnings } = await sdk.store.cart.shippingOptions(cartId)
+
+for (const option of options) {
+  option.name // 'Express'
+  option.carrier_name // 'UPS'
+  option.amount // 1500, in cents
+}
+```
+
+Carriers that quote live rates need the shipping address, so list the options after setting it. An empty list with no warning means that no line of the cart ships, such as a cart of e-books. The warnings are sentences for a log or a notice, never codes to branch on, as [Empty Lists and Warnings](/3.x/store-api/checkout#empty-lists-and-warnings) explains.
+
+## Setting the Shipping Method
+
+`cart.setShippingMethod()` takes the `id` of the option the customer picked. The API quotes the options again and keeps the price of that quote, so the shipping price always comes from the server. Here, the cart takes the option the customer picked and returns its new totals:
+
+```ts
+const cart = await sdk.store.cart.setShippingMethod(cartId, option.id)
+
+cart.shipping_total // 1500
+cart.total // 20400
+```
+
+## Payment Methods
+
+`cart.paymentMethods()` returns the payment methods the cart offers: the enabled methods of its zone whose driver is configured. The `driver` of a method tells the storefront which flow to run. This call lists the payment methods with their title and driver:
+
+```ts
+const methods = await sdk.store.cart.paymentMethods(cartId)
+
+for (const method of methods) {
+  method.title // 'Credit card'
+  method.driver // 'stripe' or 'manual'
+}
+```
+
+A `stripe` method opens a payment session. A `manual` method, such as a bank transfer or cash on delivery, collects offline: its `instructions` tell the customer what to do, to show on the confirmation page.
+
+## Setting the Payment Method
+
+`cart.setPaymentMethod()` takes the `id` of the method the customer picked. Ask for the `paymentMethod` include to get it back with the cart. This call sets the method the customer picked and returns the cart with its lines and its payment method:
+
+```ts
+const cart = await sdk.store.cart.setPaymentMethod(cartId, method.id, {
+  include: ['lines', 'paymentMethod'],
+})
+```
+
+## Paying With Stripe
+
+`cart.createPaymentSession()` prices the cart again, computes the total and opens a PaymentIntent for it at Stripe. The session carries the `client_secret` that Stripe.js needs to collect the payment. This call opens the session and reads its client secret and its amount:
+
+```ts
+const session = await sdk.store.cart.createPaymentSession(cartId)
+
+session.client_secret // 'pi_3QHx..._secret_...'
+session.amount // 20400
+```
+
+Mount Stripe's Payment Element with the client secret, and confirm the payment with `stripe.confirmPayment()`. Stripe runs 3D Secure when the card needs it, then sends the customer to `return_url`. This function opens the session, mounts the Payment Element in `#payment-element`, confirms the payment when the customer submits the form, and shows the error of a declined card:
+
+```ts title="checkout/payment.ts"
+import { loadStripe } from '@stripe/stripe-js'
+import { sdk } from '@/lib/shopper'
+
+export async function mountPayment(form: HTMLFormElement, cartId: string) {
+  const session = await sdk.store.cart.createPaymentSession(cartId)
+
+  const stripe = (await loadStripe(import.meta.env.VITE_STRIPE_PUBLISHABLE_KEY))!
+  const elements = stripe.elements({ clientSecret: session.client_secret! })
+
+  elements.create('payment').mount('#payment-element')
+
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault()
+
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: { return_url: `${window.location.origin}/checkout/complete` },
+    })
+
+    form.querySelector('#payment-message')!.textContent = error.message ?? ''
+  })
+}
+```
+
+A new session also returns the publishable key in `data.publishable_key`, but a resumed session does not, so keep the key in the configuration of the storefront. Calling `createPaymentSession()` again on an unchanged cart resumes the same session. Any change to the lines, a promotion code, the currency, the zone or the shipping method cancels it: open a new session after every change and mount the form again, as [Calling It Again](/3.x/store-api/checkout#calling-it-again) describes. The [Stripe](/3.x/payments/stripe) page covers the capture method and the webhooks.
+
+A driver that collects on its own page returns a `redirect_url` instead of a client secret: send the customer to it with `window.location.assign(session.redirect_url)`.
+
+## Completing the Cart
+
+`cart.complete()` places the order. Call it on the page behind `return_url`, once Stripe has confirmed the payment, or when the customer confirms the order for a `manual` method. Ask for the `items` include to show the order lines. This function places the order, keeps its ID for the confirmation page and forgets the cart ID:
+
+```ts title="checkout/complete.ts"
+import { sdk } from '@/lib/shopper'
+
+export async function placeOrder(cartId: string) {
+  const order = await sdk.store.cart.complete(cartId, { include: ['items'] })
+
+  localStorage.setItem('shopper_last_order', order.id)
+  localStorage.removeItem('shopper_cart')
+
+  order.number // the order number to show the customer
+  order.price_amount // 20400, the amount the customer pays
+
+  return order
+}
+```
+
+Completing a cart that is already completed returns the same order, so a storefront that loses the response to a timeout calls `complete()` again and never places a second order. Keep the order `id` to read the order back, as [Orders](/3.x/sdk/orders) shows, and forget the cart ID: a completed cart refuses every change with `cart_completed`.
+
+The order starts with `payment_status: 'pending'`, and the Stripe webhook moves it to authorized or paid, often before `complete()` answers. A confirmation page can show "payment pending" for the few seconds before the event arrives, as [Payment Status After Placement](/3.x/store-api/checkout#payment-status-after-placement) describes.
+
+## When the Checkout Fails
+
+The API checks the cart again when the payment session opens and when the cart completes. A price that went up, a stock that ran out or a carrier that raised its rate throws a `ShopperApiError` whose code tells the storefront what to do. This function places the order and, when it fails, shows the updated cart, the new shipping options, a retry or the message of the API, depending on the code:
+
+```ts title="checkout/complete.ts"
+import { ShopperApiError } from '@shopperlabs/shopper-sdk'
+
+export async function completeCheckout(cartId: string) {
+  try {
+    return await placeOrder(cartId)
+  } catch (error) {
+    if (! (error instanceof ShopperApiError)) {
+      throw error
+    }
+
+    switch (error.code) {
+      case 'price_changed':
+        return showCart(await sdk.store.cart.retrieve(cartId))
+      case 'shipping_price_changed':
+      case 'shipping_option_unavailable':
+        return showShippingOptions(await sdk.store.cart.shippingOptions(cartId))
+      case 'payment_session_in_progress':
+      case 'payment_provider_unavailable':
+      case 'shipping_provider_unavailable':
+        return retryLater(error.status === 409 ? 3 : 5)
+      default:
+        return showMessage(error.message)
+    }
+  }
+}
+```
+
+On `price_changed`, the cart already holds the new prices: show the new total, and open a new payment session once the customer accepts it. The `409` and `503` codes wait 3 and 5 seconds, the `Retry-After` the API sends with them.
+
+`payment_released` means the stock ran out after the payment: the API gave the payment back, so the customer updates the cart and pays again. [When the Order Cannot Be Placed](/3.x/store-api/checkout#when-the-order-cannot-be-placed) lists every code, and [Price, Stock and Shipping Changes](/3.x/store-api/checkout#price-stock-and-shipping-changes) what the cart holds after each one.
+
+## Next Steps
+
+<Cards>
+  <Card title="Orders" href="/3.x/sdk/orders">
+    Read the order back on the confirmation page and follow its shipments.
+  </Card>
+  <Card title="Stripe" href="/3.x/payments/stripe">
+    Set up the Stripe driver, its capture method and its webhooks.
+  </Card>
+</Cards>

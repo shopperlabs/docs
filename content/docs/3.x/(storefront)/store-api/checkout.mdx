@@ -63,6 +63,8 @@ The shipping options depend on the cart: its zone, the carriers of that zone, th
 
 </Params>
 
+This request lists the shipping options of the cart, once its shipping address is set:
+
 ```bash title="Request"
 curl http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/shipping-options \
   -H "Accept: application/vnd.api+json"
@@ -213,6 +215,8 @@ The storefront sends back the ID of the option the customer picked. The API quot
 
 </Params>
 
+This request picks the Colissimo option of the listing above:
+
 ```bash title="Request"
 curl -X POST http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/shipping-method \
   -H "Accept: application/vnd.api+json" \
@@ -285,6 +289,8 @@ A payment method is the way the customer pays: a card through Stripe, a bank tra
 </Field>
 
 </Params>
+
+This request lists the payment methods of the cart:
 
 ```bash title="Request"
 curl http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/payment-methods \
@@ -370,6 +376,8 @@ The storefront sends the ID of the method the customer picked. Ask for the `paym
 
 </Params>
 
+This request picks the credit card method of the listing above, and asks for it back with `include=paymentMethod`:
+
 ```bash title="Request"
 curl -X POST "http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/payment-method?include=paymentMethod" \
   -H "Accept: application/vnd.api+json" \
@@ -454,6 +462,8 @@ The payment provider must collect an amount that the server computed, not the br
 </Field>
 
 </Params>
+
+This request opens the payment session of the cart, at the provider of its payment method:
 
 ```bash title="Request"
 curl -X POST http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/payment-session \
@@ -604,6 +614,8 @@ Completing the cart places the order. The API checks the cart one last time, res
 </Field>
 
 </Params>
+
+This request places the order of the cart, and asks for its items with `include=items`:
 
 ```bash title="Request"
 curl -X POST "http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/complete?include=items" \

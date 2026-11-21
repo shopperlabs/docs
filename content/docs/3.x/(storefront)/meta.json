@@ -20,6 +20,17 @@
     "store-api/cart",
     "store-api/checkout",
     "store-api/customers",
-    "store-api/orders"
+    "store-api/orders",
+    "---JavaScript SDK---",
+    "sdk/index",
+    "sdk/authentication",
+    "sdk/errors",
+    "sdk/catalog",
+    "sdk/store",
+    "sdk/cart",
+    "sdk/checkout",
+    "sdk/customers",
+    "sdk/orders",
+    "sdk/custom-endpoints"
   ]
 }

@@ -597,6 +597,8 @@ Load an order by its public ID in URLs, so a customer cannot guess the next one.
 Route::get('/orders/{order:public_id}', [OrderController::class, 'show'])->name('orders.show');
 ```
 
+This controller answers `404` when the order belongs to another customer, and loads the items, addresses and shipments the page shows:
+
 ```php title="app/Http/Controllers/OrderController.php"
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -687,6 +689,8 @@ The account endpoints read these parameters from `resources.order` in `config/sh
 | `filter[status]` | An `OrderStatus` value |
 | `sort` | `created_at` (prefix with `-` for descending) |
 | `include` | `items`, `shippingAddress`, `billingAddress`, `paymentMethod`, `shippings`, `shippings.events`, `refund` |
+
+This request lists the processing orders of the customer, with their items:
 
 ```bash
 curl "https://example.com/store/customers/me/orders?filter[status]=processing&include=items" \

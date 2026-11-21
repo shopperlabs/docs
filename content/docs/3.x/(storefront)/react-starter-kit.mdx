@@ -452,7 +452,7 @@ To add a payment provider, implement it with Shopper's [payment system](/3.x/pay
 
 ### Adding Pages
 
-A new page takes a controller, a named route in `routes/web.php` and a React component in `resources/js/pages`. Name it under `shop/` so it renders inside the store header and footer:
+A new page takes a controller, a named route in `routes/web.php` and a React component in `resources/js/pages`. Name it under `shop/` so it renders inside the store header and footer. This controller renders the `shop/about` page:
 
 ```php title="app/Http/Controllers/Shop/AboutController.php"
 <?php
@@ -474,11 +474,15 @@ final class AboutController extends Controller
 }
 ```
 
+This route serves the page at `/about`, under the name `shop.about`:
+
 ```php title="routes/web.php"
 use App\Http\Controllers\Shop\AboutController;
 
 Route::get('about', AboutController::class)->name('shop.about');
 ```
+
+This component renders the title of the page inside the `Container` of the storefront:
 
 ```tsx title="resources/js/pages/shop/about.tsx"
 import { Head } from '@inertiajs/react';

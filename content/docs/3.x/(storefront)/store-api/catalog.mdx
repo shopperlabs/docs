@@ -885,6 +885,8 @@ A navigation menu needs every visible category, nested, in one request. `/store/
 
 <Endpoint id="get-store-categories-tree" method="GET" path="/store/categories/tree" auth="public">
 
+This request reads the whole tree:
+
 ```bash title="Request"
 curl http://localhost:8000/store/categories/tree \
   -H "Accept: application/vnd.api+json"
@@ -1180,6 +1182,8 @@ Collections group products for a campaign or a theme, such as "Gift Ideas" or "W
 </Field>
 
 </Params>
+
+This request reads the `gift-ideas` collection with its products, limited to their name, slug and prices:
 
 ```bash title="Request"
 curl "http://localhost:8000/store/collections/gift-ideas?include=products&fields[products]=name,slug,prices" \
@@ -1646,6 +1650,8 @@ A filter sidebar offers the attributes a visitor can narrow the catalog by, such
 </Field>
 
 </Params>
+
+This request lists the filterable attributes and their values:
 
 ```bash title="Request"
 curl http://localhost:8000/store/attributes \

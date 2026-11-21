@@ -595,6 +595,8 @@ The tree endpoint returns plain JSON rather than JSON:API resources, so a menu l
 curl "https://example.com/store/categories/tree"
 ```
 
+The response nests each category in the `children` of its parent:
+
 ```json
 {
     "data": [

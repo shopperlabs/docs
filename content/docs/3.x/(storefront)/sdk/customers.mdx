@@ -1,0 +1,133 @@
+---
+title: Customers
+description: Read and update the profile of the logged-in customer, upload a profile picture and manage saved addresses with the JavaScript SDK.
+---
+
+The customer methods serve the account area of the storefront: the profile form, the profile picture and the address book. They act on the customer whose token the client holds, set by [logging in](/3.x/sdk/authentication#logging-in), and throw a `ShopperApiError` with status `401` without one. The [Customers](/3.x/store-api/customers) guide of the Store API describes every field.
+
+## Reading the Profile
+
+`customer.me()` returns the profile of the logged-in customer, to greet them and fill the account form. This call reads the profile, with the first name, the email and the picture:
+
+```ts
+import { sdk } from '@/lib/shopper'
+
+const customer = await sdk.store.customer.me()
+
+customer.first_name // 'Amara'
+customer.email // 'amara@example.com'
+customer.avatar // the URL of the profile picture
+```
+
+A token that expired throws status `401` here like on every account call, as [When the Token Expires](/3.x/sdk/authentication#when-the-token-expires) describes.
+
+## Updating the Profile
+
+`customer.update()` saves the fields the customer changed: `first_name`, `last_name`, `phone_number`, `birth_date`, `gender` and `opt_in`. A field left out keeps its value, and `null` clears the optional ones. Here, the account form saves a new phone number, a birth date and the newsletter choice:
+
+```ts
+const customer = await sdk.store.customer.update({
+  phone_number: '+33612345678',
+  birth_date: '1992-04-18',
+  opt_in: false,
+})
+```
+
+The email is not part of the profile update: a body that carries `email` leaves it unchanged. Invalid fields throw status `422`, which [Validation Errors](/3.x/sdk/errors#validation-errors) turns into messages under each input.
+
+## Profile Picture
+
+`customer.updateAvatar()` uploads a picture of 1,024 KB at most, from a file input or any `Blob`. The client sends it as `multipart/form-data`. This code takes the file the customer picked in the `#avatar` input and uploads it:
+
+```ts
+const input = document.querySelector<HTMLInputElement>('#avatar')!
+const file = input.files![0]
+
+const customer = await sdk.store.customer.updateAvatar(file, file.name)
+
+customer.avatar // the URL of the new picture
+```
+
+`customer.removeAvatar()` deletes it. Without a picture, `avatar` points to a generated one, so the storefront always has an image to show.
+
+## Addresses
+
+Saved addresses spare a returning customer from typing their address at every checkout. Each address is a shipping or a billing address, and the customer marks one of each as the default.
+
+### Listing Addresses
+
+`customer.address.list()` returns every address of the customer, newest first, in one array. It is not paginated. This call reads the addresses with their country and finds the default shipping address:
+
+```ts
+const addresses = await sdk.store.customer.address.list({ include: ['country'] })
+
+const shipping = addresses.find((address) => address.shipping_default)
+```
+
+### Saving an Address
+
+`customer.address.create()` saves an address from the account area, or after a checkout when the customer ticks a "save this address" box. `type` is `shipping` or `billing`, and `shipping_default` or `billing_default` moves the default from the other addresses to this one. This call saves a shipping address in Paris and makes it the default one:
+
+```ts
+const address = await sdk.store.customer.address.create({
+  type: 'shipping',
+  first_name: 'Amara',
+  last_name: 'Ndiaye',
+  street_address: '12 Rue de Rivoli',
+  postal_code: '75004',
+  city: 'Paris',
+  country_code: 'FR',
+  phone_number: '+33612345678',
+  shipping_default: true,
+})
+```
+
+### Updating and Deleting an Address
+
+`customer.address.update()` changes the fields it receives, and `customer.address.delete()` removes the address. Both take the `id` of the address. The first call adds an apartment number to the address, and the second deletes the address:
+
+```ts
+await sdk.store.customer.address.update(address.id, { street_address_plus: 'Apartment 4B' })
+
+await sdk.store.customer.address.delete(address.id)
+```
+
+An ID that belongs to another customer throws status `404`, like an ID that does not exist.
+
+### Using a Saved Address
+
+The cart takes an address object, not an address ID. To ship to a saved address, copy its fields into the cart address: four of them change name, and the others keep theirs, as [Using a Saved Address at Checkout](/3.x/store-api/customers#using-a-saved-address-at-checkout) lists. The `toCartAddress()` function below copies a saved address into a cart address, then the call ships the cart to the default shipping address:
+
+```ts
+import type { Address } from '@shopperlabs/shopper-sdk'
+
+function toCartAddress(address: Address) {
+  return {
+    first_name: address.first_name,
+    last_name: address.last_name,
+    company: address.company_name,
+    address_1: address.street_address,
+    address_2: address.street_address_plus,
+    city: address.city,
+    state: address.state,
+    postal_code: address.postal_code,
+    phone: address.phone_number,
+    country_code: address.country_code!,
+  }
+}
+
+await sdk.store.cart.setAddresses(cartId, {
+  shipping_address: toCartAddress(shipping),
+})
+```
+
+## Next Steps
+
+<Cards>
+  <Card title="Orders" href="/3.x/sdk/orders">
+    List the orders of the customer and download the files they bought.
+  </Card>
+  <Card title="Checkout" href="/3.x/sdk/checkout">
+    Ship to the saved address and place the order.
+  </Card>
+</Cards>

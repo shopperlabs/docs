@@ -1,0 +1,293 @@
+---
+title: JavaScript SDK
+sidebarTitle: Overview
+description: The typed JavaScript client of the Store API, for browsers, Node.js, React Native and edge runtimes.
+---
+
+`@shopperlabs/shopper-sdk` is the JavaScript client of the [Store API](/3.x/store-api). It builds the URLs and query strings, sends the JSON:API, zone, channel and language headers, keeps the customer token, and turns every JSON:API document into the plain nested objects described by `@shopperlabs/shopper-types`. A failed request throws a `ShopperApiError` that carries the status and the error codes of the API.
+
+The SDK has no dependency other than the types and runs wherever `fetch` exists: browsers, Node.js 18 and later, React Native and edge runtimes such as Cloudflare Workers or the Vercel Edge runtime. It works with any front-end framework, because it only wraps HTTP calls.
+
+The pages of this section show the SDK method for each part of the storefront flow. The [Store API guides](/3.x/store-api#next-steps) describe the same endpoints over plain HTTP, with every field of the responses and every error code: each SDK page links to its guide instead of repeating them.
+
+## Installation
+
+Install the package from npm. It brings `@shopperlabs/shopper-types` with it and re-exports its types, so a storefront installs the SDK only. Run this command in the folder of your storefront:
+
+```bash
+npm install @shopperlabs/shopper-sdk
+```
+
+The package is published as an ES module. Import it with `import`, from TypeScript or from a bundler; `require()` is not supported.
+
+The Laravel application must run the Store API first, as described on the [Installation](/3.x/installation#install-the-store-api) page.
+
+## Creating the Client
+
+The client takes the base URL of the Laravel application that runs the Store API, without the `/store` prefix. Create it once in a module of its own and import it where you need it. This module creates the client with the URL of the shop:
+
+```ts title="lib/shopper.ts"
+import Shopper from '@shopperlabs/shopper-sdk'
+
+export const sdk = new Shopper({
+  baseUrl: process.env.NEXT_PUBLIC_SHOPPER_URL ?? 'http://localhost:8000',
+})
+```
+
+The client groups its methods in two modules. `sdk.auth` registers, logs in and logs out customers. `sdk.store` holds one resource per part of the Store API, named in the singular: `sdk.store.product`, `sdk.store.cart`, `sdk.store.customer`, and so on. This example imports the client, lists the 12 newest products of the men category that are in stock, then creates a cart:
+
+```ts
+import { sdk } from '@/lib/shopper'
+
+const { data: products } = await sdk.store.product.list({
+  filter: { category_tree: 'men', in_stock: true },
+  sort: ['-published_at'],
+  page: { size: 12 },
+})
+
+const cart = await sdk.store.cart.create()
+```
+
+A storefront rendered on a server, such as Next.js server components or Nuxt server routes, needs one client per request as soon as customers log in: see [Server-Side Storefronts](#server-side-storefronts).
+
+## Configuration
+
+The constructor takes one object. Only `baseUrl` is required:
+
+<Params title="ShopperConfig">
+
+<Field name="baseUrl" type="string" required>
+  The URL of the Laravel application, such as `https://shop.example.com`. A trailing slash is removed.
+</Field>
+
+<Field name="storePrefix" type="string" default="store">
+  The prefix of the Store API routes. Change it when your application sets `SHOPPER_API_PREFIX`, as [Base URL](/3.x/store-api#base-url) describes.
+</Field>
+
+<Field name="locale" type="string">
+  Sent as `Accept-Language` on every request, such as `fr`. It sets the language of translated content and of error messages. See [Language](/3.x/store-api#language).
+</Field>
+
+<Field name="channel" type="string">
+  The slug of a sales channel, sent as `X-Shopper-Channel` on every request. The catalog then returns only the products of that channel; without it, the API uses its default channel, or no channel filter. See [Sales Channel](/3.x/store-api#sales-channel).
+</Field>
+
+<Field name="headers" type="Record<string, string>">
+  Headers added to every request, such as `X-Shopper-Zone`. They override the headers the SDK sets, `Authorization` included.
+</Field>
+
+<Field name="fetch" type="typeof fetch" default="globalThis.fetch">
+  The `fetch` function to call, for a runtime without a global `fetch` or to wrap every request.
+</Field>
+
+<Field name="tokenStorage" type="TokenStorage">
+  Where the customer token lives between requests. It is kept in memory by default, so it is lost on page reload. See [Persisting the Token](/3.x/sdk/authentication#persisting-the-token).
+</Field>
+
+<Field name="onUnauthorized" type="() => void | Promise<void>">
+  Called when a request that carried a token answers `401`, after the SDK has cleared the token. See [When the Token Expires](/3.x/sdk/authentication#when-the-token-expires).
+</Field>
+
+</Params>
+
+### Zone
+
+The zone of a request sets the currency of the prices, the zone of new carts, and the shipping options and payment methods offered at checkout, as described in [Zone](/3.x/store-api#zone). The SDK has no zone option: send the `X-Shopper-Zone` header with the code of the zone through `headers`. This client asks for the prices and the checkout options of the `EU` zone:
+
+```ts title="lib/shopper.ts"
+export const sdk = new Shopper({
+  baseUrl: process.env.NEXT_PUBLIC_SHOPPER_URL ?? 'http://localhost:8000',
+  headers: { 'X-Shopper-Zone': 'EU' },
+})
+```
+
+A visitor who picks another country changes the zone of the catalog and of the cart separately. Catalog calls take the header per request, through their [request options](#request-options). An existing cart keeps the zone it was created with until you change it with [`cart.update()`](/3.x/sdk/cart#changing-the-currency-or-the-zone).
+
+### Language and Sales Channel
+
+A language switcher changes the language of every later call with `setLocale()`, and `setChannel()` does the same for the sales channel. `null` goes back to the default of the shop. Here, the client switches to French and to the `mobile-app` channel, then goes back to the default channel:
+
+```ts
+sdk.setLocale('fr')
+sdk.getLocale() // 'fr'
+
+sdk.setChannel('mobile-app')
+sdk.getChannel() // 'mobile-app'
+sdk.setChannel(null)
+```
+
+## Query Parameters
+
+The methods that read a resource take an optional `RequestParams` object. The SDK turns it into the JSON:API query parameters described in [JSON:API Conventions](/3.x/store-api/json-api):
+
+| Option | Example | Query string |
+|--------|---------|--------------|
+| `include` | `['brand', 'variants']` | `include=brand,variants` |
+| `filter` | `{ brand: 'maison-cuir', in_stock: true }` | `filter[brand]=maison-cuir&filter[in_stock]=true` |
+| `sort` | `['-published_at', 'name']` | `sort=-published_at,name` |
+| `page` | `{ number: 2, size: 24 }` | `page[number]=2&page[size]=24` |
+| `page` | `{ cursor: '' }` | `page[cursor]=` |
+| `fields` | `{ products: ['name', 'slug'] }` | `fields[products]=name,slug` |
+
+A filter takes a string, a number or a boolean. Several values of one filter are a comma-separated string, such as `{ option: '42,43' }`. The filters, sorts and includes each resource accepts are listed in its Store API guide; an unknown one throws a `400` error with the `bad_request` code.
+
+## Responses
+
+The API answers JSON:API documents: the attributes of a resource sit in `attributes`, and its related resources sit once each in a top-level `included` array. The SDK flattens them. A resource becomes one object with its `id` and its attributes, and each relationship you include becomes a nested object or array. This call reads a product with its brand and its variants, which then read as plain properties:
+
+```ts
+const product = await sdk.store.product.retrieve('classic-leather-sneaker', {
+  include: ['brand', 'variants'],
+})
+
+product.name // 'Classic Leather Sneaker'
+product.brand?.name // 'Maison Cuir'
+product.variants?.length // 6
+```
+
+A relationship you did not include stays out of the object. One whose related resource is not in `included` becomes a stub with only its `id`. Relationship names keep the case of the API, such as `order.shippingAddress` or `cart.paymentMethod`.
+
+### Listings
+
+`list()` returns an object with the records in `data`, plus the `meta` and `links` of the document. The pagination values sit there, as [Pagination](/3.x/store-api/json-api#pagination) describes. This call reads the first 20 brands by name, the number of pages and the link to the next page:
+
+```ts
+const { data: brands, meta, links } = await sdk.store.brand.list({
+  sort: ['name'],
+  page: { number: 1, size: 20 },
+})
+
+meta?.last_page // 3
+links?.next // 'https://shop.example.com/store/brands?sort=name&page%5Bnumber%5D=2&page%5Bsize%5D=20'
+```
+
+With cursor pagination, start with an empty cursor and pass `meta.next_cursor` to the next call, with the same filters and sort, until it is `null`. This loop reads every brand, 50 at a time:
+
+```ts
+import type { Brand } from '@shopperlabs/shopper-sdk'
+
+const brands: Brand[] = []
+let cursor: string | null = ''
+
+while (cursor !== null) {
+  const page = await sdk.store.brand.list({ sort: ['name'], page: { size: 50, cursor } })
+
+  brands.push(...page.data)
+  cursor = (page.meta?.next_cursor as string | null) ?? null
+}
+```
+
+The listings that the API never paginates return the records directly: `category.tree()`, `review.latest()`, `cart.paymentMethods()` and `customer.address.list()`. `cart.shippingOptions()` returns the options with the warnings of the quote.
+
+## Request Options
+
+The catalog and store resources take a last argument, `init`, passed to `fetch` for that call: an `AbortSignal`, a cache mode, extra headers, or the caching options of Next.js. Headers given here win over the headers of the client. Here, a search can be cancelled with the controller, and asks for the prices of the `US` zone:
+
+```ts
+const controller = new AbortController()
+
+const { data } = await sdk.store.product.list(
+  { filter: { q: 'sneaker' } },
+  { signal: controller.signal, headers: { 'X-Shopper-Zone': 'US' } },
+)
+```
+
+In a Next.js server component, `next.revalidate` and `next.tags` cache the response in the Next.js data cache, and `revalidateTag()` clears it when the store changes. This home page caches the settings for 5 minutes and the featured products for 60 seconds:
+
+```ts title="app/page.tsx"
+const settings = await sdk.store.setting.retrieve(undefined, {
+  next: { revalidate: 300, tags: ['settings'] },
+})
+
+const { data: featured } = await sdk.store.product.list(
+  { filter: { featured: true }, page: { size: 8 } },
+  { next: { revalidate: 60, tags: ['products'] } },
+)
+```
+
+These methods take `init`: `list()` and `retrieve()` of the catalog and store resources, `product.reviews()`, `review.latest()`, `category.tree()`, `setting.retrieve()` and `setting.get()`, and `store.fetch()`. The cart, customer, order and shipment methods do not: they send the headers of the client, and a cart changes zone through [`cart.update()`](/3.x/sdk/cart#changing-the-currency-or-the-zone).
+
+## Server-Side Storefronts
+
+In the browser, each visitor runs their own copy of the client, so a module-level client is enough. On a server, a module-level client is shared by every request the process handles: a token stored by one visitor's login would be sent with the next visitor's requests. A storefront that renders on the server creates a client per request when customers log in, with a [token storage](/3.x/sdk/authentication#persisting-the-token) that reads the cookie of that request.
+
+The Store API counts its rate limits per IP address. When every call comes from your storefront server, all visitors share the quota of that server. Forward the visitor's address in `X-Forwarded-For` and trust the storefront server in Laravel, as described in [Behind a Server-Side Storefront](/3.x/store-api#behind-a-server-side-storefront). This `shopper()` function creates a client for each request and forwards the IP address of the visitor:
+
+```ts title="lib/shopper.ts"
+import Shopper from '@shopperlabs/shopper-sdk'
+import { headers } from 'next/headers'
+
+export async function shopper() {
+  const forwardedFor = (await headers()).get('x-forwarded-for')
+
+  return new Shopper({
+    baseUrl: process.env.SHOPPER_URL ?? 'http://localhost:8000',
+    headers: forwardedFor ? { 'X-Forwarded-For': forwardedFor } : {},
+  })
+}
+```
+
+## TypeScript
+
+The SDK is written in TypeScript and every method is typed. The resource types of `@shopperlabs/shopper-types`, such as `Product`, `Cart`, `Order` or `Customer`, are re-exported by the SDK, so you import them from one package. Here, the types come from the SDK, and `RequestParams` types the options that the listing pages share:
+
+```ts
+import type { Cart, Product, RequestParams } from '@shopperlabs/shopper-sdk'
+
+export const listingParams: RequestParams = {
+  include: ['brand', 'rating'],
+  page: { size: 24 },
+}
+```
+
+The API sends every `id` as a string, and the objects the SDK methods return type it that way, for the resource and for each relation it includes. The `Cart` type itself types `id` as `string | number`, because the Inertia starter kits also pass it the numeric ids of Eloquent models, so a variable typed `Cart` loses the string. Type the variable `Flattened<Cart>`, the shape the methods return. This code keeps the cart in a variable and sends its `id` back to update it, a call that a variable typed `Cart` would not compile:
+
+```ts
+import type { Cart, Flattened } from '@shopperlabs/shopper-sdk'
+
+let cart: Flattened<Cart> = await sdk.store.cart.create()
+
+cart = await sdk.store.cart.update(cart.id, { email: 'jane@example.com' })
+```
+
+A few payload types are not exported from the package root, such as the address of a cart. Read them from the method signature. This type takes the second argument of `cart.setAddresses()`, the addresses of the cart:
+
+```ts
+import type { CartModule } from '@shopperlabs/shopper-sdk'
+
+type CartAddresses = Parameters<CartModule['setAddresses']>[1]
+```
+
+Every amount is an integer in cents, as in the API. The [Money](/3.x/money) page covers cents and formatting.
+
+## Next Steps
+
+<Cards>
+  <Card title="Authentication" href="/3.x/sdk/authentication">
+    Register and log in customers, keep their token across page loads, and log them out.
+  </Card>
+  <Card title="Errors" href="/3.x/sdk/errors">
+    Catch `ShopperApiError`, show validation messages next to their fields and react to error codes.
+  </Card>
+  <Card title="Catalog" href="/3.x/sdk/catalog">
+    List and filter products, and read categories, collections, brands, tags, attributes and reviews.
+  </Card>
+  <Card title="Store and Regions" href="/3.x/sdk/store">
+    Read the store settings, the legal pages, and the countries, zones and currencies.
+  </Card>
+  <Card title="Cart" href="/3.x/sdk/cart">
+    Create a cart, add and change lines, set addresses and apply promotion codes.
+  </Card>
+  <Card title="Checkout" href="/3.x/sdk/checkout">
+    Choose shipping and payment, open a payment session and place the order.
+  </Card>
+  <Card title="Customers" href="/3.x/sdk/customers">
+    Manage the profile, the avatar and the saved addresses of the logged-in customer.
+  </Card>
+  <Card title="Orders" href="/3.x/sdk/orders">
+    Show the order confirmation, the order history, shipments and digital downloads.
+  </Card>
+  <Card title="Custom Endpoints" href="/3.x/sdk/custom-endpoints">
+    Call the routes of an add-on, or any Store API route the SDK does not wrap.
+  </Card>
+</Cards>

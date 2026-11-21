@@ -89,6 +89,8 @@ As in any Scout application, the `SCOUT_DRIVER` environment variable selects the
 composer require meilisearch/meilisearch-php http-interop/http-factory-guzzle
 ```
 
+These variables select Meilisearch and give Scout the address and the master key of your server:
+
 ```bash title=".env"
 SCOUT_DRIVER=meilisearch
 MEILISEARCH_HOST=http://127.0.0.1:7700
@@ -207,6 +209,8 @@ class ProductIndexer extends ShopperProductIndexer
 }
 ```
 
+In `config/shopper/search.php`, this `indexers` list gives products your indexer and keeps the indexers of Shopper for the other models:
+
 ```php title="config/shopper/search.php"
 'indexers' => [
     Brand::class => BrandIndexer::class,
@@ -237,6 +241,8 @@ class CustomerIndexer extends ShopperCustomerIndexer
     }
 }
 ```
+
+This `indexers` list adds your indexer for the `App\Models\User` class:
 
 ```php title="config/shopper/search.php"
 'indexers' => [
@@ -285,6 +291,8 @@ A product or a collection whose `published_at` is in the future is not indexed w
 <Warning>
   If you schedule publications, schedule the import of products and collections as well, as often as your publication times require.
 </Warning>
+
+This schedule imports the products and the collections every hour:
 
 ```php title="routes/console.php"
 use Illuminate\Support\Facades\Schedule;

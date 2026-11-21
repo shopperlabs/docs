@@ -1,0 +1,136 @@
+---
+title: Store and Regions
+description: Read the store settings, the legal pages, and the countries, zones and currencies of the shop with the JavaScript SDK.
+---
+
+The store methods read what the storefront shows around the catalog: the name, logo and contact details of the shop in the header and footer, the legal pages, and the countries, zones and currencies a visitor picks from. They need no customer token and change rarely, so a storefront caches them. The [Store](/3.x/store-api/store) guide of the Store API describes every field of the responses.
+
+## Store Settings
+
+`setting.retrieve()` returns the public settings of the shop in one object: the name, the logo, the address, the social links, the default currency, the currencies and the supported languages. This call reads them, then the name, the logo and the languages the header shows:
+
+```ts
+import { sdk } from '@/lib/shopper'
+
+const settings = await sdk.store.setting.retrieve()
+
+settings.name // 'Maison Cuir'
+settings.logo?.url // 'https://shop.example.com/storage/logo.png'
+settings.supported_locales // [{ code: 'en', label: 'English' }, { code: 'fr', label: 'Français' }]
+```
+
+`setting.get()` returns one key of the settings, typed after it. This call reads the currencies of the shop:
+
+```ts
+const currencies = await sdk.store.setting.get('currencies') // ['EUR', 'USD']
+```
+
+`get()` reads the whole settings to return one key, so a page that needs several keys calls `retrieve()` once.
+
+### Caching the Settings
+
+A storefront reads the settings on nearly every page. The API lets browsers and CDNs cache the response for 300 seconds, as [Caching the Settings](/3.x/store-api/store#caching-the-settings) describes. In a Next.js server component, cache it in the Next.js data cache and clear it with `revalidateTag('settings')` when the merchant changes them. This call caches the settings for 300 seconds under the `settings` tag:
+
+```ts
+const settings = await sdk.store.setting.retrieve(undefined, {
+  next: { revalidate: 300, tags: ['settings'] },
+})
+```
+
+The settings follow the language of the client, set with `locale` or `setLocale()`: the country name of the address is translated.
+
+## Legal Pages
+
+`legal.list()` returns the enabled legal pages for the footer links. Shopper creates four at install, with the slugs `refund`, `privacy`, `terms` and `shipping`. `legal.retrieve()` reads one page by its slug. Here, the footer lists the legal pages with their links, and the privacy page reads its content:
+
+```ts
+const { data: pages } = await sdk.store.legal.list()
+
+pages.map((page) => ({ title: page.title, href: `/legal/${page.slug}` }))
+
+const privacy = await sdk.store.legal.retrieve('privacy')
+
+privacy.content // '<h2>Who we are</h2><p>...</p>'
+```
+
+`content` is HTML written by the merchant in the admin panel, or `null` when the page is not written yet. A page the merchant disabled throws a `ShopperApiError` with status `404`: hide its link.
+
+## Countries
+
+`country.list()` pages through the countries, for the country field of an address form. Filter by `region` or by `zone` to offer only the countries the shop ships to, and `country.retrieve()` reads one country by its two-letter or three-letter ISO code. This address form lists the countries of the `EU` zone by name, then reads Cameroon:
+
+```ts
+const { data: countries } = await sdk.store.country.list({
+  filter: { zone: 'EU' },
+  sort: ['name'],
+  page: { size: 100 },
+})
+
+const cameroon = await sdk.store.country.retrieve('CM')
+
+cameroon.translated_name // 'Cameroun' with setLocale('fr')
+```
+
+## Zones
+
+A zone groups countries that share a currency, shipping options and payment methods. `zone.list()` returns the enabled zones, and `zone.retrieve()` reads one by its code. The first call lists the zones with their countries and currency, and the second reads the `af` zone with its countries:
+
+```ts
+const { data: zones } = await sdk.store.zone.list({ include: ['countries', 'currency'] })
+
+const africa = await sdk.store.zone.retrieve('af', { include: ['countries'] })
+```
+
+The [Zones](/3.x/store-api/store#zones) section lists the includes of a zone.
+
+## Currencies
+
+`currency.list()` returns the enabled currencies, for a currency switcher. `currency.retrieve()` reads one by its ISO code. This switcher lists the currencies, then reads the euro and its symbol:
+
+```ts
+const { data: currencies } = await sdk.store.currency.list()
+
+const euro = await sdk.store.currency.retrieve('EUR')
+
+euro.symbol // '€'
+```
+
+## Picking a Zone and a Currency
+
+The API never guesses where a visitor is: the storefront decides the zone and sends its code in the `X-Shopper-Zone` header, as [Picking a Zone and a Currency](/3.x/store-api/store#picking-a-zone-and-a-currency) describes. Load the zones with their countries once, keep a map from each country to its zone, and look the visitor's country up in it. The `zoneByCountry()` function below builds that map, from the two-letter code of each country to the code of its zone:
+
+```ts title="lib/zones.ts"
+import { sdk } from '@/lib/shopper'
+
+export async function zoneByCountry(): Promise<Map<string, string>> {
+  const { data: zones } = await sdk.store.zone.list({
+    include: ['countries'],
+    page: { size: 100 },
+  })
+
+  const map = new Map<string, string>()
+
+  for (const zone of zones) {
+    for (const country of zone.countries ?? []) {
+      if (zone.code) {
+        map.set(country.cca2, zone.code)
+      }
+    }
+  }
+
+  return map
+}
+```
+
+The country comes from the geolocation header of your CDN, a country selector or the address of a returning customer. Send the zone with the catalog calls through the `headers` of the client or of the call, as [Zone](/3.x/sdk#zone) shows, and set it on the cart with [`cart.update()`](/3.x/sdk/cart#changing-the-currency-or-the-zone). A currency switcher that keeps the zone adds `filter: { currency: 'USD' }` to the catalog calls.
+
+## Next Steps
+
+<Cards>
+  <Card title="Catalog" href="/3.x/sdk/catalog">
+    List the products of the zone, in its currency.
+  </Card>
+  <Card title="Cart" href="/3.x/sdk/cart">
+    Create a cart in the zone of the visitor.
+  </Card>
+</Cards>

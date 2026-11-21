@@ -66,6 +66,8 @@ Without the `action` slot, the heading only shows the title.
   <PreviewHeading title="Dashboard" />
 </ComponentPreview>
 
+This Blade renders the heading with its `title` only:
+
 ```blade
 <x-shopper::heading title="Dashboard" />
 ```
@@ -79,6 +81,8 @@ The categories page opens the category form in a slide-over:
     <PreviewButton variant="primary">Add Category</PreviewButton>
   </PreviewHeading>
 </ComponentPreview>
+
+This Blade puts the button in the `action` slot, shows it only to users with the `categories.create` permission, and opens the `shopper-slide-overs.category-form` slide-over on click:
 
 ```blade
 <x-shopper::heading title="Categories">
@@ -107,6 +111,8 @@ Wrap several buttons in a flex container. The methods called here, `export` and 
     </div>
   </PreviewHeading>
 </ComponentPreview>
+
+This Blade puts the two buttons in the `action` slot, inside a `div` that lines them up with a gap:
 
 ```blade
 <x-shopper::heading title="Gift Cards">

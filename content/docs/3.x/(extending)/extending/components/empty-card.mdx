@@ -70,6 +70,8 @@ Pass a button in the `action` slot. This one sits in the points card of a loyalt
   />
 </ComponentPreview>
 
+This Blade puts a Filament button in the `action` slot. A click dispatches `openPanel` with the name of the slide-over and the ID of the member:
+
 ```blade
 <x-shopper::empty-card
     heading="No points history"
@@ -102,6 +104,8 @@ Leave out `icon` to display the text only.
     icon={false}
   />
 </ComponentPreview>
+
+This Blade passes the `heading` and the `description`, with no `icon`:
 
 ```blade
 <x-shopper::empty-card

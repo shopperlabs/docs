@@ -1,0 +1,234 @@
+---
+title: Authentication
+description: Register and log in customers with the JavaScript SDK, keep their token across page loads and handle its expiration.
+---
+
+A visitor browses and buys as a guest without any call to `sdk.auth`. Registering or logging in gives the client a customer token, and the client then sends it with every request, so the cart, the profile and the order history belong to that customer. The [Authentication](/3.x/store-api/authentication) guide of the Store API describes the endpoints, the token lifetime and the error codes behind these methods.
+
+## Registering a Customer
+
+`register()` creates the account and logs the customer in. Pass the ID of the guest cart in `cart_id` to keep the products added before signing up. Here, the sign-up form creates the account and keeps the guest cart:
+
+```ts
+import { sdk } from '@/lib/shopper'
+
+const customer = await sdk.auth.register({
+  first_name: 'Amara',
+  last_name: 'Ndiaye',
+  email: 'amara@example.com',
+  password: 'correct-horse-battery-staple',
+  opt_in: true,
+  cart_id: storedCartId,
+})
+
+customer.email // 'amara@example.com'
+```
+
+The method returns the customer and stores the token in the client. `getCartId()` then gives the cart of the account, which is not always the ID you sent: the API merges the guest cart into the cart the customer already has, as [What Happens to the Guest Cart](/3.x/store-api/authentication#what-happens-to-the-guest-cart) explains. After the call, save that ID in place of the cart ID your storefront kept, or remove it when the customer has no cart:
+
+```ts
+const cartId = sdk.auth.getCartId()
+
+if (cartId) {
+  localStorage.setItem('shopper_cart', cartId)
+} else {
+  localStorage.removeItem('shopper_cart')
+}
+```
+
+The client keeps this ID in memory only, until the next login or logout. Your storefront stores the cart ID itself, where it keeps the token.
+
+## Logging In
+
+`login()` takes the email, the password and the same optional `cart_id`. Like `register()`, it stores the token and sets `getCartId()`. Without `cart_id`, `getCartId()` gives the latest open cart of the customer, or `null` when there is none. The login form sends the email, the password and the guest cart:
+
+```ts
+const customer = await sdk.auth.login({
+  email: 'amara@example.com',
+  password: 'correct-horse-battery-staple',
+  cart_id: storedCartId,
+})
+```
+
+Wrong credentials throw a `ShopperApiError` with status `422` and the `credentials_invalid` code on the `email` field, and repeated failures throw one with status `429` and the `rate_limited` code. The [Errors](/3.x/sdk/errors) page shows how to read them.
+
+## Persisting the Token
+
+The client keeps the token in memory by default, so a page reload logs the customer out. The `tokenStorage` option gives the client an object with three synchronous methods, `get()`, `set()` and `clear()`, that keep the token where your storefront needs it.
+
+### In the Browser
+
+A single-page storefront with no server of its own keeps the token in `localStorage`, so it survives reloads and new tabs. This client reads the token from `localStorage`, saves it there after a login and removes it at logout:
+
+```ts title="lib/shopper.ts"
+import Shopper from '@shopperlabs/shopper-sdk'
+
+export const sdk = new Shopper({
+  baseUrl: import.meta.env.VITE_SHOPPER_URL,
+  tokenStorage: {
+    get: () => localStorage.getItem('shopper_token'),
+    set: (token) => localStorage.setItem('shopper_token', token),
+    clear: () => localStorage.removeItem('shopper_token'),
+  },
+})
+```
+
+Any script that runs on the page can read `localStorage`, so a cross-site scripting flaw exposes the token. A storefront that has a server keeps the token in an `HttpOnly` cookie instead, out of reach of scripts.
+
+The storage is synchronous. On React Native, where secure storage such as `expo-secure-store` is asynchronous, read the token once when the app starts, before the first request, and serve it from memory. Here, `restoreToken()` loads the token from secure storage, and the client reads it from a variable and writes each change back to secure storage:
+
+```ts title="lib/shopper.ts"
+import Shopper from '@shopperlabs/shopper-sdk'
+import * as SecureStore from 'expo-secure-store'
+
+let token: string | null = null
+
+export async function restoreToken() {
+  token = await SecureStore.getItemAsync('shopper_token')
+}
+
+export const sdk = new Shopper({
+  baseUrl: process.env.EXPO_PUBLIC_SHOPPER_URL!,
+  tokenStorage: {
+    get: () => token,
+    set: (value) => {
+      token = value
+      void SecureStore.setItemAsync('shopper_token', value)
+    },
+    clear: () => {
+      token = null
+      void SecureStore.deleteItemAsync('shopper_token')
+    },
+  },
+})
+```
+
+### On a Server
+
+A storefront rendered on a server, such as Next.js, logs the customer in from a server action and keeps the token in an `HttpOnly` cookie. A new client is created for the call, so the token of one visitor never reaches another. This server action logs the customer in, saves the token and the cart ID in cookies, then opens the account page:
+
+```ts title="app/login/actions.ts"
+'use server'
+
+import Shopper from '@shopperlabs/shopper-sdk'
+import { cookies } from 'next/headers'
+import { redirect } from 'next/navigation'
+
+export async function login(formData: FormData) {
+  const sdk = new Shopper({ baseUrl: process.env.SHOPPER_URL! })
+  const store = await cookies()
+
+  await sdk.auth.login({
+    email: String(formData.get('email')),
+    password: String(formData.get('password')),
+    cart_id: store.get('shopper_cart')?.value,
+  })
+
+  const options = { httpOnly: true, secure: true, sameSite: 'lax', path: '/' } as const
+
+  store.set('shopper_token', sdk.auth.getToken()!, options)
+
+  const cartId = sdk.auth.getCartId()
+
+  if (cartId) {
+    store.set('shopper_cart', cartId, options)
+  }
+
+  redirect('/account')
+}
+```
+
+Each later request creates its own client with the token of the cookie. The `shopper()` function below reads the cookie and sends the token in the `Authorization` header. Without a cookie, the client calls the API as a guest:
+
+```ts title="lib/shopper.ts"
+import Shopper from '@shopperlabs/shopper-sdk'
+import { cookies } from 'next/headers'
+
+export async function shopper() {
+  const token = (await cookies()).get('shopper_token')?.value
+
+  return new Shopper({
+    baseUrl: process.env.SHOPPER_URL ?? 'http://localhost:8000',
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
+  })
+}
+```
+
+A page of the account calls `shopper()` to get the client of the request, then reads the profile of the logged-in customer to greet them:
+
+```ts title="app/account/page.tsx"
+import { shopper } from '@/lib/shopper'
+
+export default async function AccountPage() {
+  const sdk = await shopper()
+  const customer = await sdk.store.customer.me()
+
+  return <h1>Welcome back, {customer.first_name}</h1>
+}
+```
+
+## When the Token Expires
+
+A token stays valid for 30 days by default, and there is no refresh endpoint, as [Token Expiration](/3.x/store-api/authentication#token-expiration) describes. When a request that carried a token answers `401`, the client clears the stored token, calls `onUnauthorized`, then throws the `ShopperApiError`. Send the customer to the login page from there. This client opens `/login` when the token has expired:
+
+```ts title="lib/shopper.ts"
+export const sdk = new Shopper({
+  baseUrl: import.meta.env.VITE_SHOPPER_URL,
+  onUnauthorized: () => {
+    window.location.assign('/login')
+  },
+})
+```
+
+A request sent without a token never calls it, and neither does a `403`. A public route with an expired token runs as a guest, so the customer's own cart answers `404` instead of `401`: treat a `404` on a cart you know belongs to the customer the same way. Keep the cart ID, because logging in again with `cart_id` attaches the cart back.
+
+`getToken()` returns the stored token, or `null`. The header of the shop uses it to know whether a customer is logged in, and shows the account menu or the login link:
+
+```ts
+const loggedIn = sdk.auth.getToken() !== null
+```
+
+## Logging Out
+
+`logout()` revokes the token on the server, then clears the token and the cart ID from the client, even when the request fails. The logout button calls it, then forgets the cart ID the storefront kept:
+
+```ts
+await sdk.auth.logout()
+
+localStorage.removeItem('shopper_cart')
+```
+
+The customer's cart stays attached to the account and comes back from `getCartId()` at the next login. Forget the cart ID on logout, or the next visitor on the same device would read a cart that now answers `404`.
+
+## Resetting a Password
+
+A password reset takes two calls. The "Forgot password" form sends the email, and the API emails a link to the reset page of your storefront. The Laravel application sets that link, as described in [Resetting a Password](/3.x/store-api/authentication#resetting-a-password). The form sends the email the customer typed:
+
+```ts
+await sdk.auth.forgotPassword('amara@example.com')
+```
+
+The reset page reads the token and the email from its URL, and sends them with the new password the customer typed:
+
+```ts
+const params = new URLSearchParams(window.location.search)
+
+await sdk.auth.resetPassword({
+  email: params.get('email')!,
+  token: params.get('token')!,
+  password: 'new-correct-horse-battery-staple',
+})
+```
+
+The customer then logs in with the new password. An expired or used link throws a `ShopperApiError` with the `reset_token_invalid` code on the `email` field: offer to send a new link.
+
+## Next Steps
+
+<Cards>
+  <Card title="Errors" href="/3.x/sdk/errors">
+    Read the code and the field messages of a failed login or registration.
+  </Card>
+  <Card title="Customers" href="/3.x/sdk/customers">
+    Read and update the profile, the avatar and the saved addresses of the logged-in customer.
+  </Card>
+</Cards>

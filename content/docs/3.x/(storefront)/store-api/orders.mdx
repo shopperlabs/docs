@@ -283,6 +283,8 @@ The list accepts these query parameters, described in [JSON:API Conventions](/3.
 
 </Params>
 
+This request lists the orders of the customer the token belongs to:
+
 ```bash title="Request"
 curl http://localhost:8000/store/customers/me/orders \
   -H "Accept: application/vnd.api+json" \
@@ -593,6 +595,8 @@ The storefront gets the shipment ID from `include=shippings` on the [order detai
 </Field>
 
 </Params>
+
+This request reads a shipment, and asks for its tracking events with `include=events`:
 
 ```bash title="Request"
 curl "http://localhost:8000/store/shipments/01JQ9B2C4D6E8F0G1H3J5K7M9N?include=events" \

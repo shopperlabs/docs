@@ -155,6 +155,8 @@ class BrandLogoController extends Controller
 }
 ```
 
+From a URL, `addMediaFromUrl()` downloads the image and adds it to the gallery of the product:
+
 ```php
 $product->addMediaFromUrl('https://cdn.example.com/classic-t-shirt-back.jpg')
     ->toMediaCollection(config('shopper.media.storage.collection_name'));

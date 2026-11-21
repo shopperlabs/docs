@@ -60,6 +60,8 @@ A quantity under 10 renders red.
   <PreviewStockBadge stock={3} />
 </ComponentPreview>
 
+This Blade passes a stock of 3:
+
 ```blade
 <x-shopper::stock-badge :stock="3" />
 ```
@@ -72,13 +74,15 @@ A quantity of 10 or more renders green.
   <PreviewStockBadge stock={50} />
 </ComponentPreview>
 
+This Blade passes a stock of 50:
+
 ```blade
 <x-shopper::stock-badge :stock="50" />
 ```
 
 ### In a Table
 
-In a Filament table, render the badge from a `ViewColumn`. The view receives the row through `$getRecord()`:
+In a Filament table, render the badge from a `ViewColumn`. This column renders the `stock` cell of each row with a Blade view:
 
 ```php
 use Filament\Tables\Columns\ViewColumn;
@@ -87,6 +91,8 @@ ViewColumn::make('stock')
     ->label('Stock')
     ->view('livewire.tables.cells.stock')
 ```
+
+The view reads the product of the row through `$getRecord()` and shows its stock in the badge, followed by "in stock":
 
 ```blade title="resources/views/livewire/tables/cells/stock.blade.php"
 @php

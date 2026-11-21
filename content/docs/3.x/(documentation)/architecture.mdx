@@ -164,6 +164,8 @@ The JavaScript SDK wraps these endpoints and returns the nested objects describe
 npm install @shopperlabs/shopper-sdk
 ```
 
+This script creates a client for the store and lists the 12 newest products whose name contains "t-shirt":
+
 ```typescript
 import Shopper from '@shopperlabs/shopper-sdk'
 
@@ -176,4 +178,4 @@ const { data: products } = await sdk.store.product.list({
 })
 ```
 
-The SDK calls `/store` by default; set its `storePrefix` option when you change the API prefix. The [Storefront](/3.x/storefront) section covers the endpoints and the SDK in detail.
+The SDK calls `/store` by default; set its `storePrefix` option when you change the API prefix. The [Storefront](/3.x/storefront) section covers the endpoints, and the [JavaScript SDK](/3.x/sdk) pages the client in detail.

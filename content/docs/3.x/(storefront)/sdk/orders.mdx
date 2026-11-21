@@ -1,0 +1,112 @@
+---
+title: Orders
+description: Show the order confirmation, list the orders of a customer, track a shipment and download purchased files with the JavaScript SDK.
+---
+
+Once the checkout places an order, the storefront shows it on the confirmation page, in the order history of the account, on a tracking page while the parcel travels, and in the downloads of a digital product. Orders are read-only for the storefront: the merchant changes them in the admin panel, and the payment and carrier webhooks move their statuses. The [Orders](/3.x/store-api/orders) guide of the Store API describes every attribute and status.
+
+## Order Confirmation
+
+`order.retrieve()` reads the order the checkout just placed, with the `id` that [`cart.complete()`](/3.x/sdk/checkout#completing-the-cart) returned. It works for guests and customers alike, so the confirmation page needs no account. This confirmation page reads the order with its lines:
+
+```ts
+import { sdk } from '@/lib/shopper'
+
+const order = await sdk.store.order.retrieve(orderId, { include: ['items'] })
+
+order.number // the order number to show the customer
+order.price_amount // 14390, the amount paid in cents
+
+for (const item of order.items ?? []) {
+  item.name // the name of the product as it was at checkout
+  item.quantity // 1
+}
+```
+
+A guest order is readable by anyone holding its ID, so keep the ID in the confirmation URL or the session of the visitor, and out of logs and analytics events. A customer order needs the token of that customer, and throws status `404` without it, like an ID that does not exist.
+
+`items` is the only include of this call: any other throws status `422` with the `include_not_allowed` code. The addresses, the payment method and the shipments are on the order details of the account, as [Who Can Read an Order](/3.x/store-api/orders#who-can-read-an-order) explains.
+
+## Order History
+
+`customer.orders.list()` pages through the orders of the logged-in customer, newest first, 15 per page by default. `filter.status` takes one [status](/3.x/store-api/orders#statuses) or several, comma-separated, so each tab of the history page is one call. Here, the "In progress" tab lists 10 orders that are new or processing, with their lines:
+
+```ts
+const { data: orders } = await sdk.store.customer.orders.list({
+  filter: { status: 'new,processing' },
+  include: ['items'],
+  page: { size: 10 },
+})
+
+for (const order of orders) {
+  order.number
+  order.status // 'processing'
+  order.created_at
+}
+```
+
+`sort: ['created_at']` lists the oldest orders first. [Filters, Sorting and Includes](/3.x/store-api/orders#filters-sorting-and-includes) lists the includes of the history.
+
+## Order Details
+
+`customer.orders.retrieve()` serves the order page of the account: the lines, the addresses, the payment method, the packages and the refund. Ask for the relationships the page shows. This call reads an order of the customer with its lines, its addresses, its payment method, its shipments and its refund:
+
+```ts
+const order = await sdk.store.customer.orders.retrieve(orderId, {
+  include: ['items', 'shippingAddress', 'billingAddress', 'paymentMethod', 'shippings', 'refund'],
+})
+
+order.payment_status // 'paid'
+order.shipping_status // 'shipped'
+order.shippingAddress?.city // 'Paris'
+order.shippings?.map((shipment) => shipment.tracking_number)
+```
+
+Show `price_amount` as the amount paid: `total` covers the lines only, without shipping, and fits a "Subtotal" row. The order keeps a copy of the addresses and of each line as they were at checkout, so a change to a saved address or to the catalog leaves a past order as it was. [Amounts](/3.x/store-api/orders#amounts) details each total.
+
+## Tracking a Shipment
+
+`shipment.retrieve()` reads one package and its tracking events, oldest first. It needs no token, so a tracking page works from a link in a shipping email. The shipment ID comes from the `shippings` of the order details, or from the `shipment.*` webhooks for the email you send when the package ships. This tracking page reads a shipment and its events:
+
+```ts
+const shipment = await sdk.store.shipment.retrieve(shipmentId, { include: ['events'] })
+
+shipment.status // 'in_transit'
+shipment.carrier_name // 'UPS'
+shipment.tracking_url // the carrier's own tracking page
+
+for (const event of shipment.events ?? []) {
+  event.status // 'at_sorting_center'
+  event.location // 'Lyon'
+  event.occurred_at
+}
+```
+
+`events` is the only include of a shipment. An unknown ID throws status `404`. [Tracking a Shipment](/3.x/store-api/orders#tracking-a-shipment) lists the statuses of a package.
+
+## Downloading Purchased Files
+
+A customer who buys a digital product, such as a PDF guide, downloads its files from the order page of their account. Once the payment status of the order is `paid` or `partially_refunded`, each item of a downloadable product carries `files` on the [order details](#order-details), with the `id`, `name`, `extension` and `size` in bytes of each file. Show one **Download** button per file.
+
+The files have no public URL. `customer.fileLink()` asks for a link when the customer clicks, with the order ID, the item ID and the file ID, and the browser follows it right away. The `download()` function below asks for the link of one file and opens it:
+
+```ts
+async function download(orderId: string, itemId: string, fileId: string) {
+  const { url } = await sdk.store.customer.fileLink(orderId, itemId, fileId)
+
+  window.location.assign(url)
+}
+```
+
+The link works for five minutes: ask for a new one at every click, and never store it or put it in an email. A guest order has no downloads, so a store that sells digital products asks buyers to create an account. [Downloading Purchased Files](/3.x/store-api/orders#downloading-purchased-files) describes the link for each storage disk.
+
+## Next Steps
+
+<Cards>
+  <Card title="Customers" href="/3.x/sdk/customers">
+    Manage the profile and the saved addresses of the account.
+  </Card>
+  <Card title="Custom Endpoints" href="/3.x/sdk/custom-endpoints">
+    Call a route of your own app through the client.
+  </Card>
+</Cards>

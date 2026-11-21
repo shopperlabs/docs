@@ -1,0 +1,207 @@
+---
+title: Catalog
+description: List and filter products, show a product page, and read categories, collections, brands, tags, attributes and reviews with the JavaScript SDK.
+---
+
+The catalog methods feed the pages a visitor browses before buying: the shop page, the category and brand pages, the search results, the product page and the navigation menu. They need no customer token. The [Catalog](/3.x/store-api/catalog) guide of the Store API describes every field of the responses and what a visitor sees, such as hidden categories or unpublished products.
+
+## Listing Products
+
+`product.list()` serves the shop page, the category pages and the search results: the same call with different filters. It returns the products in `data`, and the pagination and the currency of the prices in `meta`. Here, a category page lists the first 24 products of the men category that are in stock, newest first, with their brand:
+
+```ts
+import { sdk } from '@/lib/shopper'
+
+const { data: products, meta } = await sdk.store.product.list({
+  filter: { category_tree: 'men', in_stock: true },
+  sort: ['-published_at'],
+  include: ['brand'],
+  page: { number: 1, size: 24 },
+})
+
+meta.currency // 'EUR'
+meta.last_page // 4
+```
+
+`meta.currency` is the currency every price of the page is expressed in. A product card reads `calculated_price` for a standard product and `price_range.min` for a variant product, both [in cents](/3.x/money). This function returns the price to show on a product card, formatted in the currency of the page:
+
+```ts
+import type { Product } from '@shopperlabs/shopper-sdk'
+
+function cardPrice(product: Product, currency: string): string {
+  const amount = product.calculated_price?.amount ?? product.price_range?.min
+
+  if (amount === undefined) {
+    return ''
+  }
+
+  return new Intl.NumberFormat('en', { style: 'currency', currency }).format(amount / 100)
+}
+```
+
+The product filters are `q`, `name`, `sku`, `featured`, `in_stock`, `category`, `category_tree`, `collection`, `brand`, `tag`, `option`, `currency`, `price_min` and `price_max`. The sorts are `name`, `created_at`, `published_at` and `price`, and the includes are listed in [Filters, Sorting and Includes](/3.x/store-api/catalog#filters-sorting-and-includes). A search box sends the term in `q`. This call returns the first 12 products that match "sneaker":
+
+```ts
+const { data: results } = await sdk.store.product.list({
+  filter: { q: 'sneaker' },
+  page: { size: 12 },
+})
+```
+
+### Price Filters
+
+A price slider sends its bounds in cents in `price_min` and `price_max`. The `price_range` include adds `meta.price_range`, the lowest and highest price of the products that match the other filters, so the slider keeps its full range while the visitor moves it. Here, the category page lists the products between 50.00 and 100.00, cheapest first, and reads the bounds of the slider:
+
+```ts
+const { data, meta } = await sdk.store.product.list({
+  filter: { category_tree: 'men', price_min: 5000, price_max: 10000 },
+  sort: ['price'],
+  include: ['price_range'],
+})
+
+meta.price_range // { min: 2500, max: 18900, currency_code: 'EUR' }
+```
+
+Prices are never converted: `filter.currency` picks the currency of a multi-currency shop, and products without a price in that currency are left out, as [Price Filters and Sorting](/3.x/store-api/catalog#price-filters-and-sorting) explains.
+
+## Showing a Product
+
+`product.retrieve()` takes the slug of the product. A product page includes the variants and the options, so the visitor can pick a size or a color. This call reads a product with its brand, its variants, its options and its rating:
+
+```ts
+const product = await sdk.store.product.retrieve('classic-leather-sneaker', {
+  include: ['brand', 'variants', 'options', 'rating'],
+})
+
+product.options?.map((option) => option.name) // ['Size', 'Color']
+product.variants?.length // 6
+product.rating // 4.6
+```
+
+An unknown or unpublished slug throws a `ShopperApiError` with status `404`. In a Next.js page, turn it into the 404 page. This page reads the product of its URL, caches it for 60 seconds, and shows the 404 page when the product does not exist:
+
+```ts title="app/products/[slug]/page.tsx"
+import { ShopperApiError } from '@shopperlabs/shopper-sdk'
+import { notFound } from 'next/navigation'
+import { sdk } from '@/lib/shopper'
+
+export default async function ProductPage({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params
+
+  const product = await sdk.store.product
+    .retrieve(slug, { include: ['variants', 'options'] }, { next: { revalidate: 60, tags: [`product:${slug}`] } })
+    .catch((error) => {
+      if (error instanceof ShopperApiError && error.status === 404) {
+        notFound()
+      }
+
+      throw error
+    })
+
+  return <h1>{product.name}</h1>
+}
+```
+
+[Showing a Product](/3.x/store-api/catalog#showing-a-product) describes the variants, the options and the stock of a product.
+
+## Categories
+
+`category.tree()` returns every enabled category, nested, in one call: the navigation menu of the shop. It is not paginated, and each node has `id`, `name`, `slug`, `position` and `children`. Here, the menu reads the tree, caches it for one hour and lists the slugs of the subcategories:
+
+```ts
+const tree = await sdk.store.category.tree({ next: { revalidate: 3600, tags: ['categories'] } })
+
+tree.map((category) => category.children.map((child) => child.slug))
+```
+
+`category.list()` pages through the categories, and `category.retrieve()` reads a category page by its slug. The first call searches the categories named "shoes", and the second reads the men category:
+
+```ts
+const { data: categories } = await sdk.store.category.list({ filter: { name: 'shoes' } })
+
+const category = await sdk.store.category.retrieve('men')
+```
+
+A category page then lists its products with `filter: { category_tree: 'men' }`, or `category: 'men'` to leave out the subcategories.
+
+## Collections
+
+`collection.list()` and `collection.retrieve()` read the published collections, such as a "Summer Sale" landing page. The products of a collection come from the product listing. This landing page reads the "Summer Sale" collection, then lists its products:
+
+```ts
+const collection = await sdk.store.collection.retrieve('summer-sale')
+
+const { data: products } = await sdk.store.product.list({
+  filter: { collection: 'summer-sale' },
+})
+```
+
+## Brands
+
+`brand.list()` gives the brand index and `brand.retrieve()` a brand page, with the same pattern. The first call lists 50 brands by name, and the second reads one brand:
+
+```ts
+const { data: brands } = await sdk.store.brand.list({ sort: ['name'], page: { size: 50 } })
+
+const brand = await sdk.store.brand.retrieve('maison-cuir')
+```
+
+## Tags
+
+`tag.list()` returns the product tags, for a tag cloud or a filter. A tag page lists its products with `filter: { tag: 'organic' }`. This call lists the tags by name:
+
+```ts
+const { data: tags } = await sdk.store.tag.list({ sort: ['name'] })
+```
+
+## Attributes
+
+`attribute.list()` returns the attributes the merchant marked as filterable, such as size or color, with their values. A filter sidebar shows each value and sends its `key` in the `option` filter of the product listing. Here, the sidebar lists the attributes and their values, then lists the products in size 42 or 43:
+
+```ts
+const { data: attributes } = await sdk.store.attribute.list()
+
+for (const attribute of attributes) {
+  attribute.name // 'Size'
+  attribute.values?.map((value) => value.key) // ['42', '43']
+}
+
+const { data: products } = await sdk.store.product.list({
+  filter: { option: '42,43' },
+})
+```
+
+## Reviews
+
+`product.reviews()` takes the slug of a product and returns its approved reviews, newest first. Its `meta` adds the rating summary of the product: `reviews_count`, `average_rating` and `rating_distribution`. This call reads the first 10 five-star reviews of a product and its rating summary:
+
+```ts
+const { data: reviews, meta } = await sdk.store.product.reviews('classic-leather-sneaker', {
+  filter: { rating: 5 },
+  page: { size: 10 },
+})
+
+meta.reviews_count // 128
+meta.average_rating // 4.6
+```
+
+`review.latest()` returns the latest approved reviews of the whole shop, for a testimonials block on the home page. It is not paginated and returns 20 reviews at most. This call reads them and lists the name of each author:
+
+```ts
+const testimonials = await sdk.store.review.latest()
+
+testimonials.map((review) => review.author?.name)
+```
+
+The [Reviews](/3.x/store-api/catalog#reviews) section describes the review fields and the author of a review.
+
+## Next Steps
+
+<Cards>
+  <Card title="Store and Regions" href="/3.x/sdk/store">
+    Read the store settings, and the countries, zones and currencies a visitor picks from.
+  </Card>
+  <Card title="Cart" href="/3.x/sdk/cart">
+    Add the product the visitor picked to a cart.
+  </Card>
+</Cards>

@@ -76,6 +76,8 @@ Use `info` for neutral guidance.
   />
 </ComponentPreview>
 
+This Blade sets the `info` color and the `untitledui-info-circle` icon:
+
 ```blade
 <x-shopper::alert
     color="info"
@@ -96,6 +98,8 @@ Use `success` to confirm that something worked.
     message="The shipping rates have been imported."
   />
 </ComponentPreview>
+
+This Blade sets the `success` color and the `untitledui-check-circle` icon:
 
 ```blade
 <x-shopper::alert
@@ -118,6 +122,8 @@ Use `warning`, the default color, for a situation that needs attention.
   />
 </ComponentPreview>
 
+This Blade sets the `warning` color and the `untitledui-alert-triangle` icon:
+
 ```blade
 <x-shopper::alert
     color="warning"
@@ -138,6 +144,8 @@ Use `danger` for an error or an action that cannot be undone.
     message="The payment provider rejected the refund. Try again or contact support."
   />
 </ComponentPreview>
+
+This Blade sets the `danger` color and the `untitledui-x-circle` icon:
 
 ```blade
 <x-shopper::alert
@@ -163,6 +171,8 @@ Without a title, the message sits next to the icon.
   />
 </ComponentPreview>
 
+This Blade passes the `message` and the `icon`, with no `title`:
+
 ```blade
 <x-shopper::alert
     color="info"
@@ -183,6 +193,8 @@ Leave out the `icon` prop to display the text only.
     icon={false}
   />
 </ComponentPreview>
+
+This Blade passes the `title` and the `message`, with no `icon`:
 
 ```blade
 <x-shopper::alert

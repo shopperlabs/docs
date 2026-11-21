@@ -438,7 +438,7 @@ To add a payment provider, implement it with Shopper's [payment system](/3.x/pay
 
 ### Adding Pages
 
-A new page takes a single-file Livewire component under `resources/views/pages/` and a named route in `routes/web.php`. The component renders in the `store` layout by default.
+A new page takes a single-file Livewire component under `resources/views/pages/` and a named route in `routes/web.php`. The component renders in the `store` layout by default. This component sets the title of the page and renders its heading:
 
 ```blade title="resources/views/pages/about.blade.php"
 <?php
@@ -452,6 +452,8 @@ new #[Title('About Us')] class extends Component {}; ?>
     <h1>About Us</h1>
 </div>
 ```
+
+This route serves the component at `/about`, under the name `about`:
 
 ```php title="routes/web.php"
 Route::livewire('about', 'pages::about')->name('about');

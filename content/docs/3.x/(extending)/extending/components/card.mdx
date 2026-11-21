@@ -61,6 +61,8 @@ Without a title, the card only renders the inner panel.
   </PreviewCard>
 </ComponentPreview>
 
+This Blade puts a paragraph in a card without a `title`:
+
 ```blade
 <x-shopper::card>
     <p>Free shipping applies to orders over $50.</p>
@@ -76,6 +78,8 @@ The description is optional.
     <p className="text-gray-600 dark:text-gray-400">Display product details in an organized manner.</p>
   </PreviewCard>
 </ComponentPreview>
+
+This Blade gives the card a `title` and no `description`:
 
 ```blade
 <x-shopper::card title="Product Information">
@@ -120,6 +124,8 @@ Cards hold the fields of most admin forms. The [label](/3.x/extending/components
     </div>
   </PreviewCard>
 </ComponentPreview>
+
+This Blade puts two fields in the card, each made of a label and an input:
 
 ```blade
 <x-shopper::card title="Supplier Details" description="The contact your purchasing team works with.">

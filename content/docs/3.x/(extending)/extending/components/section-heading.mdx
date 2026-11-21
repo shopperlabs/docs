@@ -59,6 +59,8 @@ Leave out the description for a short title.
   <PreviewSectionHeading title="Pricing" />
 </ComponentPreview>
 
+This Blade passes the `title` only:
+
 ```blade
 <x-shopper::section-heading title="Pricing" />
 ```
@@ -73,6 +75,8 @@ The description is limited to a readable line length.
     description="Stock levels, SKU and barcode of the product."
   />
 </ComponentPreview>
+
+This Blade adds the `description` under the `title`:
 
 ```blade
 <x-shopper::section-heading
@@ -95,6 +99,8 @@ The card uses the section heading when you pass it a `title` string, and forward
     </div>
   </PreviewCard>
 </ComponentPreview>
+
+This Blade passes the `title` and the `description` to the card, and puts an [empty card](/3.x/extending/components/empty-card) in it:
 
 ```blade
 <x-shopper::card
