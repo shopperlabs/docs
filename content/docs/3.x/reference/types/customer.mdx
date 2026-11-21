@@ -7,7 +7,7 @@ The types of this page describe the account of a signed-in customer. The Store A
 
 ## Customer
 
-`Customer` is the profile of a customer, returned by `GET /store/customers/me` and `PATCH /store/customers/me` for the customer the token belongs to. `avatar` is a URL: the uploaded picture when `avatar_type` is `storage`, a generated picture when it is `avatar_ui`. `email_verified` is sent by the Store API. The type declares `birth_date` as a `Date`, but the JSON carries a string, such as `"1992-04-18"`. See [Reading the Profile](/3.x/store-api/customers#reading-the-profile). This is the definition:
+`Customer` is the profile of a customer, returned by `GET /store/customers/me` and `PATCH /store/customers/me` for the customer the token belongs to. `avatar` is a URL: the uploaded picture when `avatar_type` is `storage`, a generated picture when it is `avatar_ui`. `birth_date` is a `YYYY-MM-DD` string and `email_verified_at` an ISO 8601 date, each `null` when unset. The Store API also sends `email_verified`, a boolean, and leaves out `timezone`, `last_login_at`, `last_login_ip` and `addresses`, which the type declares. See [Reading the Profile](/3.x/store-api/customers#reading-the-profile). This is the definition:
 
 ```ts
 interface Customer extends Entity {
@@ -16,8 +16,8 @@ interface Customer extends Entity {
   email: string
   gender: GenderType | null
   phone_number: string | null
-  birth_date: Date | null
-  email_verified_at: Date | null
+  birth_date: string | null
+  email_verified_at: string | null
   email_verified?: boolean
   avatar: string
   avatar_type: string
