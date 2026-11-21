@@ -3,7 +3,7 @@ name: Docs
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [main, 3.x]
 
 permissions:
   contents: read
