@@ -1,5 +1,5 @@
 import { highlight } from 'fumadocs-core/highlight';
-import { FileCode, FileText, Files, GitPullRequest } from 'lucide-react';
+import { FileCode, FileText, Files, GitPullRequest, Plug } from 'lucide-react';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { AnyLink, ArrowLink, buttons, filler, frame, Section, TileGrid, type Tile } from '@/components/home/sections';
@@ -8,7 +8,7 @@ import { VersionMark } from '@/components/home/version-mark';
 import { domainHref, firstUrl, flattenPages, tabsFor, versions } from '@/components/layout/tree';
 import { DiscordIcon, GithubIcon, XIcon } from '@/components/ui/brand-icons';
 import { InstallCommand } from '@/components/ui/install-command';
-import { getPageImageUrl, links } from '@/lib/shared';
+import { docsUrl, getPageImageUrl, links } from '@/lib/shared';
 import { getDocsTree } from '@/lib/source';
 
 export const metadata: Metadata = {
@@ -53,6 +53,12 @@ const AI: Tile[] = [
     href: '/3.x/getting-started.md',
     Icon: FileCode,
   },
+  {
+    title: 'MCP server',
+    description: 'Search and read these pages from Claude Code, Cursor or any MCP client.',
+    href: '/3.x/ai-tools#documentation-mcp-server',
+    Icon: Plug,
+  },
 ];
 
 const COMMUNITY: Tile[] = [
@@ -63,6 +69,7 @@ const COMMUNITY: Tile[] = [
 ];
 
 const COMMANDS = ['composer require shopper/framework', 'php artisan shopper:install'];
+const MCP_COMMAND = `claude mcp add --transport http shopper-docs ${docsUrl}/mcp`;
 
 export default async function Home() {
   const version = versions(getDocsTree()).find((node) => node.$id === '3.x')!;
@@ -73,6 +80,7 @@ export default async function Home() {
   const install = live('/3.x/installation') ? '/3.x/installation' : '#install';
   const storefront = firstUrl(tab('Storefront'))!;
   const tokens = await Promise.all(COMMANDS.map((command) => highlight(command, { lang: 'bash', structure: 'inline' })));
+  const mcpTokens = await highlight(MCP_COMMAND, { lang: 'bash', structure: 'inline' });
 
   const steps = [
     {
@@ -296,9 +304,16 @@ export default async function Home() {
       <Section
         id="ai"
         title="Use with AI"
-        lead="Give an assistant the pages it needs, in Markdown."
+        lead="Give an assistant the pages it needs, in Markdown or through the MCP server."
       >
-        <TileGrid tiles={AI} className="sm:grid-cols-3" />
+        <TileGrid tiles={AI} className="sm:grid-cols-2 lg:grid-cols-4" />
+        <div className="mt-6 max-w-3xl">
+          <InstallCommand command={MCP_COMMAND}>{mcpTokens}</InstallCommand>
+          <p className="mt-3 text-sm/6 text-pretty text-zinc-500 [&_code]:font-mono [&_code]:text-[0.8125rem] [&_code]:text-zinc-950 dark:[&_code]:text-white">
+            Adds the MCP server to Claude Code. In Cursor, add <code>{`${docsUrl}/mcp`}</code> under <code>mcpServers</code> in{' '}
+            <code>.cursor/mcp.json</code>.
+          </p>
+        </div>
       </Section>
 
       <Section id="community" title="Community">

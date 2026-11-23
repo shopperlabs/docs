@@ -1,10 +1,10 @@
 ---
 title: Using Shopper with AI Tools
 sidebarTitle: AI Tools
-description: Give Claude Code, Cursor or any coding agent the Shopper conventions through Laravel Boost, and read this documentation as Markdown.
+description: Give Claude Code, Cursor or any coding agent the Shopper conventions through Laravel Boost, and this documentation through an MCP server or as Markdown.
 ---
 
-A coding agent knows Laravel well, but it does not know how Shopper registers an admin page, which contract to implement for a custom model, or which config key turns off a feature. Shopper gives agents that context in two ways: guidelines and skills shipped inside the Shopper packages for [Laravel Boost](https://laravel.com/docs/boost), and this documentation served as Markdown.
+A coding agent knows Laravel well, but it does not know how Shopper registers an admin page, which contract to implement for a custom model, or which config key turns off a feature. Shopper gives agents that context in three ways: guidelines and skills shipped inside the Shopper packages for [Laravel Boost](https://laravel.com/docs/boost), an MCP server that searches this documentation, and every page served as Markdown.
 
 ## Laravel Boost
 
@@ -73,17 +73,51 @@ The other four cover changes made during the 2.x releases, for a store that upgr
 
 Remove `shopper/upgrade` once the upgrade is done.
 
+## Documentation MCP Server
+
+The documentation runs its own MCP server at `https://docs.shopperphp.com/mcp`. An agent connected to it searches this documentation and reads the pages it needs while it works, so you do not paste links or pages into the conversation. The server is public and needs no key.
+
+It exposes three tools:
+
+| Tool | What it does |
+|------|--------------|
+| `search` | Searches one version of the documentation and returns the matching pages and sections with their URLs. The agent passes the Shopper version your application uses; without one, the search covers 3.x. |
+| `get_page` | Returns a page as Markdown from its path, such as `/3.x/installation`. |
+| `list_pages` | Lists every page of every version with its summary, the same list as [`/llms.txt`](https://docs.shopperphp.com/llms.txt). |
+
+In Claude Code, run this command in your project to add the server:
+
+```bash
+claude mcp add --transport http shopper-docs https://docs.shopperphp.com/mcp
+```
+
+The server is then available in this project only. Add `--scope user` to the command to use it in every project, or `--scope project` to save it in the project's `.mcp.json` file and share it with your team.
+
+In Cursor, add the server to `.cursor/mcp.json` in your project, or to `~/.cursor/mcp.json` to use it in every project:
+
+```json title=".cursor/mcp.json"
+{
+  "mcpServers": {
+    "shopper-docs": {
+      "url": "https://docs.shopperphp.com/mcp"
+    }
+  }
+}
+```
+
+Other agents that support remote MCP servers take the same URL.
+
 ## Documentation as Markdown
 
 Every page of this documentation is also served as Markdown, which an agent reads with fewer tokens than the HTML page:
 
 | URL | What it returns |
 |-----|-----------------|
-| [`/llms.txt`](https://docs.laravelshopper.dev/llms.txt) | The list of every page with its summary, for an agent to choose what to read. |
-| [`/llms-full.txt`](https://docs.laravelshopper.dev/llms-full.txt) | The whole documentation in one Markdown file. |
+| [`/llms.txt`](https://docs.shopperphp.com/llms.txt) | The list of every page with its summary, for an agent to choose what to read. |
+| [`/llms-full.txt`](https://docs.shopperphp.com/llms-full.txt) | The whole documentation in one Markdown file. |
 | `/3.x/installation.md` | One page as Markdown: add `.md` to the URL of any page. |
 
-A request for a page URL with the `Accept: text/markdown` header also returns the Markdown version, so an agent that fetches `https://docs.laravelshopper.dev/3.x/installation` with that header gets Markdown without a different URL.
+A request for a page URL with the `Accept: text/markdown` header also returns the Markdown version, so an agent that fetches `https://docs.shopperphp.com/3.x/installation` with that header gets Markdown without a different URL.
 
 <Note>
   `llms.txt` and `llms-full.txt` cover every version of the documentation. Each page title carries its path, such as `/3.x/installation` or `/2.x/installation`: tell your agent to read the `/3.x` pages.
