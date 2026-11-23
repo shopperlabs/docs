@@ -127,6 +127,8 @@ export async function generateMetadata(props: PageProps<'/[...slug]'>): Promise<
     alternates: {
       canonical: page.url,
     },
+    // Archived versions stay reachable from links, but their pages must not outrank the current ones.
+    robots: version.description === 'Archived' ? { index: false, follow: true } : undefined,
     openGraph: {
       url: page.url,
       type: 'article',
