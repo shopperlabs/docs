@@ -83,7 +83,7 @@ v2.8 tightens authorization across every Shopper admin Livewire component. If yo
 
 #### Chain `authorize()` on Filament actions
 
-Filament `Action` handlers should declare their ability on the action itself, not inside the closure. This hides the button when the user lacks the ability, instead of throwing a 403 on click:
+Filament `Action` handlers should declare their ability on the action itself, not inside the closure. When the user lacks the ability, the button is left out of a table or an `x-filament::actions` list, or shown disabled when the view renders the action on its own, and Filament refuses to run it instead of throwing a 403 on click:
 
 ```php
 Action::make('cancel') // [!code --]

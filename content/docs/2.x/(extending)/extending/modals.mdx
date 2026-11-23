@@ -1,8 +1,176 @@
 ---
-title: Modals
-description: Learn how to implement and use modals in your Shopper admin panel
+title: 'Modals'
+description: 'Confirm an action or ask for a few values in a modal of your admin pages, with the Filament actions that the order and brand pages of Shopper use.'
 ---
 
-# Modals
+Some buttons of the admin panel need a step between the click and the result. Archiving an order asks for confirmation first, and editing a shipment asks for its carrier and tracking number without leaving the order page. Shopper has no modal component of its own for this: its pages open the modal of a [Filament action](https://filamentphp.com/docs/4.x/actions/modals). Your pages do the same, and their modals look like the ones of the admin panel.
 
-Coming Soon...
+## Confirming an Action [#confirming-an-action]
+
+The page of a gift card needs a button that turns the card off, once the admin has confirmed. A Filament action is that button and the modal it opens, declared in a method of the Livewire page. The method is named after the action followed by `Action`, which is how Livewire finds the action when the button is clicked. `requiresConfirmation()` turns its modal into a confirmation, and the action runs only when the admin confirms.
+
+The page below declares a `disable` action:
+
+```php title="app/Livewire/Shopper/GiftCards/EditGiftCard.php"
+namespace App\Livewire\Shopper\GiftCards;
+
+use App\Models\GiftCard;
+use Filament\Actions\Action;
+use Filament\Actions\Concerns\InteractsWithActions;
+use Filament\Actions\Contracts\HasActions;
+use Filament\Notifications\Notification;
+use Filament\Schemas\Concerns\InteractsWithSchemas;
+use Filament\Schemas\Contracts\HasSchemas;
+use Illuminate\Contracts\View\View;
+use Livewire\Attributes\Locked;
+use Shopper\Livewire\Pages\AbstractPageComponent;
+use Shopper\Traits\HandlesAuthorizationExceptions;
+
+class EditGiftCard extends AbstractPageComponent implements HasActions, HasSchemas
+{
+    use HandlesAuthorizationExceptions;
+    use InteractsWithActions;
+    use InteractsWithSchemas;
+
+    #[Locked]
+    public GiftCard $giftCard;
+
+    public function mount(): void
+    {
+        $this->authorize('read_gift_cards');
+    }
+
+    public function disableAction(): Action
+    {
+        return Action::make('disable')
+            ->label(__('Disable'))
+            ->color('danger')
+            ->authorize('edit_gift_cards')
+            ->visible($this->giftCard->is_enabled)
+            ->requiresConfirmation()
+            ->modalIcon('untitledui-slash-circle-01')
+            ->modalHeading(__('Disable the gift card :code', ['code' => $this->giftCard->code]))
+            ->modalDescription(__('Customers can no longer use this code at checkout. You can enable it again later.'))
+            ->modalSubmitActionLabel(__('Disable'))
+            ->action(function (): void {
+                $this->giftCard->update(['is_enabled' => false]);
+
+                Notification::make()
+                    ->title(__('Gift card disabled'))
+                    ->success()
+                    ->send();
+            });
+    }
+
+    public function render(): View
+    {
+        return view('livewire.shopper.gift-cards.edit-gift-card')
+            ->title($this->giftCard->code);
+    }
+}
+```
+
+The page implements `HasActions` and uses `InteractsWithActions` to run actions, and `HasSchemas` with `InteractsWithSchemas` to render the fields of a modal. `authorize('edit_gift_cards')` hides the button from admins without the permission, and `visible()` hides it once the card is off. Filament refuses to run an action that is hidden, so a request sent to the page without the button does nothing. The `#[Locked]` attribute keeps the browser from swapping the gift card for another one, as described in the [authorization pattern](/2.x/extending/controllers#authorization-pattern-for-custom-admin-components) of the admin panel.
+
+The view renders the button in the heading of the page with `x-filament::actions`, which leaves out the actions that are hidden, and the modals of the page with `<x-filament-actions::modals />`. Livewire requires a single root element, so both sit inside a `<div>`:
+
+```blade title="resources/views/livewire/shopper/gift-cards/edit-gift-card.blade.php"
+<div>
+    <x-shopper::container class="space-y-8 py-5">
+        <x-shopper::heading :title="$giftCard->code">
+            <x-slot name="action">
+                <x-filament::actions :actions="[$this->disableAction]" />
+            </x-slot>
+        </x-shopper::heading>
+    </x-shopper::container>
+
+    <x-filament-actions::modals />
+</div>
+```
+
+Rendered on its own with `{{ $this->disableAction }}`, a hidden action still shows, as a disabled button.
+
+Register the page in your [custom route file](/2.x/extending/controllers#custom-routes), with the gift card in the URL:
+
+```php title="routes/shopper.php"
+use App\Livewire\Shopper\GiftCards\EditGiftCard;
+use Illuminate\Support\Facades\Route;
+
+Route::get('/gift-cards/{giftCard}', EditGiftCard::class)->name('gift-cards.edit');
+```
+
+Clicking **Disable** opens the confirmation:
+
+<Screenshot src="/images/v2/extending-modals-confirmation.png" alt="Disable the gift card WELCOME-50 confirmation modal with a red icon, its description, and the Cancel and Disable buttons" />
+
+Without `modalHeading()` and `modalDescription()`, the modal shows the label of the action as its heading and asks "Are you sure you would like to do this?". The icon takes the color of the action.
+
+A row action of a table takes the same methods. The brand list of Shopper confirms the deletion of a brand with `requiresConfirmation()` and `modalIcon()` on the `delete` action of each row.
+
+## Forms in a Modal [#forms-in-a-modal]
+
+An admin who extends a gift card only changes its expiry date, which does not deserve an edit page. The modal of an action holds a short form for this. `schema()` puts Filament fields in the modal and `fillForm()` fills them when the modal opens. When the admin submits, Filament validates the fields and passes their values to `action()` as `$data`.
+
+This action, added to the page above, asks for the new expiry date:
+
+```php title="app/Livewire/Shopper/GiftCards/EditGiftCard.php"
+use Filament\Actions\Action;
+use Filament\Forms\Components\DatePicker;
+use Filament\Notifications\Notification;
+use Filament\Support\Enums\Width;
+
+public function extendAction(): Action
+{
+    return Action::make('extend')
+        ->label(__('Extend'))
+        ->color('gray')
+        ->authorize('edit_gift_cards')
+        ->modalHeading(__('Extend the gift card'))
+        ->modalWidth(Width::Large)
+        ->fillForm(fn (): array => ['expires_at' => $this->giftCard->expires_at])
+        ->schema([
+            DatePicker::make('expires_at')
+                ->label(__('Expires on'))
+                ->required()
+                ->minDate(now()),
+        ])
+        ->action(function (array $data): void {
+            $this->giftCard->update(['expires_at' => $data['expires_at']]);
+
+            Notification::make()
+                ->title(__('Gift card extended'))
+                ->success()
+                ->send();
+        });
+}
+```
+
+The view adds the new button before the first one, in the same `x-filament::actions` component:
+
+```blade title="resources/views/livewire/shopper/gift-cards/edit-gift-card.blade.php"
+<x-slot name="action">
+    <x-filament::actions :actions="[$this->extendAction, $this->disableAction]" />
+</x-slot>
+```
+
+The **Extend** button opens the form, filled with the current expiry date:
+
+<Screenshot src="/images/v2/extending-modals-form.png" alt="Extend the gift card modal with a required Expires on date field and the Submit and Cancel buttons" />
+
+`$data` holds only the fields of the schema, so the admin cannot change another column of the gift card through this modal. Filament checks the rules on the server as well: a value that fails one keeps the modal open and shows the error under the field. `minDate()` also sets the `min` attribute of the date input, so the browser refuses a past date before the form is sent.
+
+## Modal Options [#modal-options]
+
+The methods below set the content and the size of the modal. Shopper's own modals use the same ones: the shipment form of an order and the stock form of a variant set `Width::Large`, and the media modal of a variant `Width::TwoExtraLarge`.
+
+| Method | Effect |
+|--------|--------|
+| `modalHeading()` | The title of the modal. Defaults to the label of the action. |
+| `modalDescription()` | The text below the title. |
+| `modalIcon()`, `modalIconColor()` | An icon above the title, and its color when it differs from the color of the action. |
+| `modalSubmitActionLabel()`, `modalCancelActionLabel()` | The labels of the two buttons of the modal. |
+| `modalWidth()` | A case of the `Filament\Support\Enums\Width` enum, from `Width::ExtraSmall` to `Width::SevenExtraLarge`, or `Width::Screen`. Confirmations default to `Width::Medium` and forms to `Width::FourExtraLarge`. |
+| `closeModalByClickingAway()` | With `false`, a click outside the modal no longer closes it, so a long form is not lost by mistake. |
+| `slideOver()` | Opens the modal as a Filament panel on the side of the screen. |
+
+[Filament's modal documentation](https://filamentphp.com/docs/4.x/actions/modals) describes the other options, such as forms in several steps and modals that show a view of your own. For a form with the header and footer of Shopper's side panels, such as the brand form, use a [slide-over](/2.x/extending/slideover).

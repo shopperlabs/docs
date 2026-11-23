@@ -61,7 +61,7 @@ class GiftCardForm extends SlideOverComponent implements HasActions, HasSchemas,
 
         $this->description = __('Customers enter the code at checkout.');
 
-        $this->form->fill($this->giftCard->toArray());
+        $this->form->fill($this->giftCard->exists ? $this->giftCard->toArray() : null);
     }
 
     public function form(Schema $schema): Schema
@@ -127,6 +127,8 @@ The component has no view of its own. The parts that give it the layout of Shopp
 | `$action` | The method the save button calls, `save` here. |
 | `$title`, `$description` | The heading of the panel and the text below it. Set them in `mount()`, where the record is known. `$description` is optional. |
 | `closePanel()` | Closes the panel once the gift card is saved. [Closing a Slide-over](#closing-a-slide-over) describes the other ways. |
+
+A new gift card has no values yet, so `mount()` calls `fill()` with `null`: Filament then applies the defaults of the fields, such as the **Enabled** toggle that starts on.
 
 `mount()` and `save()` check the permission themselves, following the [authorization pattern](/3.x/extending/controllers#authorization-pattern-for-custom-admin-components) of the admin panel: the event that opens a panel can be dispatched from any page, whatever buttons it shows. The `#[Locked]` attribute keeps the browser from swapping the gift card for another one between two requests.
 
@@ -212,7 +214,7 @@ A panel opened from another panel stacks on top of it. Closing the top panel sho
 
 ## Closing a Slide-over [#closing-a-slide-over]
 
-The user closes a panel with the **Cancel** button or the close button of `x-shopper::form-slider-over`, the `Escape` key, or a click outside the panel. Your component closes it from PHP with these methods:
+The user closes a panel with the **Cancel** button, the close button of `x-shopper::form-slider-over` or the `Escape` key. A click outside the panel leaves it open, so a stray click does not lose a form being filled. Your component closes it from PHP with these methods:
 
 | Method | Effect |
 |--------|--------|
@@ -248,7 +250,7 @@ public static function panelMaxWidth(): string
 | Method | Default | Effect |
 |--------|---------|--------|
 | `panelMaxWidth()` | `'xl'` | The maximum width of the panel: `md`, `lg`, `xl`, `2xl`, `3xl`, `4xl`, `5xl`, `6xl` or `7xl`. The attribute form of Shopper uses `lg`, the shipment details use `2xl` and the shipping label form `5xl`. |
-| `closePanelOnClickAway()` | `true` | Closes every open panel on a click outside them. |
+| `closePanelOnClickAway()` | `true` | Closes every open panel on a click outside them, only when `stack` is `false` in `config/livewire-slide-over.php`. With stacked panels, the default, a click outside never closes a panel. |
 | `closePanelOnEscape()` | `true` | Closes the active panel on the `Escape` key. |
 | `dispatchCloseEvent()` | `false` | Dispatches a `panelClosed` event with the `name` of the component when the panel closes. |
 | `destroyOnClose()` | `false` | Removes the component when the panel closes, so the next opening mounts it again. |
@@ -259,7 +261,7 @@ The `panelAttributes` key of the `openPanel` event overrides these options for o
 
 ```blade title="resources/views/livewire/shopper/gift-cards/index.blade.php"
 <x-filament::button
-    wire:click="$dispatch('openPanel', { component: 'slide-overs.gift-card-form', panelAttributes: { maxWidthClass: 'max-w-3xl', closeOnClickAway: false } })"
+    wire:click="$dispatch('openPanel', { component: 'slide-overs.gift-card-form', panelAttributes: { maxWidthClass: 'max-w-3xl' } })"
 >
     {{ __('Issue a gift card') }}
 </x-filament::button>

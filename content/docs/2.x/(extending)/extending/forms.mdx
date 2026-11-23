@@ -1,10 +1,159 @@
 ---
-title: Forms
-description: Learn how to create input fields and forms for storing information in the database
+title: 'Forms'
+description: 'Build Filament forms in your own admin pages, with the fields and layout of Shopper forms.'
 ---
 
-# Forms
+The forms of the admin panel are Filament schemas rendered by Livewire components. Your own pages build theirs the same way, with Filament's fields and the components Shopper adds, so they look and behave like the product or customer forms. This page builds a form on an admin page. [Modals](/2.x/extending/modals) opens a short form over the current page, and [Slide-overs](/2.x/extending/slideover) shows the same form in a side panel.
 
-The forms allow us to quickly create input fields for our information to be stored in the database.
+## Form in an Admin Page [#form-in-an-admin-page]
 
-Coming Soon...
+The page below issues gift cards. It follows the layout of Shopper's create pages: a section with its title and description on the left and the fields on the right, then a save button at the bottom:
+
+```php title="app/Livewire/Shopper/GiftCards/CreateGiftCard.php"
+namespace App\Livewire\Shopper\GiftCards;
+
+use App\Models\GiftCard;
+use Filament\Actions\Concerns\InteractsWithActions;
+use Filament\Actions\Contracts\HasActions;
+use Filament\Forms\Components\DatePicker;
+use Filament\Forms\Components\TextInput;
+use Filament\Forms\Components\Toggle;
+use Filament\Notifications\Notification;
+use Filament\Schemas\Concerns\InteractsWithSchemas;
+use Filament\Schemas\Contracts\HasSchemas;
+use Filament\Schemas\Schema;
+use Illuminate\Contracts\View\View;
+use Illuminate\Support\Arr;
+use Illuminate\Validation\ValidationException;
+use Shopper\Components\Form\MoneyInput;
+use Shopper\Components\Section;
+use Shopper\Livewire\Pages\AbstractPageComponent;
+use Shopper\Traits\HandlesAuthorizationExceptions;
+
+class CreateGiftCard extends AbstractPageComponent implements HasActions, HasSchemas
+{
+    use HandlesAuthorizationExceptions;
+    use InteractsWithActions;
+    use InteractsWithSchemas;
+
+    public ?array $data = [];
+
+    public function mount(): void
+    {
+        $this->authorize('add_gift_cards');
+
+        $this->form->fill();
+    }
+
+    public function form(Schema $schema): Schema
+    {
+        return $schema
+            ->components([
+                Section::make(__('Gift card'))
+                    ->aside()
+                    ->compact()
+                    ->columns()
+                    ->description(__('The code customers enter at checkout and the amount it holds.'))
+                    ->extraAttributes(['class' => 'sh-section-aside'])
+                    ->schema([
+                        TextInput::make('code')
+                            ->label(__('Code'))
+                            ->required()
+                            ->maxLength(32)
+                            ->unique(GiftCard::class, 'code'),
+                        MoneyInput::make('amount')
+                            ->label(__('Amount'))
+                            ->currency(shopper_currency())
+                            ->required(),
+                        DatePicker::make('expires_at')
+                            ->label(__('Expires on'))
+                            ->minDate(now()),
+                        Toggle::make('is_enabled')
+                            ->label(__('Enabled'))
+                            ->default(true),
+                    ]),
+            ])
+            ->statePath('data')
+            ->model(GiftCard::class);
+    }
+
+    public function store(): void
+    {
+        $this->authorize('add_gift_cards');
+
+        $giftCard = GiftCard::query()->create([
+            ...Arr::only($this->form->getState(), ['code', 'amount', 'expires_at', 'is_enabled']),
+            'currency_code' => shopper_currency(),
+        ]);
+
+        Notification::make()
+            ->title(__('Gift card :code issued', ['code' => $giftCard->code]))
+            ->success()
+            ->send();
+
+        $this->redirectRoute(name: 'shopper.gift-cards.index', navigate: true);
+    }
+
+    protected function onValidationError(ValidationException $exception): void
+    {
+        Notification::make()
+            ->title($exception->getMessage())
+            ->danger()
+            ->send();
+    }
+
+    public function render(): View
+    {
+        return view('livewire.shopper.gift-cards.create-gift-card')
+            ->title(__('Issue a gift card'));
+    }
+}
+```
+
+The parts that come from Shopper:
+
+| Part | Role |
+|------|------|
+| `AbstractPageComponent` | Renders the page in the admin layout. `title()` on the view sets the title of the browser tab. |
+| `HandlesAuthorizationExceptions` | Shows a notification instead of an error page when a permission check fails after the page has loaded. |
+| `Shopper\Components\Section` | A Filament section with the styles of the admin panel. `aside()` with the `sh-section-aside` class places the title and the description next to the fields. |
+| `MoneyInput` | Shows the amount as a decimal and saves it as cents, as described in [MoneyInput](/2.x/pricing#moneyinput). |
+| `onValidationError()` | Filament calls it when `getState()` fails validation. Shopper's pages show the error in a notification as well as under the field. |
+
+`statePath('data')` keeps the values of the form in the `$data` property, and `model()` tells the fields which model the form creates, which relationship fields need. The `add_gift_cards` permission comes from `Permission::generate('gift_cards')`, as described in [Generating Permissions](/2.x/acl#generating-permissions).
+
+The view renders the form and its save button:
+
+```blade title="resources/views/livewire/shopper/gift-cards/create-gift-card.blade.php"
+<x-shopper::container class="space-y-8 py-5">
+    <x-shopper::heading :title="__('Issue a gift card')" />
+
+    <form wire:submit="store">
+        {{ $this->form }}
+
+        <div class="mt-10 border-t border-gray-200 pt-10 dark:border-white/20">
+            <div class="flex justify-end">
+                <x-filament::button type="submit" wire:loading.attr="disabled">
+                    <x-shopper::loader wire:loading wire:target="store" class="text-white" />
+                    {{ __('shopper::forms.actions.save') }}
+                </x-filament::button>
+            </div>
+        </div>
+    </form>
+</x-shopper::container>
+```
+
+Register the page in your [custom route file](/2.x/extending/controllers#custom-routes):
+
+```php title="routes/shopper.php"
+use App\Livewire\Shopper\GiftCards\CreateGiftCard;
+use Illuminate\Support\Facades\Route;
+
+Route::get('/gift-cards/create', CreateGiftCard::class)->name('gift-cards.create');
+```
+
+The page shows the title and the description of the section next to its fields:
+
+<Screenshot src="/images/v2/extending-forms-page.png" alt="Issue a gift card page with the Code, Amount, Expires on and Enabled fields next to the Gift card section, and the Save button" />
+
+To ask for a few values without leaving a page, such as a new expiry date for a gift card, open the form in the modal of a Filament action, as described in [Forms in a Modal](/2.x/extending/modals#forms-in-a-modal). For a form of its own with the look of Shopper's side panels, use a [slide-over](/2.x/extending/slideover).

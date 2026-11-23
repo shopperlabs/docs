@@ -217,7 +217,7 @@ To show a notification instead of an error page when a check fails, add the `Sho
 
 ### Chain `authorize()` on Filament Actions
 
-Declare the required ability on the Filament `Action` itself, not inside the closure. This hides the button when the user lacks the ability instead of throwing a 403 on click:
+Declare the required ability on the Filament `Action` itself, not inside the closure. When the user lacks the ability, the button is left out of a table or an `x-filament::actions` list, or shown disabled when the view renders the action on its own, and Filament refuses to run it instead of throwing a 403 on click:
 
 ```php title="app/Livewire/Shopper/OrderFulfillment.php"
 use Filament\Actions\Action;

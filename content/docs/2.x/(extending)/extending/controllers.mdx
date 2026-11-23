@@ -155,7 +155,7 @@ Custom Livewire components that extend or mimic Shopper's admin surfaces (orders
 
 ### Chain `authorize()` on Filament Actions
 
-Declare the required ability on the Filament `Action` itself, not inside the closure. This hides the button when the user lacks the ability instead of throwing a 403 on click:
+Declare the required ability on the Filament `Action` itself, not inside the closure. When the user lacks the ability, the button is left out of a table or an `x-filament::actions` list, or shown disabled when the view renders the action on its own, and Filament refuses to run it instead of throwing a 403 on click:
 
 ```php
 use Filament\Actions\Action;
