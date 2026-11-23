@@ -270,6 +270,10 @@
   @media (width >= 48rem) {
     [data-sections] {
       --spacing-subheader: 112px;
+    }
+
+    /* On html, where the scroll padding reads it. */
+    html:has([data-sections]) {
       --nav-offset: 120px;
     }
   }
@@ -280,6 +284,8 @@
 
   html {
     @apply scroll-smooth;
+    /* Keeps keyboard focus and anchor jumps clear of the sticky band. */
+    scroll-padding-top: var(--nav-offset);
     -webkit-text-size-adjust: 100%;
     text-rendering: optimizeLegibility;
   }
@@ -296,10 +302,10 @@
   }
 }
 
-/* Unlayered so it beats the `scroll-m-28` fumadocs puts on headings. */
+/* Unlayered so it beats the `scroll-m-28` fumadocs puts on headings, which would add to the scroll padding. */
 :target,
 [id] {
-  scroll-margin-top: var(--nav-offset);
+  scroll-margin-top: 0;
 }
 
 @utility z-overlay {
