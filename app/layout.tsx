@@ -33,6 +33,16 @@ export const metadata: Metadata = {
 export default function Layout({ children }: LayoutProps<'/'>) {
   return (
     <html lang="en" className={`${sans.variable} ${display.variable} ${mono.variable}`} suppressHydrationWarning>
+      <head>
+        {/* Same Plausible site as shopperphp.com; its hostname allow list drops visits from preview deployments. */}
+        {process.env.NODE_ENV === 'production' && (
+          <script
+            defer
+            data-domain="shopperphp.com"
+            src="https://analytics.universy.app/js/script.outbound-links.pageview-props.js"
+          />
+        )}
+      </head>
       <body className="min-h-dvh bg-background font-sans text-foreground antialiased">
         <a
           href="#content"
