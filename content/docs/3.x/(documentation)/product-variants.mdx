@@ -202,7 +202,7 @@ $variant->decreaseStock(
 );
 ```
 
-`setStock()` compares the quantity you pass with the total stock of the variant across every location, and writes the difference to the location you pass. On a store with one location, that sets the stock; on a store with several, use `mutateStock()` with a difference computed from `stockInventory()`. `clearStock()` deletes every ledger row and every stock level of the variant, at every location.
+`setStock()` sets the stock of the variant at the location you pass: it compares the quantity with the stock there and writes the difference as a movement. The other locations keep their stock. `clearStock()` deletes every ledger row and every stock level of the variant, at every location.
 
 ### Backorder
 

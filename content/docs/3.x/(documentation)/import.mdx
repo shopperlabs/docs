@@ -30,7 +30,7 @@ Every import is a `Shopper\Core\Models\ProductImport` record in the `sh_product_
 | `total_products` | unsigned integer, default `0` | The number of products found in the file |
 | `imported_count` | unsigned integer, default `0` | The products created or updated |
 | `failed_count` | unsigned integer, default `0` | The products that could not be imported |
-| `mapping` | jsonb, nullable | The file column to read for each Shopper field |
+| `mapping` | jsonb, nullable | The file column to read for each Shopper field, `null` for a field left out of the import |
 | `errors` | jsonb, nullable | A list of errors, each with a `handle` and a `message` |
 | `batch_id` | string, nullable | The ID of the Laravel job batch |
 | `user_id` | bigint, nullable | The ID of the user who started the import |
@@ -65,7 +65,7 @@ if ($import->status->isFinished()) {
 
 ## File Format
 
-The CSV source reads a file whose first row holds the column names. The admin panel links a sample file, which `php artisan shopper:link` also publishes at `/vendor/shopper/templates/product-import.csv`. The `handle` and `name` columns are required: a file without one of them fails before any product is read. Every other column is optional, and a blank cell counts as empty.
+The CSV source reads a file whose first row holds the column names. The admin panel links a sample file, which `php artisan shopper:link` also publishes at `/vendor/shopper/templates/product-import.csv`. The `handle` and `name` columns are required: a file without one of them fails before any product is read. Every other column is optional. A column missing from the file leaves its value unchanged on the products that already exist, while a blank cell is an empty value: [Updating Products](#updating-products) lists the values an empty cell clears.
 
 | Column | Read from | Description |
 |--------|-----------|-------------|
@@ -75,21 +75,28 @@ The CSV source reads a file whose first row holds the column names. The admin pa
 | `brand` | First row | A brand name |
 | `category` | First row | A category path, segments separated by `>` |
 | `tags` | First row | Tag names separated by commas |
-| `published` | First row | `TRUE` or `FALSE`, sets the visibility, `TRUE` when empty |
+| `published` | First row | `TRUE` or `FALSE`, sets the visibility. When empty, a new product is visible and an existing one keeps its visibility |
 | `seo_title`, `seo_description` | First row | The SEO fields |
 | `option1_name`, `option2_name`, `option3_name` | First row | Up to three option names, such as `Size` and `Color` |
 | `option1_value`, `option2_value`, `option3_value` | Variant rows | The option values of the variant |
 | `sku`, `barcode`, `ean`, `upc` | Variant rows | The identifiers. A standard product stores the SKU and the barcode |
 | `price`, `compare_at_price`, `cost_per_item` | Variant rows | Decimal amounts, such as `19.99` |
 | `currency` | Variant rows | A currency code, the store default currency when empty |
-| `quantity` | Variant rows | The stock, `0` when empty |
+| `quantity` | Variant rows | The stock, a whole number |
+| `allow_backorder` | Variant rows | `TRUE` or `FALSE`, whether the product or variant takes orders when it is out of stock, `FALSE` when empty |
 | `weight_value`, `weight_unit` | Variant rows | The weight, in `kg`, `g` or `lbs` |
 | `image_url` | Any row | One image URL, or several separated by `;` |
 | `image_position` | Any row | The position of the images of the row |
 | `image_alt` | Any row | The alternative text of the images of the row |
 | `variant_image_url` | Variant rows | The image of the variant |
 
-The sample file also has a `requires_shipping` column. Shopper reads it but stores it nowhere: set the shipping of a product in the admin panel.
+The number columns (the three prices, `quantity` and `weight_value`) take digits with a period as decimal separator, without a currency sign or a thousands separator: `19,99` and `$19.99` are not numbers. `quantity` takes a whole number, so `012` and `12.0` are read as 12 and `5.5` is not valid.
+
+The `published` and `allow_backorder` columns take `TRUE` or `FALSE`, `yes` or `no`, `on` or `off`, in any case, or a number: `1` means true and any other number false, which reads the `-1` (draft) and `2` (pending) of a WooCommerce export as hidden. `allow_backorder` also takes the backorder values of Shopify and WooCommerce exports: `continue` and `notify` mean true, `deny` means false.
+
+A cell that holds an invalid value for its column, such as `19,99` in `price` or `oui` in `published`, stops the whole import, as described in [Errors](#errors).
+
+The sample file also has a `requires_shipping` column, which the CSV source does not read: set the shipping of a product in the admin panel.
 
 ### Products and Variants
 
@@ -97,9 +104,9 @@ Consecutive rows with the same handle form one product, and rows with an empty h
 
 The first row holds the product columns. The first row is also a variant row, and so is every other row of the product that has a `sku`, a `price` or an `option1_value`. A row with none of them only adds images.
 
-A product with a single variant row and no option name is a standard product: its SKU, barcode, weight, price and stock go to the product. Any other product is a variant product, and each variant row creates or updates a variant. The import sets one of these two types on every product it creates or updates.
+A product with a single variant row and no option name is a standard product: its SKU, barcode, weight, price and stock go to the product. Any other product is a variant product, and each variant row creates or updates a variant. A new product gets the type its rows give. An existing variant product stays a variant product, and an existing standard product becomes a variant product when its rows give option names or several variants.
 
-A variant is named after its option values, such as `Small / Green`, or after the product when it has no option value. Shopper finds an existing variant by its SKU, or by its name when the row has no SKU, and adds new variants after the existing ones. The sample file imports the "Graphic T-Shirt" with three variants:
+A variant is named after its option values, such as `Small / Green`, or after the product when it has no option value. Shopper finds an existing variant by its SKU, or by its name when the row has no SKU, and adds new variants after the existing ones. A file without option names keeps the name and the option values of the variants it updates. The sample file imports the "Graphic T-Shirt" with three variants:
 
 ```csv
 handle,name,option1_name,option1_value,option2_name,option2_value,sku,price,quantity
@@ -109,6 +116,8 @@ graphic-t-shirt,,,Medium,,Red,TSHIRT-M-RED,19.99,56
 ```
 
 Each option name becomes a select attribute and each option value an attribute value, created when missing, and each variant is linked to its values. The import does not attach the attributes to the product itself: the Attributes section of the product editor and the `options` include of the Store API stay empty for an imported product until the attributes are added to it, as described on the [Attributes](/3.x/attributes) page.
+
+Without option names, a variant needs a SKU. A row of a variant product with neither updates the product alone when it holds no other variant value, so a file of product columns, such as `handle`, `name` and `description`, updates variant products without touching their variants. When that row holds a barcode, EAN, UPC, price, quantity, weight or variant image, the product fails with `Product [graphic-t-shirt] has a variant without SKU or options.`
 
 ### Brand, Categories and Tags
 
@@ -120,19 +129,17 @@ The import adds categories and tags to a product and never removes the ones alre
 
 ### Prices
 
-The `price`, `compare_at_price` and `cost_per_item` columns hold decimal amounts as merchants write them, such as `19.99`. Shopper multiplies them by 100 and rounds them to store them in cents, as described on the [Money](/3.x/money) page. The `currency` column takes the code of a currency enabled on the store, in any case. When it is empty, the price goes to the store default currency.
+The `price`, `compare_at_price` and `cost_per_item` columns hold decimal amounts as merchants write them, such as `19.99`. Shopper rounds them half up to two decimals and stores them in cents, as described on the [Money](/3.x/money) page: `0.285` is stored as `29` and `1.005` as `101`. A [zero-decimal currency](/3.x/money#zero-decimal-currencies) such as JPY or XAF is rounded to a whole amount and stored as is, so `4900` in JPY is stored as `4900`. A negative amount fails the product.
 
-A row with a price replaces the price of the product or variant in that currency, its compare-at and cost amounts included. A row without a price leaves the prices unchanged.
+The `currency` column takes the code of a currency enabled on the store, in any case. When it is empty, the price goes to the store default currency.
 
-<Warning>
-  The import multiplies every amount by 100, zero-decimal currencies included. A price of `15000` in XAF is stored as `1500000` and displays as 1,500,000 FCFA, while Shopper stores these currencies in whole units, as described in [Zero-Decimal Currencies](/3.x/money#zero-decimal-currencies). For a zero-decimal currency, divide the amounts of the file by 100, or set the prices in the admin panel after the import.
-</Warning>
+A row with a price creates or replaces the price of the product or variant in that currency, with the compare-at and cost amounts of the row: a blank `compare_at_price` or `cost_per_item` cell clears that amount, and a column missing from the file keeps it. A row without a price keeps the price amount, and its compare-at and cost cells still update the price already stored in that currency. A product or variant without a price in that currency gets none, since a price needs an amount.
 
 ### Stock and Weight
 
-The `quantity` column sets the stock of the product or variant. Shopper records the difference with the current stock as a movement at the default inventory location, labeled "Product import" in the inventory history described in [Stock Management](/3.x/products#stock-management). An empty quantity counts as `0`, so importing a file without this column sets the stock of every product to 0.
+The `quantity` column sets the stock of the product or variant at the default inventory location. Shopper records the difference with the stock of that location as a movement, labeled "Product import" in the inventory history described in [Stock Management](/3.x/products#stock-management). The stock at the other locations does not change. An empty quantity, or a file without this column, leaves the stock as it is, and a new product without a quantity gets no stock movement. A negative quantity is accepted and sets a negative stock.
 
-`weight_value` sets the weight in the unit of `weight_unit`: `kg`, `g` or `lbs`, in any case. An empty or unknown unit stores grams. A row without `weight_value` leaves the weight unchanged.
+`weight_value` sets the weight in the unit of `weight_unit`: `kg`, `g` or `lbs`, in any case. An empty unit stores grams, and any other unit, such as `kgs` or `lb`, fails the product with `Product [graphic-t-shirt] has an unknown weight unit [kgs].` A row without `weight_value` leaves the weight and its unit unchanged.
 
 ### Images
 
@@ -142,9 +149,13 @@ The `image_url` column holds one image URL, or several separated by `;`. Every r
 
 ### Updating Products
 
-Shopper finds an existing product by its slug, which must equal the handle. Write handles as slugs, in lowercase letters, digits and hyphens, such as `graphic-t-shirt`. A new product stores its handle as its slug, and Shopper turns any other value into a URL-safe slug: `Graphic T-Shirt` is stored as `graphic-t-shirt`, so the next import of that handle does not find the product and creates a second one.
+Shopper turns the handle into a slug with `Str::slug()` and finds the existing product by that slug, which a new product stores. `Graphic T-Shirt` and `graphic-t-shirt` both find the product whose slug is `graphic-t-shirt`, so write handles as slugs to keep the file and the store alike. A handle that gives an empty slug, such as `!!!`, fails the product with `Product [!!!] has a handle that cannot be used in a URL.`
 
-An update writes every product column read from the file, empty cells included: an empty description, brand or SEO cell clears that value on the product. The SKU and barcode of a standard product, and the SKU, barcode, EAN and UPC of the variants, are replaced the same way. The publication date of a new product is the date of the import, and an existing product keeps its own. The import also turns off backorders on every standard product and every variant it saves.
+A product deleted from the admin panel is soft deleted. Importing its handle restores the product and updates it. Its prices, images and stock were deleted with it, so it gets back only those the file gives.
+
+An update writes the columns the file has. A column missing from the file, or a field left on **Not mapped** in the admin panel, keeps its value. A blank cell clears the values that can be empty: the description, the brand, the SEO title and description, the compare-at and cost amounts, the SKU and barcode of a standard product, and the SKU, barcode, EAN and UPC of a variant. A blank cell keeps the price, the stock, the weight and the visibility. The publication date of a new product is the date of the import, and an existing product keeps its own.
+
+The `allow_backorder` column sets backorders on a standard product or on each variant, and a blank cell turns them off. A file without this column leaves backorders as they are.
 
 ## How an Import Runs
 
@@ -170,17 +181,30 @@ Shopper downloads `http` and `https` URLs only, follows at most three redirects 
 
 An import meets two kinds of errors. A file error stops the whole import. A product error skips one product, and the import goes on with the others.
 
-A file error is a missing required column, an unknown source, a file that cannot be read, or a batch that cannot be dispatched. The import gets the `Failed` status, its `finished_at` date and a single error with `*` as handle, then `execute()` throws the exception again. No `ProductImportCompleted` event is dispatched. A missing column gives this message:
+A file error is a missing required column, a cell that is not a valid number or `TRUE` or `FALSE` in a column that expects one, an unknown source, a file that cannot be read, or a batch that cannot be dispatched. The import gets the `Failed` status, its `finished_at` date and a single error with `*` as handle, then `execute()` throws the exception again. No `ProductImportCompleted` event is dispatched. A missing column gives this message:
 
 ```text
 The file does not match the product import template: missing the handle column.
 ```
+
+An invalid cell gives a message that names the file column, the product and the value:
+
+```text
+The price column of product "graphic-t-shirt" holds "19,99", which is not a valid number.
+```
+
+The admin panel reads the file before it starts the import, so merchants meet these errors in the slide-over instead, as described in [In the Admin](#in-the-admin).
 
 Product errors keep the handle of the product and the message of the exception:
 
 | Message | Cause |
 |---------|-------|
 | `Product [graphic-t-shirt] has no name.` | The first row of the product has no `name` |
+| `Product [!!!] has a handle that cannot be used in a URL.` | The handle gives an empty slug |
+| `Product [graphic-t-shirt] has a variant without SKU or options.` | A row of a variant product has no SKU and no option names, and holds a variant value |
+| `Product [graphic-t-shirt] uses the sku [TSHIRT-S-GREEN] of product [basic-t-shirt].` | Another product holds the code. The SKU and barcode of a standard product are checked against the other products, and the SKU, barcode, EAN and UPC of a variant against the other variants. The message ends with `, which is deleted` when that product is soft deleted, since it keeps its codes |
+| `Product [graphic-t-shirt] has a negative price.` | A price, compare-at or cost amount is below zero |
+| `Product [graphic-t-shirt] has an unknown weight unit [kgs].` | `weight_unit` is not `kg`, `g` or `lbs` |
 | `Currency [EUR] is not enabled on this store.` | The `currency` column holds a currency the store does not sell in |
 | `Image [https://example.com/t-shirt.jpg] could not be imported: ...` | An image failed after its last attempt. The reason follows the colon, such as `Image host [example.com] is not a public address.` |
 
@@ -249,7 +273,7 @@ class CatalogImportController extends Controller
 }
 ```
 
-The `mapping` keys are Shopper column names, and the values are the columns of your file. A column missing from the mapping is read under its own name, so a file that follows the sample needs no mapping. From code, you can map every column of the format, the options and images included; the admin panel offers 20 of them.
+The `mapping` keys are Shopper column names, and the values are the columns of your file. A column missing from the mapping is read under its own name, so a file that follows the sample needs no mapping. A field mapped to `null` is left out of the import, even when the file has a column of that name, and the existing products keep their value. From code, you can map every column of the format, the options and images included; the admin panel offers 21 of them.
 
 `execute()` throws the exception of a file error after marking the import as failed. On a queue connection other than `sync`, it returns before the products are imported, and the `ProductImportCompleted` event tells you when the import ends.
 
@@ -328,7 +352,15 @@ final class SupplierFeedSource implements ImportSource
 }
 ```
 
-`ProductRow` and `VariantRow` take the same values as the CSV columns. `VariantRow` also takes `allowBackorder`, which the CSV source leaves at `false`. A product row with a single variant and no `optionNames` is a standard product. Register the source in the `boot()` method of a service provider:
+`ProductRow` and `VariantRow` take the same values as the CSV columns, such as `allowBackorder` on `VariantRow` for the `allow_backorder` column. A product row with a single variant and no `optionNames` is a standard product. Three arguments decide what the import writes on a product that already exists:
+
+| Argument | Default | Description |
+|----------|---------|-------------|
+| `ProductRow` `fields` | `null` | The CSV field names the source read, such as `['handle', 'name', 'price']`. An update writes these fields only and keeps the others, and `provides('price')` tells whether the row lists a field. `null` means every field. The stock follows `quantity` instead |
+| `ProductRow` `published` | `false` | `true` or `false` sets the visibility. `null` keeps the visibility of an existing product and makes a new product visible |
+| `VariantRow` `quantity` | `0` | The stock at the default location. `null` leaves the stored stock unchanged |
+
+Register the source in the `boot()` method of a service provider:
 
 ```php title="app/Providers/AppServiceProvider.php"
 use App\Import\SupplierFeedSource;
@@ -340,7 +372,7 @@ public function boot(): void
 }
 ```
 
-An import whose `source` column holds `supplier-feed` now reads its file with this class. A source that also implements `Shopper\Core\Import\Contracts\SupportsColumnMapping` returns the columns of a file from `headers(string $path)` and receives the `mapping` of the import through `withMapping(array $mapping)`, which returns a configured copy of the source.
+An import whose `source` column holds `supplier-feed` now reads its file with this class. A source that also implements `Shopper\Core\Import\Contracts\SupportsColumnMapping` returns the columns of a file from `headers(string $path)` and receives the `mapping` of the import through `withMapping(array $mapping)`, which returns a configured copy of the source. A field the merchant left on **Not mapped** arrives as `null`: leave it out of `fields` so the import keeps its value.
 
 In the admin panel, the **Import** action lists the configured sources and opens the slide-over registered as `slide-overs.import-{code}` for the one the merchant picks. Shopper ships the slide-over of the CSV source only. For your source, write a Livewire slide-over that stores the file and starts the import, as `Shopper\Livewire\SlideOvers\ImportCsv` does, publish the product components with `php artisan shopper:component:publish product`, and add your slide-over to the `components` array of `config/shopper/components/product.php`:
 
@@ -401,7 +433,13 @@ The admin panel checks these permissions for imports:
 
 ## In the Admin
 
-Merchants import products from the **Products** page. **Import** opens a dialog that lists the configured sources, and **Next** opens the slide-over of the chosen one. The CSV slide-over has three steps: **Upload** takes the file and links the sample file, **Columns** matches each Shopper field with a column of the file and preselects the columns named after a field, and **Review** shows the number of products, variants and stock units with a preview of the first 50 products. **Import products** stores the file on the `local` disk under `shopper/imports`, starts the import and confirms it with a notification. The product list does not refresh by itself: reload the page to see the imported products. The [User Guide](/3.x/user-guide) walks through these screens.
+Merchants import products from the **Products** page. **Import** opens a dialog that lists the configured sources, and **Next** opens the slide-over of the chosen one. The CSV slide-over has three steps:
+
+1. **Upload** takes the file and links the sample file. It refuses a file whose first row is empty or repeats a column name, with "The first row of the file must give each column its own name." under the file field.
+2. **Columns** matches each Shopper field with a column of the file and preselects the columns named after a field. **Name** and **Handle** are required, and **Not mapped** leaves a field out of the import, stored as `null` in `mapping`. **Next** reads the whole file with this mapping, and the first cell that is not a valid number or `TRUE` or `FALSE` shows its message under the field it belongs to.
+3. **Review** shows the number of products, variants and stock units with a preview of the first 50 products. Each price is formatted in the currency of its row and rounded as the import stores it, and a warning counts the products priced in a currency the store does not accept, which the import fails.
+
+**Import products** stores the file on the `local` disk under `shopper/imports`, starts the import and confirms it with a notification. The product list does not refresh by itself: reload the page to see the imported products. The [User Guide](/3.x/user-guide) walks through these screens.
 
 ## From a Storefront
 

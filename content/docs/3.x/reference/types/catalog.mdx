@@ -267,7 +267,7 @@ interface Inventory extends Entity {
 
 ### InventoryHistory
 
-`InventoryHistory` is one stock movement of a product or a variant at a location, an entry of the stock ledger. `quantity` is the quantity after the movement and `old_quantity` the quantity before it. `stockable_type` and `stockable_id` name the product or the variant, and `reference_type` and `reference_id` the record that caused the movement. This is the definition:
+`InventoryHistory` is one stock movement of a product or a variant at a location, an entry of the stock ledger. `quantity` is the signed quantity of the movement, negative when stock leaves, and `old_quantity` the stock of the location before it. `stock_after` is the stock of the location once the movement is applied; the model computes it and serializes it only when you append it. `stockable_type` and `stockable_id` name the product or the variant, and `reference_type` and `reference_id` the record that caused the movement. This is the definition:
 
 ```ts
 interface InventoryHistory extends Entity {
@@ -281,7 +281,7 @@ interface InventoryHistory extends Entity {
   stockable_type: string
   reference_id?: ResourceId | null
   reference_type?: string | null
-  adjustment?: string | number
+  stock_after?: number
   inventory?: Inventory
 }
 ```

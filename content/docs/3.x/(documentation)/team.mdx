@@ -9,7 +9,7 @@ Merchants manage the team from Settings, Staff & permissions, at `/cpanel/settin
 
 ## Team Members
 
-Shopper seeds two team roles, `administrator` and `manager`, and both open the admin panel. A member who holds only a role you created, such as a "Fulfillment" role for the warehouse team, opens the admin panel when that role holds the `system.dashboard` permission. The [Roles](/3.x/acl#roles) section lists the seeded roles.
+Shopper seeds two team roles, `administrator` and `manager`, and both open the admin panel. The administrator role receives every permission, and the manager role the catalog, sales and customer permissions listed in [Manager Permissions](/3.x/acl#manager-permissions). A member who holds only a role you created, such as a "Fulfillment" role for the warehouse team, opens the admin panel when that role holds the `system.dashboard` permission. The [Roles](/3.x/acl#roles) section lists the seeded roles.
 
 A user can hold several roles. A customer who receives the `manager` role keeps their orders and addresses and appears on the Team screen, because the screen lists every user with at least one role other than the customer role.
 
@@ -19,13 +19,22 @@ The **Add administrator** button of the Team screen opens a slide-over with thre
 
 | Section | Fields |
 |---------|--------|
-| Login information | Email, password, Send Invite |
+| Login information | Email and Send Invite, or email and password (see below) |
 | Personal information | First name, last name, gender, phone number |
 | Role information | One or more roles |
 
-The email, the password, the first name, the last name and at least one role are required. The **Generate** link next to the password field fills it with a random password of 16 characters. The email address must not belong to an existing user: to give a customer access to the admin panel, assign a role to their account, as shown in [Assigning Roles](#assigning-roles).
+The email, the first name, the last name and at least one role are required. The email address must not belong to an existing user: to give a customer access to the admin panel, assign a role to their account, as shown in [Assigning Roles](#assigning-roles).
 
-The role list never shows the customer role, and shows the administrator role only to administrators. Shopper marks the new member's email as verified, so they can sign in at once.
+The role list never shows the customer role. Administrators see every other role. Other users see only the roles they can give: not the administrator role, not a role without any permission, and not a role that holds a permission they lack. Shopper saves the account and its roles in one database transaction, so a failure leaves no account without a role, and marks the new member's email as verified.
+
+The Login information section depends on `password_reset` in `config/shopper/auth.php`:
+
+| `password_reset` | Login information | Password of the new account |
+|------------------|-------------------|-----------------------------|
+| `true` (default) | Email, **Send Invite** (on by default) | A random password that nobody sees. The member chooses their own through the [welcome email](#welcome-email) or the **Forgot your password?** link of the login page |
+| `false` | Email, password (required) | The password typed in the slide-over. The **Generate** link next to the field fills it with a random password of 16 characters. The merchant passes it on to the member |
+
+With `password_reset` set to `false`, the admin has no reset page to link to, so the slide-over hides **Send Invite** and sends no email.
 
 ### Preparing the User Model
 
@@ -88,11 +97,11 @@ The `shopper:user` command creates the first administrator from the terminal, as
 
 ## Welcome Email
 
-Shopper creates the account with the password typed or generated in the slide-over. The new member receives access in one of two ways.
+With **Send Invite** on, Shopper asks the default password broker for a reset token with `Password::sendResetLink()` once the member is created, and sends the `Shopper\Notifications\AdminSendCredentials` notification with that token. The email is titled "Welcome to Shopper". It holds the URL of the store from `config('app.url')` and a **Choose my password** button that opens the admin's **Reset password** page (the `shopper.password.reset` route) with the member's email filled in. The member types a password there and Shopper signs them in, or sends them to the login page when the account uses two-factor authentication. The notification goes through the `mail` channel during the request, so the mailer of your application must be configured.
 
-With **Send Invite** on, Shopper sends the `Shopper\Notifications\AdminSendCredentials` notification by email once the member is created. The message holds the URL of the store from `config('app.url')`, the member's email address and password, a **Login** button to the admin login page, and a request to change the password from the profile page after the first sign-in. The notification is sent during the request, through the `mail` channel, so the mailer of your application must be configured.
+The link expires after the `expire` minutes of the default broker, `auth.passwords.users.expire` in `config/auth.php` (60 in a new Laravel application), and the email states that delay. After that, the member requests a new link with **Forgot your password?** on the login page. The broker also throttles: when a token for the same email is less than `throttle` seconds old, no email is sent, the member is still created, and a warning notification reads "The team member was created, but the invitation email was not sent." with the broker's message below it.
 
-With **Send Invite** off, Shopper sends nothing. The merchant passes the sign-in details on, or tells the member to open the login page and click **Forgot your password?** to choose their own password. That link is shown while `password_reset` is `true` in `config/shopper/auth.php`, the default.
+With **Send Invite** off, Shopper sends nothing. The member opens the login page and clicks **Forgot your password?** to choose their password. When `password_reset` is `false`, there is no Send Invite and no reset page: the merchant gives the member the password typed in the slide-over.
 
 The email text comes from the `mails.admin` keys of Shopper's translation files. When the store enables them, a new member who signs in can turn on [two-factor authentication](/3.x/two-factor) or add a passkey from their profile page.
 
@@ -164,7 +173,7 @@ The Team screen checks two system permissions, and keeps two actions for adminis
 | `system.settings` | Creating, renaming and deleting roles, granting and revoking permissions |
 | Administrator role | Deleting team members, creating and deleting permissions, opening the administrator role |
 
-A user with `system.users` can give a new member any role except administrator, whatever permissions that role holds. The [Permissions](/3.x/acl#team-management-safeguards) page explains this rule.
+A user with `system.users` who is not an administrator can give a new member only a role whose permissions they all hold, and never a role without any permission. The [Permissions](/3.x/acl#team-management-safeguards) page explains this rule.
 
 ## Customizing the Team Screen
 
@@ -180,4 +189,4 @@ Merchants open the Team screen from Settings, Staff & permissions. It lists the 
 
 ## From a Storefront
 
-The Store API does not expose team members: no endpoint lists, creates or deletes them. Its registration endpoint, `/store/auth/register`, gives every new account the customer role. The Store API [Authentication](/3.x/store-api/authentication#registering-a-customer) guide covers registration.
+The Store API does not expose team members: no endpoint lists, creates or deletes them. Its registration endpoint, `/store/auth/register`, gives every new account the customer role. Team members cannot use the Store API as customers: an account that can open the admin panel cannot sign in to the Store API or reset its password there, and its store tokens answer `401`. A team member who also buys on the store needs a separate customer account with another email address. The Store API [Authentication](/3.x/store-api/authentication#registering-a-customer) guide covers registration.

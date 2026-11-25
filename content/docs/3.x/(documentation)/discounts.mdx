@@ -286,7 +286,7 @@ An automatic discount applies without a code. Its `trigger` column is `automatic
 
 The `ApplyAutomaticPromotions` step of the [calculation pipeline](/3.x/cart#calculation-pipeline) loads the automatic discounts of the `active()` scope on every calculation. It attaches each one to the cart, as a `CartPromotion` of source `automatic`, when the discount passes its rules and would take at least one cent off the cart. It removes the ones the cart no longer qualifies for, and the ones whose discount was turned off or switched back to a code. The step does nothing while the cart holds a payment session with a provider, so the amount being paid does not change.
 
-An automatic discount follows the same rules as a code: dates, usage limits, eligibility, zone, minimum requirement and campaign budget. It also competes with the codes of the cart under the rules of [Priority and Combination](#priority-and-combination). A limit reached at checkout names it "automatic promotion" in the exception message, since it has no code.
+An automatic discount follows the same rules as a code: dates, usage limits, eligibility, zone, minimum requirement, and the status and budget of its campaign. It also competes with the codes of the cart under the rules of [Priority and Combination](#priority-and-combination). A limit reached at checkout names it "automatic promotion" in the exception message, since it has no code.
 
 ## Priority and Combination
 
@@ -364,14 +364,14 @@ try {
 |-----------|-------------|
 | `DiscountLimitReachedException::global($code)` | The discount reached its `usage_limit` |
 | `DiscountLimitReachedException::perUser($code)` | The customer already used a discount limited to one use per customer |
-| `PromotionUnavailableException` | The discount was deleted, or its terms stopped holding (turned off, expired, out of zone, minimum no longer reached) |
+| `PromotionUnavailableException` | The discount was deleted, or its terms stopped holding (turned off, expired, out of zone, minimum no longer reached, campaign turned off or ended) |
 | `Shopper\Core\Exceptions\CampaignBudgetExceededException` | The campaign budget cannot absorb the discount, see [Budget Exceeded Exception](/3.x/campaigns#budget-exceeded-exception) |
 
 The messages of `DiscountLimitReachedException` read "The discount "SUMMER20" has reached its usage limit and can no longer be applied." and "You have already used the discount "SUMMER20", which is limited to one use per customer.". The [Cart](/3.x/cart#discount-limit-exceptions) page covers the other checks of the checkout.
 
 ## Discount Validation
 
-`DiscountValidator` holds the discount rules. The pipeline runs it on every promotion of the cart, and you can call it yourself, for example to check a code before attaching it: `applyCoupon()` only checks that the code exists. `validate()` runs the checks below in order and stops at the first failure. `validateTerms()` runs the first eleven, which describe the discount and the cart, without the usage limits and the campaign budget. Both return a `Shopper\Cart\Discounts\DiscountValidationResult` with a `valid` boolean and a `failureReason`:
+`DiscountValidator` holds the discount rules. The pipeline runs it on every promotion of the cart, and you can call it yourself, for example to check a code before attaching it: `applyCoupon()` only checks that the code exists. `validate()` runs the checks below in order and stops at the first failure. `validateTerms()` runs the first twelve, which describe the discount and the cart, without the usage limits and the campaign budget. Both return a `Shopper\Cart\Discounts\DiscountValidationResult` with a `valid` boolean and a `failureReason`:
 
 | Check | Fails when | Message key |
 |-------|------------|-------------|
@@ -380,6 +380,7 @@ The messages of `DiscountLimitReachedException` read "The discount "SUMMER20" ha
 | Percentage | A percentage is above 100 | `invalid_percentage` |
 | Start | `start_at` is in the future | `not_started` |
 | End | `end_at` is in the past | `expired` |
+| Campaign status | The campaign is Disabled, Scheduled or Expired | `not_active`, `not_started` or `expired` |
 | Campaign currency | The campaign currency differs from the cart currency | `currency_mismatch` |
 | Eligibility | The rule of the `eligibility` key refuses the cart | Set by the rule |
 | Zone | The cart is in another zone than `zone_id` | `not_available_in_zone` |

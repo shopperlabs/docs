@@ -109,7 +109,7 @@ The `shopper:upgrade:permissions` and `shopper:upgrade:fix-zero-decimal-currenci
 composer require shopper/upgrade:^3.0
 ```
 
-Some 3.0 migrations rewrite whole tables: the `public_id` columns get a ULID on every row, and the stock levels are built from the inventory history. On a large catalog or order history, they take minutes rather than seconds, so plan the maintenance window from the time they took on your staging copy.
+Some 3.0 migrations rewrite whole tables: the `public_id` columns get a ULID on every row, the stock levels are built from the inventory history, and `old_quantity` is recomputed on every inventory history row. On a large catalog or order history, they take minutes rather than seconds, so plan the maintenance window from the time they took on your staging copy.
 
 Once production runs 3.0, remove the package:
 
@@ -349,7 +349,7 @@ A custom product edit screen moves from Livewire form components to pages regist
 
 | Contract | Added in 3.0 |
 |----------|--------------|
-| `Shopper\Core\Models\Contracts\Order` | `canTransitionTo(OrderStatus $status): bool`, `transitionTo(OrderStatus $status): void`, `canTransitionPaymentTo(PaymentStatus $status): bool`, `transitionPaymentTo(PaymentStatus $status): void`, `allowsDownloads(): bool`, `promotions(): HasMany` |
+| `Shopper\Core\Models\Contracts\Order` | `canTransitionTo(OrderStatus $status): bool`, `transitionTo(OrderStatus $status): void`, `canTransitionPaymentTo(PaymentStatus $status): bool`, `transitionPaymentTo(PaymentStatus $status): void`, `allowsDownloads(): bool`, `promotions(): HasMany`, `taxLines(): MorphMany` |
 | `Shopper\Core\Models\Contracts\Category` | `enabledSubtreeIds(): Illuminate\Support\Collection` |
 | `Shopper\Core\Contracts\Priceable` | `resolvePrice(?PricingContext $context = null): ?ResolvedPrice` |
 | `Shopper\Payment\Contracts\PaymentDriver` | `mode(): ?PaymentMode`, `supportsRetrieval(): bool` |
@@ -374,6 +374,15 @@ return new WebhookResult(action: WebhookAction::Refunded, reference: $reference,
 In 2.x every successful refund result settled the refund at once. A 3.x result whose `isPending()` is true (status `pending` or `requires_action`) and whose reference is not the payment reference leaves the refund pending until a `Refunded` or `RefundFailed` webhook carries the same refund ID. A driver whose provider settles refunds later returns `PaymentResult::pendingRefund()` with the provider's refund ID, as described in [Pending Refunds](/3.x/payments#pending-refunds).
 
 `PaymentProcessingService::refund()` takes a fifth, optional `$idempotencyKey` argument. A call that repeats a key already used on the order returns that refund without calling the provider: generate the key once per refund and send it again on every retry. A successful result can now be pending, so check `$result->isPending()` before treating the money as returned.
+
+Its `$reason` argument is a `Shopper\Payment\Enum\RefundReason` case, where 2.x took a string. The service sends the case value to the driver, so `refundPayment()` still receives a string:
+
+```php
+use Shopper\Payment\Enum\RefundReason;
+
+$payments->refund($order, $reference, 2000, 'requested_by_customer'); // [!code --]
+$payments->refund($order, $reference, 2000, RefundReason::RequestedByCustomer); // [!code ++]
+```
 
 A custom settings page implements `SettingItem`, which now extends `NavigationItem` and requires `group(): ?string`. A custom sidebar item returns `?string` from `getActiveWhen()`, where 2.x returned `bool`. The `shopper-upgrade-contracts` [upgrade skill](/3.x/ai-tools#upgrade-skills) covers these changes.
 
@@ -436,6 +445,20 @@ See [Order Number Generation](/3.x/orders#order-number-generation), and the `sta
 
 A pending order whose online payment never lands is cancelled after 24 hours and its stock is released. Offline payments are never reclaimed. Set `reclaim_pending_after_hours` in `config/shopper/orders.php` to change the delay, or to `null` to turn it off. See [Reclaiming Pending Orders](/3.x/orders#reclaiming-pending-orders).
 
+### Stock History Records the Stock Before Each Movement
+
+**Likelihood of Impact: Medium**
+
+*Affects code that reads `old_quantity` or `adjustment` of an inventory history row, passes `oldQuantity` to a stock method, or calls `setStock()` on a store with several locations.*
+
+`old_quantity` is the stock of the location just before the movement, and Shopper computes it when it writes the row. 2.x stored the `oldQuantity` the caller passed, `0` by default. The write methods still accept `oldQuantity` and ignore it. A 3.0 migration recomputes `old_quantity` on every existing row from the ledger: for each product or variant and location, it adds up the quantities in ID order, starting from 0, and updates the rows whose value differs.
+
+The `adjustment` attribute, which returned `old_quantity` with a `+` sign, is removed. Read `stock_after`, the stock of the location once the movement is applied, as shown in [Querying Stock](/3.x/products#querying-stock). The admin panel shows it in a **Stock after** column.
+
+`setStock()` sets the stock of the location you pass and leaves the other locations as they are, where 2.x compared the new quantity with the total of every location. Pass the quantity you counted at that location.
+
+A second migration makes `inventory_id` of `sh_stock_levels` required, deletes the stock levels whose location was deleted, and deletes the stock levels of a location along with it from then on. Both migrations run in the maintenance window of [Upgrading Production](#upgrading-production).
+
 ### Capture and Refund Checks
 
 **Likelihood of Impact: Medium**
@@ -448,6 +471,18 @@ A pending order whose online payment never lands is cancelled after 24 hours and
 - `refund()` throws when the payment status is neither Paid nor Partially refunded, and when the amount is larger than what remains refundable: the captured total minus the refunds made or pending.
 
 Catch the exception where your code captures or refunds a payment.
+
+The manual driver now refunds: `refundPayment()` returns a successful result with a `manual_` reference and moves no money, where 2.x threw a `PaymentException`. `getLatestReference()` skips refund transactions, so it returns the reference of the capture or authorization even after a refund.
+
+### Shipping Is Taxed
+
+**Likelihood of Impact: Medium**
+
+*Affects stores with tax zones and custom tax providers.*
+
+2.x added the shipping amount to the cart total without tax. 3.0 taxes it at the default rate of the zone of the shipping address and stores the result in the new `cart_shipping_tax_lines` table, which the order copies as its own tax lines, read with `$order->taxLines`. In a tax-exclusive zone, the total of a cart with shipping rises by that tax. In a tax-inclusive zone, the total does not change, and `tax_total`, then the order's `tax_amount`, include the tax the shipping amount contains. Carts get the new totals at their next calculation; orders placed before the upgrade keep theirs.
+
+To keep shipping untaxed with the system provider, attach a `shipping` rule to a 0% rate in each zone, as [Rule Reference Types](/3.x/taxes#rule-reference-types) shows. A [custom tax provider](/3.x/taxes#custom-tax-providers) now also receives a `Shopper\Core\Taxes\ShippingTaxableItem` for the shipping amount, with no product type, no product ID and no categories: return an empty array for it to leave shipping untaxed.
 
 ### Stripe Webhooks
 
@@ -610,6 +645,90 @@ The admin page of a variant moves from `/products/{product}/variants/{variant}` 
 
 `cache.duration` in `config/shopper/sidebar.php` counts minutes, where 2.x passed it to the cache as seconds. With the default `1440`, a cached sidebar now lasts 24 hours instead of 24 minutes. The cache is off unless `cache.method` is set.
 
+### Store Setup Access
+
+**Likelihood of Impact: Low**
+
+*Affects stores whose staff log in before the store is set up, and applications that published the Shopper translations or the forbidden view, or replaced the dashboard page.*
+
+While the store has no email or street address, staff without `system.settings` land on the forbidden page with the message of the new `shopper::errors.403.store_not_initialized` key, where 2.x sent them to the setup wizard, which answered with a 403. The dashboard setup guide shows only to administrators and `system.settings` holders, where 2.x showed it to every staff member in place of the dashboard widgets.
+
+Laravel fills a missing key of a published `lang/vendor/shopper/{locale}/errors.php` from the package file. A locale Shopper does not ship (it ships `en`, `es`, `fr`, `sv` and `tr`) shows the message in the fallback locale until you add the key under `403`:
+
+```php title="lang/vendor/shopper/de/errors.php"
+'403' => [
+    'store_not_initialized' => 'This store is not set up yet. An administrator must finish its setup before you can use the dashboard.',
+],
+```
+
+A copy of the forbidden view in `resources/views/vendor/shopper/livewire/pages/forbidden.blade.php` prints `{{ session('shopper_forbidden', __('shopper::errors.403.description')) }}` in place of the description, or it keeps showing the generic text. A custom dashboard page that renders `<livewire:shopper-setup-guide />` gates it with the `canAccessSettings()` method of the `Shopper\Traits\AuthorizesSettingsAccess` trait, as in [Replacing the Page](/3.x/dashboard#replacing-the-page). A page that extends `Shopper\Livewire\Pages\Dashboard` already has the check.
+
+### Customer Invitation Email
+
+**Likelihood of Impact: Low**
+
+*Affects stores whose staff create customers in the admin panel, code that sends `CustomerSendCredentials`, and applications that translated its lines.*
+
+The New customer page no longer asks for a password. The customer receives a random password nobody sees, and **Send an invitation email** emails a link to choose one. 2.x asked for the password, with a **Generate** button, and **Send customer credentials** emailed it in clear text. The link opens the password reset page of your storefront, built from the callback registered with `ResetPassword::createUrlUsing()` or from a route named `password.reset`, as described in [Mail Notifications](/3.x/notifications#mail-notifications). Without either, the checkbox is hidden and a customer created in the admin chooses a password through the forgot password flow of your storefront.
+
+`Shopper\Notifications\CustomerSendCredentials` extends `Illuminate\Auth\Notifications\ResetPassword` and takes a reset token in place of the password. Code that sends it asks the password broker for the token:
+
+```php
+// 2.x
+$customer->notify(new CustomerSendCredentials($password));
+
+// 3.0
+use Illuminate\Support\Facades\Password;
+
+Password::sendResetLink(
+    ['email' => $customer->email],
+    fn ($customer, string $token) => $customer->notify(new CustomerSendCredentials($token)),
+);
+```
+
+The email reads its lines from the `customer` keys of the `mails.php` translation file (`set_password`, `set_password_action` and `link_expiry`), where 2.x passed English strings such as `Email: :email - Password: :password` to `__()`, so translations of those strings in `lang/{locale}.json` are no longer used. In a published `lang/vendor/shopper/{locale}/pages/customers.php`, the `security_title`, `security_description`, `send_credentials` and `credential_description` keys are no longer read, and the page reads the new `send_invitation`, `invitation_description` and `invitation_not_sent` keys, which Laravel fills from the package file when they are missing.
+
+### Team Member Invitation Email
+
+**Likelihood of Impact: Low**
+
+*Affects stores whose staff add team members in the admin panel, code that sends `AdminSendCredentials`, and applications that translated its lines.*
+
+The **Add administrator** form no longer asks for a password. The new team member receives a random password nobody sees, and **Send Invite**, now turned on by default, emails a link to choose one on the password reset page of the admin panel. 2.x asked for the password, with a **Generate** button, and **Send Invite** emailed it in clear text. The link expires after the `expire` minutes of your password broker in `config/auth.php`; after that, the member requests a new link from the forgot password page. When `shopper.auth.password_reset` is `false`, the admin panel has no reset page: the form keeps the password field and its **Generate** button, hides **Send Invite**, and you give the password to the member yourself.
+
+`Shopper\Notifications\AdminSendCredentials` takes a reset token in place of the password. Code that sends it asks the password broker for the token:
+
+```php
+// 2.x
+$user->notify(new AdminSendCredentials($password));
+
+// 3.0
+use Illuminate\Support\Facades\Password;
+
+Password::sendResetLink(
+    ['email' => $user->email],
+    fn ($user, string $token) => $user->notify(new AdminSendCredentials($token)),
+);
+```
+
+The email reads its lines from the `admin` keys of the `mails.php` translation file (`set_password`, `set_password_action` and `link_expiry` for the link), where 2.x passed English strings such as `Email: :email - Password: :password` to `__()`, so translations of those strings in `lang/{locale}.json` are no longer used. In a published `lang/vendor/shopper/{locale}/pages/settings/staff.php`, `send_invite_summary` keeps saying that the email carries the login information until you update it, and the new `invitation_not_sent` key is filled from the package file when it is missing.
+
+### Manager Role Permissions
+
+**Likelihood of Impact: Low**
+
+*Affects stores whose staff hold the manager role, and staff members who are not administrators and add team members.*
+
+A new 3.0 install gives the manager role the catalog, sales and customer permissions listed in [Manager Permissions](/3.x/acl#manager-permissions). The upgrade does not change the roles of an existing store: the manager role keeps the permissions you gave it, none on a store that never granted any, and keeps its 2.x description.
+
+In 3.0, a staff member who is not an administrator can give a role to a new team member only when they hold every permission of that role, and never a role without any permission, as described in [Team Management Safeguards](/3.x/acl#team-management-safeguards). 2.x let them give any role except the administrator role. A manager role left without permissions can then be given by administrators only. Give it its permissions from Settings > Roles, or run the seeder that a new install runs:
+
+```bash
+php artisan db:seed --class="Shopper\Database\Seeders\PermissionRoleTableSeeder"
+```
+
+The seeder replaces the permissions of the manager and administrator roles: a permission you granted to the manager by hand is removed, and the manager receives every permission your application created in the Catalog, Products or Sales group.
+
 ### Rector Removes Unused Imports
 
 **Likelihood of Impact: Low**
@@ -623,6 +742,8 @@ The upgrade's Rector step removes the unused `use` statements of every file it s
 *Affects storefronts that import `@shopperlabs/shopper-types`, such as the 2.x Inertia starter kits.*
 
 The package moves from 1.0 to 3.0. Every `id` is a `ResourceId`, `string | number`, so the types fit models with integer keys and models with UUIDs. 1.0 typed the `id` of `Entity`, `Currency` and `Country` as a number: code that passes one of these ids where a `number` is expected now converts it, with `Number(country.id)` for instance. The `DateEntity` type is removed: dates are ISO 8601 strings.
+
+`InventoryHistory` loses `adjustment` and gains `stock_after?: number`. `quantity` is the signed quantity of the movement, and `old_quantity` the stock of the location before it.
 
 ## Coming From a Release Before 2.7
 

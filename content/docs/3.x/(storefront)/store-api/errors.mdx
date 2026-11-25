@@ -199,7 +199,7 @@ These codes come from the HTTP status of the response, so any route can answer t
 | Code | Status | Pointer | When it happens | What to do |
 |------|--------|---------|-----------------|------------|
 | `bad_request` | 400 | | An `include`, `filter` or `sort` name outside the allowlist of the endpoint. The `detail` lists the accepted names | Fix the query, see [Allowlists](/3.x/store-api/json-api#allowlists) |
-| `unauthenticated` | 401 | | A route of the authenticated group called without a token, with an expired or revoked token, or with a token that lacks the `store` ability | Drop the stored token and send the customer to the login page, see [Using the Token](/3.x/store-api/authentication#using-the-token) |
+| `unauthenticated` | 401 | | A route of the authenticated group called without a token, with an expired or revoked token, with a token that lacks the `store` ability, or with the token of a team member | Drop the stored token and send the customer to the login page, see [Using the Token](/3.x/store-api/authentication#using-the-token) |
 | `forbidden` | 403 | | A download link asked for a file of an order that is not paid yet, or a cart transfer on a cart that belongs to another customer | Offer the download once the order is paid. For a transfer, create a new cart |
 | `not_found` | 404 | | No record with this ID or slug for the request, or no route for the URL. A disabled or unpublished record, and a cart or an order of another customer, count as missing | Check the ID. For a cart the customer owned, see [Using the Token](/3.x/store-api/authentication#using-the-token) |
 | `method_not_allowed` | 405 | | The route does not accept this HTTP method. The `detail` lists the methods it accepts | Fix the method |

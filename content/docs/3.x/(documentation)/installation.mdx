@@ -126,7 +126,7 @@ On the first login, a setup wizard asks for the store details in three steps:
 
 <Screenshot src="/images/v3/initialization-step-1.png" alt="First step of the setup wizard, with the store name, email, country and currencies" />
 
-The admin panel opens once the wizard is saved. Until the store has an email and a street address, every admin page sends you back to the wizard, as described in [Access Requirements](/3.x/dashboard#access-requirements).
+The admin panel opens once the wizard is saved. Until the store has an email and a street address, every admin page sends you back to the wizard. Staff without the `system.settings` permission get the forbidden page instead, with a message saying that the store is not set up yet, as described in [Access Requirements](/3.x/dashboard#access-requirements).
 
 ## Run the Scheduler and a Queue Worker
 

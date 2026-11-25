@@ -754,7 +754,7 @@ The address does not change the zone of the cart. When the country is outside th
 
 ## Promotion Codes
 
-A promotion code entered by the customer is checked against the whole cart before it is kept: its currency, zone, dates, eligible products, minimum amount or quantity, usage limits and campaign budget. A code that cannot apply is refused and leaves the cart as it was. Automatic promotions need no request: they appear in `promotions` as soon as the cart qualifies. The [Discounts](/3.x/discounts) page describes how promotions are set up.
+A promotion code entered by the customer is checked against the whole cart before it is kept: its currency, zone, dates, eligible products, minimum amount or quantity, usage limits, and the status and budget of its campaign. A code that cannot apply is refused and leaves the cart as it was. Automatic promotions need no request: they appear in `promotions` as soon as the cart qualifies. The [Discounts](/3.x/discounts) page describes how promotions are set up.
 
 <Endpoint id="post-store-carts-cartid-promotion" method="POST" path="/store/carts/{cartId}/promotion" auth="owner" limit="checkout">
 
@@ -1056,7 +1056,7 @@ The cart resource has the type `carts` and the public ID of the cart as its `id`
 </Field>
 
 <Field name="tax_total" type="integer">
-  Tax of the cart, in cents, 0 until the cart has a shipping address.
+  Tax of the cart, in cents, the tax on shipping included, 0 until the cart has a shipping address.
 </Field>
 
 <Field name="shipping_total" type="integer">
@@ -1116,7 +1116,7 @@ A `cart-lines` resource has these attributes:
 </Field>
 
 <Field name="tax_total" type="integer">
-  Tax on the line, in cents.
+  Tax on the line, in cents. The tax on shipping belongs to no line: it is only in the `tax_total` of the cart.
 </Field>
 
 <Field name="adjustments" type="array">

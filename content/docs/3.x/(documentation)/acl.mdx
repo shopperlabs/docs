@@ -24,7 +24,7 @@ Shopper relies on three roles. Their names are set in `config/shopper/admin.php`
 | Role | Display name | Access |
 |------|--------------|--------|
 | `administrator` | Administrator | Opens the admin panel and receives every seeded permission. Only an administrator can manage the administrator role, create or delete permissions, and delete team members. |
-| `manager` | Manager | Opens the admin panel. The seeder gives it no permission: grant the ones the team needs from the role page or in code. |
+| `manager` | Manager | Opens the admin panel and receives the catalog, sales and customer permissions listed in [Manager Permissions](#manager-permissions). The settings, the Team screen, the inventory locations and anonymizing a customer stay out of its reach. |
 | `user` | User | The customer role. The Team screen does not list it, and it cannot be given to a team member from the admin panel. |
 
 The seeder creates the three roles with `can_be_removed` set to `false`, so the admin panel never offers to delete them. Any other role, such as a "Fulfillment" role for the warehouse team, opens the admin panel only when it holds the `system.dashboard` permission.
@@ -97,7 +97,7 @@ The forms that create permissions on the role page offer these groups. The role 
 
 ## Seeded Permissions
 
-`Shopper\Database\Seeders\AuthTableSeeder` creates the three roles, then 73 permissions, then gives every permission to the administrator role. None of these permissions can be deleted from the admin panel.
+`Shopper\Database\Seeders\AuthTableSeeder` creates the three roles, then 73 permissions, then gives every permission to the administrator role and a default set to the manager role. None of these permissions can be deleted from the admin panel.
 
 ### System Permissions
 
@@ -106,7 +106,7 @@ The `system` group holds the three permissions that cover the panel itself:
 | Permission | Display name | Allows |
 |------------|--------------|--------|
 | `system.dashboard` | Access Dashboard | Opening the admin panel, for a user who is neither administrator nor manager |
-| `system.settings` | Access Settings | Opening and changing the settings pages, including the roles and permissions of the Team screen |
+| `system.settings` | Access Settings | Opening and changing the settings pages, including the roles and permissions of the Team screen, the store setup wizard and the dashboard setup guide |
 | `system.users` | View Users | Opening the Team screen, viewing roles and team members, and adding a team member |
 
 ### Resource Permissions
@@ -130,13 +130,35 @@ Each resource has five permissions: `browse` (the list page), `read` (a single r
 | `customers` | Customers | Customers |
 | `inventories` | Inventory | Inventory locations, in the settings |
 
+### Manager Permissions
+
+The manager role covers the daily work of a store: the catalog, the orders and promotions, and the customers. The seeder gives it 65 of the 73 permissions:
+
+| Permissions | Count |
+|-------------|-------|
+| `system.dashboard` | 1 |
+| The five permissions of `brands`, `categories` and `collections` (Catalog group) | 15 |
+| The five permissions of `products`, `products.variants`, `attributes`, `suppliers`, `tags` and `reviews` (Products group) | 30 |
+| The five permissions of `orders`, `discounts` and `campaigns` (Sales group) | 15 |
+| `customers.browse`, `customers.read`, `customers.create` and `customers.edit` | 4 |
+
+The manager does not receive `system.settings`, `system.users`, `customers.delete` or the five `inventories` permissions, so a manager cannot open the settings pages, the Team screen or the inventory locations, and cannot anonymize a customer. Change the set from the role page, or in code with Spatie's methods.
+
+`Shopper\Database\Seeders\PermissionRoleTableSeeder` gives these permissions when `shopper:install` runs. No migration runs it, so a store installed before this set existed keeps a manager role without any permission. Running it gives the manager role the default set and gives the administrator role every permission in the table:
+
+```bash
+php artisan db:seed --class="Shopper\Database\Seeders\PermissionRoleTableSeeder"
+```
+
+The seeder replaces the permissions of both roles, so a permission you granted to the manager role by hand is removed. It picks the manager permissions by group, so it also gives the manager every permission your application created in the Catalog, Products or Sales group, such as the `subscriptions` permissions of [Generating Permissions](#generating-permissions).
+
 ## Access by Section
 
 Every page of the admin panel checks its permission when it loads, and the actions on the page check theirs again when they run, so a hidden button is never the only protection. A user who fails the check when a page loads lands on the forbidden page.
 
 | Section | Permissions checked |
 |---------|---------------------|
-| Admin panel, every page | Administrator or manager role, or `system.dashboard` |
+| Admin panel, every page | Administrator or manager role, or `system.dashboard`. While the store has no email or street address, the administrator role or `system.settings`, as described in [Access Requirements](/3.x/dashboard#access-requirements) |
 | Dashboard widgets | `orders.browse`, `products.browse`, `customers.browse`, as listed on the [Dashboard](/3.x/dashboard#widgets) page |
 | Products | `products.browse` for the list, `products.create` to add a product or import a CSV file, `products.edit` for every tab of the product editor, `products.delete`, `attributes.delete` to remove an attribute from a product, `system.settings` to set the default product type from the add product form |
 | Variants | `products.edit` to open the variant page, `products.variants.create` to add variants, `products.variants.edit` to generate variants and to change a variant, its stock, its media and its prices, `products.variants.delete`. Generating variants also checks `products.variants.create` when it adds variants and `products.variants.delete` when it removes some |
@@ -148,7 +170,7 @@ Every page of the admin panel checks its permission when it loads, and the actio
 | Campaigns | `campaigns.browse` for the list, then `campaigns.create`, `campaigns.edit` and `campaigns.delete` |
 | Settings, Locations | `inventories.browse`, `inventories.create`, `inventories.edit`, `inventories.delete` |
 | Settings, Team | `system.users` and `system.settings`, as described in [Team Management Safeguards](#team-management-safeguards) |
-| Every other settings page, and the store setup wizard | `system.settings` |
+| Every other settings page, the store setup wizard and the dashboard setup guide | `system.settings` |
 
 The admin panel does not check the following seeded permissions: `brands.read`, `categories.read`, `collections.read`, `products.read`, `products.variants.browse`, `products.variants.read`, `attributes.read`, `suppliers.read`, `tags.read`, `reviews.read`, `reviews.create`, `orders.create`, `orders.delete`, `discounts.read`, `campaigns.read`, `customers.edit` and `inventories.read`. They exist in the database, and your own code can check them.
 
@@ -156,18 +178,19 @@ The admin panel does not check the following seeded permissions: `brands.read`, 
 
 The Team screen relies on two system permissions. `system.users` opens it, lists the roles and the team members, opens a role and adds a team member. `system.settings` creates, renames and deletes roles, and grants or revokes permissions.
 
-Holding `system.settings` does not make a user an administrator. A merchant can give it to a staff member who configures shipping and taxes without handing over the access control system, because four rules apply to every user who is not an administrator:
+Holding `system.settings` does not make a user an administrator. A merchant can give it to a staff member who configures shipping and taxes without handing over the access control system, because five rules apply to every user who is not an administrator:
 
 | Rule | Effect |
 |------|--------|
 | The administrator role is out of reach | A non-administrator cannot open the administrator role, change it, or give it to a new team member. |
 | Grant only what you hold | Granting a permission to a role requires holding that permission. Revoking a permission has no such condition. |
+| Assign only what you hold | Giving a role to a new team member requires holding every permission of that role. A role without any permission cannot be given at all. |
 | Permission definitions are administrator only | Creating, generating and deleting permissions requires the administrator role. |
 | Deleting team members is administrator only | An administrator can delete any team member except their own account and the last administrator. Deleting a team member deletes the user. |
 
 The rules run on the server, in the Livewire actions, so a forged request fails like a click in the interface. Roles and permissions with `can_be_removed` set to `false` are protected the same way: the server refuses to delete them.
 
-The grant rule covers permissions given to a role. Adding a team member with an existing role only requires `system.users`, so a user who holds it can give a new member any role except administrator, whatever permissions that role holds.
+The add team member form lists only the roles a user can give: a non-administrator does not see the administrator role, a role without any permission, or a role holding a permission they lack. A user with `system.users` who holds every manager permission can add a manager; one who misses `customers.edit` cannot. A manager role left without permissions by an older install can only be given by an administrator until it receives permissions, as described in [Manager Permissions](#manager-permissions).
 
 ## Generating Permissions
 
@@ -329,7 +352,7 @@ Route::livewire('subscriptions', Subscriptions::class)
     ->name('subscriptions.index');
 ```
 
-Inside the admin panel, a failed check sends the user to the forbidden page. In a component that uses the `Shopper\Traits\HandlesAuthorizationExceptions` trait, a check that fails after the page has loaded shows an "Unauthorized" notification instead, and the user stays on the page.
+Inside the admin panel, a failed check sends the user to the forbidden page. The page shows the message flashed in the `shopper_forbidden` session key, or `shopper::errors.403.description` when there is none: the `Dashboard` middleware flashes `shopper::errors.403.store_not_initialized` there while the store is not set up. In a component that uses the `Shopper\Traits\HandlesAuthorizationExceptions` trait, a check that fails after the page has loaded shows an "Unauthorized" notification instead, and the user stays on the page.
 
 ### Creating Custom Permissions
 

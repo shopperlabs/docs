@@ -224,7 +224,7 @@ curl -X POST http://localhost:8000/store/carts/01JD8Z6Q4M3K2V7R9T5W1XNB0C/shippi
   -d '{"option_id": "colissimo:01JD8XM5N7Q9S1T3W5Y7A9C1E3"}'
 ```
 
-The API answers `200 OK` with the cart. Shipping now shows in `shipping_total` and in `total`. The response is trimmed to the totals:
+The API answers `200 OK` with the cart. Shipping now shows in `shipping_total` and in `total`, and its tax in `tax_total`: the 690 cents of shipping contain 115 cents of the 20% VAT. The response is trimmed to the totals:
 
 ```json title="Response 200"
 {
@@ -235,7 +235,7 @@ The API answers `200 OK` with the cart. Shipping now shows in `shipping_total` a
             "currency_code": "EUR",
             "subtotal": 18000,
             "discount_total": 1800,
-            "tax_total": 2700,
+            "tax_total": 2815,
             "shipping_total": 690,
             "total": 16890,
             "tax_inclusive": true,
@@ -635,7 +635,7 @@ The API answers `201 Created` with the order, and its items when the request ask
             "payment_status": "pending",
             "shipping_status": "unfulfilled",
             "total": 16200,
-            "tax_amount": 2700,
+            "tax_amount": 2815,
             "shipping_amount": 690,
             "price_amount": 16890,
             "currency_code": "EUR",
@@ -691,7 +691,7 @@ Completing a cart that is already completed answers `200 OK` with the same order
 </Field>
 
 <Field name="tax_amount" type="integer">
-  Tax of the order, in cents.
+  Tax of the order, in cents, the tax on shipping included.
 </Field>
 
 <Field name="shipping_amount" type="integer, null">

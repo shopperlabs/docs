@@ -15,7 +15,7 @@ The admin panel builds these notifications with Filament's notifications package
 |-------|------------|--------------|--------|
 | `Shopper\Core\Events\Orders\OrderCreated` | An order is created | "New order received" | View order |
 | `Shopper\Core\Events\Orders\OrderPaid` | The payment status of an order becomes paid | "Order paid" | View order |
-| `Shopper\Payment\Events\PaymentFailed` | The provider declines an authorization, a capture or a refund | "Payment failed", or "Refund failed" for a refund | View order |
+| `Shopper\Payment\Events\PaymentFailed` | The provider declines an authorization, a capture or a refund, or a provider webhook voids the authorization of an order that already shipped | "Payment failed", "Refund failed" for a refund, or "Payment voided" for a voided authorization | View order |
 | `Shopper\Core\Events\Products\ProductImportCompleted` | A product import finishes, with or without row errors | "Product import finished", with the number of imported and failed rows | View products |
 
 The body names the order number, for example "Order ORD-20260312-000042 has just been placed." A failed payment shows in red, and an import with row errors in orange. The button opens the order, or the product list for an import, and marks the notification as read. An import that stops before the end, with the `Failed` status, sends no notification.
@@ -133,6 +133,7 @@ return [
 | `database.order_paid.title`, `.body` | "Order paid", "Payment for order :number has been received." |
 | `database.payment_failed.title`, `.body` | "Payment failed", "A payment attempt for order :number has failed." |
 | `database.refund_failed.title`, `.body` | "Refund failed", "A refund attempt for order :number has failed." |
+| `database.payment_voided.title`, `.body` | "Payment voided", "The payment authorization for order :number was voided after the order shipped. Collect the payment another way, then mark the order as paid." |
 | `database.product_import.title`, `.body` | "Product import finished", ":imported products imported, :failed failed." |
 | `database.view_order` | "View order" |
 | `database.view_products` | "View products" |
@@ -224,7 +225,7 @@ Keep the replacement out of `app/Listeners`. Laravel would discover it there and
 
 `notifications.database.enabled` turns the four database notifications and the bell on or off together. There is no setting for a single notification: to drop one, [replace it](#replacing-a-notification) with a listener that sends something else, or nothing.
 
-The two welcome emails described below are only sent when the administrator asks for them in the creation form. The password reset email of the admin panel stops with the reset flow itself: set `password_reset` to `false` in `config/shopper/auth.php` and the login page hides the "Forgot your password?" link and no longer registers the reset routes.
+The two welcome emails described below are only sent when the administrator asks for them in the creation form. The password reset email of the admin panel stops with the reset flow itself: set `password_reset` to `false` in `config/shopper/auth.php` and the login page hides the "Forgot your password?" link and no longer registers the reset routes. The team member welcome email links to those routes, so the **Add administrator** form then hides **Send Invite** and asks for a password instead.
 
 ## Mail Notifications
 
@@ -233,10 +234,28 @@ Shopper sends three emails from the admin panel, as Laravel notifications in the
 | Notification | Recipient | Sent when |
 |--------------|-----------|-----------|
 | `AdminSendCredentials` | The new team member | An administrator creates a team member with **Send Invite** turned on |
-| `CustomerSendCredentials` | The new customer | An administrator creates a customer with **Send customer credentials** checked |
+| `CustomerSendCredentials` | The new customer | An administrator creates a customer with **Send an invitation email** checked |
 | `AdminResetPassword` | The user who asked for the reset | Someone submits the "Forgot your password?" form of the admin login page |
 
-The team member email is titled "Welcome to Shopper" and links to the admin login page. The customer email is titled "Welcome to" followed by `config('app.name')` and links to the home page of the application. The reset email links to the admin page where the user picks a new password. Both options of the creation forms are off by default. Creating team members is covered on the [Team](/3.x/team) page.
+The team member email is titled "Welcome to Shopper", and its "Choose my password" button opens the admin's password reset page. The customer email is titled "Welcome to" followed by `config('app.name')`, and its "Choose my password" button opens the password reset page of your storefront. The reset email links to the admin page where the user picks a new password. **Send Invite** is on by default in the team member form, and **Send an invitation email** is off by default in the customer form. Creating team members is covered on the [Team](/3.x/team) page.
+
+`AdminSendCredentials` takes the reset token in its constructor. The admin creates the team member with a random password nobody sees, asks the default password broker for a token with `Password::sendResetLink()`, and the email links to the admin's `shopper.password.reset` route with the token and the member's email. Unlike `CustomerSendCredentials`, it extends Laravel's `Illuminate\Notifications\Notification`, not `ResetPassword`, so neither `ResetPassword::createUrlUsing()` nor `ResetPassword::toMailUsing()` changes it. The expiry and throttle described below apply the same way: a throttled request creates the member and shows the warning "The team member was created, but the invitation email was not sent." Its welcome flow is described on the [Team](/3.x/team#welcome-email) page.
+
+`CustomerSendCredentials` extends Laravel's `Illuminate\Auth\Notifications\ResetPassword`. The admin creates the customer with a random password nobody sees, asks the default password broker for a reset token with `Password::sendResetLink()`, and passes that token to the constructor. The link comes from the callback registered with `ResetPassword::createUrlUsing()`, shown in [From a Storefront](#from-a-storefront), or else from a route of your application named `password.reset`. The admin's own `shopper.password.reset` route does not count. When neither exists, the form hides the **Send an invitation email** checkbox, and the customer chooses a password through the forgot password flow of your storefront.
+
+The link expires after the `expire` minutes of the default broker, `auth.passwords.users.expire` in `config/auth.php` (60 in a new Laravel application), and the email states that delay. The broker also throttles: when a token for the same email is less than `throttle` seconds old, no email is sent, the customer is still created, and the admin shows a warning with the broker's message. `CustomerSendCredentials` builds its own message, so a `ResetPassword::toMailUsing()` callback changes the storefront reset email but not this one.
+
+To send the invitation again from your own code, for example after the link expired, ask the broker for a new token the same way:
+
+```php
+use Illuminate\Support\Facades\Password;
+use Shopper\Notifications\CustomerSendCredentials;
+
+Password::sendResetLink(
+    ['email' => $customer->email],
+    fn ($customer, string $token) => $customer->notify(new CustomerSendCredentials($token)),
+);
+```
 
 Their subjects and lines come from the `mails.php` translation file (the two welcome emails) and the `pages/auth.php` file (the reset email) of `shopper/framework`, which you override in `lang/vendor/shopper` as shown in [Changing the Text](#changing-the-text). The layout is Laravel's mail notification template: `php artisan vendor:publish --tag=laravel-notifications` publishes it to `resources/views/vendor/notifications`.
 
@@ -262,4 +281,4 @@ public function boot(): void
 }
 ```
 
-The page then sends the token, the email and the new password to `POST /store/auth/reset-password`. The Store API [Authentication](/3.x/store-api/authentication#resetting-a-password) guide covers the whole reset flow.
+The same callback builds the link of the customer invitation that the admin sends, described in [Mail Notifications](#mail-notifications). The page then sends the token, the email and the new password to `POST /store/auth/reset-password`. The Store API [Authentication](/3.x/store-api/authentication#resetting-a-password) guide covers the whole reset flow.

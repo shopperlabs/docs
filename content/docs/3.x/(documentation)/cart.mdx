@@ -17,7 +17,7 @@ Every amount of the cart is an integer in cents: a line priced at $25.00 stores 
 
 ## Models
 
-The cart models live in `Shopper\Cart\Models`. `Cart` and `CartLine` can be replaced with your own classes; their contracts are `Shopper\Cart\Models\Contracts\Cart` and `Shopper\Cart\Models\Contracts\CartLine`. The four other models (`CartAddress`, `CartLineAdjustment`, `CartLineTaxLine` and `CartPromotion`) are fixed. Their tables take the Shopper [table prefix](/3.x/configuration#database-table-prefix), `sh_` by default.
+The cart models live in `Shopper\Cart\Models`. `Cart` and `CartLine` can be replaced with your own classes; their contracts are `Shopper\Cart\Models\Contracts\Cart` and `Shopper\Cart\Models\Contracts\CartLine`. The five other models (`CartAddress`, `CartLineAdjustment`, `CartLineTaxLine`, `CartPromotion` and `CartShippingTaxLine`) are fixed. Their tables take the Shopper [table prefix](/3.x/configuration#database-table-prefix), `sh_` by default.
 
 ### Cart
 
@@ -55,6 +55,7 @@ A cart has these relationships:
 | `lines` | HasMany | The class in `shopper.cart.models.cart_line` |
 | `promotions` | HasMany | `CartPromotion` |
 | `addresses` | HasMany | `CartAddress` |
+| `shippingTaxLines` | HasMany | `CartShippingTaxLine` |
 | `customer` | BelongsTo | The class in `auth.providers.users.model` |
 | `channel` | BelongsTo | The class in `shopper.models.channel` |
 | `zone` | BelongsTo | `Shopper\Core\Models\Zone` |
@@ -145,6 +146,20 @@ The `full_name` accessor joins `first_name` and `last_name`. The country of the 
 | `rate` | decimal(8,4) | no | - | Rate in percent: `20.0000` for 20% |
 | `amount` | unsigned int | no | 0 | Tax on the line, in cents |
 
+### CartShippingTaxLine
+
+`Shopper\Cart\Models\CartShippingTaxLine` is one tax applied to the shipping amount of the cart, with its `cart` and `taxRate` relations. The pipeline rewrites these rows when it calculates tax, as described in [Cart Integration](/3.x/taxes#cart-integration).
+
+| Column | Type | Nullable | Default | Description |
+|--------|------|----------|---------|-------------|
+| `id` | bigint | no | auto | Primary key |
+| `cart_id` | bigint | no | - | The cart, deleted with it |
+| `tax_rate_id` | bigint | yes | null | The tax rate |
+| `code` | string | no | - | Tax code |
+| `name` | string | no | - | Tax name, such as "VAT" |
+| `rate` | decimal(8,4) | no | - | Rate in percent: `20.0000` for 20% |
+| `amount` | unsigned int | no | 0 | Tax on the shipping, in cents |
+
 ### CartPromotion
 
 `Shopper\Cart\Models\CartPromotion` is a discount attached to the cart, either a code the customer entered or an automatic promotion the pipeline found. The `source` column is cast to `Shopper\Core\Enum\PromotionSource` (`Code` or `Automatic`). A cart holds each discount once: a unique index covers `cart_id` and `discount_id`.
@@ -232,16 +247,16 @@ Each step does one job, in this order:
 | `CalculateLines` | Multiplies the unit price of each line by its quantity, fills `lineSubtotals` and sums them into `subtotal` |
 | `ApplyAutomaticPromotions` | Attaches each active automatic discount the cart qualifies for as a `CartPromotion`, and removes those it no longer qualifies for |
 | `ApplyDiscounts` | Resolves the promotions of the cart, writes a `CartLineAdjustment` for each line a promotion discounts, and sets `discountTotal` |
-| `CalculateTax` | Computes the tax of each line on its subtotal minus its adjustments, writes the `CartLineTaxLine` rows, sets `taxTotal` and `taxInclusive`. Skipped until the shipping address has a country |
+| `CalculateTax` | Computes the tax of each line on its subtotal minus its adjustments and the tax of the `shipping_amount`, writes the `CartLineTaxLine` and `CartShippingTaxLine` rows, sets `taxTotal` and `taxInclusive`. Skipped until the shipping address has a country |
 | `Calculate` | Sets `shippingTotal` from the cart's `shipping_amount` and computes `total` |
 
-`Calculate` adds tax to the total only when prices exclude it: the goods total is `subtotal - discountTotal + taxTotal`, or `subtotal - discountTotal` when prices include tax, and never goes below `0`. The shipping amount is added on top. The [Taxes](/3.x/taxes) page covers tax zones, rates and tax-inclusive prices.
+`Calculate` adds tax to the total only when prices exclude it: the goods total is `subtotal - discountTotal + taxTotal`, or `subtotal - discountTotal` when prices include tax, and never goes below `0`. The shipping amount is added on top; its tax is part of `taxTotal`, so it reaches the total only when prices exclude tax. The [Taxes](/3.x/taxes) page covers tax zones, rates and tax-inclusive prices.
 
 While the cart holds an open payment session with a provider, the promotion and tax steps keep the stored adjustments and tax lines as they are, so the amount being paid does not move under the customer.
 
 ### Stored Totals
 
-`CartManager` offers two ways to read totals. `calculate()` always runs the pipeline and records the time in `calculated_at`. `totals()` runs the pipeline only when the cart was never calculated or the last calculation is older than `shopper.cart.totals_ttl_minutes` (15 by default). Otherwise it rebuilds the totals from the stored rows: line prices, adjustments, tax lines and `shipping_amount`.
+`CartManager` offers two ways to read totals. `calculate()` always runs the pipeline and records the time in `calculated_at`. `totals()` runs the pipeline only when the cart was never calculated or the last calculation is older than `shopper.cart.totals_ttl_minutes` (15 by default). Otherwise it rebuilds the totals from the stored rows: line prices, adjustments, the tax lines of the lines and of the shipping, and `shipping_amount`.
 
 Every change to a line, an address, a promotion, the currency or the shipping choice clears `calculated_at`, so the next `totals()` call runs the pipeline again. The TTL covers what changes without touching the cart, such as an automatic promotion that starts or ends. The Store API answers with `totals()`; the checkout, the payment session and the promotion endpoint call `calculate()`.
 
@@ -336,7 +351,7 @@ Inside the transaction, the action:
 5. Copies the shipping and billing addresses to `OrderAddress` rows.
 6. Creates the order with the total, tax and shipping amounts, the currency, email, customer, channel, zone, payment method and carrier option of the cart, and the discount of the promotion with the largest amount.
 7. Creates one order item per line, with its name, SKU, quantity, unit price, discount and tax, and reserves stock for each line that tracks inventory.
-8. Copies the tax lines of the cart to `OrderTaxLine` rows.
+8. Copies the tax lines of the cart lines to `OrderTaxLine` rows on the order items, and the shipping tax lines to `OrderTaxLine` rows on the order.
 9. Records the use of each applied promotion, checks its usage limits and charges its campaign budget.
 10. Sets `completed_at` and `order_id` on the cart and dispatches `CartCompleted` once the transaction commits.
 

@@ -50,7 +50,7 @@ Do not add the admin prefix, the `shopper.` name prefix or the admin middleware 
 
 - The admin domain and prefix, from `shopper.admin.domain` and `shopper.admin.prefix` (`cpanel` by default).
 - The `shopper.` prefix on its name.
-- The middleware of the admin pages: cookies, session, CSRF protection and route model binding, Shopper's serving and locale middleware, authentication with the Shopper guard, the dashboard check, the sidebar resolver and the ones listed in `shopper.routes.middleware` (see [Middleware](/3.x/configuration#middleware)). The dashboard check sends users who cannot access the admin panel to its forbidden page, and everyone to the setup screen until the store has an email and an address.
+- The middleware of the admin pages: cookies, session, CSRF protection and route model binding, Shopper's serving and locale middleware, authentication with the Shopper guard, the dashboard check, the sidebar resolver and the ones listed in `shopper.routes.middleware` (see [Middleware](/3.x/configuration#middleware)). The dashboard check sends users who cannot access the admin panel to its forbidden page, and, until the store has an email and an address, sends administrators and users with `system.settings` to the setup screen and everyone else to the forbidden page with a message saying that the store is not set up yet.
 
 The routes do not check any permission. Each page checks its own, the way the skeleton's `LoyaltyIndex` calls `$this->authorize('loyalty.browse')` in `mount()`: a failed check sends the user to the admin panel's forbidden page. To check a permission on a group of routes instead, add the `can:` middleware, as the product sections below do.
 

@@ -91,7 +91,7 @@ $location->country?->cca2;
 
 ### Inventory Histories
 
-Every stock movement of a product or variant is a row of the inventory history, the ledger, tied to the location it happened at. `histories` returns the rows of a location as `Shopper\Core\Models\InventoryHistory` instances. The [Products](/3.x/products#stock-management) page describes the ledger and the methods that write to it.
+Every stock movement of a product or variant is a row of the inventory history, the ledger, tied to the location it happened at. Each row holds the quantity of the movement and the stock of that product at the location before it. `histories` returns the rows of a location as `Shopper\Core\Models\InventoryHistory` instances. The [Products](/3.x/products#stock-management) page describes the ledger and the methods that write to it.
 
 ```php
 $movements = $location->histories()
@@ -121,18 +121,17 @@ The stock a product or variant holds at each location is a row of `Shopper\Core\
 | `stockable_type` | string | no | - | Morph alias of the product or variant, such as `product` or `variant` |
 | `stockable_id` | bigint | no | - | ID of the product or variant |
 | `quantity` | integer | no | 0 | Current quantity at the location |
-| `inventory_id` | bigint | yes | null | Foreign key to `sh_inventories` |
+| `inventory_id` | bigint | no | - | Foreign key to `sh_inventories` |
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
 
-A unique index on `stockable_type`, `stockable_id` and `inventory_id` keeps one row per product and location. `stockable` returns the product or variant, and `inventory` returns the location. The model has no contract and no public ID, and it cannot be swapped.
+A unique index on `stockable_type`, `stockable_id` and `inventory_id` keeps one row per product and location. The `inventory_id` foreign key deletes the stock level when its location is deleted. `stockable` returns the product or variant, and `inventory` returns the location. The model has no contract and no public ID, and it cannot be swapped.
 
 Products and variants read their stock levels through the `stockLevels` relation. To show the stock of a product at each location, on a product page that offers in-store pickup for example:
 
 ```php
 $levels = $product->stockLevels()
     ->with('inventory')
-    ->whereNotNull('inventory_id')
     ->where('quantity', '>', 0)
     ->get();
 
@@ -189,7 +188,7 @@ To load the stock of one location for a whole listing in one query, use `loadSto
 
 One location at most is the default. When a location is saved with `is_default` set to `true`, Shopper sets `is_default` to `false` on every other location. Nothing requires a default to exist: a store can save its only location with `is_default` set to `false`.
 
-The setup wizard creates the default location when the merchant submits it, from the store name, email, street address, postal code, city, phone number and country. Its code is the store name as a slug. The wizard does not copy the state: set it on the location when your carriers need it.
+The setup wizard creates the default location when the merchant submits it, from the store name, email, street address, postal code, state, city, phone number and country. Its code is the store name as a slug.
 
 Shopper reads the default location in three places:
 
@@ -198,7 +197,7 @@ Shopper reads the default location in three places:
 - The Store API uses the default location as the origin address when it asks a carrier for live rates. With no default location, it uses the location with the lowest `priority`. The [Carriers](/3.x/carriers#calculating-shipping-rates) page describes the rate request.
 
 <Warning>
-Deleting a location deletes its inventory history rows and keeps its stock levels with `inventory_id` set to `null`. Those orphaned rows still count in the `stock` of each product, but no order can draw from them, so a product can show as in stock and fail at checkout. Move the stock to another location before you delete one, or run `php artisan shopper:stock:reconcile --fix` after the deletion to set the orphaned rows to zero.
+Deleting a location deletes its inventory history rows and its stock levels with it. The `stock` of each product drops by the quantity the location held, and no movement records that loss. Move the stock to another location before you delete one, as shown in [How Locations Connect to Stock](#how-locations-connect-to-stock).
 </Warning>
 
 ## Allocating Stock Across Locations
@@ -266,7 +265,7 @@ The `shopper:stock:reconcile` command compares the stock levels with the sum of 
 php artisan shopper:stock:reconcile
 ```
 
-Each drifted row prints as `[product:12:1] snapshot 40, ledger 38`: the morph alias, the ID of the product or variant, the location ID, the quantity of the stock level and the quantity of the ledger. A stock level whose location was deleted has an empty location ID and reports `ledger 0`. Without `--fix`, the command exits with a failure code when it finds a drifted row, which makes it usable as a check in a scheduled job or a deployment.
+Each drifted row prints as `[product:12:1] snapshot 40, ledger 38`: the morph alias, the ID of the product or variant, the location ID, the quantity of the stock level and the quantity of the ledger. Without `--fix`, the command exits with a failure code when it finds a drifted row, which makes it usable as a check in a scheduled job or a deployment.
 
 Add `--fix` to rewrite each drifted stock level from the ledger. Stock levels without any ledger row are set to `0`:
 
@@ -382,7 +381,7 @@ The admin panel checks four permissions of the `inventories` resource:
 
 ## In the Admin
 
-Merchants manage locations under Settings, Inventories, at `/cpanel/setting/locations`, on a page titled Locations. The page lists each location with its name, a Default badge, its country, city and phone number. The location form has the name, email, description, a Set as default location toggle, the priority and the address, with the country and state. The default location has no delete button in the list. On the product page, the Stock & Inventory section records stock movements at a location chosen by the merchant and filters the history by location. The [User Guide](/3.x/user-guide) walks through these screens.
+Merchants manage locations under Settings, Inventories, at `/cpanel/setting/locations`, on a page titled Locations. The page lists each location with its name, a Default badge, its country, city and phone number. The location form has the name, email, description, a Set as default location toggle, the priority and the address, with the country and state. The default location has no delete button in the list. For any other location, the delete confirmation shows the units the location holds (the sum of its stock levels) and warns that this stock and its history are deleted with it. On the product page, the Stock & Inventory section records stock movements at a location chosen by the merchant and filters the history by location. The [User Guide](/3.x/user-guide) walks through these screens.
 
 ## From a Storefront
 

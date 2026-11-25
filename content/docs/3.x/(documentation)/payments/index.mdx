@@ -70,7 +70,7 @@ Every driver implements `Shopper\Payment\Contracts\PaymentDriver`. Amounts are i
 | `isConfigured()` | `bool` | Whether the credentials are set |
 | `mode()` | `?PaymentMode` | `PaymentMode::Live` or `PaymentMode::Test` (`Shopper\Payment\Enum\PaymentMode`), or `null` when the driver has no such notion |
 | `supportsWebhooks()` | `bool` | Whether the provider sends webhooks |
-| `supportsRefunds()` | `bool` | Whether the provider can refund |
+| `supportsRefunds()` | `bool` | Whether the provider can refund. The admin panel shows the Refund action of an order only when it returns `true` |
 | `supportsRetrieval()` | `bool` | Whether Shopper can ask the provider for the current state of a payment |
 | `initiatePayment(int $amount, string $currency, array $context = [])` | `PaymentResult` | Create a payment with the provider |
 | `authorizePayment(string $reference, array $data = [])` | `PaymentResult` | Authorize an initiated payment |
@@ -86,7 +86,7 @@ A driver whose provider can read a refund by its ID can also implement `Shopper\
 
 ### The Manual Driver
 
-The manual driver (`Shopper\Payment\Drivers\ManualDriver`) calls no API. It is always configured, and initiating a payment succeeds right away with the status `authorized` and a reference such as `manual_01JD8Z6Q4M3K2V7R9T5W1XNB0C`. Authorizing and capturing succeed, webhooks are ignored, and refunding, cancelling or retrieving a manual payment throws a `PaymentException`. The money of a manual order is collected outside Shopper, and the merchant records it with Mark as paid in the admin panel, as described in [In the Admin](#in-the-admin).
+The manual driver (`Shopper\Payment\Drivers\ManualDriver`) calls no API. It is always configured, and initiating a payment succeeds right away with the status `authorized` and a reference such as `manual_01JD8Z6Q4M3K2V7R9T5W1XNB0C`. Authorizing, capturing and refunding succeed, webhooks are ignored, and cancelling or retrieving a manual payment throws a `PaymentException`. A manual refund moves no money: the driver answers it with a new `manual_` reference, and the merchant pays the customer back outside Shopper. The money of a manual order is collected outside Shopper, and the merchant records it with Mark as paid in the admin panel, as described in [In the Admin](#in-the-admin).
 
 ## Configuration
 
@@ -180,11 +180,12 @@ Capturing an order that is already paid returns a successful result without call
 
 ### Refunding a Payment
 
-`refund()` returns money to the customer, in full or in part. The amount is in cents and the order's payment status must be Paid or Partially refunded, otherwise the service throws a `PaymentException`. The amount cannot exceed what remains refundable: the sum of the successful captures, or the order total when no capture is recorded, minus the successful refunds and the refunds still pending at the provider.
+`refund()` returns money to the customer, in full or in part. Merchants call it with the Refund action of the order page, described in [In the Admin](#in-the-admin), and your code calls it the same way. The amount is in cents and the order's payment status must be Paid or Partially refunded, otherwise the service throws a `PaymentException`. The amount cannot exceed what remains refundable: the sum of the successful captures, or the order total when no capture is recorded, minus the successful refunds and the refunds still pending at the provider.
 
 Pass an idempotency key with each refund the merchant asks for. Generate it once, such as a UUID stored with the refund request or the queued job, and send the same key on every retry:
 
 ```php
+use Shopper\Payment\Enum\RefundReason;
 use Shopper\Payment\Enum\TransactionType;
 
 $reference = $order->paymentTransactions()
@@ -197,16 +198,24 @@ $result = $payments->refund(
     order: $order,
     reference: $reference,
     amount: 2999,
-    reason: 'requested_by_customer',
+    reason: RefundReason::RequestedByCustomer,
     idempotencyKey: $refundKey,
 );
 ```
 
 The service stores the key in the `idempotency_key` column of the refund transaction, unique per order, and passes it to the driver in `$context['idempotency_key']`. A call that repeats a key already recorded on the order returns the state of that refund without calling the provider, so a double submit or a retried job refunds once. Repeating a key with another amount throws a `PaymentException`, and a refund that failed keeps its key: use a new key to try again. Without a key, the service generates a UUID, so every call is a new refund. Call `refund()` outside any open database transaction: the service locks the order and reads the refunds on file, and on MySQL a transaction opened earlier would read them from a stale snapshot.
 
-When the refunds reach the captured amount, the payment status moves to Refunded, otherwise to Partially refunded. A fully refunded order also gives its discounts back to their [campaign budgets](/3.x/campaigns#budgets). The reason goes to the provider: Stripe passes it as the reason of its refund, and accepts `duplicate`, `fraudulent` and `requested_by_customer`. The manual driver cannot refund.
+When the refunds reach the captured amount, the payment status moves to Refunded, otherwise to Partially refunded. A fully refunded order also gives its discounts back to their [campaign budgets](/3.x/campaigns#budgets). The reason is a `Shopper\Payment\Enum\RefundReason` case (`RequestedByCustomer`, `Duplicate` or `Fraudulent`) or `null`. The service stores its value under `reason` in the `metadata` of the refund transaction, where the admin panel reads it, and passes the value to the driver: Stripe sends `requested_by_customer`, `duplicate` or `fraudulent` as the reason of its refund. A manual payment may have no reference to read: pass the order number when `getLatestReference()` returns `null`, as the admin panel does.
 
-The service records a `refund` transaction and does not create an `OrderRefund` record. [Order Refunds](#order-refunds) shows how to keep one.
+The admin form and your own screens read what can still be refunded from the service. `refundableAmount()` returns the amount in cents that `refund()` accepts at most, and `capturedTotal()` the sum of the successful captures, or the order total when none is recorded:
+
+```php
+$refundable = $payments->refundableAmount($order);
+
+$collected = $payments->capturedTotal($order);
+```
+
+The service records a `refund` transaction and does not create an `OrderRefund` record, whether your code or the Refund action calls it. [Order Refunds](#order-refunds) shows how to keep one.
 
 #### Pending Refunds
 
@@ -224,7 +233,7 @@ $result = $payments->cancel($order, $reference);
 
 ### Querying Transactions
 
-The service returns the transactions of an order, newest first, and the reference of the latest successful one:
+The service returns the transactions of an order, newest first, and the reference of the latest successful one that is not a refund, the payment reference that capturing and refunding take:
 
 ```php
 $transactions = $payments->getTransactions($order);
@@ -428,7 +437,7 @@ Transactions are stored in the `sh_payment_transactions` table (`sh_` is the def
 | `idempotency_key` | string, nullable | Idempotency key of a refund request, unique per order |
 | `data` | jsonb, nullable | Data returned by the driver |
 | `notes` | text, nullable | Message returned by the driver |
-| `metadata` | jsonb, nullable | Custom data |
+| `metadata` | jsonb, nullable | Custom data, and the `reason` of a refund |
 | `order_id` | bigint, nullable | Foreign key to the order |
 | `payment_method_id` | bigint, nullable | Foreign key to the payment method |
 | `user_id` | bigint, nullable | The admin user or customer who made the call, `null` for provider events |
@@ -495,12 +504,13 @@ Create the record after a successful refund. A [pending refund](#pending-refunds
 use Shopper\Core\Enum\OrderRefundStatus;
 use Shopper\Core\Enum\PaymentStatus;
 use Shopper\Core\Models\OrderRefund;
+use Shopper\Payment\Enum\RefundReason;
 
 $result = $payments->refund(
     order: $order,
     reference: $reference,
     amount: 2999,
-    reason: 'requested_by_customer',
+    reason: RefundReason::RequestedByCustomer,
     idempotencyKey: $refundKey,
 );
 
@@ -510,7 +520,7 @@ if ($result->success) {
         'user_id' => $order->customer_id,
         'amount' => 2999,
         'currency' => $order->currency_code,
-        'reason' => 'requested_by_customer',
+        'reason' => RefundReason::RequestedByCustomer->value,
         'status' => match (true) {
             $result->isPending() => OrderRefundStatus::Pending,
             $order->refresh()->payment_status === PaymentStatus::Refunded => OrderRefundStatus::Refunded,
@@ -976,14 +986,14 @@ The admin panel checks these permissions on the payment screens:
 | Permission | Checked for |
 |------------|-------------|
 | `orders.read` | Opening an order and its payment details |
-| `orders.edit` | Mark as paid and Capture payment on an order |
+| `orders.edit` | Mark as paid, Capture payment and Refund on an order |
 | `system.settings` | The Payment methods settings page, where methods and their drivers are managed |
 
 [Access by Section](/3.x/acl#access-by-section) lists the permissions of every section.
 
 ## In the Admin
 
-Merchants manage payment methods under Settings, Payment methods: the list shows each method with its driver, green when the driver is configured, and its Live or Test mode, and the form offers every registered driver, marked "Not configured" when its credentials are missing. On an order pending payment, Mark as paid sets the payment status to Paid for a payment collected outside Shopper, such as cash on delivery, and moves a new order to processing. On an authorized order, Capture payment captures the payment with the order's latest successful reference. Refunds are made in code, as shown in [Refunding a Payment](#refunding-a-payment). The [User Guide](/3.x/user-guide) walks through these screens.
+Merchants manage payment methods under Settings, Payment methods: the list shows each method with its driver, green when the driver is configured, and its Live or Test mode, and the form offers every registered driver, marked "Not configured" when its credentials are missing. On an order pending payment, Mark as paid sets the payment status to Paid for a payment collected outside Shopper, such as cash on delivery, and moves a new order to processing. On an authorized order, Capture payment captures the payment with the order's latest successful reference. On a paid or partially refunded order whose driver supports refunds, Refund opens a form with the amount, filled with `refundableAmount()` and limited to it, and a reason, then calls `refund()` with `getLatestReference()`, or the order number for a manual payment without a reference, and an idempotency key generated when the form opens, so a double submit refunds once. The order summary lists the successful and pending refunds of the order, then the net collected amount: `capturedTotal()` minus the successful refunds. The [User Guide](/3.x/user-guide) walks through these screens.
 
 ## From a Storefront
 

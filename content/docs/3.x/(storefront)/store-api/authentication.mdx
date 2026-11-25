@@ -234,7 +234,7 @@ The API answers `200 OK` with the same document as registration:
 
 Each login creates a new token and leaves the others valid, so a customer can stay logged in on a phone and a laptop at the same time.
 
-A wrong email or password answers `422 Unprocessable Content` with the `credentials_invalid` code on the `email` field. The message does not say which of the two is wrong:
+A wrong email or password answers `422 Unprocessable Content` with the `credentials_invalid` code on the `email` field. The message does not say which of the two is wrong. A team member, any user who can open the admin panel (administrators, managers and roles with the `system.dashboard` permission), gets the same answer even with the right password, and the attempt counts as a failed login: the Store API serves customers only, so a team member who also buys on the store needs a separate customer account with another email address.
 
 ```json title="Response 422"
 {
@@ -256,7 +256,7 @@ A wrong email or password answers `422 Unprocessable Content` with the `credenti
 
 | Status | Code | When |
 |--------|------|------|
-| 422 | `credentials_invalid` | The email and the password match no account |
+| 422 | `credentials_invalid` | The email and the password match no account, or the account belongs to a team member |
 | 422 | Rule name, such as `required` | A field fails validation |
 
 </Errors>
@@ -294,7 +294,7 @@ curl "http://localhost:8000/store/customers/me" \
   -H "Authorization: Bearer 4|Pq7Hn2Lw9Xc4Vb8Mz1Rt6Ky3Jd5Sf0Ga2Ue8Wo1N9c1d2e3f"
 ```
 
-The token carries the `store` ability. The API accepts only tokens that carry it, so a Sanctum token your application issues for another purpose answers `401 Unauthorized` on every Store API route.
+The token carries the `store` ability. The API accepts only tokens that carry it, so a Sanctum token your application issues for another purpose answers `401 Unauthorized` on every Store API route. The tokens of a team member answer the same `401`, so a customer who joins the team can no longer use the tokens issued before.
 
 An expired or revoked token is handled differently by the two route groups:
 
@@ -400,7 +400,7 @@ curl -X POST "http://localhost:8000/store/auth/forgot-password" \
   -d '{"email": "camille.martin@example.com"}'
 ```
 
-The API answers `202 Accepted` with an empty body whether or not an account uses that email, so the form cannot reveal who has an account. Show the same message in both cases, such as "If an account exists for this email, a reset link is on its way."
+The API answers `202 Accepted` with an empty body whether or not an account uses that email, so the form cannot reveal who has an account. For the email of a team member, it sends nothing and answers the same `202`: team members reset their password from the admin panel. Show the same message in both cases, such as "If an account exists for this email, a reset link is on its way."
 
 <Errors>
 

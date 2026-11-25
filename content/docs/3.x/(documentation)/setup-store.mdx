@@ -9,7 +9,7 @@ This page maps each field of the wizard and of the General page to its setting k
 
 ## Setup Wizard
 
-After installing Shopper and creating an admin user, log in at `/cpanel/login` (`cpanel` is the default prefix, set by `SHOPPER_PREFIX`). Until the store has an `email` and a `street_address`, every admin page behind the login redirects to the wizard at `/cpanel/initialize`, as described in [Access Requirements](/3.x/dashboard#access-requirements).
+After installing Shopper and creating an admin user, log in at `/cpanel/login` (`cpanel` is the default prefix, set by `SHOPPER_PREFIX`). Until the store has an `email` and a `street_address`, every admin page behind the login redirects administrators and users with the `system.settings` permission to the wizard at `/cpanel/initialize`, and other users to the forbidden page, as described in [Access Requirements](/3.x/dashboard#access-requirements).
 
 The wizard has three steps: Information, Address and Social Links. Clicking **Next** saves the fields of the current step. Clicking **Save** on the last step saves every field, creates the default inventory location in the same database transaction, and opens the dashboard. The [Setup Wizard and Settings Pages](/3.x/settings#setup-wizard-and-settings-pages) section explains how these saves use locked rows.
 
@@ -76,7 +76,7 @@ The platforms are the cases of the `Shopper\Core\Enum\SocialPlatform` enum. The 
 
 ## Default Location
 
-When the merchant clicks **Save** on the last step, the wizard creates the default inventory location, or updates it when one already exists. The location takes the store name, email, street address, postal code, city, phone number and country, and its code is the slug of the store name, such as `classic-apparel`. The default location exists only once that last step is saved.
+When the merchant clicks **Save** on the last step, the wizard creates the default inventory location, or updates it when one already exists. The location takes the store name, email, street address, postal code, state, city, phone number and country, and its code is the slug of the store name, such as `classic-apparel`. The default location exists only once that last step is saved.
 
 Shopper puts the initial quantity of a new product in the default location, and the Store API uses its address as the origin when it asks carriers for shipping rates. Changing the address on the General settings page later leaves the location as it is: merchants edit it on the Locations settings page, described in [Locations](/3.x/locations).
 
@@ -201,7 +201,7 @@ public function boot(): void
 
 ## Permissions
 
-The wizard opens for administrators and for users with the `system.settings` permission, and answers with a 403 error to anyone else. The General page checks `system.settings` when it opens and again when it saves. The [System Permissions](/3.x/acl#system-permissions) section lists what `system.settings` gives access to.
+The wizard opens for administrators and for users with the `system.settings` permission, and answers with a 403 error to anyone else. Those other users do not reach it from the admin: while the store is not set up, the `Dashboard` middleware sends them to the forbidden page with the `shopper::errors.403.store_not_initialized` message, which tells them that an administrator must finish the setup. Opening `/cpanel/initialize` directly gives them the forbidden page with its default message. The General page checks `system.settings` when it opens and again when it saves. The [System Permissions](/3.x/acl#system-permissions) section lists what `system.settings` gives access to.
 
 ## In the Admin
 

@@ -17,7 +17,7 @@ The order is stored by five models of the `Shopper\Core\Models` namespace:
 | `OrderItem` | `order_items` | One purchased product or variant, with its name, SKU, quantity and unit price at checkout |
 | `OrderAddress` | `order_addresses` | A copy of the shipping or billing address |
 | `OrderPromotion` | `order_promotions` | One discount applied at checkout, see [Discounts](/3.x/discounts) |
-| `OrderTaxLine` | `order_tax_lines` | One tax applied to an order item, see [Taxes](/3.x/taxes) |
+| `OrderTaxLine` | `order_tax_lines` | One tax applied to an order item or to the shipping of the order, see [Taxes](/3.x/taxes) |
 
 Shipments (`OrderShipping` and `OrderShippingEvent`) are described on the [Fulfillment](/3.x/fulfillment) page, refunds (`OrderRefund`) on the [Payments](/3.x/payments) page.
 
@@ -71,7 +71,7 @@ The `sh_orders` table has soft deletes:
 | `public_id` | ulid | yes | generated | Public identifier, unique |
 | `number` | string(32) | yes | generated | Order number such as `ORD-20261117-000124`, unique |
 | `price_amount` | integer | yes | null | Amount charged to the customer, taxes and shipping included |
-| `tax_amount` | unsigned integer | yes | null | Total tax of the order |
+| `tax_amount` | unsigned integer | yes | null | Total tax of the order, the tax on shipping included |
 | `shipping_amount` | integer | yes | null | Shipping cost |
 | `status` | string(32) | no | `new` | A `Shopper\Core\Enum\OrderStatus` value, set by the model |
 | `payment_status` | string(32) | no | `pending` | A `Shopper\Core\Enum\PaymentStatus` value |
@@ -242,10 +242,10 @@ The checkout records each use against the discount's limits and charges the budg
 
 ### Tax Lines
 
-Taxes are stored per item: `$item->taxLines` returns the `OrderTaxLine` rows of an item, one per tax rate with its code, name, rate and amount. `tax_amount` on the item and on the order hold the totals. The [Taxes](/3.x/taxes) page covers how they are computed, and [Tax Rates](/3.x/taxes#tax-rates) where the rates come from.
+Taxes are stored per item: `$item->taxLines` returns the `OrderTaxLine` rows of an item, one per tax rate with its code, name, rate and amount. The tax lines of the shipping belong to the order: `$order->taxLines` returns them. `tax_amount` on the item and on the order hold the totals. The [Taxes](/3.x/taxes) page covers how they are computed, and [Tax Rates](/3.x/taxes#tax-rates) where the rates come from.
 
 ```php
-$order->load('items.taxLines');
+$order->load(['items.taxLines', 'taxLines']);
 
 foreach ($order->items as $item) {
     foreach ($item->taxLines as $taxLine) {
@@ -424,11 +424,12 @@ The admin panel shows each action of the order page only when it applies:
 | Start processing | The order is New | Moves it to Processing |
 | Mark as paid | The payment is Pending | Sets the payment to Paid, and moves a New order to Processing |
 | Capture payment | The payment is Authorized and the order is neither Cancelled nor Archived | Captures the authorization through the payment provider |
+| Refund | The payment is Paid or Partially refunded, the driver of the order's payment method supports refunds and part of the collected amount is refundable, whatever the order status | Refunds the amount and reason entered in its form through the driver of the payment method, as described in [Refunding a Payment](/3.x/payments#refunding-a-payment) |
 | Mark complete | The order is Processing and Paid | Moves it to Completed |
 | Cancel Order | The order can be cancelled (see [Status Check Methods](#status-check-methods)) and is not Completed | Moves it to Cancelled |
 | Archive | The order is neither Completed, Paid nor Archived | Moves it to Archived and returns to the order list |
 
-Cancelling an order changes its status only. The listeners of `OrderCancelled` put the reserved stock back on sale and give the discount amount back to the campaign budget, but a payment that was authorized or collected stays as it is: void or refund it through the payment provider, as described in [Refunding a Payment](/3.x/payments#refunding-a-payment). Archiving an order runs no listener, so cancel an order before you archive it when its stock must return to sale.
+Cancelling an order changes its status only. The listeners of `OrderCancelled` put the reserved stock back on sale and give the discount amount back to the campaign budget, but a payment that was authorized or collected stays as it is: release an authorization with `cancel()`, as described in [Cancelling a Payment](/3.x/payments#cancelling-a-payment), and refund a collected payment with the Refund action or `refund()`, as described in [Refunding a Payment](/3.x/payments#refunding-a-payment). A refund changes the payment status only: the order status and the shipping status stay as they are, no stock returns to sale and no order event is dispatched. Archiving an order runs no listener, so cancel an order before you archive it when its stock must return to sale.
 
 ## Fulfillment Status
 
@@ -666,7 +667,7 @@ The admin panel checks these permissions on the order pages:
 
 ## In the Admin
 
-The **Orders** page lists the orders under the All, Open (New or Processing, not shipped yet), Paid, Fulfilled, Cancelled and Archived tabs, and filters them by number, customer, status, payment status, shipping status and date. The order page shows the items, the summary, the customer and the addresses, the private note and the fulfillment, with the actions of [Order Status Flow](#order-status-flow) and the forms to create shipping labels and record shipment events. The **Shipments** page lists every package, and the **Abandoned Carts** page lists the carts that never became orders. The [User Guide](/3.x/user-guide) walks through these screens.
+The **Orders** page lists the orders under the All, Open (New or Processing, not shipped yet), Paid, Fulfilled, Cancelled and Archived tabs, and filters them by number, customer, status, payment status, shipping status and date. The order page shows the items, the summary with the refunds of the order and the net collected amount, the customer and the addresses, the private note and the fulfillment, with the actions of [Order Status Flow](#order-status-flow) and the forms to create shipping labels and record shipment events. The **Shipments** page lists every package, and the **Abandoned Carts** page lists the carts that never became orders. The [User Guide](/3.x/user-guide) walks through these screens.
 
 ## From a Storefront
 

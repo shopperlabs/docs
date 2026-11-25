@@ -253,7 +253,7 @@ enum OrderRefundStatus {
 
 ## OrderTaxLine
 
-`OrderTaxLine` is one tax applied to an order item, copied from its cart line when the order is placed, in the `taxLines` of the item. The Store API does not return the tax lines of an order. `taxable_type` and `taxable_id` name the order item, `rate` is a percentage, `20` for 20%, and `amount` is in cents. See [Persisting Tax Lines on Orders](/3.x/taxes#persisting-tax-lines-on-orders). This is the definition:
+`OrderTaxLine` is one tax applied to an order item, in its `taxLines`, or to the shipping of the order, copied from the cart when the order is placed. The Store API does not return the tax lines of an order. `taxable_type` and `taxable_id` name the order item, or the order for the tax on shipping, `rate` is a percentage, `20` for 20%, and `amount` is in cents. See [Persisting Tax Lines on Orders](/3.x/taxes#persisting-tax-lines-on-orders). This is the definition:
 
 ```ts
 interface OrderTaxLine extends Entity {

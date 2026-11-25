@@ -241,6 +241,7 @@ The driver verifies every webhook before it reads it. It needs the raw request b
 Refund a captured payment with the processing service. The amount is in cents and can be less than the captured amount:
 
 ```php
+use Shopper\Payment\Enum\RefundReason;
 use Shopper\Payment\Services\PaymentProcessingService;
 
 $payments = resolve(PaymentProcessingService::class);
@@ -249,12 +250,12 @@ $result = $payments->refund(
     order: $order,
     reference: $reference,
     amount: 2000,
-    reason: 'requested_by_customer',
+    reason: RefundReason::RequestedByCustomer,
     idempotencyKey: $refundKey,
 );
 ```
 
-The reference is the PaymentIntent ID, which [Refunding a Payment](/3.x/payments#refunding-a-payment) shows how to read from the capture transaction, along with how to generate `$refundKey`. The `reason` goes to Stripe, which accepts `duplicate`, `fraudulent` and `requested_by_customer`: any other value makes Stripe reject the refund and the call throw a `StripeException`. Leave it `null` to send no reason.
+The reference is the PaymentIntent ID, which [Refunding a Payment](/3.x/payments#refunding-a-payment) shows how to read from the capture transaction, along with how to generate `$refundKey`. The `reason`, a `Shopper\Payment\Enum\RefundReason` case, goes to Stripe as `requested_by_customer`, `duplicate` or `fraudulent`. Leave it `null` to send no reason.
 
 The driver creates a Stripe refund for the PaymentIntent. It sends the idempotency key of the refund, yours or the UUID the service generates without one, as the key of the Stripe request, and stores it in the refund's metadata under `idempotency_key`, so the refund events carry it back to the store. Stripe forgets a request key after 24 hours: past that delay, retrying a refund whose answer was lost and whose events have not reached the store yet creates a second refund. Shopper records both and reports the duplicate to your exception handler.
 

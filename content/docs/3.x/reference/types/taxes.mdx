@@ -3,7 +3,7 @@ title: Tax Types
 description: TypeScript types of tax zones, tax rates, tax rate rules and tax providers.
 ---
 
-The types of this page describe the tax configuration the merchant sets up in the admin panel. The Store API exposes no endpoint for tax zones or rates: a storefront reads the taxes of a cart in its `tax_total` and in the [`tax_lines`](/3.x/reference/types/cart#cartlinetaxline) of each line, as [From a Storefront](/3.x/taxes#from-a-storefront) describes. The tax lines of an order are typed [`OrderTaxLine`](/3.x/reference/types/order#ordertaxline).
+The types of this page describe the tax configuration the merchant sets up in the admin panel. The Store API exposes no endpoint for tax zones or rates: a storefront reads the taxes of a cart in its `tax_total` and in the [`tax_lines`](/3.x/reference/types/cart#cartlinetaxline) of each line, the tax on shipping being only in the cart's `tax_total`, as [From a Storefront](/3.x/taxes#from-a-storefront) describes. The tax lines of an order are typed [`OrderTaxLine`](/3.x/reference/types/order#ordertaxline).
 
 ## TaxZone
 
@@ -47,7 +47,7 @@ interface TaxRate extends Entity {
 
 ## TaxRateRule
 
-`TaxRateRule` applies a rate to some items instead of the default rate of the zone. `reference_type` is `product_type`, `product` or `category`, and `reference_id` holds the value to match. See [Tax Rate Rules](/3.x/taxes#tax-rate-rules). This is the definition:
+`TaxRateRule` applies a rate to some items instead of the default rate of the zone. `reference_type` is `product_type`, `product`, `category` or `shipping`, and `reference_id` holds the value to match. See [Tax Rate Rules](/3.x/taxes#tax-rate-rules). This is the definition:
 
 ```ts
 interface TaxRateRule extends Entity {

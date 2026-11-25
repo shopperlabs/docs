@@ -238,7 +238,7 @@ A receiver can get the same event more than once: a retry after a timeout on a r
 
 ### Signing Secret
 
-The secret is a random 40-character string, shown once when the subscription is created in the admin panel and never again. Regenerating it from the admin panel shows the new secret once, and the old one stops working at once, for retries too, since every attempt is signed when it is sent. Update the receiver with the new secret right away. Shopper stores the secret encrypted with your application key.
+The secret is a random 40-character string, shown once when the subscription is created in the admin panel and never again. Regenerating it from the admin panel shows the new secret once, and the old one stops working at once, for retries too, since every attempt is signed when it is sent. Update the receiver with the new secret right away. Shopper stores the secret encrypted with your application key, and editing a subscription in the admin panel neither loads nor changes it.
 
 ## Deliveries and Retries
 
@@ -321,6 +321,8 @@ The three webhook models live in `Shopper\Core\Models`. They have no configurati
 | `secret` | text | Signing secret, encrypted with your application key |
 | `is_active` | boolean | Whether the subscription receives deliveries, `true` by default |
 | `description` | text | Free note, such as the name of the integration |
+
+`secret` is in the model's `$hidden` attribute, so `toArray()`, `toJson()` and the admin edit form leave it out. Read `$subscription->secret` when your code needs it, as the delivery job does to sign each attempt.
 
 `WebhookSubscription::active()` returns the active subscriptions, cached for an hour so that dispatching an event adds no query to the checkout. Saving or deleting a subscription through Eloquent clears the cache. `listensTo('order.paid')` tells whether the subscription takes an event, and `deliveries()` returns its deliveries. Deleting a subscription deletes its deliveries.
 
@@ -517,7 +519,7 @@ The webhooks page of the admin panel and each of its actions check the `system.s
 
 ## In the Admin
 
-Webhooks sit under Settings, in the Store group. The page lists the subscriptions with their URL, their events, an active toggle and the date of the last change. Add webhook opens a form with the URL, the events and a description, and shows the signing secret once after saving; the button is disabled when the store reaches `max_subscriptions`. The actions of a row show its last 25 deliveries with their event, date, attempt, response code and status, redeliver its latest event as a new delivery, regenerate its secret, edit it or delete it. Redelivery is refused when the resource of the event no longer exists. To hide the page, remove it from `config/shopper/settings.php` as [Settings](/3.x/configuration#settings) describes. The [User Guide](/3.x/user-guide) walks through the screen.
+Webhooks sit under Settings, in the Store group. The page lists the subscriptions with their URL, their events, an active toggle and the date of the last change. Add webhook opens a form with the URL, the events and a description, and shows the signing secret once after saving; the button is disabled when the store reaches `max_subscriptions`. The actions of a row show its last 25 deliveries with their event, date, attempt, response code and status, redeliver its latest event as a new delivery, regenerate its secret, edit it or delete it. Redeliver shows only while the subscription is active, since an inactive one receives nothing. It answers "No delivery yet for this webhook." when the subscription has no delivery, and is refused when the resource of the event no longer exists. To hide the page, remove it from `config/shopper/settings.php` as [Settings](/3.x/configuration#settings) describes. The [User Guide](/3.x/user-guide) walks through the screen.
 
 ## From a Storefront
 

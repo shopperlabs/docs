@@ -212,7 +212,7 @@ The customer list of the admin panel uses `customers()`.
 
 ## Role Checking
 
-Four methods answer questions about a user. `isAdmin()` and `isManager()` check the roles named in `config('shopper.admin.roles')`. `canAccessDashboard()` returns `true` for admins, managers and users with the `system.dashboard` permission. `isVerified()` returns `true` once `email_verified_at` is set:
+Four methods answer questions about a user. `isAdmin()` and `isManager()` check the roles named in `config('shopper.admin.roles')`. `canAccessDashboard()` returns `true` for admins, managers and users with the `system.dashboard` permission on the admin guard, `shopper.auth.guard`, whatever the guard of the current request. `isVerified()` returns `true` once `email_verified_at` is set:
 
 ```php
 $user->isAdmin();
@@ -686,11 +686,11 @@ The admin panel checks four permissions of the `customers` resource:
 
 ## In the Admin
 
-Merchants manage customers under Customers. The list shows each customer's name, email, the country of their first address, the number of paid orders and the registration date, filters by email verification and registration date, and sits under four figures: total customers, customers registered in the last 30 days, customers with a paid order, and the average lifetime value in the store currency. The create form takes the name, email, phone, gender, a password and a shipping address, with the marketing consent. The customer page shows the profile, the shipping and billing addresses, the orders and the paid order totals, and holds the Anonymize action. Merchants cannot edit a customer's profile or addresses. The [User Guide](/3.x/user-guide) walks through these screens.
+Merchants manage customers under Customers. The list shows each customer's name, email, the country of their first address, the number of paid orders and the registration date, filters by email verification and registration date, and sits under four figures: total customers, customers registered in the last 30 days, customers with a paid order, and the average lifetime value in the store currency. The create form takes the name, email, phone, gender and a shipping address, with the marketing consent. It has no password field: the account gets a random password, and the merchant can email the customer a link to choose their own, as [Mail Notifications](/3.x/notifications#mail-notifications) explains. The customer page shows the profile, the shipping and billing addresses, the orders and the paid order totals, and holds the Anonymize action. Merchants cannot edit a customer's profile or addresses. The [User Guide](/3.x/user-guide) walks through these screens.
 
 ## From a Storefront
 
-The Store API handles sign-up and the customer account under the `store` prefix, set by `SHOPPER_API_PREFIX`. Sign-up and sign-in return a Laravel Sanctum token in `meta.token`, which the storefront sends as a bearer token. Your `User` model needs Sanctum's `HasApiTokens` trait, which `php artisan shopper:api:install` offers to add. Tokens expire after `shopper.api.token_expiration` minutes (`SHOPPER_API_TOKEN_EXPIRATION`, 30 days by default).
+The Store API handles sign-up and the customer account under the `store` prefix, set by `SHOPPER_API_PREFIX`. Sign-up and sign-in return a Laravel Sanctum token in `meta.token`, which the storefront sends as a bearer token. Your `User` model needs Sanctum's `HasApiTokens` trait, which `php artisan shopper:api:install` offers to add. Tokens expire after `shopper.api.token_expiration` minutes (`SHOPPER_API_TOKEN_EXPIRATION`, 30 days by default). The Store API refuses users for whom `canAccessDashboard()` is `true`: they cannot sign in, the forgot password endpoint sends them nothing, and their tokens answer `401`. A team member who also buys on the store uses a separate customer account with another email address. The Store API [Authentication](/3.x/store-api/authentication#logging-in) guide gives the responses.
 
 | Endpoint | Does |
 |----------|------|

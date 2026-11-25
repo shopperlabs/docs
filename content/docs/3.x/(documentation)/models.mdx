@@ -84,6 +84,7 @@ The cart models are in `Shopper\Cart\Models` (`shopper/cart`) and the payment mo
 | `CartAddress` | `cart_addresses` | | [Cart](/3.x/cart) |
 | `CartLineAdjustment` | `cart_line_adjustments` | | [Cart](/3.x/cart) |
 | `CartLineTaxLine` | `cart_line_tax_lines` | | [Cart](/3.x/cart) |
+| `CartShippingTaxLine` | `cart_shipping_tax_lines` | | [Cart](/3.x/cart) |
 | `CartPromotion` | `cart_promotions` | | [Cart](/3.x/cart) |
 | `PaymentTransaction` | `payment_transactions` | | [Payments](/3.x/payments) |
 | `PaymentWebhookEvent` | `payment_webhook_events` | | [Payments](/3.x/payments) |
@@ -296,7 +297,7 @@ $orders = Order::query()
     ->get();
 ```
 
-Every model in the tables above has a public ID except the line and ledger rows, the tax setup and a few internal tables: `AttributeProduct`, `AttributeValue`, `CampaignBudgetMovement`, `CollectionRule`, `DiscountDetail`, `Geolocation`, `InventoryHistory`, `Legal`, `OrderPromotion`, `OrderTaxLine`, `Setting`, `StockLevel`, `TaxProvider`, `TaxRate`, `TaxRateRule`, `TaxZone`, `WebhookSubscription`, `CartLineAdjustment`, `CartLineTaxLine`, `CartPromotion`, `PaymentTransaction` and `PaymentWebhookEvent`. The `InteractsWithShopper` trait gives your `User` model one as well, stored in a `public_id` column Shopper adds to the `users` table. On a store upgraded from 2.x, the migration that adds the column fills it for the existing rows.
+Every model in the tables above has a public ID except the line and ledger rows, the tax setup and a few internal tables: `AttributeProduct`, `AttributeValue`, `CampaignBudgetMovement`, `CollectionRule`, `DiscountDetail`, `Geolocation`, `InventoryHistory`, `Legal`, `OrderPromotion`, `OrderTaxLine`, `Setting`, `StockLevel`, `TaxProvider`, `TaxRate`, `TaxRateRule`, `TaxZone`, `WebhookSubscription`, `CartLineAdjustment`, `CartLineTaxLine`, `CartShippingTaxLine`, `CartPromotion`, `PaymentTransaction` and `PaymentWebhookEvent`. The `InteractsWithShopper` trait gives your `User` model one as well, stored in a `public_id` column Shopper adds to the `users` table. On a store upgraded from 2.x, the migration that adds the column fills it for the existing rows.
 
 ## Table Names
 

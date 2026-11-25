@@ -1,9 +1,9 @@
 ---
 title: Taxes
-description: Tax zones, rates and override rules in Shopper, how the cart computes tax per line, tax-inclusive prices, order tax lines and custom providers.
+description: Tax zones, rates and override rules in Shopper, cart tax on lines and shipping, tax-inclusive prices, order tax lines and custom providers.
 ---
 
-Shopper computes taxes for each cart line from the address the order ships to. You define tax zones (a country, or a province of a country), give each zone one or more percentage rates, and attach rules to the rates that apply only to some products, product types or categories. The cart pipeline applies them every time a cart is calculated, and the order keeps a copy of each line's taxes when it is placed.
+Shopper computes taxes for each cart line and for the shipping of the cart from the address the order ships to. You define tax zones (a country, or a province of a country), give each zone one or more percentage rates, and attach rules to the rates that apply only to some products, product types, categories or to shipping. The cart pipeline applies them every time a cart is calculated, and the order keeps a copy of the taxes of each line and of the shipping when it is placed.
 
 Tax amounts are integers in cents, like every amount in Shopper. The [Money](/3.x/money) page covers cents and formatting.
 
@@ -13,10 +13,10 @@ The tax system has four parts:
 
 1. `TaxZone`: a country, or a province within a country, with its tax behavior (prices with or without tax) and an optional tax provider.
 2. `TaxRate`: a percentage attached to a zone. The default rate of a zone applies to every item that no rule targets.
-3. `TaxRateRule`: a target on a rate. When a cart line matches a rule, that rate replaces the default rate of the zone.
+3. `TaxRateRule`: a target on a rate. When a cart line, or the shipping of the cart, matches a rule, that rate replaces the default rate of the zone.
 4. `TaxCalculationProvider`: the service that receives an item and a context and returns `TaxLine` value objects. The built-in `Shopper\Core\Taxes\SystemTaxProvider` reads the zones, rates and rules above.
 
-When a cart is calculated, the `CalculateTax` step reads the shipping address of the cart, `Shopper\Core\Taxes\TaxCalculator` resolves the zone of that address and the provider of the zone, and the step stores one `CartLineTaxLine` for each tax line the provider returns. When the customer checks out, the order copies those lines.
+When a cart is calculated, the `CalculateTax` step reads the shipping address of the cart, `Shopper\Core\Taxes\TaxCalculator` resolves the zone of that address and the provider of the zone, and the step stores one `CartLineTaxLine` for each tax line the provider returns for a line, and one `CartShippingTaxLine` for each tax line of the shipping amount. When the customer checks out, the order copies those lines.
 
 ## Tax Zones
 
@@ -181,6 +181,26 @@ TaxRateRule::query()->create([
 ]);
 ```
 
+Or the shipping of the cart, which is otherwise taxed at the default rate of the zone. To exempt shipping from tax, attach a `shipping` rule to a rate of 0%; to charge another rate on it, attach the rule to that rate:
+
+```php
+$shippingExempt = resolve(TaxRate::class)::query()->create([
+    'tax_zone_id' => $franceZone->id,
+    'name' => 'Shipping exempt',
+    'code' => 'FR_SHIPPING_EXEMPT',
+    'rate' => 0,
+    'is_default' => false,
+]);
+
+TaxRateRule::query()->create([
+    'tax_rate_id' => $shippingExempt->id,
+    'reference_type' => 'shipping',
+    'reference_id' => 'shipping',
+]);
+```
+
+A 0% rate still stores a shipping tax line, with an `amount` of 0.
+
 `Shopper\Core\Models\TaxRateRule` has no configuration key, so it is always loaded with its own class (see [Models You Cannot Swap](/3.x/models#models-you-cannot-swap)).
 
 ### Rule Reference Types
@@ -192,6 +212,9 @@ For a cart line that holds a variant, the rule reads the parent product of the v
 | `product_type` | A `ProductType` value: `standard`, `variant`, `virtual` or `external` | The type of the product equals the value |
 | `product` | A product ID, as a string | The product has that ID |
 | `category` | A category ID, as a string | The product is attached to that category. A product attached only to a child category does not match its parent |
+| `shipping` | `shipping`, the value the admin panel stores: the provider does not read it | The item is the shipping of the cart |
+
+The shipping of a cart has no product: only a `shipping` rule matches it, and a `shipping` rule matches no cart line.
 
 A product with variants has the type `variant`. The override form of the admin panel offers `standard`, `virtual` and `external` only, so a rule on `variant` products is created in code.
 
@@ -203,7 +226,7 @@ Rules are stored in the `sh_tax_rate_rules` table:
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
 | `tax_rate_id` | bigint | no | - | The rate the rule selects, deleting the rate deletes its rules |
-| `reference_type` | string | no | - | `product_type`, `product` or `category` |
+| `reference_type` | string | no | - | `product_type`, `product`, `category` or `shipping` |
 | `reference_id` | string | no | - | The value to match |
 | `created_at` | timestamp | yes | null | Creation timestamp |
 | `updated_at` | timestamp | yes | null | Last update timestamp |
@@ -237,7 +260,7 @@ Cache::increment('shopper.tax-zones.version');
 
 ## Inclusive vs Exclusive Taxes
 
-The `is_tax_inclusive` flag of the zone decides how the system provider computes the tax of a line and how the cart builds its total. In both cases the provider taxes the whole line total (unit price times quantity, minus the line's discounts) and rounds the result to the nearest cent.
+The `is_tax_inclusive` flag of the zone decides how the system provider computes the tax of a line and how the cart builds its total. In both cases the provider taxes the whole line total (unit price times quantity, minus the line's discounts) and rounds the result to the nearest cent. It taxes the shipping amount of the cart the same way.
 
 In a tax-exclusive zone (sales tax), tax is added on top of the price:
 
@@ -257,20 +280,23 @@ total = line_total
 
 A line of 10000 cents at 20% VAT contains 10000 - 10000 / 1.2 = 1666.67, rounded to 1667 cents of tax, and 8333 cents before tax. The customer pays 10000 cents.
 
-The cart pipeline exposes the flag as `taxInclusive` on its context, and the Store API as `tax_inclusive` on the cart, so a storefront can show "VAT included" or add the tax as a separate line at checkout. Shipping is added to the total as it is, in both cases: Shopper creates no tax line for shipping.
+The cart pipeline exposes the flag as `taxInclusive` on its context, and the Store API as `tax_inclusive` on the cart, so a storefront can show "VAT included" or add the tax as a separate line at checkout.
+
+Shipping is taxed at the default rate of the zone, unless a [`shipping` rule](#rule-reference-types) selects another rate. In a tax-exclusive zone, its tax is added to the total like the tax of the lines: 500 cents of shipping at 10% adds 50 cents. In a tax-inclusive zone, the shipping amount already contains its tax, so the total does not change and `taxTotal` includes the tax it contains: 690 cents of shipping at 20% VAT contains 115 cents of tax.
 
 ## Cart Integration
 
-Tax calculation is a step of the cart pipeline. `Shopper\Cart\Pipelines\CalculateTax` runs after the automatic promotions and the discount codes, so the tax base of a line is its subtotal minus its discount adjustments.
+Tax calculation is a step of the cart pipeline. `Shopper\Cart\Pipelines\CalculateTax` runs after the automatic promotions and the discount codes, so the tax base of a line is its subtotal minus its discount adjustments. The tax base of the shipping is the `shipping_amount` of the cart.
 
-The step reads the country (`cca2`) and the `state` of the cart's shipping address. When the cart has no shipping address, or the address has no country, the step does nothing and the cart has no tax. Otherwise it builds a `TaxCalculationContext` with the country code, the `state` as province code and the customer ID of the cart, then, for each cart line:
+The step first deletes the `CartLineTaxLine` records of every line and the `CartShippingTaxLine` records of the cart. It then reads the country (`cca2`) and the `state` of the cart's shipping address. When the cart has no shipping address, or the address has no country, the step stops there and the cart has no tax. Otherwise it builds a `TaxCalculationContext` with the country code, the `state` as province code and the customer ID of the cart, then, for each cart line:
 
-1. Deletes the existing `CartLineTaxLine` records of the line.
-2. Skips the line when its taxable amount is zero or less.
-3. Wraps the line in a `Shopper\Cart\Taxes\CartLineTaxAdapter` and passes it to `TaxCalculator::calculate()`.
-4. Stores one `CartLineTaxLine` for each returned `TaxLine`, and adds the amounts to `taxTotal` on the pipeline context.
+1. Skips the line when its taxable amount is zero or less.
+2. Wraps the line in a `Shopper\Cart\Taxes\CartLineTaxAdapter` and passes it to `TaxCalculator::calculate()`.
+3. Stores one `CartLineTaxLine` for each returned `TaxLine`, and adds the amounts to `taxTotal` on the pipeline context.
 
-It then sets `taxInclusive` from the zone of the address, or to `false` when no zone matches. Calculate a cart through the cart manager and read the taxes from the context and the lines:
+When the `shipping_amount` of the cart is above zero, the step then passes it to the calculator as a `Shopper\Core\Taxes\ShippingTaxableItem`, with the same context, stores one `CartShippingTaxLine` for each returned `TaxLine` and adds the amounts to `taxTotal`.
+
+It then sets `taxInclusive` from the zone of the address, or to `false` when no zone matches. Calculate a cart through the cart manager and read the taxes from the context, the lines and the shipping:
 
 ```php
 use Shopper\Cart\CartManager;
@@ -280,7 +306,7 @@ $context = resolve(CartManager::class)->calculate($cart);
 $context->taxTotal;
 $context->taxInclusive;
 
-$cart->load('lines.taxLines');
+$cart->load(['lines.taxLines', 'shippingTaxLines']);
 
 foreach ($cart->lines as $line) {
     foreach ($line->taxLines as $taxLine) {
@@ -289,23 +315,29 @@ foreach ($cart->lines as $line) {
         $taxLine->amount;
     }
 }
+
+foreach ($cart->shippingTaxLines as $taxLine) {
+    $taxLine->name;
+    $taxLine->amount;
+}
 ```
 
-`Shopper\Cart\Models\CartLineTaxLine` stores the same `code`, `name`, `rate`, `amount` and `tax_rate_id` columns as an [order tax line](#ordertaxline-schema), with a `cart_line_id` in place of the polymorphic owner. When a provider returns a tax line without a code, the step stores the name as the code.
+`Shopper\Cart\Models\CartLineTaxLine` stores the same `code`, `name`, `rate`, `amount` and `tax_rate_id` columns as an [order tax line](#ordertaxline-schema), with a `cart_line_id` in place of the polymorphic owner. `Shopper\Cart\Models\CartShippingTaxLine` stores the same columns with a `cart_id` (see its [schema](/3.x/cart#cartshippingtaxline)). When a provider returns a tax line without a code, the step stores the name as the code.
 
-Once the customer has opened a payment with a provider driver (any driver other than `manual`), the cart keeps its tax lines: `CalculateTax` sums the stored lines instead of computing them again, and `taxInclusive` comes from the payment session. A change that alters the total, such as a new shipping address, releases the payment session first, and the next calculation computes the taxes again. The amount the customer authorizes stays equal to the total of the order. The [payments](/3.x/payments) page covers payment sessions.
+Once the customer has opened a payment with a provider driver (any driver other than `manual`), the cart keeps its tax lines, those of the shipping included: `CalculateTax` sums the stored lines instead of computing them again, and `taxInclusive` comes from the payment session. A change that alters the total, such as a new shipping address, releases the payment session first, and the next calculation computes the taxes again. The amount the customer authorizes stays equal to the total of the order. The [payments](/3.x/payments) page covers payment sessions.
 
 ## Persisting Tax Lines on Orders
 
 When a cart becomes an order, `Shopper\Cart\Actions\CreateOrderFromCartAction` calculates the cart one last time, then copies its taxes to the order (see [order conversion](/3.x/cart#order-conversion)):
 
-- the `tax_amount` of the order is the tax total of the cart;
-- the `tax_amount` of each order item is the sum of the tax lines of its cart line;
-- each tax line of a cart line becomes an `OrderTaxLine` attached to the order item, with its `code`, `name`, `rate`, `amount` and `tax_rate_id`.
+- the `tax_amount` of the order is the tax total of the cart, the tax on shipping included;
+- the `tax_amount` of each order item is the sum of the tax lines of its cart line, so the items add up to the `tax_amount` of the order minus the tax on shipping;
+- each tax line of a cart line becomes an `OrderTaxLine` attached to the order item, with its `code`, `name`, `rate`, `amount` and `tax_rate_id`;
+- each shipping tax line of the cart becomes an `OrderTaxLine` attached to the order itself, which `$order->taxLines` returns.
 
-The order keeps these values: editing or deleting a zone or a rate later does not change the orders already placed. Deleting a rate sets `tax_rate_id` to null on its tax lines and keeps the other columns. Tax lines are attached to order items only.
+The order keeps these values: editing or deleting a zone or a rate later does not change the orders already placed. Deleting a rate sets `tax_rate_id` to null on its tax lines and keeps the other columns. Tax lines are attached to order items and, for the shipping, to the order: the `taxLines` relation of an `OrderShipping` shipment stays empty.
 
-The model is `Shopper\Core\Models\OrderTaxLine`, which implements the `Shopper\Core\Models\Contracts\OrderTaxLine` contract. Its `taxable()` relationship returns the order item, and `taxRate()` the rate it was computed from.
+The model is `Shopper\Core\Models\OrderTaxLine`, which implements the `Shopper\Core\Models\Contracts\OrderTaxLine` contract. Its `taxable()` relationship returns the order item, or the order for a shipping tax line, and `taxRate()` the rate it was computed from.
 
 ### OrderTaxLine Schema
 
@@ -314,7 +346,7 @@ Order tax lines are stored in the `sh_order_tax_lines` table:
 | Column | Type | Nullable | Default | Description |
 |--------|------|----------|---------|-------------|
 | `id` | bigint | no | auto | Primary key |
-| `taxable_type` | string | no | - | Class of the owner, `Shopper\Core\Models\OrderItem` for the lines Shopper creates |
+| `taxable_type` | string | no | - | Type of the owner: `Shopper\Core\Models\OrderItem` for the tax of an item, `order` (the morph alias of the order model) for the tax of the shipping |
 | `taxable_id` | bigint | no | - | ID of the owner |
 | `code` | string | no | - | Code of the rate when the order was placed |
 | `name` | string | no | - | Name of the rate when the order was placed |
@@ -326,13 +358,13 @@ Order tax lines are stored in the `sh_order_tax_lines` table:
 
 ### Accessing Tax Lines on an Order
 
-Load the tax lines with the items of the order:
+Load the tax lines of the items, and the shipping tax lines of the order, with the order:
 
 ```php
 use Shopper\Core\Models\Contracts\Order;
 
 $order = resolve(Order::class)::query()
-    ->with('items.taxLines')
+    ->with(['items.taxLines', 'taxLines'])
     ->findOrFail($orderId);
 
 $order->tax_amount;
@@ -346,13 +378,19 @@ foreach ($order->items as $item) {
         $taxLine->amount;
     }
 }
+
+foreach ($order->taxLines as $taxLine) {
+    $taxLine->name;
+    $taxLine->amount;
+}
 ```
 
-An invoice often lists the tax per rate. Group the lines of every item by code:
+An invoice often lists the tax per rate. Group the lines of every item and of the shipping by code:
 
 ```php
 $taxSummary = $order->items
     ->flatMap->taxLines
+    ->concat($order->taxLines)
     ->groupBy('code')
     ->map->sum('amount');
 ```
@@ -446,6 +484,8 @@ final class AvalaraTaxProvider implements TaxCalculationProvider
 
 Two values of a `TaxLine` must follow the zone. `taxRateId` is stored in the `tax_rate_id` foreign key of the cart and order tax lines, so it must be the ID of an existing rate: give the zone a default rate and reference it. And the cart reads `is_tax_inclusive` from the zone to build its total, whatever provider computed the lines, so the amount must be the tax contained in the price for an inclusive zone and the tax added to it for an exclusive one.
 
+The calculator also calls your provider for the shipping of a cart, with a `Shopper\Core\Taxes\ShippingTaxableItem`. Its `getTaxableTotal()` is the `shipping_amount` of the cart, and it has no product type, product ID or categories. Return the tax lines of the shipping, or an empty array to leave it untaxed; check `$item instanceof ShippingTaxableItem` when your tax service needs a shipping tax code.
+
 Register the provider in a service provider of your application. `TaxCalculator` receives its default provider from the same `TaxCalculationProvider` binding, so binding the contract straight to your class would make it the provider of every zone. Bind it to a closure that returns your class for its identifier and the system provider otherwise:
 
 ```php title="app/Providers/AppServiceProvider.php"
@@ -505,7 +545,7 @@ Any object you pass to `TaxCalculator::calculate()` implements `Shopper\Core\Con
 
 The contract asks for the line total rather than a unit amount and a quantity. The provider taxes that total in one pass, so a line whose discount does not divide evenly by its quantity is never rounded per unit: exclusive zones do not overcharge by a cent, and inclusive breakdowns stay balanced (the amount before tax plus the tax equals the price).
 
-Shopper ships one adapter, `Shopper\Cart\Taxes\CartLineTaxAdapter`, which wraps a cart line during cart calculation. To compute a tax outside a cart, such as the price with tax on a product page of a sales-tax store, implement the contract on your own class:
+Shopper ships two implementations used during cart calculation: `Shopper\Cart\Taxes\CartLineTaxAdapter`, which wraps a cart line, and `Shopper\Core\Taxes\ShippingTaxableItem`, which holds the shipping amount of the cart and returns `null` or an empty array from the three product methods. To compute a tax outside a cart, such as the price with tax on a product page of a sales-tax store, implement the contract on your own class:
 
 ```php title="app/Taxes/ProductPriceTaxableItem.php"
 <?php
@@ -572,7 +612,7 @@ The Taxes page of the admin panel and every action on it (adding, editing and de
 
 ## In the Admin
 
-Merchants manage taxes on the Taxes page of the settings. They add a zone for a country and an optional province code, choose whether prices include tax, and pick a tax provider among the enabled `TaxProvider` records (the admin panel has no screen to create these records). On a zone, "Add Rate" creates a rate and "Create Override" a rate with its targets: product types, products or categories. The setup guide of the dashboard marks its taxes step as done once a zone exists. Set `Items\TaxSetting::class` to `false` in `config/shopper/settings.php` to remove the page from the settings screen ([Configuration](/3.x/configuration#settings)). The [user guide](/3.x/user-guide) walks through the screens.
+Merchants manage taxes on the Taxes page of the settings. They add a zone for a country and an optional province code, choose whether prices include tax, and pick a tax provider among the enabled `TaxProvider` records (the admin panel has no screen to create these records). On a zone, "Add Rate" creates a rate and "Create Override" a rate with its targets: product types, products, categories or shipping ("All shipping fees", stored as a `shipping` rule). The setup guide of the dashboard marks its taxes step as done once a zone exists. Set `Items\TaxSetting::class` to `false` in `config/shopper/settings.php` to remove the page from the settings screen ([Configuration](/3.x/configuration#settings)). The [user guide](/3.x/user-guide) walks through the screens.
 
 ## From a Storefront
 
@@ -580,11 +620,11 @@ The Store API returns the taxes of a cart with its totals, all in cents:
 
 | Resource | Attribute | Content |
 |----------|-----------|---------|
-| Cart | `tax_total` | The tax of every line |
+| Cart | `tax_total` | The tax of every line and of the shipping |
 | Cart | `tax_inclusive` | `true` when the prices of the zone include tax |
 | Cart line | `tax_total` | The tax of the line |
 | Cart line | `tax_lines` | The tax lines of the line, each with `code`, `name`, `rate` and `amount` |
-| Order | `tax_amount` | The tax of the order |
+| Order | `tax_amount` | The tax of the order, shipping included |
 
 For a line of 5000 cents in the French zone above, at 20% VAT included, the attributes of the line include:
 
@@ -602,6 +642,6 @@ For a line of 5000 cents in the French zone above, at 20% VAT included, the attr
 }
 ```
 
-Taxes depend on the shipping address: send it with the cart addresses endpoint, with the country in `country_code` and the province in `state`, in the format of the `province_code` of your zones. Until the cart has a shipping address, `tax_total` is 0. When `tax_inclusive` is `true`, the total already contains `tax_total`: show it as "VAT included". When it is `false`, show it as a line added to the subtotal.
+Taxes depend on the shipping address: send it with the cart addresses endpoint, with the country in `country_code` and the province in `state`, in the format of the `province_code` of your zones. Until the cart has a shipping address, `tax_total` is 0. The tax on shipping is in the `tax_total` of the cart and in no line: the `tax_total` of the lines add up to the cart's `tax_total` minus that tax. When `tax_inclusive` is `true`, the total already contains `tax_total`: show it as "VAT included". When it is `false`, show it as a line added to the subtotal.
 
 The order items of the Store API carry no tax fields, and the Store API exposes no endpoint for tax zones or rates. The Store API [Orders](/3.x/store-api/orders#amounts) guide shows which order amount includes tax.

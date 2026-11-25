@@ -471,7 +471,7 @@ Amounts are stored in cents, as described on the [Money](/3.x/money) page. A var
 
 ## Stock Management
 
-Products use the `HasStock` trait. Stock is not a column of the products table. Each stock movement is a row of `sh_inventory_histories`, the ledger, with the quantity added or removed, the location, the event label, the user and an optional reference such as an order. The `sh_stock_levels` table keeps the running quantity of each product at each location, and is updated in the same transaction as the ledger.
+Products use the `HasStock` trait. Stock is not a column of the products table. Each stock movement is a row of `sh_inventory_histories`, the ledger, with the quantity added or removed, the stock of the location before the movement, the location, the event label, the user and an optional reference such as an order. The `sh_stock_levels` table keeps the running quantity of each product at each location, and is updated in the same transaction as the ledger.
 
 Every movement belongs to an inventory location, so every method that writes stock takes an `inventoryId`. How a store spreads its stock over several locations is covered on the [Locations](/3.x/locations) page.
 
@@ -509,6 +509,14 @@ $movements = $product->inventoryHistories()
     ->get();
 ```
 
+Each row holds the signed `quantity` of the movement and, in `old_quantity`, the stock of that location just before it. Shopper computes `old_quantity` inside the transaction that writes the movement, so it stays right when two orders draw from the same location at once. The `stock_after` attribute adds the two and gives the stock of the location once the movement is applied; the **Stock after** column of the admin panel shows it:
+
+```php
+foreach ($movements as $movement) {
+    echo "{$movement->inventory->name}: {$movement->old_quantity} + {$movement->quantity} = {$movement->stock_after}";
+}
+```
+
 The `security_stock` column holds the safety stock set in the admin panel. Shopper stores it and sends no alert when the stock falls below it: compare it in your own code, such as a scheduled command that emails the team.
 
 ### Modifying Stock
@@ -540,7 +548,7 @@ $product->decreaseStock(
 );
 ```
 
-To set the stock to an exact quantity after a physical count, use `setStock()`. It compares the new quantity with the total stock of the product across every location, and writes the difference to the location you pass. It returns `null` and writes nothing when the quantities are equal:
+To set the stock of one location to an exact quantity after a physical count, use `setStock()`. It compares the new quantity with the stock at the location you pass, and writes the difference there. The other locations keep their stock. It returns `null` and writes nothing when the quantities are equal:
 
 ```php
 $product->setStock(
@@ -550,7 +558,9 @@ $product->setStock(
 );
 ```
 
-On a store with several locations, the result of `setStock()` is the total you pass, not the quantity at that location. Use `mutateStock()` with the difference you computed from `stockInventory()` to correct a single location.
+After this call, `stockInventory($warehouse->id)` returns `75`, and `stock` returns `75` plus the stock of the other locations.
+
+The write methods still accept an `oldQuantity` argument, and ignore it: `old_quantity` is always computed from the stock level.
 
 To erase the ledger and start again, optionally with a new quantity at one location, use `clearStock()`:
 
