@@ -9,6 +9,10 @@ const config = {
   experimental: {
     agentUpgrade: 'security',
   },
+  // Screenshots change only with a deploy, and every re-encode on Vercel is billed: 31 days instead of Next's 4 hours.
+  images: {
+    minimumCacheTTL: 2678400,
+  },
   async redirects() {
     return redirects;
   },
