@@ -1,0 +1,155 @@
+---
+title: Shipments
+description: "Follow every package after it leaves your store, record its tracking events and mark it as delivered."
+---
+
+A shipment is a package you created from an order with **Create Shipping Label** (see [Creating a Shipment](/3.x/user-guide/sales/orders#creating-a-shipment)). Once it exists, you follow it from **Sales > Orders > Shipments**: this page lists every shipment of your store, shows where each package is, and lets you record its pickup, delivery or return.
+
+## Shipment List
+
+Open **Sales > Orders** in the sidebar, then click **Shipments** below it. The newest shipments come first.
+
+<Screenshot src="/images/v3/shipments.png" alt="The Shipments page with its status tabs and a list of UPS shipments: one label created, one out for delivery with its Mark as delivered button, one delivery failed, three in transit and the others delivered." />
+
+| Column | Shows |
+|--------|-------|
+| **Shipment ID** | The shipment number, such as SHP-47 |
+| **Shipment Event** | A five-step tracker of the package, from label created to delivered |
+| **Status** | The current status of the package |
+| **Shipped at** | The date the carrier picked up the package |
+| **Order Number** | The order the package belongs to. Click it to open the order |
+| **Carrier Service** | The carrier that delivers the package, with its logo |
+
+The search box finds a shipment by its order number, or by its shipment ID, with or without the SHP- prefix (type SHP-47 or 47).
+
+### Tabs
+
+The tabs above the table narrow the list by status. Each tab shows how many shipments it holds.
+
+| Tab | Shows |
+|-----|-------|
+| **All** | Every shipment, returned ones included |
+| **Label created** | Shipments whose label is created but that the carrier has not picked up yet |
+| **In transit** | Shipments that are picked up, in transit, at a sorting center, or out for delivery |
+| **Delivered** | Shipments that reached their destination |
+| **Delivery failed** | Shipments the carrier could not deliver |
+
+### Filters
+
+Click the filter icon next to the search box to narrow the list by **Status** (pick several at once), by **Order Number**, or by **Carrier Service**.
+
+## Shipment Detail
+
+To see everything about a package, click the sliders icon (**Manage shipment**) on its row. The detail panel opens on the right.
+
+<Screenshot src="/images/v3/shipment-detail.png" alt="The detail panel of shipment SHP-47, in transit with UPS, showing its tracker, its two products and three tracking events." />
+
+The top of the panel shows the shipment ID with its status, the date it was shipped and a link to its order. Below, a gray box shows the order's shipping address and the carrier.
+
+**Tracking progress**. A 5-step tracker:
+
+<Steps>
+  <Step title="Label created">
+    The shipping label is created and the package waits for the carrier.
+  </Step>
+  <Step title="Picked up">
+    The carrier has collected the package.
+  </Step>
+  <Step title="In transit">
+    The package is on its way. A package at a sorting center also stands on this step.
+  </Step>
+  <Step title="Out for delivery">
+    The package is with the local delivery driver.
+  </Step>
+  <Step title="Delivered">
+    The package has reached the customer.
+  </Step>
+</Steps>
+
+When a delivery failed or the package was returned, the whole tracker turns red.
+
+**Shipment details**. The **Shipped at** and **Received at** dates, and the **Tracking number**. When the shipment has a tracking URL, the number links to the carrier's tracking page.
+
+**Products**. The items in this package, each with its fulfillment status, such as **Shipped** or **Delivered**.
+
+**Shipment Timeline**. Every event of the package, oldest first. Each event shows its status and date, and its location and description when they were recorded.
+
+To close the panel, click its close button or press Escape.
+
+## Editing the Tracking Details
+
+To fix the carrier or add a tracking number you received later, click the pencil icon (**Edit**) on the shipment's row. The **Edit** window has three fields:
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Carrier Service** | Yes | The carrier that delivers the package, chosen among your carriers |
+| **Tracking number** | No | The number the carrier gave the package, such as `1Z999AA10123456784` |
+| **Tracking URL** | No | The full address of the carrier's tracking page for this package |
+
+Click **Submit** to save the changes. This does not change the status of the package: record an event for that.
+
+## Adding Tracking Events
+
+Tracking events keep the timeline in step with what the carrier tells you, and they move the order forward: recording **Picked up** or **Delivered** updates the order's shipping status.
+
+<Steps>
+  <Step title="Open the shipment">
+    Click the sliders icon (**Manage shipment**) on the shipment's row.
+  </Step>
+  <Step title="Click Add event">
+    The button sits next to **Shipment Timeline**. The **Add event** panel opens.
+  </Step>
+  <Step title="Fill in the event">
+    Choose the **Status**, check **Occurred at**, and add a **Location** and a **Description** if you have them.
+  </Step>
+  <Step title="Save">
+    Click **Save**. The event appears in the timeline and the shipment takes its status.
+  </Step>
+</Steps>
+
+<Screenshot src="/images/v3/shipment-add-event.png" alt="The Add event panel for an in transit shipment, with Out for delivery selected, a date, a location and a description." />
+
+**Occurred at** starts at the current date and time, and cannot be earlier than the last event of the shipment. The **Status** buttons only offer the statuses that can follow the current one:
+
+| Current status | Statuses you can record next |
+|----------------|------------------------------|
+| **Label created** | **Picked up**, **Returned** |
+| **Picked up** | **In transit**, **Out for delivery**, **Delivery failed**, **Returned** |
+| **In transit** | **At sorting center**, **Out for delivery**, **Delivery failed**, **Returned** |
+| **At sorting center** | **In transit**, **Out for delivery**, **Delivery failed**, **Returned** |
+| **Out for delivery** | **Delivered**, **Delivery failed**, **Returned** |
+| **Delivery failed** | **In transit**, **Out for delivery**, **Returned** |
+| **Delivered** | **Returned** |
+| **Returned** | None: the **Add event** button disappears |
+
+Some statuses do more than add a line to the timeline:
+
+- **Picked up** records the shipping date, marks the package's items as **Shipped**, and updates the order's shipping status. A **New** order moves to **Processing**
+- **Delivered** has the same effect as [Mark as delivered](#marking-as-delivered)
+- **Returned** records the return date and cancels the package's items
+
+<Warning>
+Recording **Returned** does not refund the customer and does not put the products back in stock. Refund the payment from the order page as described in [Refunds](/3.x/user-guide/sales/refunds), and adjust the stock of the products yourself.
+</Warning>
+
+Shopper does not email the customer when you record an event.
+
+### Automatic Tracking Updates
+
+When the shipment's carrier uses the FedEx or UPS driver with its credentials set, and the shipment has a tracking number, Shopper asks the carrier for new scans every 30 minutes and adds them to the timeline as events. It stops once the package is **Delivered** or **Returned**. This relies on the scheduler and the queue worker your developer runs on the server. Manual and USPS carriers never update on their own: record their events yourself.
+
+## Marking as Delivered
+
+When the customer has received a package that is **Out for delivery**, a **Mark as delivered** button appears on its row in the **Shipments** table. Click it, then click **Confirm** in the dialog that asks whether you are sure. **Cancel** closes the dialog without changing anything.
+
+<Screenshot src="/images/v3/shipment-mark-delivered.png" alt="The Mark as delivered confirmation dialog open over the Shipments table, with its Cancel and Confirm buttons, for shipment SHP-49 which is out for delivery." />
+
+Once confirmed, the shipment and its items become **Delivered**, and the delivery date is recorded.
+
+When every item of the order is delivered, the order's shipping status becomes **Delivered**, and a **Processing** order that is paid moves to **Completed** on its own. The full journey of an order is described in [Typical Order Flow](/3.x/user-guide/sales/orders#typical-order-flow).
+
+<Note>
+Browsing the shipments and opening their details only needs access to orders. Adding an event, marking a package as delivered and editing its tracking details need the permission to edit orders: without it, the **Add event** button does not show in the shipment details. See [Roles & Permissions](/3.x/user-guide/administration/roles).
+</Note>
+
+For developer details, see [Fulfillment](/3.x/fulfillment).

@@ -1,0 +1,214 @@
+---
+title: Managing Products
+description: Edit pricing, SEO, media, and other settings after product creation.
+---
+
+After creating a product, you can manage all its details from the product edit page. This guide covers the common management tasks available for all product types.
+
+## Product Edit Page
+
+In the sidebar, click **Catalog > Products**, then click a product in the list to open its edit page. The header shows the product type, the product name and a **Delete** button. Below it, a section menu groups the sections of the page, and each section has its own address you can bookmark:
+
+| Group | Sections |
+|-------|----------|
+| **Product** | **Overview**, **Media**, **Attributes** (Standard, Virtual and Variant), **Variants** (Variant) |
+| **Inventory** | **Stock & Inventory** |
+| **Sales** | **Pricing** (all types except Variant), **Shipping** (Standard and Variant), **Files** (Virtual) |
+| **Marketing** | **SEO**, **Related Products** |
+
+The **Attributes** section also needs the attributes feature turned on in your store. To give the section more room, click the button at the top of the menu: the menu shrinks to its icons until you click it again, and the admin remembers your choice in this browser.
+
+<Screenshot src="/images/v3/product-edit.png" alt="The Overview section of a Standard product with the full section menu." />
+
+The **Overview** section holds the **Product information** card: the name, the **Slug**, the summary, the **Featured** toggle and the description. Click **Update** to save the changes made in this section.
+
+## Pricing
+
+Set your product's price, compare-at price and cost per item in the **Pricing** section, one price per currency of your store. The [Pricing](/3.x/user-guide/marketing/pricing) page explains each field, how amounts are stored in cents and how sale prices work.
+
+<Screenshot src="/images/v3/product-pricing.png" alt="The Product pricing table of a product with prices in two currencies." />
+
+The **Product pricing** table lists one row per currency, with the **Price**, **Compare at price** and **Cost per item**. Click **Add new price** to open the **Product pricing** panel, fill in the fields and click **Save** (see [Adding Prices](/3.x/user-guide/marketing/pricing#adding-prices)). To change a price, click the **Edit** icon on its row: the panel then shows only that currency. To remove a price, click the **Delete** icon on its row and confirm. A product without any price shows "No product pricing added".
+
+### Multi-Currency Pricing
+
+If you have multiple currencies configured in your store:
+
+- Each currency has its own set of price fields in the **Product pricing** panel
+- The **Add new price** button only shows while at least one of your store currencies has no price yet
+
+The currencies come from **Settings > Currencies** (see [Currencies](/3.x/user-guide/store-setup/currencies)).
+
+<Screenshot src="/images/v3/product-add-pricing.png" alt="The Product pricing panel with the price fields of every store currency." />
+
+<Tip>
+  For variant products, pricing is set at the variant level. The parent product has no **Pricing** section and no price of its own. Each variant can have a different price (see [Variant Product](/3.x/user-guide/catalog/products/variant-product)).
+</Tip>
+
+### Pricing Strategies
+
+| Strategy | How to configure |
+|----------|-----------------|
+| **Fixed price** | Set only the "Price amount" field |
+| **Sale price** | Set "Price amount" lower than "Compare at price" |
+| **Cost-plus** | Fill "Cost per item" to track margins, set "Price amount" with your desired markup |
+| **Anchor pricing** | Set a high "Compare at price" to make the actual price feel like a deal |
+
+The admin does not compute margins: "Cost per item" is stored for your own calculations and never sent to customers. The [Pricing Strategies](/3.x/user-guide/marketing/pricing#pricing-strategies) section of the Pricing page covers how to choose your price level.
+
+## Media Management
+
+Manage your product's visual content, including thumbnail and gallery images, in the **Media** section. Click **Update** to save your changes.
+
+<Screenshot src="/images/v3/product-media.png" alt="The Use as thumbnail dialog listing the product gallery images." />
+
+### Thumbnail
+
+The thumbnail is your product's primary image, up to 1 MB. The admin shows it in the product list and on the related product cards, and the Store API sends it as the product's `thumbnail`. When a product has no thumbnail, the Store API sends its first gallery image instead.
+
+To reuse an image you already uploaded to the gallery, click **Choose from images** below the thumbnail. In the **Use as thumbnail** dialog, pick one of the product images and click **Use as thumbnail**. The button only shows once the product has gallery images.
+
+### Product Gallery
+
+Additional images shown on the product detail page:
+- Upload multiple images for different angles, up to 2 MB each
+- Upload them in the order you want them shown, as the gallery has no drag and drop reordering
+- Delete images you no longer need
+
+**Image recommendations:**
+- Minimum resolution: 800x800 pixels
+- Consistent aspect ratio across products (square works best for most stores)
+- Clean white or neutral background for the thumbnail
+- Lifestyle and detail shots for gallery images
+
+## SEO Optimization
+
+Optimize your product pages for search engines to drive organic traffic. The **SEO** section is titled **Search Engine Optimization**.
+
+<Screenshot src="/images/v3/product-seo.png" alt="The Search Engine Optimization section with its fields and the search result preview." />
+
+| Field | Description | Best practice |
+|-------|-------------|---------------|
+| **Title** | The title shown in search engine results | Keep under 60 characters. Include the product name and a key benefit. |
+| **Description** | The meta description shown below the title in search results. Limited to 160 characters. | Describe the product and include a call to action. |
+| **Metadata** | Extra key and value pairs saved with the product. Click **Add row** to add a pair, and drag the rows to reorder them. | Only fill it in if your storefront is built to read these keys. Ask your developer which ones it uses. |
+
+Click **Update** to save. Next to the form, a preview shows how the product can appear in search results, including its URL. The URL ends with the product slug, which is created from the product name when you create the product.
+
+To change the slug, edit the **Slug** field in the **Overview** section and click **Update**. Renaming the product later does not change the slug: click the button at the end of the **Slug** field to rebuild it from the current name. Two products cannot share the same slug.
+
+<Warning>
+  The Store API finds a product by its slug, at `/store/products/{slug}`. Once you change the slug, the old address answers `404 Not Found`, so links shared with the old slug stop working.
+</Warning>
+
+### SEO Tips
+
+- **Include keywords** naturally in the title and description. Think about what customers search for
+- **Be specific**. "Red Leather Crossbody Bag" is better than "Nice Bag"
+- **Add a call to action** in the meta description, such as "Shop now", "Free shipping", "Limited edition"
+- **Avoid duplicate content**. Each product should have unique SEO text
+
+<Note>
+  The Store API sends the title and description as `seo_title` and `seo_description`, empty when you leave the fields empty. Your storefront then decides what search engines get instead, so set these fields yourself for the best results.
+</Note>
+
+## Related Products
+
+Link related products to encourage customers to explore more of your catalog and increase average order value.
+
+<Screenshot src="/images/v3/related-product.png" alt="The Similar Products card with three related product cards, the hidden one marked with a red dot." />
+
+### Adding Related Products
+
+1. Open the **Related Products** section of your product. Its card is titled **Similar Products**
+2. Click **Add product** (or **New product** if the product has no related products yet)
+3. In the **Add Similar Products** panel, search for products, select them and click **Add selected products**. The panel lists published products only, without the product itself and the products already linked
+4. Each related product shows as a card with its thumbnail, its name and a dot: green when the product is visible, red when it is hidden. Click the name to open that product
+
+The link goes one way: the products you add here do not list this product in their own **Related Products** section unless you add it there too. A storefront reads the related products of a product with the `relatedProducts` include of the Store API, which only returns the related products that are published and in the request's sales channel (see [Showing a Product](/3.x/store-api/catalog#showing-a-product)).
+
+To unlink a product, open the menu at the top right of its card, click **Remove** and confirm.
+
+### When to Use Related Products
+
+| Use case | Example |
+|----------|---------|
+| **Complementary items** | Shoes: shoe cleaner, laces, socks |
+| **Same category** | Blue dress: other dresses in similar style |
+| **Frequently bought together** | Phone: phone case, screen protector |
+| **Upsell** | Basic model: premium model of the same product |
+| **Accessories** | Camera: lens, tripod, bag |
+
+## Visibility & Publishing
+
+Control when and where your product is visible. Both settings are in the **Product availability** card of the **Overview** section.
+
+### Visibility Toggle
+
+- **Visible**: Product appears on your storefront and in search results
+- **Hidden**: Product exists in the admin but is not shown to customers. The Store API answers `404 Not Found` for it and leaves it out of every listing, in every sales channel
+
+Use hidden mode to:
+- Prepare products before a launch
+- Temporarily remove seasonal items
+- Hide products being updated or photographed
+
+### Publication Date
+
+The **Availability** date controls when the product goes live. It is required:
+
+- **Past or current date**: Product is immediately available (if visible)
+- **Future date**: Product is scheduled and will become available at that date and time
+
+<Tip>
+  Combine a future publication date with "Visible" to schedule product launches. The product won't appear until the scheduled date.
+</Tip>
+
+## Featured Products
+
+Turn on **Featured** in the **Product information** card of the **Overview** section to mark the product as featured, then click **Update**. The admin does not change anything else for a featured product. The flag is for your storefront and your collections:
+
+- The Store API sends it as the product's `featured` attribute, and a storefront lists the featured products with the `filter[featured]` parameter (see [Listing Products](/3.x/store-api/catalog#listing-products))
+- An automatic collection can select the featured products with the **Product featured** rule (see [Automatic Collections](/3.x/user-guide/catalog/collections#automatic-collections))
+
+## Channels
+
+If your store uses sales channels, the **Overview** section has a **Sales channels** card with one toggle per channel. Turn a toggle on to make the product available in that channel, then click **Update**. Below the toggles, a counter reads "Available in 2 of 3 sales channels". Your channels are listed in **Settings > Sales channels** (see [Sales Channels](/3.x/user-guide/store-setup/channels)), for example:
+
+- **Web store**. Your main online store
+- **Mobile app**. If you have a mobile shopping app
+- **POS**. Point of sale / in-store
+- **Marketplace**. Third-party marketplace listings
+
+Each product can be assigned to one or more channels. A disabled channel shows a **Disabled** badge and its toggle cannot be changed: a product already in that channel stays in it when you save. The card is hidden when your store has no sales channel.
+
+The Store API returns a product only in the sales channels it belongs to: a storefront that sends another channel gets `404 Not Found` for it. The [What the Channel Changes](/3.x/channels#what-the-channel-changes) developer section lists everything a channel filters.
+
+## Associations
+
+The **Associations** card of the **Overview** section links the product to a **Brand**, **Categories**, **Collections** and **Tags**. Each field shows only when its feature is turned on in your store. Click **Update** to save.
+
+To add a tag that does not exist yet, use the create option of the **Tags** field: the **Create tag** dialog asks for a name and a slug, and the new tag is selected on the product. The [Tags](/3.x/user-guide/catalog/tags) page covers how to organize them.
+
+## Product on Storefront
+
+Shopper does not draw your storefront: a storefront built on the Store API reads a product from `GET /store/products/{slug}`. The endpoint answers only when the product is visible, its **Availability** date has passed and it belongs to the request's sales channel.
+
+The response carries what you set on the product edit page: the name, slug, summary, description, `featured`, type, publication date, SEO fields, metadata, images and thumbnail, the prices in every enabled currency, and the stock. Related products, brand, categories, collections and tags come with the `include` parameter. The [Showing a Product](/3.x/store-api/catalog#showing-a-product) section of the Store API lists every field.
+
+## Common Actions
+
+| Action | How |
+|--------|-----|
+| **Edit product info** | Click on the product, modify fields, click **Update** |
+| **Change visibility** | Toggle the **Visible** switch in the **Overview** section, click **Update** |
+| **Update stock** | Go to the **Stock & Inventory** section, click **Add stock** |
+| **Update pricing** | Go to the **Pricing** section, click the **Edit** icon on a price, save |
+| **Delete product** | Click **Delete** at the top of the product page, or on its row in the products list, and confirm |
+| **Duplicate product** | There is no duplicate action. Click **New product** and fill in the details again |
+
+<Warning>
+  A deleted product cannot be restored from the admin. Deleting it also removes its images, its downloadable files, its prices and its stock history. Consider hiding the product instead if you might need it again.
+</Warning>
+
+For developer details, see the [Products documentation](/3.x/products).

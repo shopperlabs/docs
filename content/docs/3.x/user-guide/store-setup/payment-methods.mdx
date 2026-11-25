@@ -1,0 +1,116 @@
+---
+title: Payment Methods
+description: "Configure how customers can pay for their orders."
+---
+
+Payment methods define how customers can pay at checkout. You can offer credit card payments via Stripe, cash on delivery, bank transfers, or mobile money, and restrict each method to specific [zones](/3.x/user-guide/store-setup/zones).
+
+## Accessing Payment Methods
+
+1. Click on **Settings** in the sidebar
+2. Select **Payment methods** from the settings menu, under **Selling**
+
+<Screenshot src="/images/v3/payment-methods-list.png" alt="The Payment Methods table with a cash on delivery method and a Stripe method in test mode." />
+
+The payment methods list shows all configured methods, newest first:
+
+| Column | Description |
+|--------|-------------|
+| **Logo** | The logo of the method's driver |
+| **Title** | The name you entered in **Provider**. Search the list by this name |
+| **Driver** | Gray for **Manual**, green for a driver whose credentials are set, orange for one whose credentials are missing |
+| **Mode** | The mode reported by the driver, live or test. Manual methods show a dash |
+| **Zones** | The zones the method is assigned to |
+| **Status** | A toggle that enables or disables the method |
+| **Updated At** | The date of the last change |
+
+## Adding a Payment Method
+
+To add a new payment method:
+
+1. Click the **Add payment method** button
+2. Fill in the payment method details in the **Add payment method** window
+3. Click **Save**
+4. Turn on the method's **Status** toggle in the list: a new payment method starts disabled
+
+<Screenshot src="/images/v3/payment-methods-create.png" alt="The Add payment method window with the provider, driver and instructions filled in." />
+
+### Payment Method Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Provider** | Yes | The name shown to customers at checkout (e.g., "Credit Card", "PayPal"). Shopper creates the method's identifier from it |
+| **Driver** | Yes | The payment provider that processes this method. Defaults to **Manual** for offline payments; choose a provider such as **Stripe** for online processing |
+| **Provider Documentation URL** | No | External URL for the payment provider |
+| **Additional details** | No | Shown to customers when they choose a payment method |
+| **Provider instructions** | No | Shown to customers after they place an order with this method (e.g., bank transfer details) |
+
+### Understanding Drivers
+
+The driver connects a payment method to a payment provider:
+
+| Driver | How it works | Example |
+|--------|-------------|---------|
+| **Manual** | No online processing. You handle payment outside of Shopper | Cash on delivery, bank transfer, check |
+| **Stripe** | Payments processed via Stripe (requires API keys) | Credit cards, Apple Pay, Google Pay |
+
+<Screenshot src="/images/v3/payment-methods-driver.png" alt="The Driver list open, with Stripe marked Not configured." />
+
+<Note>
+Only **Manual** is built in. Stripe appears in the **Driver** list once your developer has installed the Stripe package, and it requires API credentials configured by your developer. If a driver shows "Not configured" in the dropdown, the API keys have not been set up yet. See the [Payments developer documentation](/3.x/payments) and the [Stripe](/3.x/payments/stripe) page for setup instructions.
+</Note>
+
+## Assigning to Zones
+
+Payment methods are assigned to [zones](/3.x/user-guide/store-setup/zones) when creating or editing a zone. A payment method only appears at checkout if it belongs to the customer's zone.
+
+To make a payment method available in a zone:
+
+1. Go to **Settings > Zones**
+2. Select the zone and click the pencil icon at the top right of its details
+3. In the **Providers** section, select the payment method in the **Payment Methods** field
+4. Click **Save**
+
+Checkout only offers methods that are enabled and whose driver is configured. When the customer's cart has no zone, it offers every such method of your store, whatever its zones.
+
+## Managing Payment Methods
+
+### Editing a Payment Method
+
+Click the pencil icon next to a method, update the fields, and click **Save changes**.
+
+### Enabling or Disabling
+
+Toggle the **Status** switch in the list to quickly enable or disable a payment method. Disabled methods are not shown at checkout.
+
+### Deleting a Payment Method
+
+Click the trash icon and confirm. Orders that used this method are kept, but they no longer show a payment method.
+
+## Common Setups
+
+| Payment Method | Driver | Best For |
+|----------------|--------|----------|
+| Credit Card | Stripe | Online stores accepting card payments |
+| Cash on Delivery | Manual | Local deliveries where customers pay on receipt |
+| Bank Transfer | Manual | B2B orders or high-value purchases |
+| Mobile Money | Manual | Markets where mobile payments are common (Africa, Asia) |
+
+## Best Practices
+
+<Cards>
+  <Card title="Offer Multiple Options" icon="credit-card">
+    Customers are more likely to complete checkout when they see a payment method they trust.
+  </Card>
+  <Card title="Zone-Specific Methods" icon="map">
+    Some methods work only in certain regions. Assign them to the right zones.
+  </Card>
+  <Card title="Clear Instructions" icon="file-lines">
+    For manual methods like bank transfers, provide clear payment instructions so customers know what to do after ordering.
+  </Card>
+  <Card title="Test Payments" icon="vial">
+    Use your payment provider's test/sandbox mode to verify the checkout flow before going live. The **Mode** column tells you which mode each provider runs in.
+  </Card>
+</Cards>
+
+For developer details on payment drivers, custom providers, and transaction management, see the [Payment Methods](/3.x/payment-methods) and [Payments](/3.x/payments) documentation.

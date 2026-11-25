@@ -1,0 +1,102 @@
+---
+title: Inventory Locations
+description: Manage your store's inventory locations for stock management.
+---
+
+Locations in Shopper represent physical places where you store your inventory. This could be warehouses, retail stores, or any other location where you keep products.
+
+## Why Use Multiple Locations?
+
+Managing inventory across multiple locations allows you to:
+
+- Track stock levels at different warehouses
+- Choose which location supplies stock first when an order is placed
+- Manage inventory for physical retail stores
+- Keep accurate stock counts across your business
+
+## Accessing Locations
+
+1. Click on **Settings** in the sidebar
+2. Select **Inventories** from the settings menu, under **Store**
+
+The **Locations** page tells you how many locations you have configured. Each row shows the location name, its country with a flag, its city, its phone number (or **Number not set**) and the date it was added.
+
+<Screenshot src="/images/v3/setting-locations.png" alt="The Locations page listing three locations, one marked Default." />
+
+## Default Inventory
+
+When you set up Shopper, a default inventory location is created for you. It is marked **Default** in the list and receives the initial stock you enter when you create a product.
+
+<Screenshot src="/images/v3/setting-location-default.png" alt="The default location row with its Default badge and no delete icon." />
+
+## Creating a New Location
+
+To add a new inventory location:
+
+1. Click the **New location** button on the Locations page
+2. Fill in the location details on the **Add location** page
+3. Click **Save**
+
+Shopper saves the location and takes you back to the list. The **New location** button only shows for team members whose role allows them to create locations.
+
+<Screenshot src="/images/v3/setting-location-create.png" alt="The Add location page with the details and address sections partly filled in." />
+
+### Location Fields
+
+The form has two sections: **Details** and **Location address**.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Name** | Yes | A descriptive name for the location (e.g., "Main Warehouse"). You see this name in areas like products |
+| **Email address** | Yes | Contact email for this location. Each location needs its own email address |
+| **Description** | No | Additional notes about the location |
+| **Set as default location** | No | Makes this location the default one (see [Setting a Default Location](#setting-a-default-location)) |
+| **Priority** | Yes | A number, 0 by default and never below 0. When an order takes stock from several locations, lower values are used first |
+| **Street Address** | Yes | Physical address of the location |
+| **Apartment, suite, etc.** | No | Additional address line |
+| **City** | Yes | City where the location is situated |
+| **State** | No | State, province, or region |
+| **Postal / Zip code** | Yes | Postal or ZIP code |
+| **Country** | Yes | Country selection |
+| **Phone number** | No | Contact phone number. Click the flag button to pick the country and its dialing code; Shopper checks that the number is valid for that country |
+
+## Editing a Location
+
+To modify an existing location:
+
+1. Click the pencil icon next to the location in the list
+2. Update the desired fields
+3. Click **Save** to apply changes
+
+<Screenshot src="/images/v3/location-update.png" alt="The edit page of a location with its details and address." />
+
+## Setting a Default Location
+
+One location is the default. It is marked **Default** in the locations list. The default location:
+
+- Receives the initial stock you enter when you create a product or a variant
+- Cannot be deleted: the delete icon is hidden for it
+
+To change the default location, edit another location, turn on **Set as default location**, and click **Save**. The previous default location stops being the default.
+
+<Warning>
+Always change the default from the location that takes over. Turning off **Set as default location** on the current default leaves your store without a default location, and the initial stock you enter on new products and variants is then not recorded.
+</Warning>
+
+## Deleting a Location
+
+To remove a location you no longer use, click the trash icon on its row and confirm. The trash icon only shows for team members whose role allows them to delete locations, and never on the default location.
+
+The **Remove** dialog tells you how many units of stock the location holds, and that this stock and its stock history will be deleted with it. Click **Confirm** to delete the location, or **Cancel** to keep it.
+
+<Screenshot src="/images/v3/setting-location-delete.png" alt="The Remove dialog over the Locations list, saying that the 10 units held at the location and its stock history will be deleted, with Cancel and Confirm buttons." />
+
+<Warning>
+Deleting a location also deletes the stock it holds and the stock history recorded there. The stock of your products drops by that quantity, and no history row records the change. Before you delete a location, move its stock: on each product, open **Stock & Inventory**, click **Add stock** and enter a negative quantity at that location, then the same quantity at another location.
+</Warning>
+
+<Tip>
+Keep your location information accurate, especially addresses, as they may be used for shipping calculations and customer communications.
+</Tip>
+
+For developer details, see the [Locations documentation](/3.x/locations).

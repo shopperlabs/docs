@@ -1,0 +1,195 @@
+---
+title: Roles & Permissions
+description: Configure access control with roles and permissions.
+---
+
+Roles and permissions allow you to control what each staff member can do in your store's administration panel. This ensures security and prevents unauthorized access to sensitive areas.
+
+## Overview
+
+The access control system consists of:
+
+- **Roles**: groups of permissions assigned to users
+- **Permissions**: individual actions a user can perform
+
+## Accessing Roles & Permissions
+
+1. Click on **Settings > Site** in the sidebar
+2. Select **Staff & permissions** under **Team** in the settings menu
+
+Staff who have the **View Users** permission without **Access Settings** open the same page from their account menu, with **Manage Users**.
+
+The page opens with the title **Administrators & roles**. Your roles appear as cards under **Administrator role available**, each with its number of accounts, the pictures of its first members and a **View details** link that opens the role.
+
+## Understanding Permissions
+
+Permissions control access to specific actions. A role has a permission when its checkbox is checked on the role's **Permissions** tab.
+
+### Permission Categories
+
+Permissions are sorted into groups. Most areas of the admin have the same five permissions: **Browse** (see the list), **Read** (open a record), **Edit**, **Create** and **Delete**, for example **Browse Brands** or **Create Brands**.
+
+| Category | Examples |
+|----------|----------|
+| **System** | **Access Dashboard**; **Access Settings** (all the settings pages, **Shop Initialization** and the dashboard **Setup guide**); **View Users** (staff accounts, roles and permissions) |
+| **Catalog** | Browse, read, edit, create and delete brands, categories and collections |
+| **Products** | Browse, read, edit, create and delete products, plus the same five permissions for product variants, attributes, suppliers, tags and reviews |
+| **Sales** | Browse, read, edit, create and delete orders, discounts and campaigns. There is no separate permission for refunds |
+| **Customers** | Browse, read, edit, create and delete customers |
+| **Inventory** | Browse, read, edit, create and delete inventories |
+
+Permissions created without a group are listed under **Custom permission**.
+
+### Browsing Permissions
+
+Open a role with **View details** and click the **Permissions** tab. Every permission is listed by group, with a checkbox that shows whether the role has it and the date it was created:
+
+<Screenshot src="/images/v3/permissions.png" alt="The Permissions tab of a role with permissions checked in several groups." />
+
+Click a checkbox to give the permission to the role or take it away. Each change is saved as soon as you click. Changing the permissions of a role needs the **Access Settings** permission, and staff who are not administrators can only give the permissions they hold themselves.
+
+## Managing Roles
+
+### Creating a Role
+
+To create a new role:
+
+1. On the **Administrators & roles** page, click the **+** button next to **Administrator role available** (its tooltip reads **Add new role**). The button appears for administrators and staff with the **Access Settings** permission
+2. Enter the **Name (in lowercase)**, for example "support". It must differ from the names of the existing roles, so "manager" is already taken
+3. Enter the **Display name** shown in the admin, for example "Support", and a **Description**
+4. Click **Save**
+5. Open the new role with **View details**, click the **Permissions** tab and check the permissions the role needs. Each checkbox is saved as soon as you click it
+
+<Screenshot src="/images/v3/add-role.png" alt="The Add new role window filled in for a Support role." />
+
+### Role Fields
+
+| Field | Description |
+|-------|-------------|
+| **Name (in lowercase)** | Internal name of the role, unique (e.g., "store_manager") |
+| **Display name** | Name shown in the admin (e.g., "Store Manager") |
+| **Description** | What this role is for |
+
+Permissions are not part of this form: you check them on the role's **Permissions** tab once the role exists.
+
+### Updating a Role
+
+Open the role with **View details**. The role page has three tabs:
+
+- **Role**: change the **Name (in lowercase)**, **Display name** and **Description**, then click **Update**. Editing the name fills the display name for you. The name of the roles Shopper installs cannot be changed. On the Administrator role, a warning reminds you that a wrong change could block your access to the dashboard
+- **Users**: the staff members who have this role, with the same actions as the staff list
+- **Permissions**: check or uncheck the permissions of the role
+
+Only administrators can open the Administrator role. Saving changes to a role needs the **Access Settings** permission.
+
+A role you created can be removed with the **Delete** button at the top of its page. The Administrator and Manager roles that Shopper installs cannot be deleted.
+
+<Screenshot src="/images/v3/update-role.png" alt="The Role tab of a custom role with the Delete, Generate permissions and Create permission buttons." />
+
+Changes apply immediately to all users with that role.
+
+## Creating Permissions
+
+Add custom permissions for your specific needs from a role's page. Two buttons at the top of the page, shown to **Administrator** accounts only, create permissions and give them to that role straight away:
+
+- **Create permission** opens the **New permission** window. Pick a **Group name** (optional), enter the **Permission name (in lowercase)** (up to 30 characters, unique), the **Display name** (up to 75 characters) and a **Description**, then click **Save**
+- **Generate permissions** creates the five standard permissions (browse, read, edit, create and delete) for one area in one go. Enter the **Resource name**, for example "shipments", pick a **Group name** if you want, then click **Generate permissions**. Without a group name, the five permissions get a group named after the resource
+
+The **Group name** list offers the six groups of the admin: System, Catalog, Products, Sales, Customers and Inventory.
+
+A new permission only controls something once your developer checks it in the admin or in a custom screen. Creating it does not restrict anything on its own.
+
+<Screenshot src="/images/v3/add-permission.png" alt="The New permission window with a group picked and the name fields filled." />
+
+<Screenshot src="/images/v3/generate-permissions.png" alt="The Generate permissions window with the resource name shipments." />
+
+<Note>
+Creating or deleting a permission requires an **Administrator** account. Other staff members with the **Access Settings** permission can still grant existing permissions to roles, but only permissions they hold themselves, and they cannot modify the Administrator role.
+</Note>
+
+## Custom Permissions
+
+Create permissions tailored to your business. Permissions created without a group appear under **Custom permission** on the role's **Permissions** tab. A permission made with **Create permission** has a trash icon that lets an Administrator delete it; the permissions Shopper installs and those made with **Generate permissions** cannot be deleted.
+
+<Screenshot src="/images/v3/custom-permissions.png" alt="The Custom permission group of a role with one permission and its trash icon." />
+
+<Warning>
+The trash icon deletes the permission at once, without asking for confirmation. Every role that had it loses it.
+</Warning>
+
+## Common Role Examples
+
+### Store Manager
+
+The **Manager** role that Shopper installs is set up for this job:
+- **Access Dashboard**
+- All the permissions of the **Catalog**, **Products** and **Sales** groups, which cover products, orders, promotions and campaigns
+- All customer permissions except **Delete Customers**, so a manager cannot anonymize a customer
+- No **Access Settings**, **View Users** or **Inventory** permission
+
+Give it **Access Settings** only if your managers handle the store settings, as it opens all of them at once.
+
+### Content Editor
+
+Focus on catalog management:
+- View/edit products
+- View/edit categories
+- View/edit collections
+- No order or customer access
+
+### Support Agent
+
+Customer service focus:
+- Browse and read orders, which also opens **Shipments** and **Abandoned Carts** under **Sales > Orders**
+- Browse and read customers
+- Edit orders only if they handle order changes
+- No product management
+
+### Marketing
+
+Promotional access:
+- View products
+- Manage discounts, listed under **Sales > Promotions**
+- Manage campaigns, listed under **Sales > Campaigns**
+- Manage collections
+- No customer data access
+
+## Best Practices
+
+<Cards>
+  <Card title="Start Restrictive" icon="lock">
+    Begin with minimal permissions and add as needed.
+  </Card>
+  <Card title="Group Logically" icon="layer-group">
+    Create roles that match actual job functions.
+  </Card>
+  <Card title="Review Regularly" icon="rotate">
+    Audit roles periodically to ensure they're still appropriate.
+  </Card>
+  <Card title="Document Roles" icon="file-lines">
+    Keep clear descriptions of what each role can do.
+  </Card>
+</Cards>
+
+## Permission Hierarchy
+
+<Tip>
+Some permissions may depend on others. For example, to edit a product, a user typically also needs the **Browse** permission to reach the product list.
+</Tip>
+
+When assigning permissions, consider:
+
+1. **Browse**: can see the list
+2. **Read**: can open a record and see its details
+3. **Create**: can add new items
+4. **Edit**: can modify existing items
+5. **Delete**: can remove items (most sensitive)
+
+## Security Considerations
+
+- **Know who has access**: the **Users** tab of each role lists its members. Shopper does not keep a history of who changed what
+- **Separation of duties**: don't give one person all permissions
+- **Regular reviews**: remove unnecessary access
+- **Test roles**: verify permissions work as expected
+
+For developers, see [Permissions](/3.x/acl).

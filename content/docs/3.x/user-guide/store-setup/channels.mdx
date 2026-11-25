@@ -1,0 +1,48 @@
+---
+title: Sales Channels
+description: "See the places where your store sells, which channel is the default, and turn a sales channel on or off."
+---
+
+A sales channel is a place where you sell: your website, a mobile app, a marketplace, a physical shop or a wholesale portal. You choose the channels each product is sold in, and each order records the channel it came from, so you can tell your website orders from your app orders.
+
+## Accessing Sales Channels
+
+1. Click on **Settings** in the sidebar
+2. Select **Sales channels** from the settings menu, under **Selling**
+
+<Screenshot src="/images/v3/sales-channels.png" alt="The Sales channels table with the default Web Store, an active Mobile App channel and a disabled Wholesale Portal." />
+
+The list shows each channel with its logo, its name and web address, its driver (the platform it runs on, such as **Web**), the default channel mark, its **Status** and the date of its last change. Search channels by name with the search box. The [Settings Page](/3.x/channels#settings-page) section of the developer documentation describes each column.
+
+## The Default Channel
+
+Your store always has one default channel, marked with a check in the **Default** column and listed first. Shopper creates it when it is installed, under the name **Web Store**. When you add a product, its **Sales channels** field starts with the default channel selected.
+
+The default channel is always on: its **Status** toggle cannot be changed. To make another channel the default, ask your developer (see [Default Channel](/3.x/channels#default-channel)).
+
+## Turning a Channel Off and On
+
+To stop selling in a channel, turn off its **Status** toggle. To sell there again, turn it back on.
+
+When a channel is off:
+
+- New products cannot be added to it: it is left out of the **Sales channels** field of the Add product form
+- Products already in it stay in it. On the product page, the channel shows a **Disabled** badge and its toggle cannot be changed (see [Channels](/3.x/user-guide/catalog/products/managing-products#channels))
+- The site or app behind it stays online, but no longer gets a catalog of its own. What it shows then depends on how your developer set up your storefront (see [The Store API](/3.x/channels#the-store-api))
+
+## Where Channels Come From
+
+The page has no button to add or edit a channel: your developer creates the channels, with their name, address, logo and driver. Ask them when you start selling in a new place, such as a new app or a marketplace. A channel your developer creates without turning it on stays off: turn its **Status** on here when you are ready to sell there. The [Creating Channels](/3.x/channels#creating-channels) developer section shows how.
+
+## Channels in Products and Orders
+
+Once your channels are set up, you use them in the rest of the admin:
+
+- When you create a product, the **Associations** step has a **Sales channels** field (see [Creating a Product](/3.x/user-guide/catalog/products/creating-product#step-3-associations))
+- On a product page, the **Sales channels** card has one toggle per channel (see [Channels](/3.x/user-guide/catalog/products/managing-products#channels))
+- The product list can be filtered by sales channel (see [Products](/3.x/user-guide/catalog/products/overview))
+- The order list has a **Channel** column and filter, and an order page shows its channel after **Purchased via** (see [Orders](/3.x/user-guide/sales/orders))
+
+The Sales channels page is part of the settings: only staff members with the **Access Settings** permission can open it (see [Roles & Permissions](/3.x/user-guide/administration/roles)).
+
+For developer details on channels, their drivers and how a storefront picks its channel, see the [Channels documentation](/3.x/channels).

@@ -1,0 +1,223 @@
+---
+title: Managing Orders
+description: View, process, and fulfill customer orders from your admin panel.
+---
+
+When a customer places an order on your store, it appears under **Sales > Orders** in your admin panel. From here, you manage everything: confirm payment, prepare shipments, follow delivery, and handle issues.
+
+## Order List
+
+To see where every order stands, open **Sales > Orders**. The **Orders** menu item shows a badge with the number of **New** orders, so you know when orders are waiting for you.
+
+The list has the columns **#** (order number), **Date**, **Status**, **Price amount**, **Purchased** (the ordered items), and **Customer**. The **Status** column shows a payment badge and a shipping badge, or a single **Cancelled** or **Archived** badge, so you see where the order stands at a glance. The **Currency**, **Zone**, and **Channel** columns are hidden by default, and you can hide **Date** and **Customer**: use the column selector above the table.
+
+<Screenshot src="/images/v3/orders.png" alt="The Orders list with payment and shipping badges on each order." />
+
+### Tabs
+
+The tabs at the top filter orders by their current state. Each tab shows how many orders it holds.
+
+| Tab | What it shows |
+|-----|---------------|
+| **All** | Every order in your store |
+| **Open** | **New** and **Processing** orders that are not shipped yet |
+| **Paid** | Orders where payment has been received |
+| **Fulfilled** | Orders with the shipping status **Shipped** or **Partially shipped** |
+| **Cancelled** | Orders that were cancelled |
+| **Archived** | Orders you've archived |
+
+### Filters
+
+Click the filter icon to narrow down your list. You can filter by order number, customer, order status, payment status, shipping status, date range, zone, channel, or currency.
+
+## Order Detail
+
+Click the eye icon (**View details**) on an order to open its detail page. The page is split into two areas: the main content on the left and customer information on the right.
+
+<Screenshot src="/images/v3/order-detail.png" alt="An order detail page with the fulfillment progress, the products, the summary and the customer card." />
+
+### Header
+
+The header stays visible as you scroll. It shows:
+
+- The **order number**
+- Three **status badges** for order status, payment status, and shipping status
+- **Action buttons** for processing the order (see [Actions](#actions) below). A **Completed** order has only **Refund**, as long as part of its payment can be refunded
+- **Previous / Next** arrows to move between orders
+- The **Order date**, the customer name after **Order from** (linked to their profile), and the [sales channel](/3.x/user-guide/store-setup/channels) after **Purchased via**
+
+### Main Content
+
+The left side of the page contains three sections:
+
+**Fulfillment**. A progress bar showing where the order is in the fulfillment process (**New**, **Processing**, **Shipped**, **Completed**), with the customer's name and country after **Expedition to**. If there are items that haven't been assigned to a shipment yet and the order is not completed, cancelled, or archived, a **Create Shipping Label** button appears here.
+
+**Products**. The items in the order with their thumbnail, name, quantity, fulfillment status badge, and price. Use the **Per page** menu to show 3, 5, or 10 items at a time.
+
+**Order summary**. Under **Payment Details**: the payment status and the **Payment Method**, the **Subtotal** with the number of items (marked **Incl. tax** or **Excl. tax** according to your tax settings), the **Shipping Type** and **Shipping Fee**, the **Tax** (the tax on the products and on shipping, shown as **Not available** when the order has none), and the **Total**. When the order has refunds, each one is listed below the total with its date and reason, followed by **Net collected** (see [After the Refund](/3.x/user-guide/sales/refunds#after-the-refund)).
+
+### Sidebar
+
+The right side shows:
+
+- **Customer profile**. Name, avatar, and a link to their full profile. Below that, since when they have been a customer (**Customer since**) and how many orders they've placed.
+- **Contact Information**. Email and phone number.
+- **Shipping address**. The delivery address for this order.
+- **Billing address**. Displayed separately, or **Same as shipping address** if it matches the shipping address.
+
+## Order Status
+
+Every order has three independent statuses that track different aspects of the order.
+
+### Order Status
+
+The overall state of the order.
+
+| Status | Meaning |
+|--------|---------|
+| **New** | Order just came in, hasn't been looked at yet |
+| **Processing** | You're actively working on this order |
+| **Completed** | Everything is done, paid and delivered |
+| **Cancelled** | Order was cancelled |
+| **Archived** | Order removed from active list |
+
+### Payment Status
+
+Tracks whether you've received the money.
+
+| Status | Meaning |
+|--------|---------|
+| **Payment pending** | Waiting for payment |
+| **Authorized** | Funds are held on the customer's card but not yet collected |
+| **Paid** | Payment received |
+| **Partially refunded** | Some of the amount has been refunded |
+| **Refunded** | Full amount refunded |
+| **Voided** | Payment was cancelled before any money was collected |
+
+<Note>
+**Authorized** means the payment provider confirmed the customer has funds, but you haven't captured (collected) them yet. This is common for physical goods where you want to verify stock before charging.
+</Note>
+
+### Shipping Status
+
+Tracks where the physical goods are. Shopper updates it from the items of the order: you never set it by hand.
+
+| Status | Meaning |
+|--------|---------|
+| **Unfulfilled** | No items have been shipped yet |
+| **Partially shipped** | Some items shipped, others are still waiting |
+| **Shipped** | All items have been shipped |
+| **Partially delivered** | Some packages arrived, others still in transit |
+| **Delivered** | Everything has been delivered |
+| **Partially returned** | Some items came back in a returned shipment, the others were shipped or delivered |
+| **Returned** | All items came back in returned shipments |
+
+## Actions
+
+The actions available depend on the current state of the order. They appear in the header, some as standalone buttons, others in the **More actions** dropdown. Each action asks you to confirm in a dialog that explains what it changes.
+
+<Note>
+**Capture payment** and **Archive** are hidden on phone-sized screens. Use a tablet or a computer to capture a payment or archive an order.
+</Note>
+
+### Capture Payment
+
+<Screenshot src="/images/v3/order-capture-button.png" alt="The order header with the Capture payment and Archive buttons." />
+
+Appears when the payment status is **Authorized** and the order is not cancelled or archived. Clicking it charges the customer for the authorized amount. A confirmation dialog appears, since this action cannot be undone.
+
+After capture, the payment status changes to **Paid** and the button disappears. If the payment provider refuses the capture, an error message tells you so and the status stays **Authorized**.
+
+### Archive
+
+Appears when the order is not completed, not paid, and not archived. After you confirm, the order moves to the **Archived** tab and you return to the order list.
+
+<Warning>
+An archived order leaves the order count of your dashboard. Use this for orders that will never be fulfilled, like spam or test orders.
+</Warning>
+
+### More Actions
+
+The dropdown contains context-sensitive actions:
+
+<Screenshot src="/images/v3/order-more-actions.png" alt="The More actions dropdown open on a new order." />
+
+| Action | When it appears | What it does |
+|--------|-----------------|--------------|
+| **Start processing** | Order is **New** | Changes order status to Processing. The items' fulfillment status does not change |
+| **Mark as paid** | Payment is **Payment pending** or **Voided**, and the order is not cancelled or archived | Changes payment status directly to Paid (without going through the payment provider). A **New** order also moves to Processing. Only confirm it if you collected the payment outside of Shopper |
+| **Mark complete** | Order is **Processing** and payment is **Paid** | Changes order status to Completed |
+| **Cancel Order** | Order is not completed, cancelled, or archived, and no item has been delivered or returned | Cancels the order, records the cancellation date and returns its items to stock. It does not refund the customer: refund the payment with **Refund** (see [Refunds](#refunds)) |
+
+### Refunds
+
+To give money back to a customer, click **Refund** in the order header. The button appears while the payment is **Paid** or **Partially refunded** and part of it can still be refunded, whatever the order status. You refund the whole amount or part of it, and the payment status changes to **Refunded** or **Partially refunded**. Cancelling an order does not refund the customer: refund the payment as well. The [Refunds](/3.x/user-guide/sales/refunds) page covers the amounts, the reasons, each payment method and failed refunds.
+
+## Fulfillment
+
+Fulfillment is the process of getting the ordered items to the customer. Shopper tracks this at two levels: the **order level** (shipping status) and the **item level** (fulfillment status per product, such as **Awaiting fulfillment**, **Shipped** or **Delivered**).
+
+### Creating a Shipment
+
+When an order has items that haven't been shipped yet, the **Create Shipping Label** button appears in the fulfillment section.
+
+<Screenshot src="/images/v3/order-fulfillment.png" alt="The fulfillment section with its progress bar and the Create Shipping Label button." />
+
+Clicking it opens the **Create Shipping Label** panel, where you:
+
+1. **Choose the Carrier Service**. Pick one of your enabled carriers. The field starts with the carrier of the shipping option the customer chose
+2. **Add tracking info** (optional). Enter a **Tracking number** and a **Tracking URL**
+3. **Check the Items to fulfill**. Every item not yet in a shipment is listed with its product, quantity, and price. Remove the items that are not in this package with the trash icon; at least one item must stay
+
+The right side of the panel shows the order summary and the shipping address. Click **Save** to create the shipment. To leave the panel without saving, click its close button, **Cancel**, or press Escape.
+
+<Screenshot src="/images/v3/order-create-shipping-label.png" alt="The Create Shipping Label panel with a carrier selected and two items to fulfill." />
+
+Once created, the shipment appears under **Sales > Orders > Shipments** with the status **Label created**, and the selected items are assigned to it. Their fulfillment status stays **Awaiting fulfillment** until the carrier picks up the package.
+
+### Partial Shipments
+
+You don't have to ship everything at once. If an order has 5 items and only 3 are ready, create a shipment with those 3 items. The remaining 2 stay as unfulfilled and you can create a second shipment later.
+
+The shipping status updates automatically from the shipment events recorded under **Sales > Orders > Shipments**, not when you create the shipment:
+- A shipment is **Picked up** while other items are not shipped yet: **Partially shipped**
+- Every item is in a shipment that was picked up: **Shipped**
+- Some items are delivered: **Partially delivered**
+- Every item is delivered: **Delivered**
+
+When the first shipment is picked up, a **New** order also moves to **Processing**.
+
+## Shipments
+
+To follow your packages after you create them, open **Sales > Orders > Shipments**: it lists every shipment with its tracking events, and lets you record pickups, deliveries and returns. The [Shipments](/3.x/user-guide/sales/shipments) page covers each step. For developer details, see [Fulfillment](/3.x/fulfillment).
+
+## Typical Order Flow
+
+Here's how a standard order moves through the system:
+
+<Steps>
+  <Step title="Order placed">
+    A customer completes checkout. The order appears as **New** with payment **Payment pending** and shipping **Unfulfilled**.
+  </Step>
+  <Step title="Payment received">
+    Depending on your payment method, the payment status changes to **Paid** (automatic capture) or **Authorized** (manual capture). If authorized, you capture it when ready.
+  </Step>
+  <Step title="Start processing">
+    Click **Start processing** to indicate you're preparing the order. The order moves to **Processing**.
+  </Step>
+  <Step title="Create shipment">
+    Click **Create Shipping Label**, check the carrier service, add tracking info, and keep the items to ship. The shipment starts as **Label created**.
+  </Step>
+  <Step title="Track delivery">
+    Record tracking events under **Sales > Orders > Shipments** as the carrier provides updates (see [Adding Tracking Events](/3.x/user-guide/sales/shipments#adding-tracking-events)). When you record **Picked up**, the shipping status changes to **Shipped** (or **Partially shipped** if some items are not in a shipment yet).
+  </Step>
+  <Step title="Delivery confirmed">
+    [Mark the shipment as delivered](/3.x/user-guide/sales/shipments#marking-as-delivered). Once every item is delivered, a **Processing** order that is **Paid** changes to **Completed** automatically. If the payment arrives after the delivery, the order completes when it is paid.
+  </Step>
+</Steps>
+
+## Abandoned Carts
+
+To see the carts customers left without completing checkout, open **Sales > Orders > Abandoned Carts**. The [Abandoned Carts](/3.x/user-guide/sales/abandoned-carts) page explains what each cart tells you. For developer details, see [Abandoned Carts](/3.x/cart#abandoned-carts) in the Cart documentation.
+
+For developer details, see the [Orders documentation](/3.x/orders).

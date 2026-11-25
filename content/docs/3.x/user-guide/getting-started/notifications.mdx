@@ -1,0 +1,75 @@
+---
+title: Notifications
+description: "Follow new orders, payments and product imports from the bell in the admin header, and mark notifications as read."
+---
+
+Notifications tell you when something in your store needs a look, such as a new order or a failed payment, without keeping the order list open. Shopper shows them under a bell in the header of every admin page.
+
+<Note>
+The bell appears once your developer turns notifications on for your store (see [Notifications](/3.x/notifications)). Until then, the header has no bell and Shopper stores no notifications.
+</Note>
+
+## Who Receives Notifications
+
+Notifications go to every team member with the **Administrator** or the **Manager** role. Other roles and customers receive none. A team member who is given one of these roles starts receiving notifications within two hours. See [Roles & Permissions](/3.x/user-guide/administration/roles) to change a member's role.
+
+## Opening Your Notifications
+
+The bell sits in the header, before the storefront icon. A badge on it shows how many notifications you have not read yet, up to "99+".
+
+<Screenshot src="/images/v3/notifications-bell.png" alt="The right side of the admin header with the notifications bell and its badge showing 3 unread notifications." />
+
+Click the bell to open the **Notifications** panel. The number next to its title counts your unread notifications, and the newest notifications come first.
+
+<Screenshot src="/images/v3/notifications-panel.png" alt="The Notifications panel with three unread notifications marked by a blue edge, followed by read notifications for a product import and two paid orders." />
+
+Each notification shows an icon, a title, how long ago it arrived, a message and a button. Unread notifications have a colored edge on their left. The panel shows 50 notifications at a time, with buttons at the bottom to see older ones. Close it with its close button or Escape.
+
+## What You Are Notified About
+
+Shopper sends a notification for these events:
+
+| Notification | When it arrives | Button |
+|--------------|-----------------|--------|
+| **New order received** | An order is placed on your store | **View order** |
+| **Order paid** | The payment of an order is received and its payment status becomes paid | **View order** |
+| **Payment failed** | The payment provider declines a payment attempt for an order | **View order** |
+| **Refund failed** | The payment provider declines a refund you made on an order | **View order** |
+| **Payment voided** | The payment provider cancels a payment authorization after part or all of the order shipped. Collect the payment another way, then mark the order as paid | **View order** |
+| **Product import finished** | A [product import](/3.x/user-guide/catalog/products/import) ends, with the number of products imported and failed | **View products** |
+
+The message names the order number, such as "Order ORD-20261123-000059 has just been placed.". Payment problems show a red icon. An import with failed products shows an orange icon: open the products to check the result. An import that cannot read its file at all sends no notification.
+
+## Acting on a Notification
+
+The button of a notification takes you where you can act: **View order** opens the order (see [Orders](/3.x/user-guide/sales/orders)), and **View products** opens the product list. Clicking the button also marks the notification as read.
+
+## Marking Notifications as Read
+
+When you have seen your notifications without opening each one, click **Mark all as read** under the panel's title. The badge on the bell disappears, and the notifications stay in the list. **Mark all as read** only shows while you have unread notifications.
+
+## Removing Notifications
+
+To remove a single notification, click the close icon at its top right. To empty the panel, click **Clear**: it deletes all your notifications, read and unread, and closes the panel.
+
+<Warning>
+**Clear** asks for no confirmation and cannot be undone. Removing notifications only affects your own list: the other team members keep theirs.
+</Warning>
+
+## How the List Updates
+
+While an admin page is open, the bell and the panel check for new notifications every 30 seconds, so a new order shows up without reloading the page. Your developer can change this interval.
+
+<Cards>
+  <Card title="Orders" href="/3.x/user-guide/sales/orders">
+    Open an order from its notification and process it.
+  </Card>
+  <Card title="Importing Products" href="/3.x/user-guide/catalog/products/import">
+    Import products from a CSV file and follow the result.
+  </Card>
+  <Card title="Roles & Permissions" href="/3.x/user-guide/administration/roles">
+    Give the Administrator or Manager role to the team members who need notifications.
+  </Card>
+</Cards>
+
+For developers, see the [Notifications documentation](/3.x/notifications).

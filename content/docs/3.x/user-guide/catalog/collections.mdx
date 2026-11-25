@@ -1,0 +1,141 @@
+---
+title: Managing Collections
+description: Create curated product collections to highlight specific products.
+---
+
+Collections allow you to group products together for marketing and merchandising purposes. Unlike categories, collections are flexible groupings that can include products from different categories.
+
+## Overview
+
+Collections are useful for:
+
+- Seasonal promotions, such as "Summer Collection" or "Holiday Gifts"
+- Marketing campaigns, such as "Best Sellers" or "New Arrivals"
+- Thematic groupings, such as "Eco-Friendly Products" or "Made in France"
+
+## Accessing Collections
+
+Open **Catalog > Collections** in the sidebar to reach collection management. The list shows the image, name and type of each collection, a summary of its conditions in the **Product conditions** column (N/A for a manual collection), and its last update. A **Zones** column, hidden by default, shows the zones each collection is limited to. Search collections by name, and filter the list by **Collection Type** or by zone.
+
+<Screenshot src="/images/v3/collections.png" alt="The Collections page listing a manual and an automatic collection with its conditions." />
+
+## Creating a Collection
+
+To create a new collection:
+
+1. Click the **New collection** button
+2. Fill in the collection details in the **New collection** panel and choose the **Collection Type**
+3. Click **Save**. The collection's edit page opens.
+4. Add products to the collection: click **Browse** above the product list for a manual collection, or **Conditions** for an automatic one (see [Automatic Collections](#automatic-collections))
+
+To leave the panel without saving, click its close button, **Cancel**, or press Escape.
+
+<Screenshot src="/images/v3/collection-create.png" alt="The New collection panel with the Collection Type choice visible." />
+
+### Collection Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Name** | Yes | The collection name |
+| **Slug** | No | The collection's identifier in web addresses, such as `summer-sale`. It fills in from the name while you create the collection, and you can edit it; the **Generate** button (two circular arrows) rebuilds it from the name. |
+| **Availability** | Yes | The date and time the collection becomes available on your store. Defaults to now; set a later date to schedule it. |
+| **Collection Type** | Yes | **Manual** or **Automatic** (condition-based). It cannot be changed after the collection is created. |
+| **Zones** | No | Limit the collection to the selected zones. The Store API sends a collection to every zone: ask your developer whether your storefront uses this field (see [Zones](/3.x/collections#zones)). |
+| **Description** | No | Describe what this collection represents |
+| **Image preview** | No | In the **Media** section, a cover image for the collection, up to 1 MB |
+| **Title** and **Description** | No | In the **SEO** section, how the collection page appears in search engine results. Keep the title under 60 characters. |
+| **Metadata** | No | In the **Metadata** section, extra key and value pairs your developer can use on the storefront |
+
+## Editing a Collection
+
+To change a collection's details or its products, open its edit page: click the edit icon on its row in the Collections list. The page shows the name, slug, description and product list on the left, and the image, **Availability**, **Zones**, **Search Engine Optimization** fields and **Metadata** on the right. Click **Update** to save your changes. The collection type cannot be changed after creation.
+
+<Screenshot src="/images/v3/collection-edit.png" alt="The edit page of a manual collection with its products and the Browse button." />
+
+To remove a collection, click the delete icon on its row in the Collections list and confirm. Its products stay in your catalog.
+
+## Collection Types
+
+### Manual Collections
+
+Manually select which products belong to the collection:
+
+- Full control over which products are included
+- Products stay in the collection until you remove them
+- Best for curated selections
+
+To add products, click **Browse** above the product list of the edit page. The **Add Products to collection** panel lists your published products that are not in the collection yet. Search them by name, select the ones you want, then click **Add Selected Products**. The panel closes and the products appear in the list.
+
+To remove products, click the delete icon on a product row, or select several rows and use the bulk **Delete** action. This removes them from the collection only.
+
+You can also add a product to collections from the **Collections** field of its product page. Pick manual collections there: an automatic collection removes the product at its next update unless the product matches its conditions.
+
+### Automatic Collections
+
+Use conditions to include products automatically. On the collection's edit page, click **Conditions** above the product list to open the **Product conditions** panel:
+
+1. Under **Products must match**, choose **All conditions** or **Any condition**
+2. For each condition, pick a rule in **Choose a rule**, an operator in **Select operator**, then fill in the **Value**. The value is a date picker for **Product created date**, **Yes** or **No** for **Product featured**, and a number for prices, stock, rating and sales.
+3. Click **Add condition** to add another one
+4. Click **Save**
+
+<Screenshot src="/images/v3/collection-rules.png" alt="The Product conditions panel with two conditions and Any condition selected." />
+
+Available rules:
+
+| Rule | Example |
+|------|---------|
+| **Product title** | Contains "organic" |
+| **Product brand** | Equals to "Nike" |
+| **Product category** | Contains "Shoes" |
+| **Product price** | Greater than 50 |
+| **Compare at price** | Greater than 0 (products shown with a former price) |
+| **Inventory stock** | Greater than 5 |
+| **Product created date** | Greater than a date you pick |
+| **Product featured** | Equals to Yes |
+| **Product rating** | Greater than 3 |
+| **Product sales count** | Greater than 100 |
+
+Only published products join an automatic collection. Price values are amounts in your store's default currency, compared with the price set on the product itself, so products whose prices are set on their variants do not match price rules. Type whole amounts, such as 50: some amounts with cents are saved one cent lower, so 19.99 becomes 19.98.
+
+<Note>
+**Inventory stock**, **Product rating** and **Product sales count** conditions only match products that already have stock movements, approved reviews or paid sales.
+</Note>
+
+<Tip>
+The product list of an automatic collection is filled when you save its conditions. Saving a product also updates it: the product joins every automatic collection whose conditions it matches and leaves the others. Other changes, such as a new price, a stock movement, an order, a review or a product reaching its publication date, show up the next time you click **Save** in the **Product conditions** panel, or when the sync command your developer can schedule runs (see [Scheduling the Sync](/3.x/collections#scheduling-the-sync)). Updates run in the background, so the list can take a moment to change.
+</Tip>
+
+## Collection Pages on Your Store [#collection-preview]
+
+The Store API sends a collection to your storefront once its **Availability** date has passed, with its name, description, image and SEO fields. It can include the collection's published products: the ones you added to a manual collection, or the products of the last update for an automatic one. See the [Store API catalog guide](/3.x/store-api/catalog#collections).
+
+## Collections on Storefront
+
+Which collections your storefront shows, and where, depends on how it was built. If it runs on a Shopper starter kit, its guide lists the collection pages it offers, such as the [Livewire starter kit](/3.x/livewire-starter-kit) guide.
+
+## Use Cases
+
+<Cards>
+  <Card title="New Arrivals" icon="sparkles">
+    Create an automatic collection with a **Product created date** condition, Greater than the date your new season starts.
+  </Card>
+  <Card title="Sale Items" icon="tag">
+    Create an automatic collection with a **Compare at price** condition, Greater than 0, to group the products shown with a former price.
+  </Card>
+  <Card title="Gift Guides" icon="gift">
+    Manually curate products perfect for gifting occasions.
+  </Card>
+  <Card title="Trending" icon="fire">
+    Create an automatic collection with a **Product sales count** condition to highlight your most popular products.
+  </Card>
+</Cards>
+
+## Best Practices
+
+- Update seasonal collections regularly to keep them fresh and relevant.
+- Use eye-catching collection images.
+- Write descriptions that help customers understand what makes the collection special.
+- Feature collections on your homepage to drive traffic to key products.
+
+For developer details, see the [Collections documentation](/3.x/collections).

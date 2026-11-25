@@ -1,0 +1,128 @@
+---
+title: Virtual Product
+description: Digital products that don't require shipping, including downloads, subscriptions, and online services.
+---
+
+A virtual product is a **digital or intangible item** that doesn't require physical shipping. Customers receive their purchase through a download link, an access code, or an online account. There's no need for inventory tracking, shipping calculations, or package dimensions.
+
+## When to Use Virtual Products
+
+Use the Virtual product type when you sell:
+
+- **Digital downloads**. Ebooks, music, software, templates, presets
+- **Online courses**. Video courses, tutorials, educational content
+- **Software licenses**. Activation keys, subscription codes
+- **Memberships**. Access to premium content or services
+- **Digital art**. Photos, illustrations, design assets
+- **Documents**. Reports, guides, legal templates
+
+## What Makes Virtual Products Unique
+
+Virtual products have a simplified configuration compared to physical products:
+
+| Feature | Available | Notes |
+|---------|-----------|-------|
+| **Shipping** | No | No physical delivery needed |
+| **Inventory tracking** | No | The **Stock & Inventory** section still shows, but the cart and the checkout do not check the stock of a virtual product |
+| **Attributes** | Yes | Add characteristics such as the format or the language |
+| **Variants** | No | Use separate products for different tiers |
+| **Digital files** | Yes | Upload downloadable files for customers |
+| **Pricing** | Yes | Full pricing support including compare-at prices |
+| **SEO** | Yes | Optimize for search visibility |
+| **Categories & collections** | Yes | Organize alongside physical products |
+
+## Managing Digital Files
+
+The key feature of virtual products is the ability to attach downloadable files that customers receive after purchase.
+
+### Uploading Files
+
+The **Files** section holds the files a customer downloads after buying the product. After creating your virtual product, open its **Files** section:
+
+1. Drag and drop your files on the **Files** field, or click it to browse. You can add several files
+2. Click **Save**. Shopper confirms with "Product files updated!"
+
+<Screenshot src="/images/v3/product-files.png" alt="The Files section of a virtual product with two PDF files uploaded." />
+
+Files are stored privately, with no public address. Only customers who paid for the product can download them, as described in [Customer Downloads](#customer-downloads).
+
+### File Types
+
+The **Files** field accepts these formats only:
+
+| Category | Formats |
+|----------|---------|
+| Documents | PDF, DOC, DOCX, TXT |
+| Spreadsheets | XLS, XLSX, CSV |
+| Archives | ZIP, RAR, 7Z |
+
+Other formats, such as audio, video, images or installers, are refused. Put them in a ZIP archive, or ask your developer to add their types to the list (see [Downloadable Files](/3.x/products#downloadable-files)).
+
+<Tip>
+  For large files, consider compressing them into a ZIP archive before uploading. This reduces upload time and provides a single download for customers.
+</Tip>
+
+### Customer Downloads
+
+A customer downloads the files from the order in their customer account, once the order's payment status is paid or partially refunded. Each click asks for a new download link, which works for five minutes. An order placed without a customer account gives no access to the files. The [Store API](/3.x/store-api/orders#downloading-purchased-files) page describes the endpoints a storefront calls.
+
+## Pricing Virtual Products
+
+Virtual products support the same pricing options as physical products:
+
+| Field | Description |
+|-------|-------------|
+| **Price amount** | The regular selling price |
+| **Compare at price** | Show a crossed-out original price (useful for promotions) |
+| **Cost per item** | Your cost for profit margin calculations |
+
+You can set prices in multiple currencies if your store supports it. The [Pricing](/3.x/user-guide/marketing/pricing) page covers these fields.
+
+<Note>
+  Virtual products often use the compare-at price for limited-time offers or launch promotions. For example, an online course priced at $49 with a compare-at price of $99 shows customers they're getting a deal.
+</Note>
+
+## Example: Creating a Virtual Product
+
+Let's create a "Photography Masterclass" online course:
+
+1. **Type**: Select "Virtual Product"
+2. **General info**: Name it "Photography Masterclass: From Beginner to Pro", add a description covering what students will learn, the curriculum outline, and what's included
+3. **Associations**: Category "Courses > Photography", collection "Best Sellers"
+4. **Media**: Upload a course cover image and preview screenshots of the video content
+5. **Stock**: Skip, no physical inventory needed
+
+After creation:
+- **Files**: In the **Files** section, upload the course ZIP file containing video lessons, PDF workbook, and preset pack
+- **Pricing**: $79.00, compare at $149.00
+- **SEO**: Title "Photography Masterclass Online Course", optimize description with keywords like "learn photography", "photo editing course"
+
+## Best Practices
+
+<Cards>
+  <Card title="Clear Deliverables" icon="file-lines">
+    Clearly describe what files or access customers will receive after purchase.
+  </Card>
+  <Card title="Preview Content" icon="eye">
+    Use images and descriptions to give customers a preview of what they're buying.
+  </Card>
+  <Card title="File Organization" icon="folder-open">
+    Bundle multiple files into a well-organized ZIP with a README or guide.
+  </Card>
+  <Card title="Pricing Strategy" icon="money-bill">
+    Use compare-at pricing for launches and time-limited promotions.
+  </Card>
+</Cards>
+
+## Differences from Standard Products
+
+| Aspect | Standard Product | Virtual Product |
+|--------|-----------------|-----------------|
+| Delivery | Physical shipping | Download from the customer account, once the order is paid |
+| Inventory | Tracked with stock levels | Stock not checked at checkout |
+| Shipping config | Weight, dimensions required | Not applicable |
+| Attributes | Material, size, etc. | Format, language, etc. |
+| Files | Not applicable | Downloadable files attached |
+| Returns | Physical return process | Refund-based (no return), from the order page (see [Refunds](/3.x/user-guide/sales/refunds)) |
+
+For developer details, see the [Products documentation](/3.x/products#downloadable-files).

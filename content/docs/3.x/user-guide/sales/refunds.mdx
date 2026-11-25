@@ -1,0 +1,97 @@
+---
+title: Refunds
+description: "Give money back to a customer from the order page, in full or in part, and follow each refund in the order summary."
+---
+
+When a customer returns a product, cancels after paying, or was charged twice, you give the money back from the order page. Shopper sends the refund through the order's payment method, changes the payment status and lists the refund in the order summary.
+
+## When You Can Refund
+
+The **Refund** button appears in the header of the order page, before the other actions, when:
+
+- the payment status is **Paid** or **Partially refunded**
+- the order's payment method can refund. Methods on the **Manual** driver and on the **Stripe** driver can
+- part of the money collected has not been refunded yet
+
+The button does not depend on the order status. It is the only button of a **Completed** order, it stays on an order you cancelled after the payment was collected, and it shows on phone-sized screens too. Once everything collected is refunded, it disappears.
+
+<Screenshot src="/images/v3/order-refund-button.png" alt="The header of a completed, paid and delivered order with the Refund button next to the previous and next arrows." />
+
+An order whose payment is **Payment pending**, **Authorized** or **Voided** has no **Refund** button: no money was collected.
+
+## Refunding an Order
+
+<Steps>
+  <Step title="Open the order">
+    Open **Sales > Orders**, click the eye icon of the order, then click **Refund** in its header.
+  </Step>
+  <Step title="Set the amount">
+    The **Amount** field starts with everything that can still be refunded, for a full refund. Lower it to refund part of the order. The line below the field shows what is refundable out of what was collected.
+  </Step>
+  <Step title="Choose a reason">
+    Pick the **Reason**: **Requested by customer** (selected by default), **Duplicate** or **Fraudulent**.
+  </Step>
+  <Step title="Confirm">
+    Click **Refund**. The message **The refund has been issued!** confirms it. To leave without refunding, click **Cancel**, the close button, or press Escape.
+  </Step>
+</Steps>
+
+<Screenshot src="/images/v3/order-refund-form.png" alt="The Refund order dialog with its notice, an amount of 32.00 EUR, the line Refundable: 118.50 euros of 118.50 euros collected, and the reason Requested by customer." />
+
+<Warning>
+A refund cannot be undone. Check the amount before you click **Refund**.
+</Warning>
+
+### Amount Limits
+
+The amount must be at least 0.01 (1 in a currency without cents, such as the Japanese yen), and at most the refundable amount: the money collected, minus the refunds already made, minus the refunds the payment provider has not settled yet. For an order you marked as paid with **Mark as paid**, the order total counts as collected.
+
+You can refund an order in several parts, until the whole amount collected is refunded. Clicking **Refund** twice in the dialog sends one refund.
+
+### Refund Reasons
+
+The reason tells why the money goes back. It is shown next to the refund in the order summary, and sent with the refund to the payment provider, such as Stripe.
+
+| Reason | Use it when |
+|--------|-------------|
+| **Requested by customer** | The customer asked for the refund: a return, a cancellation, a late delivery |
+| **Duplicate** | The customer paid twice for the same order |
+| **Fraudulent** | The payment was made without the cardholder's consent |
+
+## After the Refund
+
+The payment status changes to **Partially refunded** while part of the money collected remains, and to **Refunded** once everything is refunded.
+
+The order summary lists each refund under the **Total**: a **Refunded** line with its date, its reason and the amount refunded. **Net collected** below them shows what you keep: the money collected minus the refunds that went through.
+
+<Screenshot src="/images/v3/order-partially-refunded.png" alt="An order page with the payment status Partially refunded, and an order summary showing a total of 171.50 euros, a refund of 45.00 euros requested by customer, and 126.50 euros net collected." />
+
+A refund changes nothing else on the order:
+
+- the order status and the shipping status stay as they are. A **Completed** order stays completed
+- no product goes back into stock. To refund an order you will not ship, cancel it first with **Cancel Order** (see [More Actions](/3.x/user-guide/sales/orders#more-actions)), which returns its items to stock, then refund it. For products that came back after delivery, add the stock yourself (see [Adding Inventory](/3.x/user-guide/catalog/products/standard-product#adding-inventory))
+- Shopper does not email the customer about the refund
+
+When an order used a discount of a [campaign](/3.x/user-guide/marketing/campaigns#how-the-budget-is-used), a full refund gives the discount amount back to the campaign budget. A partial refund keeps it.
+
+## How Each Payment Method Refunds
+
+What happens to the money depends on the driver of the order's payment method (see [Payment Methods](/3.x/user-guide/store-setup/payment-methods)).
+
+**Manual** (cash on delivery, bank transfer, mobile money). No money moves through Shopper. The refund is recorded at once and the payment status changes, but you pay the customer back yourself, in cash or by transfer. The dialog reminds you of it.
+
+**Stripe**, or another payment provider. Shopper sends the refund to the provider, which returns the money to the customer's card or account. Most refunds go through at once. When the provider takes time to settle one, the message **The refund is pending with the payment provider.** appears, the refund line shows a **Pending** badge, and the payment status changes once the provider confirms. A pending amount cannot be refunded a second time while it waits, and it is not subtracted from **Net collected** until it goes through.
+
+A refund you make in the provider's own dashboard also reaches the order when the provider reports refunds to your store, as the Stripe integration does: Shopper adds the refund line and changes the payment status.
+
+## When a Refund Fails
+
+If Shopper cannot send the refund, the message **Failed to refund the payment.** appears with the reason, and the dialog stays open: correct the amount or try again later. If the order has no payment reference from its provider, the message **No payment reference found for this order.** appears and nothing is refunded.
+
+If the provider declines the refund, the same message appears, the payment status does not change and the summary shows no refund line. A refund the provider declines later, after it showed as pending or as refunded, disappears from the summary, its amount becomes refundable again, and the payment status returns to what the remaining refunds give. In both cases, Shopper sends a **Refund failed** notification to your administrators and managers (see [Notifications](/3.x/user-guide/getting-started/notifications)).
+
+## Permissions
+
+Refunding needs the permission to edit orders, like the other actions of the order page. There is no separate permission for refunds. See [Roles & Permissions](/3.x/user-guide/administration/roles).
+
+For developer details, see [Refunding a Payment](/3.x/payments#refunding-a-payment) and [Orders](/3.x/orders).

@@ -1,0 +1,292 @@
+---
+title: Variant Product
+description: Products with multiple options like size, color, or material, where each combination becomes a unique variant.
+---
+
+A variant product is a **physical item that comes in multiple options**. Instead of creating separate products for each size or color, you create one parent product and generate variants for every combination. Each variant has its own SKU, price, stock level, and image.
+
+## When to Use Variant Products
+
+Use the Variant product type when:
+
+- A product comes in **multiple sizes** (S, M, L, XL, XXL)
+- A product is available in **different colors** (Red, Blue, Black)
+- A product has **different materials** (Cotton, Polyester, Silk)
+- A product has **capacity options** (64GB, 128GB, 256GB)
+- Any combination of the above (Size + Color, Color + Material, etc.)
+
+**Do NOT use variants when:**
+
+| Scenario | Better approach |
+|----------|----------------|
+| Completely different products | Create separate Standard products |
+| Products with only price differences | Use separate Standard products with different names |
+| Digital products with tiers | Create separate Virtual products |
+| Bundles or kits | Use related products |
+
+## How Variants Work
+
+Variants are built from **attributes**, structured properties you define for your products. Here's the flow:
+
+1. Create a **Variant** product
+2. Attach **attributes** to the product (e.g., Size, Color)
+3. Each attribute has **values** (Size: S, M, L / Color: Red, Blue)
+4. **Generate variants** from all combinations
+5. Configure each variant (price, stock, image)
+
+### Example: T-Shirt with Size and Color
+
+**Attributes:**
+- Size: S, M, L, XL
+- Color: Red, Blue, Black
+
+**Generated variants (12 total):**
+
+| Variant | SKU | Price | Stock |
+|---------|-----|-------|-------|
+| S / Red | TSH-S-RED | $29.99 | 25 |
+| S / Blue | TSH-S-BLU | $29.99 | 30 |
+| S / Black | TSH-S-BLK | $29.99 | 20 |
+| M / Red | TSH-M-RED | $29.99 | 40 |
+| M / Blue | TSH-M-BLU | $29.99 | 35 |
+| M / Black | TSH-M-BLK | $29.99 | 45 |
+| L / Red | TSH-L-RED | $32.99 | 20 |
+| L / Blue | TSH-L-BLU | $32.99 | 25 |
+| L / Black | TSH-L-BLK | $32.99 | 30 |
+| XL / Red | TSH-XL-RED | $34.99 | 15 |
+| XL / Blue | TSH-XL-BLU | $34.99 | 20 |
+| XL / Black | TSH-XL-BLK | $34.99 | 10 |
+
+## Setting Up Variant Attributes
+
+Before generating variants, you need to attach attributes to your product.
+
+### Prerequisites
+
+Make sure you have created the necessary attributes in **Catalog > Products > Attributes** (see [Attributes](/3.x/user-guide/catalog/attributes)). Variant-compatible attributes use these field types:
+
+- **Select**. A dropdown list of values. You add one value to the product at a time
+- **Color picker**. Visual color selection. You can add several values at once
+- **Checkbox**. Multiple selectable values. You can add several values at once
+
+Attributes of type text, number, rich text or date are not used to generate variants.
+
+### Adding Attributes to Your Product
+
+1. Open your variant product's **Attributes** section
+2. Click **Choose attributes**
+3. In the **Attributes** step of the panel, select the attributes you want to use for variants (e.g., Size, Color), then go to the next step
+4. In the **Values** step, pick the values this product comes in (e.g., S, M, L). A **Select** attribute takes one value at a time: click **Choose attributes** again to add the next one. Values the product already has are greyed out
+5. Click **Save**. The values you picked become the options for variant generation
+
+<Screenshot src="/images/v3/product-attributes.png" alt="The Attributes section of a product listing its Size, Color and Material values." />
+
+The [Attributes](/3.x/user-guide/catalog/products/standard-product#attributes) section of the Standard Product page describes this panel in full, including swatch images.
+
+## Generating Variants
+
+Once attributes are attached, you can generate all variant combinations automatically.
+
+### Automatic Generation
+
+1. Go to the **Variants** section of your product
+2. Click **Generate variants**. The button only shows once the product has attribute values
+3. Shopper calculates all possible combinations from your attribute values
+4. Review the list in the **Generate variants** panel. Each combination is a row with a **Name** (required, filled in from the values), a **SKU (Stock Keeping Unit)** made from the product SKU and the values, a **Price** and a **Stock number value**. Rows marked **New** are variants that do not exist yet
+5. Edit the name, SKU, price and stock as needed. To leave out a combination you do not sell, click the delete icon on its row. If that combination is an existing variant, the variant is deleted when you save
+6. Click **Save** to create all variants at once
+
+<Screenshot src="/images/v3/product-variants-generate.png" alt="The Generate variants panel scrolled to its last size, color and material combinations, with 44 / Denim / Leather marked New." />
+
+<Warning>
+  The **Price** field in this panel does not convert decimals: type the amount in cents, for example 15000 for 150.00. It sets the price in your default currency only. To enter prices with decimals or in other currencies, leave it at 0 and use the **Product pricing** section on each variant's page.
+</Warning>
+
+<Warning>
+  Saving the panel again with a **Stock number value** above 0 on an existing variant replaces that variant's stock: Shopper clears its stock history and puts the whole quantity in your default inventory location. To change the stock of existing variants, set their **Stock number value** to 0 here and update the stock on each variant's page.
+</Warning>
+
+<Note>
+  The number of variants equals the product of all attribute value counts. For example: 4 sizes x 3 colors = 12 variants. Keep this manageable, too many combinations can be hard to maintain.
+</Note>
+
+### Adding Individual Variants
+
+You can also add variants one at a time:
+
+1. Go to the **Variants** section
+2. Click **Add variant**
+3. Fill in the variant details step by step, then click **Save**. The new variant's page opens
+
+The individual variant creation wizard has 4 steps:
+
+**Step 1: General**
+- **Name** of the variant (required)
+- **SKU** (must be unique within the product)
+- One value for each of the product's attributes, under **Variant attributes**. If another variant already uses the same values, the panel shows "This variant already exists!" and you cannot save
+
+**Step 2: Media**
+- **Thumbnail** for this variant, up to 1 MB
+- Additional **Images** for this variant, up to 2 MB each
+
+**Step 3: Pricing**
+- **Price amount** per currency
+- **Compare at price**
+- **Cost per item**
+
+**Step 4: Inventories**
+- **Barcode**
+- **Quantity**, added to your default inventory location
+
+## Managing Variants
+
+After generation, you can manage each variant individually. The **Products variations** list in the **Variants** section shows each variant's thumbnail, name, SKU, position and current stock.
+
+<Screenshot src="/images/v3/product-variants-list.png" alt="The Products variations table listing six variants with their SKU, position and stock." />
+
+### Variant Properties
+
+Each variant can have its own:
+
+| Property | Description |
+|----------|-------------|
+| **Name** | Descriptive name (filled in from the attribute values when you generate variants) |
+| **SKU** | Stock keeping unit for this specific variant, unique within the product |
+| **Barcode** | Unique barcode (ISBN, UPC, GTIN) for this variant |
+| **EAN** and **UPC** | Shown on the variant page, without an edit field. A [product import](/3.x/user-guide/catalog/products/import) fills them |
+| **Price amount** | Different pricing per variant and per currency |
+| **Compare at price** | Show original price for discounted variants |
+| **Cost per item** | Your cost for this variant (for margin calculations) |
+| **Quantity** | Stock level for this specific combination, per inventory location |
+| **Thumbnail** and **Images** | Images showing this color or option |
+| **Package dimension** | Width, height, weight, volume and depth, if they vary by size |
+| **Allow backorder** | Whether to accept orders when out of stock. A product import sets it from the `allow_backorder` column when the file has one, and leaves it as it is otherwise |
+| **Position** | The variant's place in the variant list. Use the reorder button above the list and drag the variants into order |
+
+### Editing a Variant
+
+Click the **Edit** icon on a variant's row to open the variant's own page, titled with its name. From there you can update:
+
+<Screenshot src="/images/v3/product-variant-edit.png" alt="The page of a variant with its Variant information, Media, Package dimension and Product pricing cards." />
+
+- The name, **Allow backorder**, the attribute values and the **Package dimension**: click **Edit** in the **Variant information** section. The **Package dimension** card on the page only displays the values
+- All pricing fields, per currency, in the **Product pricing** section, the same way as for a product (see [Pricing](/3.x/user-guide/marketing/pricing))
+- The SKU and barcode: click **Edit** in the **Inventories** section
+- Stock levels: in the **Quantity Inventory** list, click **Update**, select the **Inventory name** and enter the **Quantity** to add (50) or remove (-5)
+- Variant-specific images: click **Edit** in the **Media** section to change the **Thumbnail** (up to 1 MB) and **Images** (up to 2 MB each)
+- The thumbnail from the variant's images: click **Choose from images** in the **Media** section, pick an image, then click **Use as thumbnail**. The button shows once the variant has images
+
+### Deleting Variants
+
+If you discontinue a specific option (e.g., removing the "XS" size):
+
+1. Find the variant in the list of the **Variants** section
+2. Click the delete icon on its row. To delete several variants, select them and choose **Delete** from the bulk actions
+3. Confirm the deletion
+
+<Warning>
+  Deleting a variant is permanent and removes its images, prices and stock history. If a variant is temporarily unavailable, set its stock to 0 instead.
+</Warning>
+
+## Variant Pricing Strategies
+
+A variant product has no **Pricing** section of its own: every price lives on a variant. Set a price on each variant, in each currency you sell in. The [Pricing](/3.x/user-guide/marketing/pricing) page covers the price fields.
+
+### Same Price for All
+
+All variants at the same price point, entered on each variant:
+- Basic t-shirt: All sizes and colors at $29.99
+
+### Price by Size
+
+Larger sizes cost more due to material usage:
+- S/M: $29.99
+- L/XL: $34.99
+- XXL: $39.99
+
+### Price by Option
+
+Premium options at a higher price:
+- Standard colors (Black, White, Gray): $49.99
+- Limited edition colors (Gold, Rose): $59.99
+
+### Per-Variant Pricing
+
+Each combination has its own price:
+- Useful for products where cost varies significantly by option
+
+## Shipping for Variant Products
+
+Variant products have package dimensions at both levels:
+
+- **Parent product**: the **Package dimension** card of the **Shipping** section
+- **Individual variants**: the **Package dimension** fields behind **Edit** in the **Variant information** section of each variant's page
+
+When the Store API asks for shipping rates, it builds the package from the cart: a variant in the cart counts with its own weight and dimensions. The parent product's dimensions are not copied to its variants, so fill them in on each variant (e.g., XL is heavier).
+
+<Screenshot src="/images/v3/product-shipping.png" alt="The Package dimension card of the Shipping section with width, height, weight, volume and depth filled in." />
+
+## Inventory Per Variant
+
+Stock is tracked individually for each variant:
+
+- Each variant has its own quantity per inventory location
+- The products list shows the total stock across all variants, for example "in stock for 12 variant(s)", where 12 is the number of variants
+- Safety stock is set on the parent product only. Variants have no safety stock level, and Shopper sends no alert when a variant runs low
+- The Store API cart refuses a quantity that a variant's stock cannot cover, unless the variant allows backorders
+
+## Storefront Display
+
+Your storefront reads the variants from the Store API, inside their product. For each variant, it sends:
+
+- The name, SKU, barcode, EAN, UPC and position
+- The **prices** in every currency, and the price to charge in the customer's currency. A variant without a price in that currency has none, since a variant product has no product price to fall back on
+- The attribute **values** of the variant, so the storefront can match the options a customer picks to a variant
+- The variant's **images** and **thumbnail**. Without a thumbnail, the first image is used
+- **Availability**: `in_stock` is true when the variant has stock or allows backorders. The product counts as in stock when at least one variant is
+
+A product with variants is sold through them: the storefront adds the chosen variant to the cart, never the parent product. The [Catalog](/3.x/store-api/catalog#showing-a-product) guide describes what the Store API sends.
+
+## Example: Creating a Variant Product
+
+Let's create a "Classic Cotton Hoodie" with Size and Color options:
+
+1. **Type**: Select "Variant"
+2. **General info**: Name "Classic Cotton Hoodie", describe the material and fit
+3. **Associations**: Brand "UrbanWear", categories "Clothing > Hoodies", collection "Fall Collection"
+4. **Media**: Upload lifestyle photos showing different colors
+5. **Stock & Inventory**: SKU for parent product `HOOD-CLASSIC` (variants will have their own SKUs)
+
+After creation:
+1. **Attributes**: Attach "Size" (S, M, L, XL) and "Color" (Navy, Gray, Black)
+2. **Generate variants**: Creates 12 combinations automatically
+3. **Pricing**: S/M at $59.99, L/XL at $64.99, on each variant's page
+4. **Stock**: Set quantities per variant based on your inventory
+5. **Images**: Upload color-specific photos for each color variant
+6. **Shipping**: Weight 0.5 kg for S/M, 0.6 kg for L/XL
+
+## Best Practices
+
+<Cards>
+  <Card title="Limit Combinations" icon="calculator">
+    Keep variant count manageable. 3 sizes x 3 colors (9 variants) is easier to manage than 6 sizes x 8 colors (48 variants).
+  </Card>
+  <Card title="Unique SKUs" icon="barcode">
+    Use a consistent SKU pattern: PRODUCT-SIZE-COLOR (e.g., HOOD-M-NAV).
+  </Card>
+  <Card title="Color-Specific Images" icon="palette">
+    Upload variant-specific images for color options. The Store API sends them with each variant, so your storefront can show the images of the selected color.
+  </Card>
+  <Card title="Watch Best Sellers" icon="bell">
+    Check the stock of your popular variants often: Shopper sends no alert when a variant runs low.
+  </Card>
+</Cards>
+
+## Limitations
+
+- There is no fixed limit on variant attributes (e.g., Size + Color + Material), but each one multiplies the number of variants
+- The total number of variants is the product of all attribute values
+- Consider splitting into separate products if you exceed 50+ variants
+- Product type cannot be changed after creation, so plan ahead
+
+For developer details, see the [Product Variants documentation](/3.x/product-variants).

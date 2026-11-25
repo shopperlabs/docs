@@ -1,0 +1,97 @@
+---
+title: Managing Tags
+description: "Organize products with simple labels for filtering and marketing campaigns."
+---
+
+Tags are flat, flexible labels you attach to products for cross-cutting organization. Unlike [categories](/3.x/user-guide/catalog/categories) (which are hierarchical) or [collections](/3.x/user-guide/catalog/collections) (which can be rule-based), tags are simple keywords that help you group products across your catalog.
+
+Common uses for tags include seasonal labels ("Summer 2026"), marketing campaigns ("Flash Sale"), product attributes ("Eco-Friendly"), or storefront filters ("New Arrival", "Best Seller").
+
+## Accessing Tags
+
+Open **Catalog > Products > Tags** in the sidebar.
+
+<Screenshot src="/images/v3/tags-list.png" alt="The Tags page listing tags with their name, slug and creation date." />
+
+The tags list shows all your tags with their name, slug, and creation date. You can search tags by name or slug, and edit and delete them from this page.
+
+## Creating a Tag
+
+To create a new tag:
+
+1. Click the **Create** button
+2. In the **Create tag** window, enter the tag name
+3. Click **Submit**
+
+<Screenshot src="/images/v3/tags-create.png" alt="The Create tag window with the name and slug filled in." />
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Name** | Yes | The tag label (e.g., "Summer 2026", "New Arrival") |
+| **Slug** | No | Used in URLs on your storefront. It fills in from the name as you type, and you can edit it. The **Generate** button (two circular arrows) rebuilds it from the name. |
+
+Each slug must be unique: if another tag already uses the same slug, the form shows an error and the tag is not created. Change the name or the slug.
+
+## Editing a Tag
+
+To update an existing tag:
+
+1. Click the **Edit** icon next to the tag
+2. Modify the name
+3. Click **Update**
+
+Renaming a tag keeps its existing slug, so its storefront URLs do not change. To make the slug follow the new name, click **Generate** before you click **Update**.
+
+<Screenshot src="/images/v3/tags-edit.png" alt="The edit window of a tag with its Update button." />
+
+## Deleting Tags
+
+To remove a tag:
+
+1. Click the **Delete** icon next to the tag
+2. Confirm the deletion
+
+You can also select multiple tags and use the bulk delete action to remove several at once.
+
+<Warning>
+Deleting a tag removes it from all products that use it. The products themselves are not affected.
+</Warning>
+
+## Assigning Tags to Products
+
+Tags are assigned to products from the product edit page, not from the tags page. When editing a product:
+
+1. Go to the product's edit page
+2. In the **Overview** section, find the **Tags** field under **Associations**
+3. Select existing tags, or click the **+** button next to the field to create a new one
+4. Click **Update**
+
+<Screenshot src="/images/v3/tags-product.png" alt="The Tags field in the Associations part of a product's Overview section." />
+
+<Tip>
+You can create new tags directly from the product edit page without going to the Tags page. Click the **+** button next to the **Tags** field, enter the name in the **Create tag** window, then click **Create**. The new tag is selected in the field: click **Update** to save the product.
+</Tip>
+
+## Tags vs Categories vs Collections
+
+| Feature | Tags | Categories | Collections |
+|---------|------|-----------|-------------|
+| **Structure** | Flat labels | Hierarchical tree | Flat groups |
+| **Assignment** | Manual per product | Manual per product | Manual or automatic (rule-based) |
+| **Best for** | Cross-cutting labels, campaigns | Product taxonomy, navigation | Marketing groups, curated lists |
+| **Example** | "Eco-Friendly", "Flash Sale" | Electronics > Computers > Laptops | "Summer Essentials", "Best Sellers" |
+
+## Common Tag Strategies
+
+| Strategy | Tags | Use Case |
+|----------|------|----------|
+| Seasonal | "Spring 2026", "Summer 2026" | Rotate seasonal products on your storefront |
+| Marketing | "Flash Sale", "Clearance" | Highlight promotional products |
+| Product traits | "Organic", "Handmade", "Vegan" | Help customers filter by values |
+| Internal | "Restock Soon", "Photo Needed" | Track products in the admin |
+
+<Note>
+Tags are visible on your storefront if your developer builds filtering based on them. The Store API lists every tag by name to any visitor, including tags you only use internally, so never put information you want to keep private in a tag name. See the [Store API catalog guide](/3.x/store-api/catalog#tags).
+</Note>
+
+For developer details on tags, see the [Product Tags documentation](/3.x/product-tags).

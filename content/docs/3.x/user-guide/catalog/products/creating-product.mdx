@@ -1,0 +1,140 @@
+---
+title: Creating a Product
+description: Step-by-step guide to creating a product using the creation wizard.
+---
+
+Creating a product in Shopper is done through a guided wizard that walks you through each step. The process is the same for all product types, with some steps adapting based on the type you choose.
+
+## Starting the Wizard
+
+In the sidebar, click **Catalog > Products**, then click the **New product** button to open the product creation wizard. It opens as a slide-over, which you close with its close button or Escape.
+
+## Step 1: Choose the Product Type
+
+The first step asks you to select the type of product you want to create. Each type is presented as a card with an icon and a description to help you make the right choice.
+
+<Screenshot src="/images/v3/product-add-step-type.png" alt="The Type step of the product wizard with the four product type cards." />
+
+The available types are:
+
+- **Standard**. Physical products that require shipping
+- **Virtual**. Digital products (downloads, subscriptions, courses)
+- **External**. Dropshipping products fulfilled by a third party
+- **Variant**. Products with multiple options (size, color, material)
+
+<Tip>
+  If your store only sells one type of product, select it and turn on **Set as default product type** below the cards. The type is saved for the next products you create, and the wizard then opens directly on the **General** step. You can still go back to this step to pick another type or turn the toggle off. The toggle stays disabled until you pick a type, and changing it requires access to the store settings.
+</Tip>
+
+Select your product type and click **Next** to continue.
+
+## Step 2: General Information
+
+This step, named **General** in the wizard, collects the core information about your product.
+
+<Screenshot src="/images/v3/product-add-step-info.png" alt="The General step of the product wizard with the name and slug filled in." />
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Name** | Yes | The product name displayed to customers, up to 255 characters. |
+| **Slug** | No | The URL-friendly name of the product. It fills in from the name as you type, and you can edit it. Left empty, it is built from the name when you save. Two products cannot share the same slug. |
+| **Summary** | No | A short description shown in product listings and cards. |
+| **Description** | No | The full product description with rich formatting (bold, lists, links, etc.). |
+| **Visible** | No | On by default. Turn it off to hide the product from all sales channels. Useful to prepare products before launching. |
+| **Availability** | Yes | The date and time when the product becomes available. It defaults to now and cannot be earlier than one hour ago. Pick a future date to schedule the publication. |
+
+<Note>
+  The **Name** field fills in the slug (e.g., "Blue Running Shoes" becomes `blue-running-shoes`) until you type in the **Slug** field yourself. After creation, the slug stays the same when you rename the product, unless you edit it or click **Generate** next to it in the **Overview** section.
+</Note>
+
+## Step 3: Associations
+
+Link your product to the organizational structures of your store. This step only appears when your store uses brands, categories or collections.
+
+<Screenshot src="/images/v3/product-add-step-relations.png" alt="The Associations step of the product wizard with a brand, categories and a sales channel selected." />
+
+| Field | Description |
+|-------|-------------|
+| **Brand** | Associate the product with a brand. Only enabled brands are listed. Hidden if your store does not use brands. |
+| **Categories** | Assign one or more categories from the category tree. You can select a parent category or any of its subcategories. Only enabled categories are listed. Hidden if your store does not use categories. |
+| **Sales channels** | Choose which sales channels this product appears on (e.g., web store, mobile app, POS). Only enabled channels are listed, and your [default channel](/3.x/user-guide/store-setup/channels#the-default-channel) is selected for you. |
+| **Collections** | Add the product to one or more collections. Hidden if your store does not use collections. |
+
+The wizard has no tags field: add tags after creation, in the **Associations** card of the **Overview** section.
+
+<Tip>
+  You can always update associations after creation. If you haven't set up categories or brands yet, you can skip this step and come back later.
+</Tip>
+
+## Step 4: Media
+
+Upload images to showcase your product. Shopper accepts JPEG, PNG, WebP and AVIF images.
+
+<Screenshot src="/images/v3/product-add-step-4.png" alt="The Media step of the product wizard with a thumbnail and gallery images uploaded." />
+
+| Element | Description |
+|---------|-------------|
+| **Thumbnail** | The main image shown in product listings, search results, and cards. Upload one image, up to 1 MB. |
+| **Images** | Additional images shown on the product detail page. Upload multiple images for different angles or details, up to 2 MB each. |
+
+**Image best practices:**
+- Use high-resolution images (minimum 800x800px recommended)
+- Keep a consistent aspect ratio across products
+- Show the product from multiple angles
+- Use a clean background for the thumbnail
+
+## Step 5: Stock & Inventory
+
+Set up the initial inventory information for your product.
+
+<Screenshot src="/images/v3/product-add-step-5.png" alt="The Stock & Inventory step of the product wizard with the SKU, barcode and quantity filled in." />
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **SKU** | No | Stock Keeping Unit, a unique identifier for your product in your inventory system. Two products cannot share the same SKU. |
+| **Barcode** | No | The product barcode (UPC, EAN, ISBN, etc.) for scanning and identification. Letters, numbers and hyphens only, unique per product. |
+| **Quantity** | No | The initial stock quantity available for sale. It is added to your default inventory location. |
+| **Safety Stock** | No | The minimum stock level you want to keep before reordering. Shopper saves this number with the product but does not send a notification when stock reaches it. |
+
+<Note>
+  This step also appears for **Variant** products. What you enter here applies to the parent product. Each variant (per size/color combination) gets its own SKU, barcode and stock, which you set when you create the variants after saving.
+</Note>
+
+<Note>
+  This step also appears for **Virtual** and **External** products. You can leave it empty when there's no physical stock to manage. The cart and the checkout do not check the stock of a virtual product, so a customer can order it whatever the quantity. The Store API sends an external product as always in stock, and its cart refuses external products (see [External Product](/3.x/user-guide/catalog/products/external-product)).
+</Note>
+
+## Completing the Creation
+
+After filling in all the steps, click **Save** to create your product. You'll be redirected to the product's **Overview** section. The menu on the left lists the other sections, depending on the product type:
+
+- **Media**: thumbnail and gallery images
+- **Attributes**: product attributes (Standard, Virtual & Variant products)
+- **Variants**: generate and manage variants (Variant products)
+- **Stock & Inventory**: SKU, barcode, safety stock and stock movements
+- **Pricing**: prices per currency (all types except Variant, which prices each variant)
+- **Shipping**: package dimensions (Standard & Variant products)
+- **Files**: digital files (Virtual products)
+- **SEO**: search engine title and description
+- **Related Products**: similar products
+
+## What's Next?
+
+Depending on your product type, continue with the specific guide:
+
+<Cards>
+  <Card title="Standard Product" icon="tag" href="/3.x/user-guide/catalog/products/standard-product">
+    Configure shipping, attributes, and inventory for physical goods.
+  </Card>
+  <Card title="Virtual Product" icon="monitor-waveform" href="/3.x/user-guide/catalog/products/virtual-product">
+    Upload digital files and configure access for downloadable products.
+  </Card>
+  <Card title="External Product" icon="link-simple" href="/3.x/user-guide/catalog/products/external-product">
+    Set up dropshipping product details and supplier information.
+  </Card>
+  <Card title="Variant Product" icon="swatches" href="/3.x/user-guide/catalog/products/variant-product">
+    Create variants from attribute combinations like size and color.
+  </Card>
+</Cards>
+
+For developer details, see the [Products documentation](/3.x/products#creating-products).

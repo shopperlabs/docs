@@ -1,0 +1,155 @@
+---
+title: Managing Staff Users
+description: Add and manage administrator accounts for your store.
+---
+
+Staff users are the people who help manage your store. Shopper allows you to create multiple admin accounts with different levels of access.
+
+## Overview
+
+The Staff management section allows you to:
+
+- Add new administrators
+- See every staff account with its roles and when it joined
+- Assign roles and permissions
+- Delete the accounts of people who no longer need access
+
+The section opens to administrators and to staff whose role has the **View Users** permission.
+
+## Accessing Staff Settings
+
+1. Click on **Settings > Site** in the sidebar
+2. Select **Staff & permissions** under **Team** in the settings menu
+
+You can also click your avatar at the top-right of the header, then **Manage Users**. Staff who have **View Users** without **Access Settings** have no **Settings** item in the sidebar: the account menu is their way in.
+
+The page opens with the title **Administrators & roles**. It shows your roles as cards at the top (see [Roles & Permissions](/3.x/user-guide/administration/roles)), then the **Administrators accounts** table that lists your staff:
+
+| Column | Description |
+|--------|-------------|
+| **Full Name** | The staff member's picture and name. Your own row shows a **Me** badge |
+| **Role** | The roles assigned to the staff member, one badge each |
+| **Joined** | The date the account was created |
+| **Last signed in** | The last sign-in Shopper recorded, or a dash |
+
+Click **Joined** or **Last signed in** to sort the table by that column. The actions menu at the end of each row holds **Copy user ID**, which copies the account's ID for your developer or your support requests.
+
+<Screenshot src="/images/v3/settings-staff.png" alt="The Administrators & roles page with the role cards and the Administrators accounts table." />
+
+## Adding a New Admin
+
+To add a new staff member:
+
+1. Click the **Add administrator** button
+2. Under **Login information**, enter the **Email address**. Leave **Send Invite** on to email the new administrator a link to choose their password
+3. Under **Personal Information**, enter the **First name** and **Last Name**, and optionally the **Gender** and **Phone number**
+4. Under **Role Information**, check one or more roles in **Choose a role for this admin**
+5. Click **Save**
+
+The form opens in a panel on the right. To leave without saving, click **Cancel**, the close button or press Escape.
+
+By default, the form has no password field. Shopper gives the account a random password that nobody sees, and the new administrator chooses their own password from the invitation email or from the **Forgot your password?** link of the login page. Their email address is marked as verified when you create it.
+
+<Screenshot src="/images/v3/add-admin.png" alt="The Add administrator panel with an email address, Send Invite turned on and two roles checked." />
+
+With **Send Invite** on, the new administrator receives a "Welcome to Shopper" email with a **Choose my password** button. The button opens the **Reset password** page of the admin with their email address filled in: they type their password in **New Password** and **Confirm Password**, click **Update password**, and Shopper signs them in. The link expires after 60 minutes unless your developer changed that delay; after that, they request a new one from the [forgot password page](/3.x/user-guide/getting-started/login#forgot-your-password). Without the invitation, they use that same page to choose a password the first time.
+
+If the invitation cannot be sent, the administrator is still created, and a warning reads "The team member was created, but the invitation email was not sent." with the reason below it. The new administrator can then use the forgot password page.
+
+When your developer turns password resets off, the login page has no **Forgot your password?** link and the form changes: **Send Invite** is hidden, and a **Password** field asks for the password of the new account. Type one or click **Generate** to create one, then give it to the new administrator yourself. Shopper sends no email.
+
+### Admin Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Email address** | Yes | Login email address (must not be used by another account) |
+| **Send Invite** | No | On by default. Emails the new administrator a link to choose their password. Hidden when password resets are turned off |
+| **Password** | Yes, when shown | Shown only when password resets are turned off. **Generate** fills in a random 16-character password, and the eye icon shows it |
+| **First name** | Yes | Staff member's first name |
+| **Last Name** | Yes | Staff member's last name |
+| **Gender** | No | Male or Female |
+| **Phone number** | No | Contact phone number |
+| **Choose a role for this admin** | Yes | The roles of this user, picked from a list of checkboxes. Check at least one |
+
+<Note>
+Only administrators can assign the **Administrator** role to a new team member. Other staff members only see the roles whose permissions they all hold themselves: never the Administrator role, and never a role that has no permission checked. The **Attention needed** message at the bottom of the form reminds you that the Administrator role gives the same rights and permissions as yours.
+</Note>
+
+## Staff Roles
+
+Each staff member is assigned one or more roles that determine what they can access:
+
+| Role | Typical Access |
+|------|----------------|
+| **Administrator** | Full access to all features. Installed with Shopper |
+| **Manager** | Installed with Shopper. Manages the catalog, orders, promotions, campaigns, reviews and customers, without the settings, the staff accounts or the inventory locations, and cannot anonymize customers |
+| **Editor** | A role you create for product and content management |
+| **Support** | A role you create for orders and customer management |
+
+A staff member with several roles can do everything any of their roles allows. See [Roles & Permissions](/3.x/user-guide/administration/roles) to create roles and choose their permissions.
+
+<Tip>
+Create roles that match your team structure. The principle of least privilege suggests giving users only the access they need for their job.
+</Tip>
+
+## Managing Existing Staff
+
+### Edit Staff Member
+
+The staff list has no edit action: you cannot change another person's name, email address, password or roles after the account is created. Instead:
+
+- Each staff member updates their own details and password from their profile (see [Your Profile](#your-profile) below)
+- To change what someone can do, change the permissions of their role on the [Roles & Permissions](/3.x/user-guide/administration/roles) page. The change applies to everyone with that role
+
+For developers, [Assigning Roles](/3.x/team#assigning-roles) shows how to change the roles of an existing account in code.
+
+### Disable Staff Member
+
+Shopper has no option to disable a staff account and enable it again later. To stop someone from signing in, delete their account as described below. If they come back, add them again with **Add administrator**.
+
+### Delete Staff Member
+
+Permanently remove a staff account:
+
+1. Open the actions menu at the end of the staff member's row in **Administrators accounts** and select **Delete user**. The same menu appears on the **Users** tab of each role
+2. Confirm the deletion
+
+To remove several accounts at once, check their rows, click **Delete** above the table and confirm.
+
+- Only administrators can delete staff accounts
+- You cannot delete your own account, nor the last account with the Administrator role
+- Use with caution: this cannot be undone
+
+## Your Profile
+
+Each staff member manages their own details, password and signed-in devices from **My profile**: see [Your Profile](/3.x/user-guide/getting-started/dashboard#your-profile).
+
+## Best Practices
+
+<Cards>
+  <Card title="Unique Accounts" icon="user">
+    Give each person their own account. Never share credentials.
+  </Card>
+  <Card title="Strong Passwords" icon="key">
+    Require strong passwords for all admin accounts.
+  </Card>
+  <Card title="Enable 2FA" icon="shield">
+    Encourage or require two-factor authentication, when your store turns it on.
+  </Card>
+  <Card title="Add Passkeys" icon="key-round">
+    When your store turns passkeys on, staff can sign in with Face ID, Touch ID, Windows Hello or a security key.
+  </Card>
+  <Card title="Regular Audits" icon="clipboard-check">
+    Periodically review who has access to your admin.
+  </Card>
+</Cards>
+
+## Security Recommendations
+
+1. **Remove inactive accounts**: delete the accounts of staff who leave
+2. **Use role-based access**: don't give everyone admin access
+3. **Enable two-factor**: add an extra layer of security with [Two-Factor Authentication](/3.x/user-guide/administration/two-factor)
+4. **Monitor activity**: ask staff to check the devices signed in to their account from their profile and log out the sessions they don't recognize. Shopper does not keep a history of staff actions
+5. **Regular password changes**: encourage periodic password updates
+
+For developers, see [Team](/3.x/team) and [Permissions](/3.x/acl).

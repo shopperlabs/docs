@@ -1,0 +1,89 @@
+---
+title: Logging In
+description: Learn how to access your Shopper administration panel.
+---
+
+To manage your store, you need to log in to the Shopper administration panel. This guide will walk you through the login process.
+
+## Accessing the Login Page
+
+Your Shopper administration panel is accessible at your website URL followed by `/cpanel`, for example `https://your-store.com/cpanel/login`. Opening `https://your-store.com/cpanel` also takes you to the login page.
+
+Your developer can replace `cpanel` with another word. If `/cpanel` does not open the panel, ask them for its address.
+
+<Screenshot src="/images/v3/login.png" alt="The Shopper login page with the Email address and Password fields." />
+
+## Logging In
+
+The login card reads **Sign in with email**.
+
+1. Enter your email in the **Email address** field
+2. Enter your password in the **Password** field
+3. Optionally check **Remember me** to stay signed in on this browser
+4. Click the **Login** button
+
+The form accepts five attempts per minute. After that, it shows how many seconds to wait before you try again.
+
+When your store has passkeys turned on and your browser supports them, the card also offers **Sign in with a passkey**, below **Or**. See [Passkeys](/3.x/user-guide/administration/two-factor#passkeys) to add one to your account.
+
+<Tip>
+If you've enabled two-factor authentication on your account, the same card asks for a verification code after you submit your credentials. Learn more about [Two-Factor Authentication](/3.x/user-guide/administration/two-factor).
+</Tip>
+
+## Forgot Your Password?
+
+If you've forgotten your password:
+
+1. Click the **Forgot your password?** link next to the **Password** label
+2. On the **Reset your password** page, enter your email address and click **Send password reset mail**
+3. Check your email for the **Reset Password** message and click its **Reset password** button
+4. On the **Reset password** page, enter your **Email address**, type your new password in **New Password** and **Confirm Password**, then click **Update password**
+
+The new password needs at least 8 characters, with uppercase and lowercase letters, a number and a symbol. Shopper then signs you in. If your account uses two-factor authentication, you land on the login page instead: sign in with your new password and a code.
+
+New staff members choose their first password the same way. The **Choose my password** button of their "Welcome to Shopper" email opens the **Reset password** page of step 4 with their email address filled in. Without that email, or once its link has expired, they start at step 1. See [Adding a New Admin](/3.x/user-guide/administration/users#adding-a-new-admin).
+
+The **Forgot your password?** link only appears when your developer allows password resets. The reset page sends up to three emails every five minutes. To go back without sending anything, click **Return to login page**.
+
+## After Logging In
+
+Once logged in, you'll be taken to the **Dashboard**, which provides an overview of your store's activity. From here, you can open any section of the administration panel from the sidebar on the left. The button at the left of the header collapses the sidebar and expands it again.
+
+<Screenshot src="/images/v3/dashboard.png" alt="The Shopper dashboard shown after logging in." />
+
+When your panel offers several languages (English and Français by default), the language menu in the header switches the admin to another language for your session.
+
+Shopper opens the admin to accounts with the Administrator or Manager role, or with the **Access Dashboard** permission. Any other account gets the **Access Forbidden** page after logging in: ask an administrator to give your role the **Access Dashboard** permission on the [Roles & Permissions](/3.x/user-guide/administration/roles) page.
+
+### Shop Initialization
+
+On a new store, Shopper asks for the store details before you start. As long as the store has no email address or no street address, every admin page opens the **Shop Initialization** page instead, for administrators and staff members with the **Access Settings** permission. They fill in its three steps:
+
+1. **Information**: the store name and email address, its country, the currencies you sell in and the default currency
+2. **Address**: the street address, postal code, state, city and phone number
+3. **Social Links**: links to your social media accounts
+
+Click **Save** on the last step to reach the dashboard. [Store Initialization](/3.x/user-guide/store-setup/general-settings#store-initialization) describes every field, and you can change them later in **Settings > General**.
+
+<Screenshot src="/images/v3/initialization-step-1.png" alt="The Information step of Shop Initialization with the store details fields." />
+
+Other staff members cannot fill in these details. Until the store is set up, every admin page shows them the **Access Forbidden** page with the message "This store is not set up yet. An administrator must finish its setup before you can use the dashboard." If you see it, ask an administrator to complete **Shop Initialization**, then open the admin again: the dashboard opens with the sections your role allows.
+
+<Screenshot src="/images/v3/store-not-set-up.png" alt="The Access Forbidden page telling a staff member that the store is not set up yet." />
+
+## When Your Session Expires
+
+If your session expires while the admin is open, your next action opens the **Resume your session** window instead of the login page. Enter your password and click **Sign in** to continue on the page you were using. If you were signed out completely, Shopper takes you to the login page.
+
+## Logging Out
+
+To log out of your account:
+
+1. Click your **profile picture** in the top-right corner of the header
+2. Select **Sign out** from the dropdown menu
+
+The menu shows your name and email address at the top. The same menu opens your profile (**Personal Account**) and the staff list (**Manage Users**, shown only if you can view staff accounts), and switches the admin between **Light**, **Dark** and **System** themes. The colors themselves come from the theme chosen under [Appearance](/3.x/user-guide/store-setup/appearance).
+
+<Screenshot src="/images/v3/account-dropdown.png" alt="The account menu open with Personal Account, Manage Users, Sign out and the theme buttons." />
+
+For developers, see [Configuration](/3.x/configuration#authentication).

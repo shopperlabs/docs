@@ -1,0 +1,160 @@
+---
+title: Importing Products
+description: "Create or update many products at once from a CSV file, with their variants, prices, stock and images."
+---
+
+When you add a whole collection, move from another platform or update prices across your catalog, entering products one by one takes too long. The import reads a CSV file, a spreadsheet saved as comma-separated values, and creates or updates every product it lists, with its variants, prices, stock, categories, tags and images.
+
+## Accessing the Import
+
+You start an import from the product list:
+
+1. In the sidebar, click **Catalog > Products**
+2. Click **Import**, next to **New product**
+3. In the **Import products** window, select **CSV file**
+4. Click **Next**
+
+<Screenshot src="/images/v3/products-import-source.png" alt="The Import products window over the product list, with the CSV file source selected." />
+
+The **Import** button only appears for team members whose role can create products (see [Roles & Permissions](/3.x/user-guide/administration/roles)). **CSV file** is the source Shopper ships with: if your developer adds other sources, they appear as more cards in this window.
+
+**Next** opens the **Import products from a CSV file** panel, which takes you through three steps: **Upload**, **Columns** and **Review**. Close it with its close button or Escape to leave without importing anything.
+
+## Preparing Your CSV File
+
+Shopper reads the file with the columns of its product import template. The quickest way to get them right is to start from the sample file: on the **Upload** step, click **Download a sample file**, open it in your spreadsheet application, replace the example rows with your products, and save it as CSV with commas between the values.
+
+The file has one row per variant. The first row of a product carries its details (name, description, brand, category, tags), and the rows that follow, with the same **handle**, add its other variants. A product without variants takes a single row.
+
+### Product Columns
+
+| Column | What it holds |
+|--------|---------------|
+| `handle` | The product's identifier and the end of its URL, such as `linen-wrap-dress`. Required. Rows that follow each other with the same handle make one product. Shopper turns it into lowercase words joined by hyphens, so `Linen Wrap Dress` finds the same product as `linen-wrap-dress`. A handle made only of symbols, such as `!!!`, cannot become a URL and the product fails |
+| `name` | The product name. Required on the first row of each product |
+| `description` | The product description |
+| `brand` | The brand name. Shopper creates the brand if it does not exist yet |
+| `category` | A category path, with `>` between levels, such as `Clothing > Dresses`. Missing categories are created |
+| `tags` | Tags separated by commas, such as `Linen, Spring`. Missing tags are created |
+| `published` | `TRUE` to show the product on your store, `FALSE` to hide it. `yes` and `no`, `on` and `off`, `1` and `0` work too. Left empty, a new product is shown and an existing product keeps its visibility |
+| `seo_title`, `seo_description` | The title and description shown in search engine results |
+
+### Variant Columns
+
+| Column | What it holds |
+|--------|---------------|
+| `sku`, `barcode` | The variant's SKU and barcode |
+| `ean`, `upc` | The variant's EAN and UPC codes. The import is the only way to fill them: the variant page shows them without an edit field |
+| `option1_name` to `option3_name` | Up to three option names, such as `Size` and `Color`, on the first row of the product |
+| `option1_value` to `option3_value` | The variant's value for each option, such as `M` and `Sage` |
+| `price`, `compare_at_price`, `cost_per_item` | Amounts with a dot before the decimals, no currency symbol and no thousands separator, such as `129.00`. Shopper stores them in cents, rounded to the nearest cent. In a currency without cents, such as JPY or XAF, write whole amounts like `15000`: Shopper rounds to the unit |
+| `currency` | The currency code of the prices, such as `EUR`. Leave it empty to use your store's default currency |
+| `quantity` | The stock of the variant in your [default location](/3.x/user-guide/store-setup/locations#default-inventory), as a whole number |
+| `allow_backorder` | `TRUE` to keep selling the variant when it is out of stock, `FALSE` to stop. `yes` and `no` work too, and so do the values of a Shopify or WooCommerce export: `continue`, `notify` and `deny`. An empty cell means `FALSE` |
+| `weight_value`, `weight_unit` | The weight, with `g`, `kg` or `lbs` as unit. Without a unit, Shopper uses grams. Any other unit, such as `kgs`, makes the product fail |
+
+### Image Columns
+
+| Column | What it holds |
+|--------|---------------|
+| `image_url` | The web address of a product image. Separate several addresses with `;` |
+| `image_position`, `image_alt` | The image's position in the gallery and its description for screen readers |
+| `variant_image_url` | The web address of the variant's own image |
+
+Images are downloaded after the products are saved, from the addresses in the file. They must be public addresses that Shopper can reach.
+
+A product whose rows have option values becomes a variant product, and each row becomes a variant named after its values, such as "M / Sage". A product with a single row and no option names becomes a standard product, and its row gives the product's own SKU, price and stock. Shopper adds missing option names to **Catalog > Attributes**, with their values.
+
+<Note>
+The sample file also has a `requires_shipping` column. The import does not save it: set shipping on each product page after the import.
+</Note>
+
+## Uploading the File
+
+On the **Upload** step, drop your file on the **CSV file** area or click **Browse** to pick it, then wait until the upload completes.
+
+<Screenshot src="/images/v3/products-import-upload.png" alt="The Upload step of the import panel with a CSV file uploaded and the Download a sample file link." />
+
+Click **Next** to read the file's columns. When the first row of the file is empty, or two columns have the same name, the panel stays on **Upload** and shows "The first row of the file must give each column its own name." under the file. Give each column its own name in the first row, save the file and upload it again.
+
+## Matching the Columns
+
+Your file may come from another platform, with its own column names. The **Columns** step lets you tell Shopper which column of your file holds each product field, as its help text reminds you: "Match the columns of your file with the product fields. Variants, options and images are detected automatically."
+
+<Screenshot src="/images/v3/products-import-columns.png" alt="The Columns step with its help text and each product field matched to the column of the same name in the file, Name and Handle marked as required." />
+
+Each field lists the columns of your file. When a column has the same name as a field, it is already selected. Pick a column for the other fields, or leave them on **Not mapped** to skip them. **Name** and **Handle** are required, marked with an asterisk.
+
+A field left on **Not mapped** is left out of the import, even when your file has a column of that name: your existing products keep their value for that field. To update descriptions without touching your stock, for example, set **Quantity** to **Not mapped**.
+
+The option and image columns (`option1_name` to `option3_value`, `image_url`, `image_position`, `image_alt`, `variant_image_url`) are not in this list. Your file must use these template names for them to be read.
+
+Click **Next** to see what Shopper found in the file. Shopper reads every row first, and stops at a cell its field cannot take, such as `129,00` in a price column or `oui` in the published column. The step stays open and shows the problem under that field, with the column, the product's handle and the value:
+
+<Screenshot src="/images/v3/products-import-column-error.png" alt="The Price field of the Columns step with the message: The price column of product beeswax-pillar-candle holds 24,00, which is not a valid number." />
+
+Fix that cell in your file, then click **Back**, replace the file on the **Upload** step and click **Next** again. Only the first wrong cell is shown, so check the rest of the column before you upload the file again.
+
+## Reviewing Before Import
+
+The **Review** step lets you check the file before anything is saved.
+
+<Screenshot src="/images/v3/products-import-review.png" alt="The Review step showing 5 products, 10 variants and 245 stock units, with a table of the products to import." />
+
+The top line counts the **Products**, **Variants** and **Stock units** the file holds. The table lists the first 50 products with their **Name**, **Brand**, the **Price** of their first variant and their number of **Variants**. The price is shown in its currency and rounded the way Shopper will store it, such as €129.00.
+
+A warning appears when some products have no name: they will be skipped. Another warning counts the products priced in a currency your store does not accept: they will be skipped too, and their price shows as a dash. Enable that currency in [Currencies](/3.x/user-guide/store-setup/currencies) before you import, or fix the `currency` column of your file.
+
+If a number looks wrong, click **Back** to change the matched columns, or close the panel and fix your file. When everything looks right, click **Import products**.
+
+## After You Click Import Products
+
+Shopper confirms with the message "Import started", closes the panel and imports the products in the background, in batches of 25. You can keep working in the admin meanwhile. The product list does not refresh on its own: reload the page to see the imported products.
+
+When your store has [notifications](/3.x/user-guide/getting-started/notifications) turned on, a **Product import finished** notification tells you how many products were imported and how many failed. A product fails when:
+
+- its first row has no name
+- its handle is made only of symbols and cannot become a URL
+- its prices use a currency that is not enabled on your store (see [Currencies](/3.x/user-guide/store-setup/currencies))
+- a price, compare-at price or cost is negative
+- its weight unit is not `g`, `kg` or `lbs`
+- a SKU, barcode, EAN or UPC of its rows already belongs to another product, a deleted one included
+- it has variants, and one of its rows has no SKU and no options but gives a price, quantity or another variant detail
+
+A failed product does not stop the others. The admin does not list which products failed: your developer can read the error of each one on the import (see [Import](/3.x/import#errors)). An image that cannot be downloaded after three tries is left out, and the product is kept without it.
+
+## Updating Existing Products
+
+Importing a file again is a way to change many products at once, such as new prices for the season. Shopper finds an existing product by its handle, and a variant by its SKU, or by its name when the row has no SKU. Products and variants it does not find are created. A product you deleted comes back: the import restores it, with the prices, stock and images that the file gives it.
+
+The import changes only what your file gives. A column missing from your file, or a field left on **Not mapped**, keeps its value on every product. An empty cell clears the description, brand, SEO fields, compare-at price, cost per item, SKU, barcode, EAN and UPC, and turns **Allow backorder** off. An empty price, quantity, weight or published cell keeps the current value.
+
+When the product exists, the import also:
+
+- adds the categories and tags of the file, and keeps the ones the product already has
+- updates the price in the row's currency, and leaves the prices in other currencies as they are
+- sets the stock in your default location to the row's quantity, recorded as "Product import" in the [stock history](/3.x/user-guide/catalog/products/standard-product#stock-history), and leaves the stock in your other locations as it is
+- keeps the product's publication date
+- keeps a product with variants as it is: its variants keep their options, and rows without a SKU or options update the product's details only
+
+A product without variants becomes a variant product when its rows in the file give option names or several variants.
+
+For example, a file with the `handle`, `name`, `sku`, `price` and `currency` columns changes the prices of your products and leaves everything else as it is.
+
+<Tip>
+Before you update a large catalog, import a file with two or three products and check them in the admin. Then import the rest.
+</Tip>
+
+<Cards>
+  <Card title="Variant Products" href="/3.x/user-guide/catalog/products/variant-product">
+    How variants, options and their stock work on the product page.
+  </Card>
+  <Card title="Locations" href="/3.x/user-guide/store-setup/locations">
+    Choose the default location that receives imported stock.
+  </Card>
+  <Card title="Notifications" href="/3.x/user-guide/getting-started/notifications">
+    Follow the end of an import from the bell in the header.
+  </Card>
+</Cards>
+
+For developers, see the [Import documentation](/3.x/import).

@@ -1,0 +1,173 @@
+---
+title: Pricing
+description: Set the price, compare-at price and cost of each product and variant in every currency your store sells in.
+---
+
+Every product has a price in each currency your store sells in, with an optional compare-at price to show a sale and a cost per item to follow your margins. This page shows where you set these prices and how to use them.
+
+## Overview
+
+Pricing allows you to:
+
+- Set a price for each of your store currencies
+- Set up sale prices and compare-at prices
+- Record what each item costs you
+- Price each variant of a product separately
+
+Prices per customer group, prices by quantity, and scheduled price changes have no field in the admin. Your developer can add them with a custom price resolver (see [Resolving Prices](/3.x/pricing#resolving-prices)). To run a sale for a limited time, use a discount with a start and an end date (see [Scheduling Discounts](/3.x/user-guide/marketing/discounts#scheduling-discounts)).
+
+## Basic Price Structure
+
+Open **Catalog > Products**, click **Edit** in the action menu of a product, then open its **Pricing** section. The **Product pricing** table lists one row per currency:
+
+| Column | Description |
+|--------|-------------|
+| **Currency** | The currency of the price |
+| **Price** | The current selling price |
+| **Compare at price** | Original price, for your storefront to show as struck through |
+| **Cost per item** | Your cost, for your margin calculations. Customers never see it |
+
+<Screenshot src="/images/v3/product-pricing.png" alt="The Product pricing table of a product with prices in the two store currencies." />
+
+The currencies come from the **Store currency** section of **Settings > General** (see [General Settings](/3.x/user-guide/store-setup/general-settings#store-currency)). A product without any price shows **No product pricing added**.
+
+## Adding Prices
+
+To set the prices of a product:
+
+1. Click **Add new price** above the table. The button shows as long as one of your store currencies has no price
+2. In the **Product pricing** panel, fill in the fields of each currency you want to price:
+   - **Price amount**: the price customers pay. Required as soon as you fill in **Compare at price**
+   - **Compare at price**: the original price, higher than the price when the product is on sale (optional)
+   - **Cost per item**: what the item costs you (optional)
+3. Click **Save**
+
+Enter amounts with decimals, for example 24.99: Shopper stores them in cents. For a currency without decimals, such as XAF or JPY, enter a whole number. A currency left empty gets no price. To leave the panel without saving, click its close button, **Cancel**, or press Escape.
+
+<Screenshot src="/images/v3/product-pricing-edit.png" alt="The Product pricing panel with the price, compare-at price and cost of one currency filled in." />
+
+### Editing or Removing a Price
+
+Click the **Edit** icon on a row to change the price of that currency only, then click **Save**. The message "Your product pricing has been updated!" confirms the change. Click the **Delete** icon to remove the price of that currency, after you confirm.
+
+## Sale Pricing
+
+To put a product on sale:
+
+1. Set the **Price** to the sale price
+2. Set the **Compare at price** to the original price
+3. The Store API sends both amounts to your storefront, which can show the original price struck through (see [Prices, Currency and Stock](/3.x/store-api/catalog#prices-currency-and-stock))
+
+### Example
+
+| Field | Value | Display |
+|-------|-------|---------|
+| Price | $24.99 | Current price |
+| Compare at price | $34.99 | ~~$34.99~~ |
+
+With these prices, your storefront can show ~~$34.99~~ **$24.99**, a 29% saving.
+
+The admin does not check that the compare-at price is higher than the price: check it yourself before you save.
+
+## Cost and Profit
+
+Track your margins by entering the cost per item. Shopper does not calculate the profit or the margin for you: work them out from the price and the cost.
+
+| Field | Value |
+|-------|-------|
+| Price | $49.99 |
+| Cost | $20.00 |
+| **Profit** | $29.99 |
+| **Margin** | 60% |
+
+<Tip>
+Always enter your product costs so you can work out your margins and make informed pricing decisions. The cost stays in your admin: the Store API never sends it to your storefront.
+</Tip>
+
+## Variant Pricing
+
+A product of the **Variant** type has no **Pricing** section of its own: each variant has its own prices, so you can set different prices:
+
+| Variant | Price |
+|---------|-------|
+| Small | $29.99 |
+| Medium | $29.99 |
+| Large | $34.99 |
+| XL | $39.99 |
+
+You set the prices of a variant in two places:
+
+- The **Pricing** step of the panel that adds a variant, with the same fields per currency
+- The **Product pricing** table of the variant's page, which works like the product table above (see [Editing a Variant](/3.x/user-guide/catalog/products/variant-product#editing-a-variant))
+
+<Screenshot src="/images/v3/variant-pricing.png" alt="The Product pricing table on a variant page with a price in two currencies." />
+
+This is useful for:
+
+- Size-based pricing (larger = more expensive)
+- Premium option pricing
+- Material-based pricing
+
+## Pricing Strategies
+
+<Cards>
+  <Card title="Competitive Pricing" icon="scale-balanced">
+    Price products similar to competitors.
+  </Card>
+  <Card title="Value Pricing" icon="gem">
+    Price based on perceived value to customers.
+  </Card>
+</Cards>
+
+## Price Display
+
+Your storefront shows prices throughout your store:
+
+- Product listing pages
+- Product detail pages
+- Shopping cart
+- Checkout
+
+### Currency Formatting
+
+The admin formats each price according to its currency and the language you use the admin in. The language decides the symbol, the separators, and where the symbol goes, and the currency decides the number of decimals:
+
+| Currency | English | French |
+|----------|---------|--------|
+| USD | $29.99 | 29,99 $US |
+| EUR | €29.99 | 29,99 € |
+| XAF | FCFA 15,000 | 15 000 FCFA |
+
+The Store API sends amounts in cents, and your storefront formats them for its visitors. See [Formatting Amounts](/3.x/money#formatting-amounts) for the details.
+
+## Best Practices
+
+### Setting Prices
+
+- Know what similar products cost at your competitors
+- Make sure your prices leave a profitable margin over your costs
+- Try different price points and compare the results
+- Round strategically, $29.99 vs $30.00
+
+### Managing Sales
+
+- Plan your sales ahead. Prices have no dates: to start and end a sale on its own, create a discount with a **Start date** and an **End date**
+- Create urgency with end dates
+- Check the **Performance** panel of the discount to follow the results
+- When a sale made with the compare-at price ends, set the price back and clear **Compare at price**
+
+<Tip>
+Use the "Compare at price" feature to show value even when not running a sale: display the "regular" price to emphasize everyday savings.
+</Tip>
+
+## Pricing Checklist
+
+Before publishing a product, verify:
+
+- Every store currency has a price (the **Add new price** button is gone)
+- The price is set correctly
+- The compare-at price, if you use one, is higher than the price
+- The cost per item is entered for your margin math
+- Variant prices are consistent with your strategy
+
+For developer details, see the [Pricing documentation](/3.x/pricing), [Admin Forms and Tables](/3.x/money#admin-forms-and-tables) for how the admin converts amounts, and [Currencies](/3.x/currencies).

@@ -1,0 +1,65 @@
+---
+title: Abandoned Carts
+description: "See the carts customers filled and left without completing checkout, with their items, customer and addresses."
+---
+
+Some customers add products to their cart and leave before they complete checkout. Shopper lists these carts under **Sales > Orders > Abandoned Carts**, so you can see the sales you nearly made and what stopped them.
+
+A cart counts as abandoned when it holds at least one product, was not turned into an order, and has not changed for 60 minutes. Your developer can change this delay.
+
+## Viewing Abandoned Carts
+
+Open **Sales > Orders** in the sidebar, then click **Abandoned Carts** below it. The carts with the most recent activity come first.
+
+<Screenshot src="/images/v3/ug-abandoned-carts.png" alt="The Abandoned Carts page listing five carts, two of them from guests, in euros and US dollars." />
+
+| Column | Shows |
+|--------|-------|
+| **#** | The cart number |
+| **Customer** | The customer's name, or **Guest** for a shopper who was not signed in |
+| **Items** | How many products the cart holds |
+| **Currency** | The currency of the cart |
+| **Channel** | The sales channel the cart was created on, or a dash when it has none |
+| **Created At** | When the cart was created |
+| **Last Activity** | When the cart last changed |
+
+Click the filter icon above the table to show only the carts of one **Customer** (the list offers the signed-in customers who left a cart, by full name, and you can search it), the carts created between two dates, or the carts of one **Channel**.
+
+## Cart Details
+
+To see what a customer left behind, click the eye icon (**View details**) on the cart's row. The detail panel opens on the right.
+
+<Screenshot src="/images/v3/ug-abandoned-cart-detail.png" alt="The detail panel of cart 1, left a day ago by a signed-in customer, with two products and the shipping and billing addresses." />
+
+The panel shows:
+
+- **The cart header**: the cart number, a badge with the time since the last activity, and the creation date
+- **Customer**: the customer's name and email. For a guest, the email entered at checkout (when there is one) appears above **Guest**. Below, a badge shows the channel when the cart has one, and another the cart's currency
+- **Items**: each product with its image, the quantity, and the unit price
+- **Shipping address** and **Billing address**: shown when the customer entered them, with the phone number of the shipping address
+
+A cart left by a guest shows the email entered at checkout, so you can still see who it was:
+
+<Screenshot src="/images/v3/ug-abandoned-cart-guest.png" alt="The detail panel of cart 2, left by a guest: the email margot.lefevre@example.com above Guest, the Mobile App and EUR badges, one product and a shipping address in Lyon." />
+
+To close the panel, click its close button or press Escape.
+
+## What You Can Learn
+
+Abandoned carts help you understand:
+
+- **Which products are left behind most often**, to spot a price or a product page that holds customers back
+- **How far customers got in checkout**: a cart with addresses shows the customer started to enter their delivery details
+- **Whether signed-in customers leave more carts than guests**, to decide where to focus your recovery efforts
+
+<Tip>
+Look for patterns. If many customers leave carts with the same product, the price may be too high, or the shipping cost may surprise them at checkout.
+</Tip>
+
+Shopper does not email customers about their abandoned carts. To win a signed-in customer back, contact them yourself with a discount code (see [Promotions](/3.x/user-guide/marketing/discounts)), or ask your developer to build reminder emails.
+
+## Automatic Cleanup
+
+To keep your database small, Shopper deletes every unfinished cart that has not changed for 30 days, once a day. The carts disappear from this list with their products and addresses. Completed carts stay with their orders. The cleanup runs on its own as long as your developer runs the scheduler on the server, and they can change the 30-day delay.
+
+For developer details, see [Abandoned Carts](/3.x/cart#abandoned-carts) in the Cart documentation.

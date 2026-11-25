@@ -1,0 +1,174 @@
+---
+title: Webhooks
+description: "Send your orders, shipments, products and new customers to your ERP, CRM or warehouse system as soon as they change in your store."
+---
+
+A webhook tells another system that something happened in your store: a new order, a payment, a shipped package, a new customer. Your ERP, CRM, warehouse or accounting tool receives a message at a web address (a URL) and updates itself, so nobody has to copy the data by hand.
+
+The receiving side is set up by your developer or by the provider of the tool. They give you the URL to use. On this page, you choose which events go to which URL and you check that the messages arrive.
+
+## Accessing Webhooks
+
+1. Click on **Settings** in the sidebar
+2. Select **Webhooks** from the settings menu, under **Store**
+
+<Screenshot src="/images/v3/webhooks.png" alt="The Webhooks table with three webhooks: two active ones for the CRM and the marketplace feed, and a paused one for the ERP." />
+
+The list shows one row per webhook, the newest first, with its **URL**, the **Events** it sends, its **Status** and the date of its last change (**Updated At**). Use the search box to find a webhook by its URL.
+
+The icons at the end of each row open, from left to right: **Deliveries** (the list icon), **Redeliver** (the circular arrow, shown only while the webhook is on), **Regenerate secret** (the key), **Edit** (the pencil) and **Delete** (the trash can).
+
+## Adding a Webhook
+
+To connect a new system:
+
+1. Click the **Add webhook** button
+2. In **URL**, paste the address the receiving system gave you
+3. Under **Events**, check the events this system needs
+4. In **Description**, note what the webhook is for, so your team knows who uses it
+5. Click **Save**
+
+To leave the window without saving, click its close button, **Cancel**, or press Escape.
+
+<Screenshot src="/images/v3/webhook-create.png" alt="The Add webhook window with a warehouse URL, the order.paid and order.cancelled events checked, and a description." />
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **URL** | Yes | The address that receives the messages. It must start with `https://` and point to a server reachable on the internet |
+| **Events** | Yes | The events sent to this URL. Check at least one |
+| **Description** | No | A note for your team, such as the system and the person in charge. It shows in the edit window, not in the list |
+
+An address on your own computer or on a private network is refused with "The webhook url must use https and resolve to a public address." Ask whoever set up the receiving system for its public HTTPS address.
+
+The webhook is active as soon as you save it. It sends the events that happen from then on: events that happened before are not sent.
+
+### The Signing Secret
+
+When you save the webhook, a **Webhook created** notification shows its signing secret: "Signing secret (copy it now, it will not be shown again)", followed by a string of 40 letters and digits. The notification stays on screen until you close it.
+
+Copy the secret and give it to the person who sets up the receiving system, through a safe channel such as a password manager. Their system uses it to check that each message really comes from your store. Shopper does not show the secret again: if it gets lost, [regenerate it](#regenerating-the-secret).
+
+<Warning>
+Treat the signing secret like a password. Anyone who has it can send messages that look like they come from your store.
+</Warning>
+
+### Choosing Events
+
+Check only the events the receiving system uses: each event you add sends a message every time it happens.
+
+| Event | Sent when |
+|-------|-----------|
+| **order.created** | An order is placed at checkout, or created by your developer's code |
+| **order.paid** | The payment status of an order becomes Paid |
+| **order.cancelled** | An order is cancelled |
+| **order.shipped** | The shipping status of an order becomes Shipped |
+| **order.completed** | An order is completed |
+| **shipment.created** | A package is created for an order |
+| **shipment.delivered** | A package is marked Delivered |
+| **shipment.delivery_failed** | A package is marked Delivery failed |
+| **shipment.returned** | A package is marked Returned |
+| **product.created** | A product is created in the admin or by a CSV import |
+| **product.updated** | The main form of a product is saved. Saving only its pricing, inventory, media or SEO sends nothing |
+| **product.deleted** | A product is deleted |
+| **customer.registered** | A customer is created in the admin or signs up in your storefront |
+| **cart.completed** | Checkout turns a customer's cart into an order |
+
+Your developer can add events of their own: they appear in the same list.
+
+## Checking Deliveries
+
+Each message sent to a webhook is a delivery. To check that the receiving system gets your messages, click the list icon (**Deliveries**) on the webhook's row. The **Deliveries** window shows its 25 most recent deliveries, the newest first. Close it with **Close**, its close button, or Escape.
+
+<Screenshot src="/images/v3/webhook-deliveries.png" alt="The Deliveries window of the ERP webhook: four succeeded deliveries, one rejected with HTTP 422 and one failed with HTTP 503 at attempt 11." />
+
+Each delivery shows the event, the date and time, the attempt number, the code the receiving system answered (such as **HTTP 200**) and a status:
+
+| Status | Meaning | What to do |
+|--------|---------|------------|
+| **Pending** | Waiting to be sent | Nothing, it goes out in a moment |
+| **Succeeded** | The receiving system confirmed it got the message | Nothing |
+| **Failed** | The receiving system answered with an error, such as **HTTP 503**, or did not answer within 10 seconds | Shopper tries again on its own. Tell the person in charge of the receiving system if it keeps failing |
+| **Rejected** | The receiving system refused the message, with a code such as **HTTP 422**, or the URL no longer points to a public address | Shopper does not try again. Ask the person in charge of the receiving system why it refused the message |
+| **Dispatch failed** | Your store could not put the message in its sending queue | Shopper tries to queue it again every 15 minutes |
+
+A failed delivery is retried 10 times, after 10 seconds, 30 seconds, 1 minute, 5 minutes, 30 minutes, then 1, 2, 4, 8 and 12 hours. That makes 11 attempts over about 28 hours. Between two attempts the delivery keeps the **Failed** status, and its attempt number shows how many tries it has had.
+
+Succeeded deliveries leave the list after 7 days, the others after 90 days.
+
+## Sending an Event Again
+
+Once the receiving system works again, you can send it the webhook's latest event a second time. Click the circular arrow (**Redeliver**) on the webhook's row. It queues the message at once, without asking for confirmation, and shows "The delivery has been queued again." The new delivery appears in the **Deliveries** window. A webhook that has not sent anything yet has no event to send again: Shopper shows "No delivery yet for this webhook." and queues nothing.
+
+**Redeliver** always sends the most recent event of the webhook, whatever its status. You cannot pick an older delivery.
+
+When the event is about a record that has been deleted since, such as a deleted customer, Shopper does not send its data again and shows "The resource of this event no longer exists, the payload cannot be redelivered."
+
+<Note>
+A webhook that is turned off sends nothing, so its row has no **Redeliver** icon. Turn its **Status** on first, then click **Redeliver**.
+</Note>
+
+## Turning a Webhook Off and On
+
+To pause a webhook, for example while the receiving system is being replaced, turn off its **Status** toggle in the list. Turn it back on to start sending again.
+
+<Warning>
+Events that happen while a webhook is off are never sent to it, even after you turn it back on. Tell the person in charge of the receiving system which period it missed.
+</Warning>
+
+Shopper also turns a webhook off on its own when its receiving system stops working. This happens when a delivery has used all its attempts and the last 15 deliveries that ended as **Succeeded** or **Failed** all failed. **Rejected** deliveries do not count. Once the receiving system works again, turn the **Status** back on.
+
+## Editing a Webhook
+
+To change the URL, the events or the description of a webhook:
+
+1. Click the pencil icon on the webhook's row
+2. Update the fields in the **Edit webhook subscription** window
+3. Click **Save changes**
+
+The edit window does not show the signing secret, and saving keeps it the same. To get a new one, [regenerate it](#regenerating-the-secret).
+
+## Regenerating the Secret
+
+Regenerate the secret when it has been lost, when it may have been seen by someone who should not have it, or when a person who knew it leaves your team.
+
+1. Click the key icon (**Regenerate secret**) on the webhook's row
+2. Read the warning in the **Regenerate secret** window and click **Confirm**
+3. Copy the new secret from the **Secret regenerated** notification
+
+<Warning>
+The current secret stops working immediately, for the retries of failed deliveries too. Until the receiving system has the new secret, it refuses your messages. Plan the change with the person in charge of that system.
+</Warning>
+
+## Deleting a Webhook
+
+To stop sending events to a system for good:
+
+1. Click the trash icon on the webhook's row
+2. Click **Delete** in the **Delete webhook subscription** window
+
+The webhook's delivery history is deleted with it. To stop sending for a while and keep the history, [turn the webhook off](#turning-a-webhook-off-and-on) instead.
+
+<Note>
+A store can have up to 50 webhooks. When it reaches that number, the **Add webhook** button is disabled: delete a webhook you no longer use, or ask your developer to raise the limit.
+</Note>
+
+## Best Practices
+
+<Cards>
+  <Card title="One Webhook per System" icon="plug">
+    Give each receiving system its own webhook. You can then pause, check or delete one without touching the others.
+  </Card>
+  <Card title="Describe Each Webhook" icon="tag">
+    Write the system and the person in charge in the description, so your team knows who to call when deliveries fail.
+  </Card>
+  <Card title="Check the Deliveries" icon="list">
+    After adding a webhook, open its deliveries once the first events have happened, and check that they succeeded.
+  </Card>
+  <Card title="Keep the Secret Safe" icon="key">
+    Share the signing secret through a password manager, never by email or chat.
+  </Card>
+</Cards>
+
+The webhooks page is part of the settings: only staff members with the **Access Settings** permission can open it (see [Roles & Permissions](/3.x/user-guide/administration/roles)).
+
+For developer details on the message content, the signature check and the retries, see the [Webhooks documentation](/3.x/webhooks).

@@ -1,0 +1,90 @@
+---
+title: Overview
+description: Understand the different product types available and how to manage your catalog.
+---
+
+Products are the core of your e-commerce store. Shopper supports multiple product types to cover a wide range of selling scenarios, from physical goods to digital downloads and dropshipping.
+
+## Accessing Products
+
+The product list is where you find a product, check its stock and open it for editing. In the sidebar, click **Catalog > Products**.
+
+<Screenshot src="/images/v3/products.png" alt="The Products page listing products of every type with their stock, visibility and publication date." />
+
+Each row shows the product's thumbnail, name, type, SKU, brand, stock, visibility and publication date. The brand column appears only when brands are enabled. For a product with variants, the stock column adds up the stock of all its variants and reads "in stock for N variant(s)", where N is the number of variants.
+
+To find a product, search by name, SKU or brand. To narrow the list, open the filters and combine rules on the name, the type, the visibility (listed as **Availability**), the **Sales channels** and the publication date. The action menu at the end of each row holds **Edit** and **Delete**.
+
+To load many products at once from a CSV file, click **Import** above the list. [Importing Products](/3.x/user-guide/catalog/products/import) walks through the file format and each step, and the [Import](/3.x/import) developer page covers how an import runs.
+
+If you haven't created any products yet, you'll see the **Manage Catalog** empty state with a **New product** button to create your first product.
+
+<Screenshot src="/images/v3/products-empty-state.png" alt="The Products page with no products, showing the New product button." />
+
+## Product Types
+
+Shopper offers four product types, each designed for a specific selling scenario. When creating a product, you'll choose the type that best fits what you're selling.
+
+<Screenshot src="/images/v3/product-add-step-type.png" alt="The Type step of the product wizard with the four product type cards." />
+
+<Cards>
+  <Card title="Standard Product" icon="tag" href="/3.x/user-guide/catalog/products/standard-product">
+    Physical goods that require shipping. This is the most common product type for stores selling tangible items like clothing, electronics, or furniture.
+  </Card>
+  <Card title="Virtual Product" icon="monitor-waveform" href="/3.x/user-guide/catalog/products/virtual-product">
+    Digital products that don't require shipping. Ideal for downloadable files, software licenses, online courses, or subscriptions.
+  </Card>
+  <Card title="External Product" icon="link-simple" href="/3.x/user-guide/catalog/products/external-product">
+    Products fulfilled by a third-party supplier. Perfect for dropshipping, where you sell products without holding inventory.
+  </Card>
+  <Card title="Variant Product" icon="swatches" href="/3.x/user-guide/catalog/products/variant-product">
+    Products with multiple options like size, color, or material. Each combination becomes a separate variant with its own price, stock, and SKU.
+  </Card>
+</Cards>
+
+## Choosing the Right Type
+
+| What you're selling | Recommended type |
+|---------------------|------------------|
+| Physical items you stock and ship yourself | **Standard** |
+| Digital files (ebooks, music, software) | **Virtual** |
+| Online courses or memberships | **Virtual** |
+| Items shipped directly by a supplier | **External** (Dropshipping) |
+| A t-shirt in multiple sizes and colors | **Variant** |
+| A single unique handmade item | **Standard** |
+| Affiliate products from another store | **External** (Dropshipping) |
+| A phone case in 10 colors | **Variant** |
+
+<Note>
+  The product type is set during creation and cannot be changed afterward. Make sure to choose the correct type before proceeding.
+</Note>
+
+## Type Capabilities
+
+Not all features are available for every product type. The type decides which sections the product page shows. Here's what each type supports:
+
+| Feature | Standard | Virtual | External | Variant |
+|---------|----------|---------|----------|---------|
+| Shipping & dimensions | Yes | No | No | Yes |
+| Inventory tracking | Yes | Section shown, stock not checked at checkout | Section shown, stock not checked | Yes (per variant) |
+| Product attributes | Yes | Yes | No | Yes |
+| Variants (size, color...) | No | No | No | Yes |
+| Digital file downloads | No | Yes | No | No |
+| Pricing | Yes | Yes | Yes | Per variant, no product **Pricing** section |
+| SEO | Yes | Yes | Yes | Yes |
+| Categories & collections | Yes | Yes | Yes | Yes |
+| Related products | Yes | Yes | Yes | Yes |
+| Media (images) | Yes | Yes | Yes | Yes |
+
+## What's Next?
+
+<Cards>
+  <Card title="Create a Product" icon="plus" href="/3.x/user-guide/catalog/products/creating-product">
+    Follow the step-by-step wizard to create your first product.
+  </Card>
+  <Card title="Manage Products" icon="pen-to-square" href="/3.x/user-guide/catalog/products/managing-products">
+    Learn how to edit pricing, SEO, media, and more after creation.
+  </Card>
+</Cards>
+
+For developer details, see the [Products documentation](/3.x/products).

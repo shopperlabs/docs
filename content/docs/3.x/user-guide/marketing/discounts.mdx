@@ -1,0 +1,219 @@
+---
+title: Promotions
+description: Create and manage discount codes and automatic promotions.
+---
+
+Discounts are a powerful way to attract customers, boost sales, and reward loyalty. Shopper provides flexible discount options for your marketing campaigns.
+
+## Overview
+
+The Promotions section allows you to:
+
+- Create discount codes, or discounts that apply automatically without a code
+- Limit a discount to one zone
+- Define discount rules and conditions
+- Decide which discounts can add up on the same cart
+- Track discount usage and the revenue it brings
+- Schedule promotional periods
+
+## Accessing Promotions [#accessing-discounts]
+
+Open **Sales > Promotions** in the sidebar. The page lists your discounts, with the **New discount** button at the top.
+
+<Screenshot src="/images/v3/discounts.png" alt="The Promotions page listing discounts with their status, usage and campaign." />
+
+The list shows the **Code** (**N/A** for an automatic discount), the **Method**, the **Type**, the **Amount**, what the discount **Applies To**, the **Customer eligibility**, the **Status**, the active **Date**, the **Usage limits**, the **Redemptions** (how many times the discount was used), the **Zone**, and the **Campaign**. Hide the columns you don't need from the column selector. The filters narrow the list by **Active** (the **Visibility** of the discount, not its **Status**), method, campaign, what the discount applies to, customer eligibility, zone, or start date.
+
+Each row has three actions: **Edit**, **Duplicate**, and **Delete**. Select several discounts to delete them together.
+
+### Discount Status
+
+The **Status** column tells you whether customers can use a discount right now:
+
+| Status | Meaning |
+|--------|---------|
+| **Active** | Customers can use the discount |
+| **Scheduled** | The start date is in the future |
+| **Expired** | The end date has passed |
+| **Limit reached** | The discount was used as many times as its usage limit allows |
+| **Disabled** | **Visibility** is turned off |
+| **Inapplicable** | The discount applies to specific products, and all of them were deleted |
+
+When several apply, the list shows the first one in this order: **Disabled**, **Expired**, **Limit reached**, **Scheduled**, **Inapplicable**, then **Active**.
+
+### Empty State
+
+If you haven't created any discounts yet, the page shows **Manage discounts and promotions** with a **New discount** button:
+
+<Screenshot src="/images/v3/discounts-empty-state.png" alt="The Promotions page with no discounts and the New discount button." />
+
+## Creating a Discount
+
+To create a new discount:
+
+1. Click the **New discount** button. The **New discount** panel opens with three steps: **Type**, **Conditions**, and **Campaign**
+2. In **Type**, choose the type and the value, the method, the code, the zone, and the visibility
+3. In **Conditions**, set what the discount applies to, who can use it, the minimum requirements, the dates, the usage limits and, under **Combinations**, how it adds up with other discounts
+4. In **Campaign**, attach the discount to a [campaign](/3.x/user-guide/marketing/campaigns) if it belongs to one
+5. Click **Save**
+
+The discount is created and its edit page opens. To leave the panel without saving, click its close button or press Escape.
+
+<Screenshot src="/images/v3/discount-create.png" alt="The New discount panel on the Type step with a percentage discount code." />
+
+### Discount Types
+
+| Type | Description | Example |
+|------|-------------|---------|
+| **Percentage** | A percentage off the order or selected products | 20% off |
+| **Fixed amount** | A fixed amount off the order or selected products | $10 off |
+
+<Note>
+There is no free shipping discount type. To offer free delivery, add a delivery option with a price of 0 in the zone (see [Free Shipping](/3.x/user-guide/store-setup/carriers#free-shipping)).
+</Note>
+
+### Discount Configuration
+
+| Field | Description |
+|-------|-------------|
+| **Type** | **Percentage** or **Fixed amount** |
+| **Percentage** or **Fixed amount** | The discount value: from 1 to 100 for a percentage, at least 0.01 for a fixed amount. A fixed amount is stored in cents |
+| **Method** | **Discount code**: customers enter a code at checkout to redeem the discount. **Automatic**: the discount applies by itself when the cart matches its conditions, without a code |
+| **Code** | For the **Discount code** method only. The code customers enter at checkout (e.g., SUMMER20). Must be unique. Click **Generate** to create a random 10-character code |
+| **Zone** | Optional. Limits the discount to one zone. A fixed amount is then in the zone's currency |
+| **Visibility** | Turn on to make the discount usable. A discount with **Visibility** off is ignored and shows as **Disabled** |
+| **Metadata** | On the edit page, under **Advanced**. Extra key and value pairs your developer can use |
+
+## Discount Conditions
+
+Set rules for when the discount can be used in the **Conditions** step of the panel, or the **Targeting** section of the edit page:
+
+### Minimum Requirements
+
+Under **Minimum requirements**, choose one option, then enter the value:
+
+| Condition | Example |
+|-----------|---------|
+| **None** | No minimum |
+| **Minimum purchase amount** | Order must be at least $50 |
+| **Minimum quantity of items** | Cart must have at least 3 items |
+
+### Customer Eligibility
+
+| Option | Description |
+|--------|-------------|
+| **Everyone** | Anyone can use the discount |
+| **Specific customers** | Only the customers you pick with **Browse customers** |
+
+Your developer can add other options to this list, for example to target a group of customers. They appear here with their own fields.
+
+### Product Restrictions
+
+Under **Applies To**, choose:
+
+| Option | Description |
+|--------|-------------|
+| **Entire order** | Applies to everything in the cart |
+| **Specific products** | Only the products you pick with **Browse products** |
+
+The product picker lists your published products. To discount a whole collection or brand, pick its products. If you switch a discount back to **Entire order**, the products you picked are removed when you save.
+
+## Usage Limits
+
+Control how the discount can be used:
+
+| Limit | Description |
+|-------|-------------|
+| **Limit number of times this discount can be used in total** | Turn on, then enter the maximum in **Usage limit value**. The limit counts uses by all customers together |
+| **Limit to one use per customer** | Each customer can use the discount once |
+
+When the total limit is reached, the discount shows as **Limit reached** and stops applying.
+
+## Combining Discounts
+
+A cart can hold several discounts at once, up to 5. The **Combinations** section, collapsed by default, decides which of them add up:
+
+| Field | Description |
+|-------|-------------|
+| **Exclusivity class** | **Order**, **Product**, or **Shipping**. Discounts of different classes always add up |
+| **Combinable with other discounts** | Lets this discount add up with another discount of the same class. Both discounts must have it turned on |
+| **Priority** | When several discounts of the same class are on a cart, the one with the highest number applies first |
+
+For example, a cart carries SUMMER20 (class **Order**, priority 10) and WELCOME10 (class **Order**, priority 0), neither of them combinable. SUMMER20 applies, and WELCOME10 takes nothing off. A third discount of the **Product** class would still apply on top of SUMMER20.
+
+New discounts start in the **Order** class, combinable, with a priority of 0. The **Shipping** class does not discount the shipping fee: it only places the discount after the other classes.
+
+## Scheduling Discounts
+
+Set active periods for your discounts:
+
+- **Start date**: when the discount becomes active. Required. When you create a discount it cannot be in the past; on the edit page, it can.
+- **End date**: when the discount expires. It must be on or after the start date.
+- **No end date**: leave **End date** empty and the discount runs indefinitely
+
+A discount with a future start date shows as **Scheduled**, and one past its end date as **Expired**.
+
+## Editing a Discount
+
+Click **Edit** on a discount to open its page, titled with its code (or **Automatic**) and its status. The form is split into **General**, **Configuration**, **Targeting**, **Combinations**, **Campaign**, and **Advanced** sections. Click **Save** to apply your changes, or **Cancel** to return to the list. The **Duplicate** and **Delete** buttons sit at the top.
+
+<Screenshot src="/images/v3/discount-edit.png" alt="The edit page of a used discount code with the Rule digest and Performance panels." />
+
+The right side holds two panels:
+
+- **Rule digest** sums up the discount in one place: type, code, zone, what it applies to, who can use it, minimum, usage, active dates, and visibility
+- **Performance** shows how the discount did: **Usage**, **Orders**, **Gross revenue**, **Discount cost**, and **AOV with code** (the average order value of the orders that used it). It counts paid orders that are processing or completed, and can take up to a minute to show a new order
+
+Once customers have used a discount, some of its terms stop changing so past orders stay consistent:
+
+- The **Zone** of a fixed-amount discount and the **Campaign** are locked, and their helper text says why
+- The code, the type, and the value can no longer change. To offer different terms, duplicate the discount, change the copy, and turn off **Visibility** on the original
+
+### Duplicating a Discount
+
+**Duplicate** copies a discount after you confirm, with its products and customers. The copy gets the code followed by `_COPY`, its **Visibility** turned off, and a usage counter at zero, then its edit page opens so you can finish it.
+
+## Campaigns
+
+To share a budget and usage caps between several discounts, group them in a campaign under **Sales > Campaigns**, then pick it in the **Campaign** step or section. [Campaigns](/3.x/user-guide/marketing/campaigns) explains how to create one and how its budget is used. For developer details, see [Campaigns](/3.x/campaigns).
+
+## Discount Strategies
+
+<Cards>
+  <Card title="Welcome Discount" icon="hand-wave">
+    Send new customers a code with **Limit to one use per customer** turned on, so each of them can use it once.
+  </Card>
+  <Card title="Seasonal Sales" icon="calendar">
+    Create time-limited discounts for holidays and seasons.
+  </Card>
+  <Card title="Cart Recovery" icon="cart-shopping">
+    Check **Sales > Orders > Abandoned Carts** and send those customers an exclusive code yourself. Shopper does not send recovery emails (see [Abandoned Carts](/3.x/user-guide/sales/abandoned-carts)).
+  </Card>
+  <Card title="Loyalty Rewards" icon="star">
+    Reward repeat customers with special discounts.
+  </Card>
+</Cards>
+
+## Best Practices
+
+<Tip>
+Use unique, memorable discount codes that are easy to type. Avoid confusing characters like 0/O or 1/l/I.
+</Tip>
+
+- Make codes descriptive, like SUMMER2024 or SAVE10
+- Protect your margins with usage limits
+- Check the **Performance** panel of each discount to see which ones drive sales
+- Use end dates to encourage quick action
+- Test a discount on your storefront before promoting it
+
+## Common Discount Examples
+
+| Campaign | Code | Type | Value |
+|----------|------|------|-------|
+| Welcome offer | WELCOME10 | Percentage | 10% off, one use per customer |
+| Spend and save | SAVE10 | Fixed amount | $10 off orders over $50 |
+| Flash sale | FLASH25 | Percentage | 25% off, 24 hours only |
+| Holiday | HOLIDAY15 | Percentage | 15% off storewide |
+| Big basket | None (**Automatic**) | Percentage | 10% off orders of 5 items or more |
+
+For developer details, see the [Discounts documentation](/3.x/discounts), and [Priority and Combination](/3.x/discounts#priority-and-combination) for how the discounts of a cart add up.

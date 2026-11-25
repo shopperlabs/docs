@@ -1,0 +1,140 @@
+---
+title: Campaigns
+description: "Group discounts under a campaign to share one spending budget or usage cap, and follow how much of it your customers have used."
+---
+
+A campaign groups several discounts, such as every code of a seasonal sale, under one budget. Instead of setting a limit on each code, you decide how much the whole operation may cost, or how many orders it may serve, and Shopper stops every discount of the campaign once that budget is spent.
+
+## Overview
+
+The Campaigns section allows you to:
+
+- Group discounts that belong to the same marketing operation
+- Cap the total amount the discounts can take off, the number of orders that can use them, or both
+- Follow how much of the budget is used
+- Plan the start and end dates of the operation
+
+## Accessing Campaigns
+
+Open **Sales > Campaigns** in the sidebar. The page lists your campaigns, newest first, with the **New campaign** button at the top.
+
+<Screenshot src="/images/v3/campaigns.png" alt="The Campaigns page listing four campaigns with their status, budget, number of promotions and dates." />
+
+| Column | Shows |
+|--------|-------|
+| **Name** | The name of the campaign |
+| **Status** | Where the campaign stands, see [Campaign Status](#campaign-status) |
+| **Budget** | The amount used out of the spend cap, or the orders counted out of the usage cap, with a bar that turns orange from 70% and red from 90%. A campaign with both caps shows the spend. **No budget** when the campaign has no cap |
+| **Promotions** | How many discounts belong to the campaign |
+| **Date** | The start and end dates. Hide the column from the column selector if you don't need it |
+
+The search box finds a campaign by its name. The filters narrow the list by **Active** (the **Visibility** of the campaign) or by **Budget type**.
+
+Each row has two actions: **Edit** and **Delete**. Select several campaigns to delete them together.
+
+### Campaign Status
+
+| Status | Meaning |
+|--------|---------|
+| **Scheduled** | The start date is in the future |
+| **Active** | The campaign has started, has not ended, and has budget left |
+| **Budget exhausted** | The campaign reached its spend cap or its usage cap |
+| **Expired** | The end date has passed |
+| **Disabled** | **Visibility** is turned off |
+
+When several apply, **Disabled** comes first, then **Expired**, then **Budget exhausted**.
+
+<Note>
+Only an **Active** campaign applies its discounts. While a campaign is **Disabled**, **Scheduled**, **Expired** or **Budget exhausted**, its codes and automatic discounts take nothing off the cart, even when each discount is active and within its own dates. To pause every discount of a campaign at once, turn off its **Visibility**.
+</Note>
+
+### Empty State
+
+Before your first campaign, the page shows **Manage marketing campaigns** with a **New campaign** button.
+
+## Creating a Campaign
+
+<Steps>
+  <Step title="Open the form">
+    Click **New campaign** on the Campaigns page.
+  </Step>
+  <Step title="Name the campaign">
+    In **General**, enter the **Name**, choose the **Currency**, and set **Visibility**.
+  </Step>
+  <Step title="Choose a budget">
+    In **Budget**, pick the **Budget type**, then enter the **Budget amount**, the **Usage budget**, or both.
+  </Step>
+  <Step title="Plan the dates">
+    In **Schedule**, set the **Start date** and, if the campaign has an end, the **End date**. The campaign's discounts apply only between these dates.
+  </Step>
+  <Step title="Save">
+    Click **Save**. The campaign's edit page opens.
+  </Step>
+</Steps>
+
+<Screenshot src="/images/v3/campaign-create.png" alt="The New campaign form filled for a summer sale in euros with a spend cap, next to the Campaign digest that sums it up." />
+
+The **Campaign digest** on the right sums up the campaign as you fill the form: its name, currency, budget, schedule and visibility.
+
+### General
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Name** | Yes | The name you see in the admin, such as `Summer Sale 2026`. Customers never see it |
+| **Currency** | Yes | The currency of the budget, chosen among your store currencies. The campaign's discounts only apply to carts in this currency |
+| **Visibility** | No | Turned off, the campaign shows as **Disabled** and its discounts stop applying |
+
+### Budget
+
+| Budget type | The campaign stops |
+|-------------|--------------------|
+| **No budget** | Never: it runs without a shared cap |
+| **Spend cap** | Once the total amount its discounts took off reaches the **Budget amount** |
+| **Usage cap** | Once the number of orders that used its discounts reaches the **Usage budget** |
+| **Spend and usage cap** | Whichever cap is reached first |
+
+The **Budget amount** is in the campaign currency, and the **Usage budget** is at least 1.
+
+### Schedule
+
+The **Start date** is required. The **End date** is optional and cannot be earlier than the start date.
+
+### Advanced
+
+This section is collapsed. It holds metadata: key and value pairs your developer can read, such as an internal reference. Customers never see them.
+
+## How the Budget Is Used
+
+Each time a customer places an order with a discount of the campaign, the order takes its share of the budget: the amount the discounts took off counts against the spend cap, and the order counts as one use against the usage cap, whatever the number of codes it used.
+
+- A discount that would push the campaign over its spend cap is not applied to the cart at all. It is never applied in part
+- Once the budget is reached, the campaign's codes stop working, and customers see "This promotion is no longer available."
+- When you cancel an order, or refund it in full, its share goes back to the budget. A partial refund keeps the share
+
+## Attaching Discounts
+
+A discount joins a campaign from its own form, in [Promotions](/3.x/user-guide/marketing/discounts#campaigns): pick the campaign in the **Campaign** step when you create the discount, or in the **Campaign** section of its edit page. A discount belongs to one campaign at most. Once a customer has used the discount, its campaign can no longer change.
+
+Choose a campaign in the same currency as the discount's carts: a cart in another currency does not get the discount.
+
+## Editing a Campaign
+
+Click the pencil icon (**Edit**) on the campaign's row. The edit page shows the name and status of the campaign above the same form as creation, and three panels on the right.
+
+<Screenshot src="/images/v3/campaign-edit.png" alt="The edit page of the Autumn Edit 2026 campaign, active, with its spend cap partly used and one attached promotion." />
+
+- **Campaign digest**: the summary of the campaign, with its status
+- **Budget consumption**: the amount used out of the **Spend** cap and the orders counted out of the **Usage** cap, each with its bar. A campaign without a cap shows "This campaign has no budget cap."
+- **Attached promotions**: the discounts of the campaign, each with its code (**Automatic** for a discount without a code) and its value
+
+Once an order has used the campaign's budget, the **Currency** can no longer change.
+
+## Deleting a Campaign
+
+Click **Delete** at the top of the edit page, or the trash icon (**Delete**) on the campaign's row, then confirm. The campaign and the record of its budget use are deleted. Its discounts stay in Promotions and keep working on their own, without a shared budget.
+
+<Note>
+Browsing, creating, editing and deleting campaigns each need their own permission. See [Roles & Permissions](/3.x/user-guide/administration/roles).
+</Note>
+
+For developer details, see [Campaigns](/3.x/campaigns).

@@ -1,0 +1,13 @@
+{
+  "title": "Products",
+  "pages": [
+    "overview",
+    "creating-product",
+    "standard-product",
+    "virtual-product",
+    "external-product",
+    "variant-product",
+    "managing-products",
+    "import"
+  ]
+}

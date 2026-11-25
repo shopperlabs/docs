@@ -1,0 +1,105 @@
+---
+title: General Settings
+description: Configure your store's basic information and settings.
+---
+
+The General Settings page allows you to configure your store's basic information. This is one of the first things you should set up when starting with Shopper.
+
+## Accessing General Settings
+
+1. Click on **Settings** in the sidebar
+2. Select **General** from the settings menu, under **Store**
+
+The page opens with the title **Store Setting**.
+
+<Screenshot src="/images/v3/setting-general.png" alt="The Store Setting page with the store details, assets and address sections." />
+
+## Store Information
+
+### Store Details
+
+Configure the basic information about your store:
+
+| Field | Description |
+|-------|-------------|
+| **Store name** | The name of your store as it will appear to customers, up to 100 characters (required) |
+| **Email address** | The main contact email for your store, used by customers who need to reach you (required) |
+| **Phone number** | Contact phone number for customers who want to call you (optional). Click the flag button to pick the country and its dialing code from a searchable list; it starts on your store's country. Shopper checks that the number is valid for that country and saves it in international format. |
+
+### Assets
+
+| Field | Description |
+|-------|-------------|
+| **Logo** | Your store logo, available to your storefront. JPEG, PNG, WebP or AVIF, up to 1 MB |
+| **Cover photo** | A cover image for your store. Same formats and size limit as the logo |
+
+### Store Address
+
+Set your store's legal name and physical address. They identify the business behind your store, for legal compliance and for customers who need to reach you. The Store API sends them to your storefront with the rest of the store details, as described in [Reading the Store Settings](/3.x/store-api/store#reading-the-store-settings).
+
+Shipping rates do not start from this address: they start from the address of your [inventory locations](/3.x/user-guide/store-setup/locations).
+
+| Field | Description |
+|-------|-------------|
+| **Legal name of the company** | The registered name of your business (required) |
+| **About** | A description of your store, written in a rich text editor (optional) |
+| **Street Address** | Street and number (required) |
+| **City** | City (required) |
+| **Postal / Zip code** | Postal code (required) |
+| **State** | State, region or province (optional) |
+| **Country** | Country, picked from a searchable list grouped by region (optional) |
+
+### Store Currency
+
+| Field | Description |
+|-------|-------------|
+| **Currencies** | The currencies your products are sold in. Pick at least one. Only the currencies enabled on the [Currencies](/3.x/user-guide/store-setup/currencies) settings page are listed |
+| **Default currency** | The main currency displayed on your store, chosen among the currencies selected above (required) |
+
+### Social Links
+
+Add links to your accounts on social networks so customers can find your official pages.
+
+1. Click **Add social link**
+2. Pick the platform: Facebook, Instagram, X (Twitter), LinkedIn, YouTube, TikTok, Pinterest, Snapchat, WhatsApp, Telegram, GitHub or Website
+3. Paste the full URL of your page, starting with `https://`
+
+Each platform can be added once. Once picked, a row's platform is locked: to change it, remove the row and add a new one. The URL must point to that platform's site: an Instagram row needs an `instagram.com` address, an X (Twitter) row accepts `x.com` or `twitter.com`. A **Website** row accepts any address. Drag a row by its arrows to change the order of your links, and click the trash icon to remove one.
+
+If your store had Facebook, Instagram or Twitter links from Shopper 2.x, they show up as rows when you open the page. Click **Save** to store them in the new format.
+
+## Store Initialization
+
+When you first set up Shopper, you'll go through an initialization wizard that helps you configure the essential settings. The admin opens the **Shop Initialization** page instead of the dashboard as long as your store has no email address or street address, for administrators and staff members with the **Access Settings** permission. Other staff members see the **Access Forbidden** page until it is done, as described in [Shop Initialization](/3.x/user-guide/getting-started/login#shop-initialization).
+
+### Step 1 - Store Information
+
+The **Information** tab, titled **Step 1 - Shop information** on screen. Fill in the **Store name** and **Email address**, then the **Country** (optional), the **Currencies** your store sells in and the **Default currency**, and click **Next**. The default currency must be one of the currencies you selected.
+
+<Screenshot src="/images/v3/initialization-step-1.png" alt="Step 1 of the setup wizard with the store name, email, country and currencies filled in." />
+
+### Step 2 - Address Setup
+
+The **Address** tab, titled **Step 2 - Address information** on screen. Fill in the **Street Address**, **Postal / Zip code** and **City**, and optionally the **State** and **Phone number**, then click **Next**. This address also becomes your default inventory location.
+
+<Screenshot src="/images/v3/initialization-step-2.png" alt="Step 2 of the setup wizard with the store address filled in." />
+
+### Step 3 - Social Links
+
+The **Social Links** tab, titled **Step 3 - Social links** on screen. This step is optional. Add your accounts with **Add social link**, the same way as in [Social Links](#social-links), then click **Save** to finish the setup and open the dashboard.
+
+<Screenshot src="/images/v3/initialization-step-3.png" alt="Step 3 of the setup wizard with a website and a GitHub link." />
+
+## Saving Changes
+
+After making any changes to your settings:
+
+1. Review your changes
+2. Click the **Save** button at the bottom of the form
+3. A confirmation message will appear when your changes are saved
+
+<Tip>
+Make sure to keep your store information up to date, especially your contact email, as this is how customers and the system will reach you.
+</Tip>
+
+For developer details, see the [Setup Store documentation](/3.x/setup-store).

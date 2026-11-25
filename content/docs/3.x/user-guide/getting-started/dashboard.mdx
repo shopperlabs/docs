@@ -1,0 +1,112 @@
+---
+title: Discovering Dashboard
+description: Get familiar with the Shopper dashboard and navigation.
+---
+
+The Dashboard is your command center for managing your online store. Let's explore its key elements and learn how to move between its sections.
+
+## Overview
+
+When you log in, you'll see the main dashboard which displays key metrics for the month, your sales over the last twelve months and your latest orders.
+
+<Screenshot src="/images/v3/dashboard.png" alt="The Shopper dashboard with the four stat cards, the Performance chart, Top Selling Products and Recent Orders." />
+
+The header at the top of every page shows where you are with breadcrumbs (on wider screens), a browser icon that opens your website in a new tab, the language menu when the panel offers several languages, and your account menu. When your developer turns notifications on, a bell also appears there (see [Notifications](/3.x/user-guide/getting-started/notifications)).
+
+## Main Navigation
+
+The sidebar on the left side of the screen is your main navigation tool. It groups the sections of your store management, and each item appears only when your role has the permission to browse it:
+
+| Group | Items | What you manage |
+|-------|-------|-----------------|
+| | **Dashboard** | Overview of your store's performance and recent activity |
+| **Catalog** | **Products**, with **Attributes**, **Suppliers** and **Tags** below it | Your [products](/3.x/user-guide/catalog/products/overview), their [attributes](/3.x/user-guide/catalog/attributes), [suppliers](/3.x/user-guide/catalog/suppliers) and [tags](/3.x/user-guide/catalog/tags) |
+| | **Categories** | Organize products into [categories](/3.x/user-guide/catalog/categories) |
+| | **Collections** | Create curated product [collections](/3.x/user-guide/catalog/collections) |
+| | **Brands** | Manage product [brands](/3.x/user-guide/catalog/brands) |
+| **Sales** | **Orders**, with **Shipments** and **Abandoned Carts** below it | Process [orders](/3.x/user-guide/sales/orders), follow [shipments](/3.x/user-guide/sales/shipments) and review [abandoned carts](/3.x/user-guide/sales/abandoned-carts) |
+| | **Promotions** | Create and manage [discount codes](/3.x/user-guide/marketing/discounts) |
+| | **Campaigns** | Group discounts in [campaigns](/3.x/user-guide/marketing/campaigns) with a shared budget |
+| **Customers** | **Customers** | View and manage [customer accounts](/3.x/user-guide/sales/customers) |
+| | **Reviews** | Moderate [customer reviews](/3.x/user-guide/sales/reviews) |
+| **Settings** | **Site** | Configure your store settings |
+
+The number next to **Orders** counts the orders in the **New** status, the ones waiting for you to process them. **Suppliers** only appears when your developer turns the supplier feature on.
+
+**Sales > Orders > Shipments** lists the packages your store ships, **Sales > Orders > Abandoned Carts** lists the carts customers left before paying, and **Sales > Campaigns** caps a group of discounts with a shared budget. For developers, see [Fulfillment](/3.x/fulfillment#in-the-admin), [Abandoned Carts](/3.x/cart#abandoned-carts) and [Campaigns](/3.x/campaigns#in-the-admin).
+
+## Store Activity [#quick-actions]
+
+The dashboard tells you how the store is doing this month without opening any list:
+
+- The four cards show **Revenue this month**, **Total Products**, **Total Orders** and **Total Customers**. Each card compares the figure with the same days of last month (**vs last month**), and **View more** opens the matching list.
+- **Revenue this month** counts the money from paid orders, including the ones refunded later, in your store currency. Refunds you make from the order page (see [Refunds](/3.x/user-guide/sales/refunds)) are not subtracted from it: only the refunds your developers record as order refunds are. **Total Orders** leaves out cancelled and archived orders.
+- The **Performance** chart shows your revenue for each of the last twelve months. When your store sells in several currencies, pick one in the menu at the top of the chart.
+- **Top Selling Products** lists the six products sold the most over the last 90 days, with their **Reviews** and **Sales**. **View all** opens the products list.
+- **Recent Orders** lists the seven latest orders, cancelled and archived ones left out, with their **Order number**, **Products**, **Amount** and **Status**. Click a row to open the order, or click **View all** to see every order.
+
+Each card appears only when your role can browse its list: the revenue and order cards need the orders permission, **Total Products** the products permission and **Total Customers** the customers permission. The chart, **Top Selling Products** and **Recent Orders** need the orders permission. The figures refresh every few minutes, so a new order can take a moment to show.
+
+## Setup Guide
+
+On a new store, administrators and staff members with the **Access Settings** permission see a **Setup guide** on the dashboard instead of the cards and charts, under **Welcome to Shopper**. It lists the steps to complete before you start selling:
+
+1. **Add your first product** (**Add a product**)
+2. **Create a collection**
+3. **Set up shipping zones** (**Set up shipping**)
+4. **Set up payment methods** (**Set up payments**)
+5. **Configure taxes**
+
+Each step opens the screen where you complete it, and is ticked once the store has a product, a collection, an enabled zone, an enabled payment method and a tax zone. The counter reads, for example, **2 of 5 completed**. You only see the steps your role allows: the product step needs the **Create Products** permission and the collection step **Create Collections**.
+
+Other staff members never see the guide. Their dashboard shows the cards and charts their role allows from the start, while the guide stays open for those who complete it.
+
+<Screenshot src="/images/v3/dashboard-setup-guide.png" alt="The Setup guide on a new store with one of five steps completed and the Extend your store cards." />
+
+Below the steps, **Extend your store** suggests two additions: the **Stripe** add-on to accept cards, Apple Pay and Google Pay (**Learn more** opens its page), and **Shipping carriers** for live shipping rates (**Configure carriers** opens [Carriers](/3.x/user-guide/store-setup/carriers)). For developers, see [Stripe](/3.x/payments/stripe).
+
+The guide closes by itself once every step is complete. To hide it earlier and show the dashboard, click **Dismiss**. It then stays hidden for everyone. You can always reach these settings later from **Settings**.
+
+## Settings Panel
+
+Click **Settings > Site** in the sidebar to access all configuration options for your store. The item only appears when your role has the **Access Settings** permission. It opens the **General** settings, with a menu on the left that groups every settings page.
+
+<Screenshot src="/images/v3/settings.png" alt="The General settings page with the settings menu on the left grouped under Store, Selling, Shipping and Team." />
+
+The settings menu shows these pages, in this order:
+
+- **Store**
+  - **[General](/3.x/user-guide/store-setup/general-settings)**: store name, contact details, address, currencies and social links
+  - **[Appearance](/3.x/user-guide/store-setup/appearance)**: the colors and look of the admin panel
+  - **[Inventories](/3.x/user-guide/store-setup/locations)**: the places where you stock inventory and sell products
+  - **[Legal](/3.x/user-guide/store-setup/legal)**: privacy policy, terms of use, shipping and refund policies
+  - **[Webhooks](/3.x/user-guide/store-setup/webhooks)**: notifications sent to other systems when something happens in your store
+- **Selling**
+  - **[Sales channels](/3.x/user-guide/store-setup/channels)**: the places where you sell your products
+  - **[Payment methods](/3.x/user-guide/store-setup/payment-methods)**: the payment methods offered to your customers
+  - **[Taxes](/3.x/user-guide/store-setup/taxes)**: how your store charges taxes
+  - **[Currencies](/3.x/user-guide/store-setup/currencies)**: enabled currencies and exchange rates
+- **Shipping**
+  - **[Carriers](/3.x/user-guide/store-setup/carriers)**: shipping carriers and delivery providers
+  - **[Zones](/3.x/user-guide/store-setup/zones)**: shipping, payment and fulfillment per zone
+- **Team**
+  - **[Staff & permissions](/3.x/user-guide/administration/users)**: administrator accounts, roles and permissions
+
+To move from one settings page to another, click its name in the left menu. The **Settings** link at the start of the breadcrumbs also opens a list of every settings page. On a phone, the menu becomes a row of links you scroll sideways at the top of the page.
+
+## Your Profile
+
+Your profile holds your own account details. Click your avatar at the top-right of the header, then **Personal Account**, to open **My profile**.
+
+<Screenshot src="/images/v3/profile.png" alt="The My profile page with the Profile Information, Update Password, Two Factor Authentication, Passkeys and Devices sections." />
+
+The page has these sections:
+
+- **Profile Information**: change your **Picture**, **First name**, **Last Name**, **Email address** and **Phone number**, then click **Save**.
+- **Update Password**: enter your **Current Password**, then your **New Password** twice, and click **Update**.
+- **Two Factor Authentication** and **Passkeys**, when your store turns them on: see [Two-Factor Authentication](/3.x/user-guide/administration/two-factor).
+- **Devices**: the browsers signed in to your account, with **This device** for the one you are using and the **Last active** time for the others. If you don't recognize a device, click **Logout** on its row, enter your password and confirm with **Logout other browser sessions**. Shopper signs out every other browser at once, so you sign in again on your other devices. The list needs sessions stored in the database; otherwise the section says so and your developer can turn it on.
+
+To sign out, click your avatar and select **Sign out**.
+
+For developers, see [Dashboard](/3.x/dashboard).

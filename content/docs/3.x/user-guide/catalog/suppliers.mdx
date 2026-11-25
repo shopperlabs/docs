@@ -1,0 +1,128 @@
+---
+title: Managing Suppliers
+description: "Add and manage product suppliers for dropshipping and external sourcing."
+---
+
+Suppliers represent external vendors or manufacturers who provide products for your store. This is primarily used in **dropshipping** scenarios where products are shipped directly from the supplier to the customer, without you handling inventory yourself.
+
+<Note>
+The supplier feature must be enabled by your developer before it appears in the admin panel. If you don't see "Suppliers" in the sidebar, ask your developer to enable it (see [Feature Flag](/3.x/suppliers#feature-flag)).
+</Note>
+
+## Accessing Suppliers
+
+When the feature is enabled, open **Catalog > Products > Suppliers** in the sidebar. The list shows the name, email address, contact, phone number, visibility and last update of each supplier. Search suppliers by name, and filter the list on visibility: the filter stays applied when you come back to the page.
+
+<Screenshot src="/images/v3/suppliers-list.png" alt="The Suppliers page listing four suppliers with their contact details and visibility." />
+
+## Adding a Supplier
+
+To add a new supplier:
+
+1. Click the **New supplier** button
+2. Fill in the supplier details in the **New supplier** panel
+3. Click **Save**
+
+To leave the panel without saving, click its close button, **Cancel**, or press Escape.
+
+<Screenshot src="/images/v3/suppliers-create.png" alt="The New supplier panel with its General section filled in." />
+
+### Supplier Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Name** | Yes | The supplier's company name |
+| **Slug** | No | The supplier's identifier, such as `techparts`. It fills in from the name while you create the supplier, and you can edit it; the **Generate** button (two circular arrows) rebuilds it from the name. When another supplier already uses the slug, Shopper adds a number to the end. |
+| **Email address** | No | Contact email for placing orders. It must be a valid email address. |
+| **Phone number** | No | Contact phone number |
+| **Contact** | No | Primary contact person at the supplier |
+| **Website** | No | Supplier's website, as a full URL such as `https://example.com` |
+| **Visibility** | No | Whether the supplier is active and can be picked on products. Off by default. |
+| **Description** | No | In the **Description** section, details about the supplier and their products |
+| **Notes** | No | In the **Description** section, internal notes (not visible to customers) |
+| **Metadata** | No | In the **Metadata** section, extra key and value pairs your developer can use |
+
+## Editing a Supplier
+
+To update a supplier's information:
+
+1. Click the **Edit** icon next to the supplier
+2. Modify the fields you want to change in the panel, titled with the supplier name
+3. Click **Save**
+
+To remove a supplier, click the **Delete** icon next to it and confirm, or select several suppliers and use the bulk **Delete** action. Products linked to a deleted supplier stay in your catalog without a supplier.
+
+## Enabling or Disabling a Supplier
+
+The **Visibility** column in the list shows whether each supplier is active; it cannot be clicked. To change it, edit the supplier and switch **Visibility**, or select several suppliers in the list and use the **Enable** or **Disable** bulk action. Disabled suppliers stay linked to their products but no longer appear in the product **Supplier** dropdown.
+
+## Linking Products to Suppliers
+
+Products are linked to suppliers from the product edit page, once the product is created: the creation form has no supplier field. When editing an **External** product:
+
+1. Go to the product's edit page
+2. In the **Overview** section, find the **Supplier** dropdown in the **Product information** part, next to **Product external Id**
+3. Select the supplier. Only enabled suppliers are listed
+4. Fill in **Product external Id**, the identifier of the product at your supplier. Both fields are required
+5. Click **Update**
+
+The **Supplier** dropdown, like the **Suppliers** menu, only appears when the supplier feature is enabled.
+
+<Screenshot src="/images/v3/suppliers-product.png" alt="The Supplier and Product external Id fields in the Overview section of an External product." />
+
+<Tip>
+Only [External](/3.x/user-guide/catalog/products/external-product) products can be linked to suppliers. Standard, variant, and virtual products are managed from your own inventory.
+</Tip>
+
+<Note>
+The Store API cart refuses External products, so a storefront built on it cannot sell them. Ask your developer how your storefront handles supplier products. The Store API [Cart](/3.x/store-api/cart#errors) guide lists the cart errors.
+</Note>
+
+## How Dropshipping Works
+
+When a customer orders a product linked to a supplier, the order flow is:
+
+1. The customer places an order on your store.
+2. You receive the order in the admin panel, under **Sales > Orders**.
+3. You forward the order to the supplier outside Shopper: by email, on their portal, or through their API. Your developer can mark the forwarded items in Shopper (see [Dropshipping Workflow](/3.x/suppliers#dropshipping-workflow)).
+4. The supplier ships the products directly to the customer.
+5. You add the tracking number the supplier sends you when you create the shipment from the order (see [Creating a Shipment](/3.x/user-guide/sales/orders#creating-a-shipment)), then follow it under **Sales > Orders > Shipments** (see [Shipments](/3.x/user-guide/sales/shipments)).
+6. The customer receives the product.
+
+The key difference from regular orders is that you never handle the physical product. The supplier ships directly to your customer.
+
+<Warning>
+With dropshipping, you depend on the supplier's inventory and shipping speed. Make sure to verify your supplier's reliability before listing their products. Delays or quality issues reflect on your store.
+</Warning>
+
+## Supplier Information to Collect
+
+When onboarding a new supplier, gather this information:
+
+| Information | Why You Need It |
+|-------------|----------------|
+| **Order email** | To send purchase orders when customers buy |
+| **Product catalog** | To know what they offer and at what price |
+| **Lead time** | To set customer expectations for delivery |
+| **Return policy** | To handle customer returns |
+| **Payment terms** | To manage your cash flow (Net 30, prepaid, etc.) |
+| **Minimum order** | To know if there's a minimum quantity per order |
+
+## Best Practices
+
+<Cards>
+  <Card title="Verify First" icon="clipboard-check">
+    Order samples from a supplier before listing their products. Test quality, packaging, and delivery time.
+  </Card>
+  <Card title="Track Margins" icon="chart-line">
+    Use the **Cost per item** field on products to track your profit margin on supplier products.
+  </Card>
+  <Card title="Communicate Clearly" icon="comments">
+    Set clear expectations with suppliers about order format, shipping requirements, and branding.
+  </Card>
+  <Card title="Keep Notes Updated" icon="note-sticky">
+    Use the **Notes** field to track payment terms, minimum orders, and special instructions.
+  </Card>
+</Cards>
+
+For developer details on suppliers and the dropshipping workflow, see the [Suppliers documentation](/3.x/suppliers).

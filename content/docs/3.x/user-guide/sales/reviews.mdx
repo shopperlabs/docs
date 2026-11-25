@@ -1,0 +1,129 @@
+---
+title: Managing Reviews
+description: Moderate and manage customer product reviews.
+---
+
+Customer reviews build trust and help other shoppers make purchasing decisions. Shopper allows you to manage and moderate reviews on your products.
+
+## Overview
+
+The Reviews section allows you to:
+
+- View all product reviews
+- Approve, reject, or flag reviews as spam
+- Monitor review ratings and how many customers recommend your products
+
+## Accessing Reviews
+
+Open **Customers > Reviews** in the sidebar. The page is titled **Customer Reviews**: "See what customers are saying about your products."
+
+<Screenshot src="/images/v3/reviews.png" alt="The Customer Reviews page with rating stats above the list of reviews." />
+
+Above the list, four stat cards and two panels sum up what customers think. They count every review, published or pending:
+
+| Card | What it shows |
+|------|---------------|
+| **Average rating** | The average star rating, based on all reviews |
+| **Total reviews** | The number of reviews, and how many came in the last 30 days |
+| **5-star reviews** | The share of reviews with 5 stars |
+| **Pending moderation** | The reviews waiting for you, or **Inbox is clear** when there are none |
+
+The **Ratings breakdown** panel shows how many reviews each star rating received, and **Recommended** shows the share of customers who recommend the product they reviewed.
+
+## Review List
+
+The review list displays all reviews submitted by customers. The **All**, **Pending**, and **Approved** tabs above it split the reviews by status.
+
+| Column | Description |
+|--------|-------------|
+| **Customer** | Who wrote the review |
+| **Product** | The reviewed product. Click it to open the product |
+| **Rating** | Star rating (1-5) |
+| **Review** | The start of the review text, in full when you hover it. Hidden by default: show it from the column selector |
+| **Status** | **Published** or **Pending** |
+| **Date** | When the review was submitted |
+
+Click the filter icon to narrow the list by rating, product, customer, or whether the customer recommends the product.
+
+### Empty State
+
+If you don't have any reviews yet, the page shows **Customers reviews**:
+
+<Screenshot src="/images/v3/reviews-empty-state.png" alt="The Customer Reviews page with no reviews yet." />
+
+## Review Moderation
+
+### Review Workflow
+
+1. **Customer submits review**. Your storefront sends the review to your store, and it arrives as **Pending**. Shopper has no review form of its own: your developer adds it (see [Review Submission](/3.x/reviews#review-submission))
+2. **Review enters queue**. Pending reviews wait under the **Pending** tab and in the **Pending moderation** count
+3. **Admin reviews**. Open the review and approve it, reject it, or mark it as spam
+4. **Published**. Approved reviews are the only ones the Store API sends to your storefront (see [Reviews](/3.x/store-api/catalog#reviews) in the Store API)
+
+### Moderation Actions
+
+Click **View** on a review to open it in a panel. The buttons at the bottom of the panel moderate it, and the **Delete** action stays in the list.
+
+| Action | Where | Effect |
+|--------|-------|--------|
+| **Approve** | Panel of a pending review | The review becomes **Published** |
+| **Reject** | Panel of a published review | The review goes back to **Pending** and is no longer published |
+| **Mark as spam** | Panel of any review | After you confirm, the review is hidden from your customers and goes back to **Pending** |
+| **Delete** | Row action, or bulk action on the selected reviews | After you confirm, the review is permanently removed |
+
+A rejected review and a review marked as spam both return to the **Pending** tab, next to the reviews you haven't moderated yet. Delete the reviews you never want to publish, so the **Pending** tab only holds the reviews still waiting for you.
+
+## Review Details
+
+The **Review** panel shows:
+
+- **Product**. The reviewed product and its SKU
+- **Rating**. Star rating from 1 to 5
+- **Content**. The review headline and its full text
+- **Reviewer**. The customer's picture, name, and email address
+- **Created At**. Submission date
+- **Approved status**. **Published** or **Pending**
+
+<Screenshot src="/images/v3/review-detail.png" alt="The Review panel of a pending review with the Approve and Mark as spam buttons." />
+
+To close the panel, click its close button or press Escape.
+
+## Review Guidelines
+
+Consider establishing review guidelines for your store:
+
+### What to Approve
+
+- Honest product feedback (positive or negative)
+- Helpful information for other shoppers
+
+### What to Reject
+
+- Spam or promotional content (use **Mark as spam**)
+- Offensive language or personal attacks
+- Reviews for wrong products
+- Fake or misleading reviews
+- Reviews containing personal information
+
+## Impact of Reviews
+
+Reviews affect your business in several ways:
+
+| Impact | Description |
+|--------|-------------|
+| **Trust** | Positive reviews build credibility |
+| **SEO** | Review content helps search rankings |
+| **Conversion** | Products with reviews convert better |
+| **Feedback** | Learn what customers like/dislike |
+
+## Best Practices
+
+<Tip>
+Encourage reviews by sending follow-up emails after purchase, making the review process easy, and showing appreciation for customer feedback. Shopper does not send these emails: use your email marketing tool, or ask your developer to add them.
+</Tip>
+
+- Moderate consistently: apply the same standards to all reviews
+- Learn from feedback: use negative reviews to improve products
+- Showcase reviews: display reviews prominently on product pages
+
+For developer details, see the [Reviews documentation](/3.x/reviews).

@@ -1,0 +1,171 @@
+---
+title: Standard Product
+description: Physical products that require shipping and inventory management.
+---
+
+A standard product is the most common product type in e-commerce. It represents a **physical item** that you stock in your warehouse and ship to customers. Examples include clothing, electronics, books, furniture, food items, or any tangible goods.
+
+## When to Use Standard Products
+
+Use the Standard product type when:
+
+- You sell a physical item that needs to be shipped
+- The product does not have variations (no size/color options)
+- You manage inventory for this product
+- The product has weight and dimensions for shipping calculations
+
+<Note>
+  If your physical product comes in multiple options (different sizes, colors, materials), use the [Variant Product](/3.x/user-guide/catalog/products/variant-product) type instead.
+</Note>
+
+## What Makes Standard Products Unique
+
+After creating a Standard product through the [creation wizard](/3.x/user-guide/catalog/products/creating-product), you have access to these additional features:
+
+| Feature | Description |
+|---------|-------------|
+| **Shipping** | Configure weight and package dimensions for carrier calculations |
+| **Attributes** | Add product characteristics (material, care instructions, etc.) |
+| **Inventory** | Track stock levels per location with a full history, and record a safety stock level |
+| **Pricing** | Set prices in multiple currencies with compare-at and cost prices |
+
+## Configuring Shipping
+
+The shipping section lets you define the physical characteristics of your product for accurate shipping rate calculations.
+
+<Screenshot src="/images/v3/product-shipping.png" alt="The Package dimension card of the Shipping section with width, height, weight, volume and depth filled in." />
+
+| Field | Description |
+|-------|-------------|
+| **Width** | Package width with unit selection (m, cm, mm, ft, in). Default unit: cm |
+| **Height** | Package height with unit selection (m, cm, mm, ft, in). Default unit: cm |
+| **Weight** | Package weight with unit selection (kg, g, lbs). Default unit: kg |
+| **Volume** | Package volume, entered by hand, with unit selection (l, ml, gal, floz). Default unit: ml |
+| **Depth** | Package depth with unit selection (m, cm, mm, ft, in). Default unit: cm |
+
+These fields are in the **Package dimension** card of the **Shipping** section. Click **Update** to save them.
+
+<Tip>
+  Accurate weight and dimensions are essential for calculating shipping costs with carriers. Measure your product when packaged, not just the item alone.
+</Tip>
+
+## Managing Attributes
+
+Attributes let you add structured information about your product's characteristics. This is useful for displaying product specs on your storefront or enabling filtering in your catalog.
+
+<Screenshot src="/images/v3/product-attributes.png" alt="The Attributes section of a product listing its Size, Color and Material values." />
+
+Common attributes for standard products:
+- **Material**. Cotton, polyester, leather, wood, metal
+- **Color**. When it's a single-color product without variants
+- **Care instructions**. Machine washable, hand wash only
+- **Country of origin**. Where the product is manufactured
+- **Warranty**. Duration and coverage details
+
+### Using Attributes on Products [#attributes]
+
+Once an attribute exists in your store, you can assign it to a product with the value that fits this product. The **Attributes** section of the product lists the assigned attributes grouped by attribute, with the icon, the name, the value and, for text attributes, the typed value under **Custom value (for text input field)**.
+
+The values you assign are what the Store API sends with the product: `include=options` adds each attribute with the values this product uses, and the `filter[option]` parameter returns the products that carry a given value. On a [Variant Product](/3.x/user-guide/catalog/products/variant-product), the attributes you assign here are the options the variants are generated from.
+
+To add attributes:
+1. Open your product's **Attributes** section
+2. Click **Choose attributes**. The button only shows once your store has at least one attribute
+3. In the **Attributes** step of the panel, select one or more attributes from your attribute library, then go to the next step. Only enabled attributes are listed
+4. In the **Values** step, set the value for this product. Attributes with predefined values show a list to pick from; Checkbox and Color picker attributes accept several values. The others show a field where you type the value: a rich text editor, a date picker or a text field, depending on the attribute type. Values already assigned to the product are disabled
+5. Click **Save**
+
+<Screenshot src="/images/v3/product-add-attributes.png" alt="The Values step of the Choose attributes panel." />
+
+<Note>
+  Attributes must be created first in the [Attributes](/3.x/user-guide/catalog/attributes) section before they can be assigned to products.
+</Note>
+
+#### Swatch Image
+
+A swatch image replaces the color dot of a value with a picture for this product only, such as a photo of the fabric or the finish. To add one, click the **Swatch image** icon button on the value's row, upload an image in **Image** (JPEG, PNG, WebP or AVIF, up to 1 MB), then submit the modal. You can crop the image with the built-in editor before submitting. The Store API sends the image address as `swatch_url` with the value.
+
+<Screenshot src="/images/v3/product-attribute-swatch.png" alt="The Swatch image modal with a fabric photo uploaded." />
+
+#### Removing an Attribute Value
+
+To remove a value from the product, click the **Delete** icon button on its row and confirm. On a variant product, the value is also removed from the variants that carry it.
+
+## Inventory Management
+
+The **Stock & Inventory** section shows your current stock levels and provides a complete history of stock movements. It has two cards: **Inventory attributes** and **Stock management**.
+
+<Screenshot src="/images/v3/product-inventory.png" alt="The Stock management card of a product, with its stock history across two locations, the Stock after column and the Total in the summary row." />
+
+### Stock Information
+
+| Field | Description |
+|-------|-------------|
+| **SKU** | Your internal stock keeping unit identifier, unique per product |
+| **Barcode** | Product barcode for scanning (UPC, EAN, ISBN). Letters, numbers and hyphens only, unique per product |
+| **Safety Stock** | The minimum stock level you want to keep before reordering. No notification is sent when stock reaches it. |
+
+These fields are in the **Inventory attributes** card. Click **Update** to save them. The current stock, the total available quantity across all locations, shows as **Total** in the summary row at the bottom of the stock history table.
+
+### Adding Inventory
+
+You can manually adjust stock levels by adding or removing inventory:
+
+<Screenshot src="/images/v3/product-inventory-add.png" alt="The Add stock modal with a location and a quantity filled in." />
+
+1. Click **Add stock** in the **Stock management** card
+2. In **Inventory name**, select the inventory location
+3. In **Quantity**, enter the quantity to add (positive, for example 50) or remove (negative, for example -5)
+4. Submit the form. The movement appears at the top of the stock history, with the stock of that location after it
+
+### Stock History
+
+Every stock movement is a row in the history table, with these columns:
+- **Date**: when the change happened
+- **Event**: the reason for the change, such as "Initial inventory", "Manually added", "Manually removed", "Product import", "Reserved for order" or "Released from cancelled order"
+- **Inventories**: the location where the stock changed
+- **Quantity Movement**: the quantity added or removed, summed in a **Total** row under the table
+- **Stock after**: the stock at that location once the movement is applied
+
+The newest movement comes first. A product created with an initial quantity starts its history with an "Initial inventory" row at your default location. The table does not show which team member made a change. You can filter the history by location, or group it by **Inventories**. A product without any movement shows "No adjustments made to inventory.". The "Product import" event comes from a CSV import, started from **Catalog > Products**, then **Import** (see [Importing Products](/3.x/user-guide/catalog/products/import)).
+
+## Pricing
+
+Configure how much your product costs in the **Pricing** section, with a price, a compare-at price and a cost per item in each currency of your store. The [Pricing](/3.x/user-guide/marketing/pricing) page covers these fields.
+
+<Screenshot src="/images/v3/product-pricing.png" alt="The Product pricing table of a product with prices in two currencies." />
+
+## Example: Creating a Standard Product
+
+Let's walk through creating a "Leather Messenger Bag":
+
+1. **Type**: Select "Standard"
+2. **General info**: Name it "Leather Messenger Bag", add a description highlighting the craftsmanship and features
+3. **Associations**: Assign to brand "Heritage Craft", category "Bags > Messenger Bags", collection "New Arrivals"
+4. **Media**: Upload photos from multiple angles (front, back, inside, strap detail)
+5. **Stock & Inventory**: SKU `BAG-LEATH-001`, initial quantity 50, safety stock 10
+
+After creation:
+- **Shipping**: Weight 1.2 kg, dimensions 40x30x10 cm
+- **Attributes**: Material "Full grain leather", Color "Brown", Origin "Italy"
+- **Pricing**: $189.00, compare at $229.00, cost $85.00
+- **SEO**: Title "Leather Messenger Bag - Heritage Craft", description with keywords
+
+## Best Practices
+
+<Cards>
+  <Card title="Accurate Dimensions" icon="ruler-combined">
+    Always measure packed products for accurate shipping calculations.
+  </Card>
+  <Card title="Safety Stock" icon="triangle-exclamation">
+    Set a safety stock level and check your stock against it, so you reorder before you run out.
+  </Card>
+  <Card title="Detailed Attributes" icon="list-check">
+    Add relevant attributes to help customers make informed decisions.
+  </Card>
+  <Card title="Multiple Images" icon="images">
+    Show your product from every angle. Customers can't touch it online.
+  </Card>
+</Cards>
+
+For developer details, see the [Products documentation](/3.x/products) and the [Attributes documentation](/3.x/attributes#assigning-attributes-to-products).

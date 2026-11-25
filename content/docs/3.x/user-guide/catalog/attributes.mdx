@@ -1,0 +1,128 @@
+---
+title: Managing Attributes
+description: Create product attributes for variations like size, color, and material.
+---
+
+Attributes define the characteristics of your products. They're essential for creating product variants and helping customers filter and compare products.
+
+## Overview
+
+Attributes describe product properties such as:
+
+- Size: Small, Medium, Large, XL
+- Color: Red, Blue, Green, Black
+- Material: Cotton, Polyester, Leather
+- Storage: 64GB, 128GB, 256GB
+
+## Accessing Attributes
+
+Open **Catalog > Products > Attributes** in the sidebar. The list shows each attribute's icon, name and type, whether it is **Enabled**, **Is Searchable** and **Is Filterable**, and its last update. Search attributes by name, and filter the list on each of the three flags.
+
+<Screenshot src="/images/v3/attributes.png" alt="The Attributes page listing Checkbox, Color picker, Select and Rich text attributes with their flags." />
+
+## Creating an Attribute
+
+To create a new attribute:
+
+1. Click the **Create** button
+2. Fill in the attribute details in the **New attribute** panel
+3. Click **Save**
+
+The form has no values. Once the attribute is saved, you add its values from the list (see [Attribute Values](#attribute-values)). To leave the panel without saving, click its close button, **Cancel**, or press Escape.
+
+<Screenshot src="/images/v3/attribute-form.png" alt="The New attribute panel with the name, slug and type filled in." />
+
+### Attribute Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Name** | Yes | The attribute name (e.g., "Color", "Size"), up to 75 characters |
+| **Slug** | No | The attribute's identifier, such as `color`. It fills in from the name while you create the attribute, and you can edit it. The **Generate** button (two circular arrows) rebuilds it from the name. Each attribute needs its own slug. |
+| **Type** | Yes | The kind of field used to fill in the attribute (see below). Choose it before you add values: changing the type later leaves the values and product data of the old type in place. |
+| **Icon** | No | An icon shown next to the attribute in the list |
+| **Description** | No | Explain what this attribute represents, up to 100 characters |
+| **Enable** | No | Toggle to make the attribute visible to customers. A disabled attribute cannot be picked on products. |
+| **Is Searchable** | No | Marks the attribute as searchable. Shopper's own product search does not read it: ask your developer whether your storefront search uses it. |
+| **Is Filterable** | No | Use this attribute as a filter on your storefront. The Store API offers enabled, filterable attributes of type **Select**, **Checkbox** or **Color picker** as filters, with their values (see the [Store API catalog guide](/3.x/store-api/catalog#attributes)). |
+
+### Attribute Types
+
+The type sets how the attribute is filled in on each product:
+
+| Type | Best For |
+|------|----------|
+| **Select** | One value per product from a list you define (e.g., size) |
+| **Checkbox** | Several values per product from a list you define (e.g., features) |
+| **Color picker** | Several colors per product, each value picked with a color picker |
+| **Text field (input)** | A short text typed on each product |
+| **Text field (number)** | A number typed on each product (e.g., storage in GB) |
+| **Rich text** | Formatted text written on each product (e.g., care instructions) |
+| **Date picker** | A date picked on each product (e.g., release date) |
+
+## Managing Existing Attributes
+
+To change an attribute, click the edit icon on its row: the panel opens with the attribute name as its title. To remove it, click the delete icon and confirm. To act on several attributes at once, select their rows and open the bulk actions menu to **Enable**, **Disable** or **Delete** them.
+
+## Attribute Values
+
+Only **Select**, **Checkbox** and **Color picker** attributes have a list of values. After saving one of them:
+
+1. Click **Values** on the attribute's row in the list
+2. In the **Attribute values** panel, click **New Value**
+3. Fill in the **Key** (a short identifier in slug format, saved in lowercase; for a color, the color itself, picked with a color picker) and the **Value** (the name shown for this value, up to 50 characters)
+4. Repeat for each value
+
+<Screenshot src="/images/v3/attribute-values.png" alt="The Attribute values panel of a Color attribute with its Key, Hex and Value columns." />
+
+The panel lists the **Key** and **Value** of each value, plus a **Hex** column for a **Color picker** attribute. To change a value, click the edit icon on its row. To remove one, click the delete icon, or select several rows and use the bulk **Delete** action.
+
+Examples of values:
+
+| Attribute | Example Values |
+|-----------|----------------|
+| Size | XS, S, M, L, XL, XXL |
+| Color | Red, Blue, Green, Yellow, Black, White |
+| Material | Cotton, Wool, Polyester, Silk |
+
+## Using Attributes on Products
+
+You set an attribute's values on a product in the **Attributes** section of its product page, described in [Attributes](/3.x/user-guide/catalog/products/standard-product#attributes).
+
+## Common Attribute Examples
+
+### Fashion / Apparel
+
+| Attribute | Values |
+|-----------|--------|
+| Size | XS, S, M, L, XL |
+| Color | Various colors |
+| Material | Cotton, Polyester, etc. |
+| Fit | Slim, Regular, Loose |
+
+### Electronics
+
+| Attribute | Values |
+|-----------|--------|
+| Storage | 64GB, 128GB, 256GB |
+| Color | Black, White, Silver |
+| Memory | 4GB, 8GB, 16GB |
+
+### Food & Beverages
+
+| Attribute | Values |
+|-----------|--------|
+| Weight | 250g, 500g, 1kg |
+| Flavor | Vanilla, Chocolate, etc. |
+
+## Best Practices
+
+<Tip>
+Create attributes before adding products. It's easier to set up your attribute structure first and then assign them to products.
+</Tip>
+
+- Use the same attribute names across similar products.
+- Only create attributes that help customers make decisions.
+- Choose attribute names customers understand at a glance.
+- Add values in a logical order (S, M, L, not M, S, L): the **Attribute values** panel has no way to reorder them.
+
+For developer details, see the [Attributes documentation](/3.x/attributes).

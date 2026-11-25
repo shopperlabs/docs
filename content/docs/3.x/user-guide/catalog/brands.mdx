@@ -1,0 +1,95 @@
+---
+title: Managing Brands
+description: Learn how to create and manage product brands in your store.
+---
+
+Brands help customers identify and find products from their favorite manufacturers. Managing brands effectively can improve navigation and boost customer trust.
+
+## Overview
+
+Brands in Shopper represent the manufacturers or labels of your products. They help customers:
+
+- Filter products by manufacturer
+- Find all products from a specific brand
+- Make informed purchasing decisions
+
+## Accessing Brands
+
+Open **Catalog > Brands** in the sidebar to reach the brand management page. The list shows the logo, name, website, visibility and last update of each brand. Search brands by name, sort them by name or update date, and use the **Enabled** filter to list only the brands with **Visibility** on, or only those with it off.
+
+<Screenshot src="/images/v3/brands.png" alt="The Brands page listing brands with their logo, website and visibility." />
+
+## Creating a Brand
+
+To add a new brand to your store:
+
+1. Click the **New brand** button on the Brands page
+2. Fill in the brand details in the **New brand** panel
+3. Click **Save** to create the brand
+
+To leave the panel without saving, click its close button, **Cancel**, or press Escape.
+
+<Screenshot src="/images/v3/brand-create.png" alt="The New brand panel with the name, slug and website filled in." />
+
+### Brand Fields
+
+The panel groups the fields into four sections: **General**, **Media**, **SEO** and **Metadata**.
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Name** | Yes | The brand name as it will appear to customers |
+| **Slug** | No | The brand's identifier in web addresses, such as `nike`. It fills in from the name while you create the brand, and you can edit it. The **Generate** button (two circular arrows) next to the field rebuilds it from the name. When another brand already uses the slug, Shopper adds a number to the end. |
+| **Website** | No | The brand's official website URL |
+| **Visibility** | No | Toggle to show or hide the brand on your store. Off by default. |
+| **Description** | No | A brief description of the brand |
+| **Image preview** | No | In the **Media** section, upload a logo image for the brand, up to 1 MB |
+| **Metadata** | No | In the **Metadata** section, extra key and value pairs your developer can use on the storefront |
+
+### SEO Settings
+
+Optimize your brand pages for search engines in the **SEO** section:
+
+| Field | Description |
+|-------|-------------|
+| **Title** | Custom title for search engine results. Keep it under 60 characters so it is not cut off. |
+| **Description** | Meta description for search engines (max 160 characters) |
+
+## Managing Existing Brands
+
+To change a brand, click the edit icon on its row. The same panel opens, titled with the brand name. Renaming a brand keeps its slug: click **Generate** if you want the slug to follow the new name.
+
+To remove a brand, click the delete icon on its row and confirm. The products of that brand stay in your catalog without a brand.
+
+To act on several brands at once, select their rows and open the bulk actions menu to **Enable**, **Disable** or **Delete** them.
+
+The table also lets you drag brands into a new order once you switch it to reorder mode. The Store API uses this position when a storefront asks for brands sorted by position.
+
+## Brand States
+
+Brands can be in two states:
+
+- With **Visibility** on, the brand is visible to customers and offered in the **Brand** field of the product form.
+- With **Visibility** off, the brand is hidden from customers and no longer offered in the product **Brand** field.
+
+<Tip>
+New brands are hidden until you turn on **Visibility**, which is off by default. Turn it off later to hide a brand temporarily without removing product associations.
+</Tip>
+
+## Empty State
+
+When you first open the Brands page with no brands created, the page shows "Organize your products into brands" and a **New brand** button to create your first brand.
+
+<Screenshot src="/images/v3/brand-empty-state.png" alt="The Brands page with no brands, showing the New brand button." />
+
+## Displaying Brands on Your Store
+
+The Store API sends your visible brands to the storefront with their name, slug, website, description, logo and SEO fields, and can include the products of each brand. A hidden brand is left out, and its products are sent without it. Whether your storefront shows a list of brands or a page per brand depends on how it was built: ask your developer. The [Store API catalog guide](/3.x/store-api/catalog#brands) lists what it returns.
+
+## Best Practices
+
+- Use the official brand logo when one is available.
+- Keep descriptions short: a few sentences tell customers what the brand offers.
+- Add the keywords your customers search for to the SEO title and description.
+- Keep brand information current, especially websites and descriptions.
+
+For developer details, see the [Brands documentation](/3.x/brands).

@@ -1,0 +1,121 @@
+---
+title: Managing Categories
+description: Organize your products with categories for better navigation.
+---
+
+Categories are essential for organizing your product catalog. They help customers navigate your store and find products easily.
+
+## Overview
+
+Categories create a hierarchical structure for your products. You can create:
+
+- Parent categories at the top level, such as "Clothing" or "Electronics"
+- Subcategories nested under another category, such as "Men's Shirts" under "Clothing"
+
+## Accessing Categories
+
+Open **Catalog > Categories** in the sidebar to reach the category management page. The list shows the image, name, slug, visibility and last update of each category. A subcategory shows its parent next to its name, as in "Tops in Clothing". Search categories by name, and use the **Enabled** filter to list only the categories with **Visibility** on, or only those with it off.
+
+<Screenshot src="/images/v3/categories.png" alt="The Categories page listing parent categories and subcategories." />
+
+## Creating a Category
+
+To add a new category:
+
+1. Click the **New category** button on the Categories page
+2. Fill in the category details in the **New category** panel
+3. Click **Save** to create the category
+
+To leave the panel without saving, click its close button, **Cancel**, or press Escape.
+
+<Screenshot src="/images/v3/category-create.png" alt="The New category panel with a parent category selected." />
+
+### Category Fields
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| **Name** | Yes | The category name displayed to customers |
+| **Slug** | No | The category's identifier in web addresses. For a top-level category, it fills in from the name while you create it, and you can edit it; the **Generate** button (two circular arrows) rebuilds it from the name. For a subcategory, Shopper saves the parent's slug followed by the name, such as `clothing-mens-shirts`, in place of what you type. |
+| **Parent** | No | Select a parent to create a subcategory. Only visible categories are listed. Leave it empty for a top-level category. When you edit a category, pick a parent outside its own branch. |
+| **Visibility** | No | Toggle to show or hide the category. Off by default. |
+| **Description** | No | Detailed description of the category |
+| **Image preview** | No | In the **Media** section, a representative image for the category, up to 1 MB |
+| **Metadata** | No | In the **Metadata** section, extra key and value pairs your developer can use on the storefront |
+
+### SEO Settings
+
+Improve your category pages visibility in search engines in the **SEO** section:
+
+| Field | Description |
+|-------|-------------|
+| **Title** | Custom title for search results. Keep it under 60 characters so it is not cut off. |
+| **Description** | Meta description for the category page (max 160 characters) |
+
+## Managing Existing Categories
+
+To change a category, click the edit icon on its row. The panel opens with the category name as its title.
+
+To remove a category, click the delete icon on its row and confirm. Its subcategories move to the top level.
+
+To act on several categories at once, select their rows and open the bulk actions menu to **Enable**, **Disable** or **Delete** them.
+
+## Category Hierarchy
+
+Categories can be nested to create a logical structure:
+
+- Electronics
+  - Computers
+    - Laptops
+    - Desktops
+  - Phones
+    - Smartphones
+    - Accessories
+  - Audio
+    - Headphones
+    - Speakers
+
+To create a subcategory:
+
+1. Create a new category
+2. Select the parent category in the **Parent** field
+3. Save the category
+
+## Managing Category Order
+
+Categories can be reordered to control the order of your category tree:
+
+1. Click the **Reorder** button above the category list
+2. In the **Reorder** panel, drag categories by their handle into the order you want. Dropping a category inside another one also changes its parent. Use **Collapse** and **Expand** to fold or open every branch at once.
+3. Each move is saved as soon as you drop it. Click **Close** when you are done.
+
+<Screenshot src="/images/v3/category-reorder.png" alt="The Reorder panel showing a nested category tree with drag handles." />
+
+The Store API sends the category tree in this order, so a storefront that builds its menu from it follows the same order. See the [Store API catalog guide](/3.x/store-api/catalog#categories).
+
+## Category States
+
+- With **Visibility** on, the category is visible to customers and appears in navigation.
+- With **Visibility** off, the category is hidden from customers, and no longer offered in the product **Categories** field or the **Parent** field. Products already in the category stay categorized. The Store API also hides its subcategories.
+
+<Tip>
+Create a clear and logical category structure from the start. Reorganizing categories later may affect URLs and SEO: renaming a subcategory or moving it under another parent changes its slug.
+</Tip>
+
+## Best Practices
+
+<Cards>
+  <Card title="Keep it Simple" icon="list">
+    Don't create too many levels. 2-3 levels deep is usually sufficient.
+  </Card>
+  <Card title="Use Clear Names" icon="font">
+    Category names should be descriptive and match what customers search for.
+  </Card>
+  <Card title="Add Images" icon="image">
+    Visual categories help customers navigate faster.
+  </Card>
+  <Card title="Plan Ahead" icon="sitemap">
+    Think about your full product range before creating the category structure.
+  </Card>
+</Cards>
+
+For developer details, see the [Categories documentation](/3.x/categories).
