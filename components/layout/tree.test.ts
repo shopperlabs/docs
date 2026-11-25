@@ -9,6 +9,7 @@ import {
   upgradeGuide,
   versionHome,
   versionHref,
+  versionPage,
   versions,
   type TreeFolder,
   type TreeItem,
@@ -167,6 +168,17 @@ test('versionHref sends a page with neither a match nor an equivalent to its 404
 
 test('versionHref reads no equivalent off the prototype for a path that is no page of the version', () => {
   assert.equal(versionHref(v2, v3, '/3.xconstructor'), '/2.x/getting-started');
+});
+
+test('versionHref sends an address outside every version to the landing page of the target', () => {
+  assert.equal(versionHref(v2, v3, '/old/pricing'), '/2.x/getting-started');
+});
+
+test('versionPage gives the page or its equivalent in the target, nothing when the target lacks both', () => {
+  assert.equal(versionPage(v3, v2, '/2.x/pricing'), '/3.x/pricing');
+  assert.equal(versionPage(v2, v3, '/3.x/models'), '/2.x/configuration#models');
+  assert.equal(versionPage(v2, v3, '/3.x/store-api'), undefined);
+  assert.equal(versionPage(v2, v3, '/old/pricing'), undefined);
 });
 
 test('tabsFor gives one tab per route group of 2.x and 3.x, opening on its first page', () => {

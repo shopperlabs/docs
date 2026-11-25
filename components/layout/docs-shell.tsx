@@ -1,10 +1,13 @@
 'use client';
 
 import { usePathname } from 'next/navigation';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { createContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { MobileDrawer } from './mobile-drawer';
 import { RailShell } from './rail-shell';
 import { scopeFor, type TreeNode } from './tree';
+
+// The 404 page reads the tree here: passing it again as a prop would send it twice in the page payload.
+export const TreeContext = createContext<TreeNode[]>([]);
 
 export function DocsShell({ tree, stars, children }: { tree: TreeNode[]; stars?: number; children: ReactNode }) {
   const pathname = usePathname();
@@ -75,7 +78,7 @@ export function DocsShell({ tree, stars, children }: { tree: TreeNode[]; stars?:
         drawerOpen={drawerOpen}
         home={scope.home}
       >
-        {children}
+        <TreeContext value={tree}>{children}</TreeContext>
       </RailShell>
 
       <MobileDrawer

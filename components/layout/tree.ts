@@ -178,20 +178,24 @@ const equivalents: Record<string, Record<string, string>> = {
 };
 
 /**
- * Same page in another version when it exists there, the page that covers its
- * topic there (`equivalents`, for a page 3.x split out of a 2.x page), the same
- * address otherwise, which answers 404: a page the version lacks is not
- * replaced by another one.
+ * Same page in another version when it exists there, or the page that covers
+ * its topic there (`equivalents`, for a page 3.x split out of a 2.x page).
  */
-export function versionHref(target: TreeFolder, current: TreeFolder, pathname: string): string {
-  const relative = pathname.slice(versionPath(current).length);
+export function versionPage(target: TreeFolder, current: TreeFolder, pathname: string): string | undefined {
   // A 404 outside every version falls back to the first version in `versionFor`, so its pathname has no page path.
-  if (!relative.startsWith('/')) return versionHome(target);
+  if (!pathname.startsWith(`${versionPath(current)}/`)) return undefined;
+  const relative = pathname.slice(versionPath(current).length);
   const urls = new Set(flattenPages(target.children).map((page) => page.url));
   const path = [relative, equivalents[target.$id ?? '']?.[relative]].find(
     (candidate) => candidate !== undefined && urls.has(`${versionPath(target)}${candidate.split('#')[0]}`),
   );
-  return `${versionPath(target)}${path ?? relative}`;
+  return path && `${versionPath(target)}${path}`;
+}
+
+/** `versionPage`, the same address otherwise, which answers 404: a page the version lacks is not replaced by another one. */
+export function versionHref(target: TreeFolder, current: TreeFolder, pathname: string): string {
+  if (!pathname.startsWith(`${versionPath(current)}/`)) return versionHome(target);
+  return versionPage(target, current, pathname) ?? `${versionPath(target)}${pathname.slice(versionPath(current).length)}`;
 }
 
 /**
